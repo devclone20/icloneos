@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -15,6 +17,7 @@ from pm.install import _facts, _lockfile, _reclaim_set_aside, _store, ensure, st
 from pm.operations import lock_project
 from pm.package import InstallError
 from pm.paths import repo_root
+from pm.progress import failure_owner
 from pm.registry import get_package, source_install_packages, tool_roots
 from pm.store import ALL_TARGETS, current_target, hash_url
 from pm.update import Resolved, resolve_package, reuse_index_responses
@@ -188,9 +191,26 @@ def _interactive() -> bool:
     return _progress_stream() is not None
 
 
-def _live_progress(name: str):
+# Prefetch workers report while the install loop prints: one lock, one write per
+# line, so no line the desktop overlay parses is ever torn.
+_OUTPUT_LOCK = threading.RLock()
+
+
+def _say(line: str) -> None:
+    with _OUTPUT_LOCK:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+
+# progress(stage, …) stages that are a step of the turn, and the word each prints after "<name>: ".
+_STEP_WORDS = {"verify": "verifying", "repair": "repairing", "unpack": "unpacking"}
+
+
+def _live_progress(name: str, *, drawing=None):
     """Per-package progress for ensure(): download as % + MiB, unpack as a
-    phase line. On a terminal the line redraws in place (~10 Hz); in a piped
+    phase line. On a terminal the line redraws in place (~10 Hz), and only
+    while ``drawing()`` is true (several packages download at once; the row
+    belongs to the one being installed); in a piped
     (CI) log each tick prints its own line, throttled to ~4 MiB steps so a
     slow line proves it's moving without flooding the log (a 1 MiB tick on a
     1.5 GiB model would be ~1,500 lines). ``finish()`` returns the cursor to
@@ -201,22 +221,28 @@ def _live_progress(name: str):
 
     def write(line: str) -> None:
         if stream is not None:
-            stream.write("\r\x1b[2K" + line)
-            stream.flush()
+            if drawing is not None and not drawing():
+                return
+            with _OUTPUT_LOCK:
+                stream.write("\r\x1b[2K" + line)
+                stream.flush()
         else:
-            print(line, flush=True)
+            _say(line)
 
     def finish() -> None:
         if stream is not None:
-            stream.write("\r\x1b[2K")
-            stream.flush()
+            with _OUTPUT_LOCK:
+                stream.write("\r\x1b[2K")
+                stream.flush()
 
     def report(stage: str, done: int, total: int, label: str) -> None:
         nonlocal last, last_time
-        if stage == "unpack":
+        if stage in _STEP_WORDS:
+            # Every step of the package's turn is its own line naming the package (G-01 r4): the desktop overlay
+            # moves a row only on a line that names it, never by inferring what a silent package is doing.
             last = 0
             last_time = 0.0
-            write(f"  {name}: unpacking{(' ' + label) if label else ''}")
+            write(f"  {name}: {_STEP_WORDS[stage]}{(' ' + label) if label and stage == 'unpack' else ''}")
             return
         if total <= 0:
             return
@@ -235,33 +261,124 @@ def _live_progress(name: str):
     return report
 
 
+def _after_prefetch(progress):
+    """The reporter for the serial pass of an owner whose prefetch completed.
+
+    ensure re-reads the prefetched archives from the cache: fetch_many then
+    reports them covered at once (``done == total``) and moves no byte, so
+    those ticks are dropped (they would read as a second download). Any byte
+    that does move (a present dependency whose bytes moved, a cached archive
+    that failed its hash) is a repair: announced once by name
+    (``<name>: repairing``), then its every tick, as any download. Decided by
+    whether bytes move in this fetch, never by matching sizes (G-01 R3-4)."""
+    moving = False
+
+    def report(stage: str, done: int, total: int, label: str) -> None:
+        nonlocal moving
+        if stage == "download":
+            if not moving and done < total:
+                moving = True
+                progress("repair", 0, 0, "")
+            if not moving:
+                return
+        elif stage == "unpack":
+            moving = False  # the next archive of the turn is a fetch of its own
+        progress(stage, done, total, label)
+
+    report.finish = progress.finish  # type: ignore[attr-defined]
+    return report
+
+
+def _releases_lock(name: str) -> bool:
+    """ensure() of a StatePackage closes the install operation (and its lock)."""
+    from pm.package import StatePackage
+
+    try:
+        return isinstance(get_package(name), StatePackage)
+    except KeyError:
+        return False
+
+
+# Ctrl-C ends every command with this status (the shell's 128 + SIGINT) and one line, never a traceback.
+_INTERRUPTED = 130
+_STOP_LINE = "stopped; unfinished downloads resume on the next install"
+
+
+class _Stopped(KeyboardInterrupt):
+    """A Ctrl-C whose line was already printed."""
+
+
 def _install_names(names: list[str], target: str | None = None, *, verify: bool = True) -> int:
-    from pm.install import _install_operation
+    """Install ``names`` in order. Host installs run their downloads ahead
+    (pm.install.Prefetch, bounded concurrency) while unpack, verification and
+    publication stay serial under the one install lock. Cross-target staging
+    is unchanged."""
+    from contextlib import nullcontext
+
+    from pm.install import Prefetch, _install_operation
+
+    # Built here, before any prefetch worker runs: one reporter (one throttle) per package.
+    # On a terminal the row belongs to the package being installed; while the loop waits for every
+    # download (settle, installing None) any downloading package may draw it.
+    installing: list[str | None] = [None]
+    reporters = {name: _live_progress(name, drawing=lambda name=name: installing[0] in (name, None))
+                 for name in dict.fromkeys(names)}
 
     failed = 0
-    with _install_operation() as operation:
-        for name in names:
-            progress = _live_progress(name)
-            try:
-                if target is not None:
-                    # Cross-target staging: publish the entry, touch no facts.
-                    entry = stage_only(name, target)
-                    print(f"✓ {name} (staged for {target}: {entry.name})")
-                else:
-                    ensure(name, explicit=True, verify=verify, progress=progress, _operation=operation)
-                    if name == "python":
-                        from hermes_cli.venv_sync import publish_launchers
+    prefetch = None
+    try:
+        with _install_operation() as operation, (
+            Prefetch.start(names, progress_for=reporters.__getitem__, _operation=operation)
+            if target is None else nullcontext()
+        ) as prefetch:
+            for name in names:
+                installing[0] = name
+                progress = reporters[name]
+                try:
+                    if target is not None:
+                        # Cross-target staging: publish the entry, touch no facts.
+                        entry = stage_only(name, target)
+                        print(f"✓ {name} (staged for {target}: {entry.name})")
+                    else:
+                        if _releases_lock(name):
+                            installing[0] = None
+                            prefetch.settle()
+                            installing[0] = name
+                        elif prefetch.wait(name):
+                            progress = _after_prefetch(progress)
+                        if not _releases_lock(name):
+                            progress("verify", 0, 0, "")  # the turn starts by checking what is present
+                        ensure(name, explicit=True, verify=verify, progress=progress, _operation=operation)
+                        if name == "python":
+                            from hermes_cli.venv_sync import publish_launchers
 
-                        publish_launchers(repo_root(), create=False)
-                    progress.finish()
-                    print(f"✓ {name}", flush=True)
-            except InstallError as e:
-                progress.finish()
-                print(f"✗ {e}", flush=True)
-                failed += 1
+                            publish_launchers(repo_root(), create=False)
+                        with _OUTPUT_LOCK:  # no other package's redraw between the cleared row and its status
+                            progress.finish()
+                            _say(f"✓ {name}")
+                except InstallError as e:
+                    with _OUTPUT_LOCK:
+                        progress.finish()
+                        _say(f"✗ {_failure_line(name, e)}")
+                    failed += 1
+    except KeyboardInterrupt:
+        _say(_STOP_LINE)
+        if prefetch is not None and prefetch.stalled:
+            # The install lock is already released. A worker still blocked in a socket read (and the
+            # downloader's own connection pool, joined at interpreter exit) would hold this process until
+            # the read timeout; partial bytes and their range sidecars stay consistent and resumable.
+            os._exit(_INTERRUPTED)
+        raise _Stopped from None  # main() returns _INTERRUPTED without a second line or a traceback
     return failed
 
 
+def _failure_line(name: str, error: InstallError) -> str:
+    """``<name>: <reason>`` for the package the loop was installing. A
+    dependency's error names the dependency (``libatomic: …``); the owner goes
+    first, so the desktop overlay attributes every ✗ by the exact name it
+    carries and never by the row that printed last."""
+    text = str(error)
+    return text if text.startswith(f"{name}:") else f"{name}: {text}"
 
 
 def _install_flag_error(args, *, extras: list[str], cross_target, tools_only: bool,
@@ -319,10 +436,11 @@ def _install_python_environments(extras: list[str], *, sync: bool, test_environm
             # the installers' old `--extra all` did. sync_venv unions, so
             # any lazy extras already recorded survive this; it only makes
             # a fresh bootstrap match what the first update would do.
-            sync_venv(extras or ["all"], explicit=True)
+            with failure_owner("venv"):
+                sync_venv(extras or ["all"], explicit=True)
             print(f"✓ venv{' +' + ' +'.join(extras) if extras else ''}")
         except InstallError as e:
-            print(f"✗ {e}")
+            print(f"✗ {_failure_line('venv', e)}")
             failed += 1
     if test_environment is not None and not failed:
         from pm import check_project_lock
@@ -389,7 +507,8 @@ def cmd_install(args) -> int:
 
         problems = activate(allow_incomplete=True)
         if problems:
-            print(f"✗ tools not on PATH before venv sync: {'; '.join(problems)}", flush=True)
+            # The Python environment row owns this failure: the overlay attributes a ✗ by its leading name.
+            print(f"✗ venv: tools not on PATH before venv sync: {'; '.join(problems)}", flush=True)
             return 1
     if tools_only:
         _install_defaults(defaults, verify=not trust_recorded)
@@ -577,9 +696,10 @@ def _sync_venv_step() -> bool:
     from pm.install import sync_venv
 
     try:
-        sync_venv(explicit=True)
+        with failure_owner("venv"):
+            sync_venv(explicit=True)
     except InstallError as e:
-        print(f"✗ {e}")
+        print(f"✗ {_failure_line('venv', e)}")
         return False
     print("✓ venv")
     return True
@@ -884,6 +1004,12 @@ def main(argv=None) -> int:
     except InstallError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
+    except KeyboardInterrupt as exc:
+        # Outside the runtime this process only waited for the runtime child (run_cli), which got the same Ctrl-C
+        # and printed its own line: one line per Ctrl-C (G-01 R3-5).
+        if not isinstance(exc, _Stopped) and is_runtime():
+            print("stopped", file=sys.stderr)
+        return _INTERRUPTED
     except PermissionError as exc:
         from pm.environments import install_state_permission_message
 

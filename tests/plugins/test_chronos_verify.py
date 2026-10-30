@@ -141,6 +141,8 @@ def test_jwks_url_path_resolves_key(rsa_keys, monkeypatch):
     monkeypatch.setattr("jwt.PyJWKClient", FakeJWKClient)
     # Isolate from the process-wide client cache (other tests may have populated it).
     monkeypatch.setattr(verify_mod, "_JWK_CLIENTS", {})
+    # The URL resolution (a real GET; tests/plugins/test_jwks_redirect.py) is not this test's subject.
+    monkeypatch.setattr("plugins.dashboard_auth._shared.resolve_jwks_url", lambda url: url)
     claims = verify_nas_fire_token(
         token=token, expected_audience=AUD,
         jwks_or_key="https://portal.nousresearch.com/.well-known/jwks.json",
@@ -163,9 +165,11 @@ def test_jwks_client_sends_explicit_http_headers(monkeypatch):
 
     monkeypatch.setattr("jwt.PyJWKClient", FakeJWKClient)
     monkeypatch.setattr(verify_mod, "_JWK_CLIENTS", {})
+    # The URL resolution (a real GET; tests/plugins/test_jwks_redirect.py) is not this test's subject.
+    monkeypatch.setattr("plugins.dashboard_auth._shared.resolve_jwks_url", lambda url: url)
 
     url = "https://portal.nousresearch.com/.well-known/jwks.json"
-    verify_mod._get_jwk_client(url)
+    verify_mod._get_jwk_client(url).client()
 
     assert captured["url"] == url
     headers = captured["kwargs"].get("headers") or {}

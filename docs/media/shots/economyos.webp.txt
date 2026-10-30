@@ -1,0 +1,52 @@
+icloneos-raster-text/2
+sha256 76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc
+transcript signed docs/media/shots/shots.json
+Settings
+Search
+Profile
+Agent
+Economy
+iNFT
+iNFT Book
+EconomyOS
+Payments
+Billing
+Machine
+Take your iNFT agent from nothing to earning, one step at a time
+Each step is checked before the next one opens, and you can stop and come back. Every iNFT gets its own wallet, email, bank card, Hyperliquid and ACP account through Virtuals.
+Choose the iNFT to set up
+Once set up, the iNFT acts on this economy itself from Message: it sends mail, checks balances and hires agents.
+#5 Robinhood READY
+#6 Robinhood READY
+#3 Robinhood READY
+#7 Robinhood SETUP NEEDED
+#1 Robinhood SETUP NEEDED
+#4 Robinhood SETUP NEEDED
+#2 Robinhood SETUP NEEDED
+Install the Virtuals connector
+Installed 1.0.38 • verified
+Licences of the installed packages
+Your agent has learned it (60 skills in 1 folders).
+Teach the agent again
+After a reinstall of this build, your computer asks once per iNFT before the app may read its
+saved sign-in. Choose "Always Allow" when it asks.
+Ask the agent
+Add notes
+Check for updates
+Give this iNFT its own agent profile, if you want one
+This token carries no personality to build a profile from.
+Ask the agent
+Add notes
+Sign in to your Virtuals account
+The sign-in opens in your browser and stays private to this iNFT.
+Ask the agent
+Add notes
+Sign in again
+Create this iNFT's agent
+Nova is bound to this iNFT.
+Ask the agent
+Add notes
+Let the agent sign within strict limits
+Signing is on; the agent acts within the limits you set.
+Register identity
+Add another signer

@@ -88,6 +88,7 @@ export const install: Translations['install'] = {
       unknown: 'The install could not finish.'
     },
     failedIn: name => `It failed while installing ${name}.`,
+    unattributed: line => `Installer reported: ${line}`,
     fixRetry: 'Try again',
     fixRepair: 'Repair the install',
     fixFreeDisk: needed => (needed ? `Free disk space… (${needed} needed)` : 'Free disk space…'),
@@ -119,9 +120,12 @@ export const install: Translations['install'] = {
       waiting: 'Waiting',
       downloading: (percent, done, total) => `${percent} % · ${done} / ${total}`,
       unpacking: 'Unpacking',
+      verifying: 'Verifying',
+      repairing: 'Repairing',
       installing: 'Installing',
       done: 'Done',
       failed: 'Failed',
+      stopped: 'Stopped',
       notNeeded: 'Already present'
     }
   }

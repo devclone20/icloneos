@@ -270,7 +270,16 @@ registerFsIpc({
 })
 
 // Git-driven features (worktrees, review pane, repo scan) — see git-ipc.ts.
-registerGitIpc({ resolveGitBinary, resolveGhBinary })
+registerGitIpc({
+  resolveGitBinary,
+  resolveGhBinary,
+  // iclone-seam: p7-ipc-sender — git and gh run in a directory the caller names; only the app's own renderer.
+  isTrustedSender: createAppSenderGuard({
+    devServer: DEV_SERVER,
+    rendererIndexPath: resolveRendererIndex,
+    log: rememberLog
+  })
+})
 
 // V3-P: the pop-out pet window; every channel answers only the app's own renderer (see pet-overlay.ts).
 const petOverlay = registerPetOverlay(() => windowsState.mainWindow)

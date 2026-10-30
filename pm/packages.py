@@ -446,7 +446,7 @@ class Venv(StatePackage):
             # restores the RECORDED environment and must not depend on a live tree it is there to recover from.
             if (project / SHIPPED_RUNTIME_MARKER).is_file():
                 bind_environment_to_source(candidate, generation / "workspace", project, project=_project_name(project))
-            environment.check()
+            environment.check(project=project)
             if repair:
                 from pm.recovery import validate_environment
                 validate_environment(environment.executable, env=dict(environment.env), cwd=resolved_lock.parent)

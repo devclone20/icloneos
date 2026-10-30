@@ -2747,8 +2747,8 @@ Bundled although the desktop workspace does not declare them:
 | `@shikijs/types`                                    | 3.23.0          | MIT                     |
 | `@shikijs/types`                                    | 4.3.1           | MIT                     |
 | `@shikijs/vscode-textmate`                          | 10.0.2          | MIT                     |
-| `@simple-git/args-pathspec`                         | 1.0.3           | MIT                     |
-| `@simple-git/argv-parser`                           | 1.1.1           | MIT                     |
+| `@simple-git/args-pathspec`                         | 1.0.4           | MIT                     |
+| `@simple-git/argv-parser`                           | 2.0.1           | MIT                     |
 | `@standard-schema/spec`                             | 1.1.0           | MIT                     |
 | `@streamdown/code`                                  | 1.1.1           | Apache-2.0              |
 | `@streamdown/math`                                  | 1.0.2           | Apache-2.0              |
@@ -2878,7 +2878,7 @@ Bundled although the desktop workspace does not declare them:
 | `d3-zoom`                                           | 3.0.0           | ISC                     |
 | `d3`                                                | 7.9.0           | ISC                     |
 | `dagre-d3-es`                                       | 7.0.14          | MIT                     |
-| `dayjs`                                             | 1.11.21         | MIT                     |
+| `dayjs`                                             | 1.11.23         | MIT                     |
 | `debug`                                             | 4.4.3           | MIT                     |
 | `decamelize`                                        | 1.2.0           | MIT                     |
 | `decode-named-character-reference`                  | 1.3.0           | MIT                     |
@@ -2892,7 +2892,7 @@ Bundled although the desktop workspace does not declare them:
 | `dom-serializer`                                    | 3.1.1           | MIT                     |
 | `domelementtype`                                    | 3.0.0           | BSD-2-Clause            |
 | `domhandler`                                        | 6.0.1           | BSD-2-Clause            |
-| `dompurify`                                         | 3.4.13          | (MPL-2.0 OR Apache-2.0) |
+| `dompurify`                                         | 3.4.17          | (MPL-2.0 OR Apache-2.0) |
 | `domutils`                                          | 4.0.2           | BSD-2-Clause            |
 | `driver.js`                                         | 1.8.0           | MIT                     |
 | `electron-updater`                                  | 6.8.9           | MIT                     |
@@ -2948,13 +2948,13 @@ Bundled although the desktop workspace does not declare them:
 | `is-fullwidth-code-point`                           | 3.0.0           | MIT                     |
 | `is-hexadecimal`                                    | 2.0.1           | MIT                     |
 | `is-plain-obj`                                      | 4.1.0           | MIT                     |
-| `is-plain-object`                                   | 5.0.0           | MIT                     |
+| `is-plain-object`                                   | 5.1.0           | MIT                     |
 | `isows`                                             | 1.0.7           | MIT                     |
-| `js-yaml`                                           | 4.3.1           | MIT                     |
+| `js-yaml`                                           | 4.3.2           | MIT                     |
 | `jsonfile`                                          | 6.2.1           | MIT                     |
 | `katex`                                             | 0.16.47         | MIT                     |
 | `khroma`                                            | 2.1.0           | UNKNOWN                 |
-| `launder`                                           | 1.7.1           | MIT                     |
+| `launder`                                           | 1.7.2           | MIT                     |
 | `layout-base`                                       | 1.0.2           | MIT                     |
 | `layout-base`                                       | 2.0.1           | MIT                     |
 | `lazy-val`                                          | 1.0.5           | MIT                     |
@@ -3078,7 +3078,7 @@ Bundled although the desktop workspace does not declare them:
 | `rw`                                                | 1.3.3           | BSD-3-Clause            |
 | `safe-content-frame`                                | 0.0.21          | MIT                     |
 | `safer-buffer`                                      | 2.1.2           | MIT                     |
-| `sanitize-html`                                     | 2.17.6          | MIT                     |
+| `sanitize-html`                                     | 2.18.0          | MIT                     |
 | `sax`                                               | 1.6.0           | BlueOak-1.0.0           |
 | `scheduler`                                         | 0.27.0          | MIT                     |
 | `secure-json-parse`                                 | 4.1.0           | BSD-3-Clause            |
@@ -3086,8 +3086,8 @@ Bundled although the desktop workspace does not declare them:
 | `set-blocking`                                      | 2.0.0           | ISC                     |
 | `shiki`                                             | 3.23.0          | MIT                     |
 | `shiki`                                             | 4.3.1           | MIT                     |
-| `simple-git`                                        | 3.36.0          | MIT                     |
-| `source-map-js`                                     | 1.2.1           | BSD-3-Clause            |
+| `simple-git`                                        | 4.0.2           | MIT                     |
+| `source-map-js`                                     | 1.2.2           | BSD-3-Clause            |
 | `space-separated-tokens`                            | 2.0.2           | MIT                     |
 | `streamdown`                                        | 2.5.0           | Apache-2.0              |
 | `string-width`                                      | 4.2.3           | MIT                     |
@@ -3141,7 +3141,7 @@ Bundled although the desktop workspace does not declare them:
 | `y18n`                                              | 4.0.3           | ISC                     |
 | `yargs-parser`                                      | 18.1.3          | ISC                     |
 | `yargs`                                             | 15.4.1          | MIT                     |
-| `zod`                                               | 4.4.3           | MIT                     |
+| `zod`                                               | 4.6.7           | MIT                     |
 | `zustand`                                           | 5.0.14          | MIT                     |
 | `zwitch`                                            | 2.0.4           | MIT                     |
 
@@ -3358,7 +3358,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### `@chevrotain/types@11.1.2`, `dompurify@3.4.13`
+### `@chevrotain/types@11.1.2`, `dompurify@3.4.17`
 
 ```text
 
@@ -4293,60 +4293,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### `@simple-git/args-pathspec@1.0.3`
-
-(Ships no licence file; the standard MIT text, copyright holder not named by the package.)
+### `@simple-git/args-pathspec@1.0.4`, `@simple-git/argv-parser@2.0.1`, `simple-git@4.0.2`
 
 ```text
-MIT License
+The MIT License (MIT)
 
-Copyright (c) the @simple-git/args-pathspec authors
+Copyright (c) 2025 Steve King
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
 
 The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### `@simple-git/argv-parser@1.1.1`
-
-(Ships no licence file; the standard MIT text, copyright holder not named by the package.)
-
-```text
-MIT License
-
-Copyright (c) the @simple-git/argv-parser authors
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ### `@standard-schema/spec@1.1.0`
@@ -6430,7 +6399,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### `dayjs@1.11.21`
+### `dayjs@1.11.23`
 
 ```text
 MIT License
@@ -7512,7 +7481,7 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
 
-### `is-plain-object@5.0.0`
+### `is-plain-object@5.1.0`
 
 ```text
 The MIT License (MIT)
@@ -7564,7 +7533,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### `js-yaml@4.3.1`
+### `js-yaml@4.3.2`
 
 ```text
 (The MIT License)
@@ -7664,32 +7633,16 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
 
-### `launder@1.7.1`
-
-(Ships no licence file; the standard MIT text, copyright holder from its package.json author.)
+### `launder@1.7.2`
 
 ```text
-MIT License
+Copyright (c) 2021 Apostrophe Technologies, Inc.
 
-Copyright (c) Apostrophe Technologies, Inc.
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
 ### `layout-base@1.0.2`, `layout-base@2.0.1`
@@ -9202,7 +9155,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
-### `sanitize-html@2.17.6`
+### `sanitize-html@2.18.0`
 
 ```text
 Copyright (c) 2013, 2014, 2015 P'unk Avenue LLC
@@ -9318,35 +9271,7 @@ ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR
 IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 ```
 
-### `simple-git@3.36.0`
-
-(Ships no licence file; the standard MIT text, copyright holder from its package.json author.)
-
-```text
-MIT License
-
-Copyright (c) Steve King
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-### `source-map-js@1.2.1`
+### `source-map-js@1.2.2`
 
 ```text
 
@@ -10071,7 +9996,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ```
 
-### `zod@4.4.3`
+### `zod@4.6.7`
 
 ```text
 MIT License

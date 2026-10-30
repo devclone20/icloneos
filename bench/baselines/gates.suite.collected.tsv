@@ -1,0 +1,14 @@
+# gates.suite: tests collected and tests passed per part by the gates.suite row of a full bench run on 2026-10-30
+# at commit 7aebd68fe3 (macOS arm64; clean at start: 1-minute load 3.33 when the row started, 15.75 when it ended, the
+# suite's own load; its own exclusive windows), with the gates' Python deselect list applied (BENCH_PYTEST_DESELECT).
+# Each count is the lower of cold and warm; cold and warm collected the same counts. The state the counts describe:
+# electron 65 / 66 failed (cold / warm), 58 skipped, 1 errored file (listed below, it errors on main too); ui 0 failed,
+# 0 skipped; python 29 failed, 541 skipped, 0 errored files.
+# A run counts only if each part collects and passes at least 98 % of the counts below (rounded down). Columns after
+# `passed` are the pinned run's state, for reading only. `errored_known` names the only electron files the
+# errored-files guard sets apart. Refresh this file only from a clean full run, and write that run's date and commit.
+part	collected	passed	failed	skipped	errored
+electron	5352	5228	66	58	1
+ui	9917	9917	0	0	0
+python	16620	16050	29	541	0
+errored_known	scripts/after-pack.test.mjs

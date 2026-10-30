@@ -5,6 +5,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { isSafeRef } from './git-review-ops'
 import { resolveRequestedPathForIpc } from './hardening'
 import { runGit } from './lib/git'
 
@@ -258,7 +259,7 @@ async function addExistingBranchWorktree(gitBin: string, root: string, name: str
   const branch = remote ? requested.slice(remote.length + 1) : requested
 
   if (!remote && branch === (await defaultBranch(gitBin, root))) {
-    await gitOut(gitBin, ['switch', branch], root)
+    await gitOut(gitBin, ['switch', '--end-of-options', branch], root)
 
     return { path: root, branch, repoRoot: root }
   }
@@ -270,18 +271,18 @@ async function addExistingBranchWorktree(gitBin: string, root: string, name: str
     // fetch is best effort: after a failure, the last known ref is still there
     // to branch from.
     try {
-      await gitOut(gitBin, ['fetch', remote, branch], root)
+      await gitOut(gitBin, ['fetch', '--end-of-options', remote, branch], root)
     } catch {
       // The user is offline, or the branch is gone from the remote. Use the ref
       // that the repo already has.
     }
 
-    await gitOut(gitBin, ['worktree', 'add', '--track', '-b', branch, dir, requested], root)
+    await gitOut(gitBin, ['worktree', 'add', '--track', '-b', branch, '--end-of-options', dir, requested], root)
 
     return { path: dir, branch, repoRoot: root }
   }
 
-  await gitOut(gitBin, ['worktree', 'add', dir, branch], root)
+  await gitOut(gitBin, ['worktree', 'add', '--end-of-options', dir, branch], root)
 
   return { path: dir, branch, repoRoot: root }
 }
@@ -306,7 +307,12 @@ async function addWorktree(
   const branch = sanitizeBranch(opts.branch) || `hermes/${slug}`
   const dir = uniqueDir(path.join(root, '.worktrees', slug))
 
-  const args = ['worktree', 'add', '-b', branch, dir]
+  // G-42 (review R1-A round 2): every value from the caller sits after --end-of-options, so git never reads one as
+  // an option. Branch names already pass sanitizeBranch (no leading "-", ".", "/"); the base is a ref the caller
+  // names as it is, so it must also pass isSafeRef — "origin/--upload-pack=<cmd>" used to reach `git fetch origin`
+  // as an option and run <cmd> against a local remote.
+  const flags = ['-b', branch]
+  const positional = [dir]
 
   if (opts.base) {
     // Remote-tracking branches may be stale or missing if the user hasn't
@@ -315,11 +321,15 @@ async function addWorktree(
     // latest remote commit. Local branches are used as-is.
     const base = String(opts.base)
 
+    if (!isSafeRef(base)) {
+      throw new Error('Base branch is not a valid ref.')
+    }
+
     if (base.startsWith('origin/')) {
       const remoteBranch = base.slice('origin/'.length)
 
       try {
-        await gitOut(gitBin, ['fetch', 'origin', remoteBranch], root)
+        await gitOut(gitBin, ['fetch', '--end-of-options', 'origin', remoteBranch], root)
       } catch {
         // The fetch isn't mandatory, but it would be nice to do if possible.
         // If it's not possible, just use the local ref of the remote branch.
@@ -331,19 +341,19 @@ async function addWorktree(
       // wants a standalone local branch — like `git checkout origin/main &&
       // git checkout -b new-branch` — not a branch silently wired to the
       // remote's upstream. `--no-track` prevents that.
-      args.push('--no-track')
+      flags.push('--no-track')
     }
 
-    args.push(base)
+    positional.push(base)
   }
 
   try {
-    await gitOut(gitBin, args, root)
+    await gitOut(gitBin, ['worktree', 'add', ...flags, '--end-of-options', ...positional], root)
   } catch (err) {
     // Branch name may already exist — retry checking out the existing branch
     // into a fresh worktree dir instead of failing the whole flow.
     if (/already exists/i.test((err as { stderr?: string }).stderr || '')) {
-      await gitOut(gitBin, ['worktree', 'add', dir, branch], root)
+      await gitOut(gitBin, ['worktree', 'add', '--end-of-options', dir, branch], root)
     } else {
       throw err
     }
@@ -367,7 +377,7 @@ async function removeWorktree(
     args.push('--force')
   }
 
-  args.push(resolvedTree)
+  args.push('--end-of-options', resolvedTree)
   await gitOut(gitBin, args, root)
 
   return { removed: resolvedTree }
@@ -479,7 +489,7 @@ async function switchBranch(repoPath: string, branch: string, gitBin: string) {
     throw new Error('Branch name is required.')
   }
 
-  await gitOut(gitBin, ['switch', target], resolved)
+  await gitOut(gitBin, ['switch', '--end-of-options', target], resolved)
 
   return { branch: target }
 }

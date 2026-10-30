@@ -86,6 +86,7 @@ export const install: TranslationOverrides['install'] = {
       unknown: '安裝無法完成。'
     },
     failedIn: name => `在安裝 ${name} 時失敗。`,
+    unattributed: line => `Installer reported: ${line}`,
     fixRetry: '重試',
     fixRepair: '修復安裝',
     fixFreeDisk: needed => (needed ? `釋放磁碟空間…（需要 ${needed}）` : '釋放磁碟空間…'),
@@ -119,7 +120,11 @@ export const install: TranslationOverrides['install'] = {
       installing: '正在安裝',
       done: '完成',
       failed: '失敗',
-      notNeeded: '已存在'
+      notNeeded: '已存在',
+      // English until the global plan translates the r4 states (the app ships English only).
+      verifying: 'Verifying',
+      repairing: 'Repairing',
+      stopped: 'Stopped'
     }
   }
 }

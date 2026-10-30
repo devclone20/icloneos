@@ -47,6 +47,7 @@ describe('isShippedPath (RT-2 exclusions + RT-LIC)', () => {
     ['website/index.md', false],
     ['tests/tools/test_approval.py', false],
     ['tests-js/a.test.js', false],
+    ['bench/run.mjs', false],
     ['docs/guide.md', false],
     ['evals/x.py', false],
     ['packaging/python/x.py', false],

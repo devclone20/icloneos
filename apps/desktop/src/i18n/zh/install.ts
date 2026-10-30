@@ -85,6 +85,7 @@ export const install: Translations['install'] = {
       unknown: '安装无法完成。'
     },
     failedIn: name => `在安装 ${name} 时失败。`,
+    unattributed: line => `Installer reported: ${line}`,
     fixRetry: '重试',
     fixRepair: '修复安装',
     fixFreeDisk: needed => (needed ? `释放磁盘空间…（需要 ${needed}）` : '释放磁盘空间…'),
@@ -118,7 +119,11 @@ export const install: Translations['install'] = {
       installing: '正在安装',
       done: '完成',
       failed: '失败',
-      notNeeded: '已存在'
+      notNeeded: '已存在',
+      // English until the global plan translates the r4 states (the app ships English only).
+      verifying: 'Verifying',
+      repairing: 'Repairing',
+      stopped: 'Stopped'
     }
   }
 }

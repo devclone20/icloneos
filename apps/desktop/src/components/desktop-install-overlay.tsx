@@ -22,7 +22,8 @@ import {
   type PackagesState,
   PYTHON_ENV_PACKAGE,
   reducePackageLine,
-  settlePackages
+  settlePackages,
+  unattributedFailures
 } from '@/iclone-shared/install-packages'
 import { AlertCircle, Check, ChevronDown, ChevronRight, Globe, iconSize, Loader2, Monitor } from '@/lib/icons'
 import { capitalize } from '@/lib/text'
@@ -141,8 +142,14 @@ function PackageRow({ line }: { line: PackageLine }) {
   const { t } = useI18n()
   const copy = t.install.recovery
   const states = copy.packageStates
-  const open = line.state === 'downloading' || line.state === 'unpacking' || line.state === 'installing'
 
+  const open =
+    line.state === 'downloading' ||
+    line.state === 'verifying' ||
+    line.state === 'unpacking' ||
+    line.state === 'installing'
+
+  // A stopped row (its stage failed or was killed before it finished) keeps the waiting row's neutral dot.
   const icon =
     line.state === 'done' || line.state === 'not-needed' ? (
       <Check className="size-[0.8125rem] text-(--ic-success)" />
@@ -154,9 +161,12 @@ function PackageRow({ line }: { line: PackageLine }) {
       <div className="size-1.5 rounded-(--ic-radius-pill) border border-(--ic-border-strong)" />
     )
 
+  // A repair opens the download before PM prints its first size: say so, not "0.0 % ·  / " (G-01 R4-2).
   const label =
     line.state === 'downloading'
-      ? states.downloading((line.percent ?? 0).toFixed(1), line.done ?? '', line.total ?? '')
+      ? line.done !== null && line.total !== null
+        ? states.downloading((line.percent ?? 0).toFixed(1), line.done, line.total)
+        : states.repairing
       : line.state === 'not-needed'
         ? states.notNeeded
         : states[line.state]
@@ -697,6 +707,11 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                     )}
                   </p>
                 ) : null}
+                {unattributedFailures(packages).map((line, index) => (
+                  <p className="mt-0.5 break-words text-(--ic-text-2)" data-unattributed key={index}>
+                    {copy.recovery.unattributed(line)}
+                  </p>
+                ))}
                 <p className="mt-0.5 text-xs text-(--ic-text-2)">{copy.recovery.skipHint}</p>
               </div>
             </div>

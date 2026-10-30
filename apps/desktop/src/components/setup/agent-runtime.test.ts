@@ -13,7 +13,8 @@ import {
   setupAgentRuntime
 } from './agent-runtime'
 
-type RtbPackageState = 'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'unpacking' | 'waiting'
+type RtbPackageState =
+  'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'stopped' | 'unpacking' | 'verifying' | 'waiting'
 
 interface RtbPackageLine {
   name: string

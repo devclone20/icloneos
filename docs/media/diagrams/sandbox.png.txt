@@ -1,0 +1,33 @@
+icloneos-raster-text/2
+sha256 07873dbad7dcd25a5ee2f9886993864dcbd3c80fc2cd43aebfcc03d0bc6e93e2
+transcript signed docs/media/shots/shots.json
+WHERE AGENT COMMANDS RUN
+YOUR MAC
+macOS profile · deny by default
+agent commands
+and the programs they start
+agent runtime
+asks to run something
+OUT OF REACH
+your keys
+cloud credentials
+keychains
+the app's own data
+the rest of your home
+gate
+outside the profile itself:
+a guard refuses any program
+that would start outside it
+project folder
+writes only when
+the mode allows it
+scratch folder
+always
+writable
+NETWORK
+only after the
+gate allowed it
+never localhost
+read only: the system tools a command needs
+on by default · in every mode, Ignore permissions included
+NO PROFILE, NO COMMAND • NEVER RUN WITHOUT IT

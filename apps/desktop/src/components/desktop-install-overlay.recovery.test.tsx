@@ -238,7 +238,13 @@ describe('every failure class: diagnosis, one fix, or skip (RTB-6)', () => {
 
   it('plain macOS copy (critic minor 2): no Windows text, no Windows path, no "venv", plain stage names', async () => {
     const { emit } = await mount()
-    await failWith(emit, 'python-deps', ['  → Installing Python dependencies…', '✓ ffmpeg'], 'exit code 1')
+    // G-01 r4: the Python environment row is failed by its own ✗ (PM names it), never by a fallback.
+    await failWith(
+      emit,
+      'python-deps',
+      ['✓ ffmpeg', '  → Installing Python dependencies…', '✗ venv: tools not on PATH before venv sync: uv'],
+      'exit code 1'
+    )
     const text = window.document.body.textContent ?? ''
 
     expect(text).not.toMatch(/Windows|LOCALAPPDATA/)
@@ -249,6 +255,61 @@ describe('every failure class: diagnosis, one fix, or skip (RTB-6)', () => {
     )
     // An unexplained failure's one fix is Repair, so the header names Repair (r2c).
     expect(text).toContain(translateNow('install.recovery.failedDescRepair'))
+  })
+
+  it('G-01 r4: a ✗ that names no package is shown in the failure card; unfinished rows read Stopped', async () => {
+    const { emit } = await mount()
+    await failWith(
+      emit,
+      'python-deps',
+      ['✓ ffmpeg', '  node: verifying', '  ✗ uv sync failed; last 3 lines of output follow'],
+      'exit code 1'
+    )
+
+    expect(window.document.querySelector('[data-unattributed]')?.textContent).toBe(
+      translateNow('install.recovery.unattributed', 'uv sync failed; last 3 lines of output follow')
+    )
+    expect(pkg('ffmpeg')?.getAttribute('data-state')).toBe('done')
+    expect(pkg('node')?.getAttribute('data-state')).toBe('stopped')
+    expect(pkg('node')?.textContent).toContain(translateNow('install.recovery.packageStates.stopped'))
+    expect(window.document.querySelector('[data-package][data-state="failed"]')).toBeNull()
+  })
+
+  it('G-01 r5: a failed venv sync names the Python environment and leaves no nameless line', async () => {
+    const { emit } = await mount()
+
+    const fixture = readFileSync(
+      path.join(import.meta.dirname, '..', 'iclone-shared', '__fixtures__', 'venv-sync-failure.txt'),
+      'utf8'
+    )
+
+    await failWith(
+      emit,
+      'python-deps',
+      ['✓ ffmpeg', '✓ ripgrep', ...fixture.split('\n').filter(Boolean)],
+      'exit code 1'
+    )
+
+    expect(pkg('venv')?.getAttribute('data-state')).toBe('failed')
+    expect(window.document.querySelector('[data-diagnosis]')?.textContent).toContain(
+      translateNow('install.recovery.failedIn', translateNow('install.recovery.pythonEnvironment'))
+    )
+    expect(window.document.querySelector('[data-unattributed]')).toBeNull()
+  })
+
+  it('G-01 r5: a repair reads Repairing until its first size is known, then its percent and sizes', async () => {
+    const { emit } = await mount()
+    await emit({ type: 'manifest', protocolVersion: 1, stages: STAGES })
+    await emit({ type: 'stage', name: 'python-deps', state: 'running' })
+    await emit({ type: 'log', stage: 'python-deps', line: '  node: repairing' })
+
+    expect(pkg('node')?.getAttribute('data-state')).toBe('downloading')
+    expect(pkg('node')?.textContent).toContain(translateNow('install.recovery.packageStates.repairing'))
+    expect(pkg('node')?.textContent).not.toContain('%')
+
+    await emit({ type: 'log', stage: 'python-deps', line: '  node:  12.0%  3.5 MiB / 28.8 MiB' })
+
+    expect(pkg('node')?.textContent).toContain('12.0 % · 3.5 MiB / 28.8 MiB')
   })
 
   it("main's stage-alive heartbeats change nothing on screen", async () => {

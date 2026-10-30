@@ -44,6 +44,8 @@ export const EXCLUDED_TOP = Object.freeze([
   // The upstream's brand art (Nous Research trademarks, used by its desktop packaging): no runtime code reads it, and
   // its MIT licence does not cover the marks (critic r1 m1).
   'assets',
+  // bench/ is the performance harness: it measures the runtime from outside the app, and neither it nor its results ship.
+  'bench',
   'contributors',
   'docs',
   'evals',
@@ -296,7 +298,9 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'hermes_cli/send_cmd.py': 'core',
   'plugins/observability/langfuse/__init__.py': 'core',
   'plugins/platforms/photon/adapter.py': 'core',
+  'pm/cli.py': 'core',
   'pm/install.py': 'core',
+  'pm/progress.py': 'core',
   'tools/bot_relay.py': 'core',
   'tools/computer_use/cua_backend.py': 'core',
   'tools/mcp_tool_config.py': 'core',
@@ -318,13 +322,26 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'plugins/iclone-permissions/normalize.py': 'plugin',
   'plugins/iclone-permissions/plugin.yaml': 'plugin',
   'plugins/iclone-permissions/policy.py': 'plugin',
+  // v0.0.4 deps (r4): PyJWT >= 2.14 refuses JWKS redirects, so the dashboard providers and the Chronos verifier
+  // resolve the JWKS URL by the OIDC discovery redirect rule (same origin only); PM's pip check is handed the project so
+  // it tolerates only the exact uv overrides of ruling 92 (pm/environment.py holds the rule).
+  'plugins/cron_providers/chronos/verify.py': 'core',
+  'plugins/dashboard_auth/_shared.py': 'core',
+  'plugins/dashboard_auth/self_hosted/__init__.py': 'core',
+  'pm/operations.py': 'core',
   // Runtime locks (owner, 2026-10-28): the opt-in bridges pin fixed releases of a dependency by an override —
   // undici 7.30.1 in the Photon sidecar (GHSA-xjj6-f33q-929c, GHSA-qrxm-fqhp-jwvm), body-parser 1.20.9 in the
-  // WhatsApp bridge (GHSA-27r3-jxmh-p828). Each manifest and its lock move together.
+  // WhatsApp bridge (GHSA-27r3-jxmh-p828); v0.0.4 (review M2): @grpc/grpc-js 1.14.5 (GHSA-m9gg-hp2v-232j,
+  // GHSA-f596-whhp-79r4) and zod 4.6.6 (GHSA-mrhx-c7xc-m3w5) in the sidecar, sharp 0.35.5 (GHSA-wq5f-xc86-pv6w) in the
+  // bridge. Each manifest and its lock move together; audit-gate.mjs SUB_LOCKS judges both locks (G-45).
   'plugins/platforms/photon/sidecar/package-lock.json': 'deps',
   'plugins/platforms/photon/sidecar/package.json': 'deps',
   'scripts/whatsapp-bridge/package-lock.json': 'deps',
   'scripts/whatsapp-bridge/package.json': 'deps',
+  // Runtime security pins (v0.0.4): fixed releases above the upstream pin's (Pillow 13.0.0 by an exact uv override,
+  // PyJWT 2.15.0, aiohttp 3.14.4, urllib3 2.8.0, certifi, brotlicffi). The project and its lock move together.
+  'pyproject.toml': 'deps',
+  'uv.lock': 'deps',
   // The Settings › Updates › Agent hand-off script (the door is disabled in 0.0.3, K-RT3; the script stays inert).
   'scripts/desktop-update/iclone-agent-update.sh': 'script',
   // Licence and notices of the fork.

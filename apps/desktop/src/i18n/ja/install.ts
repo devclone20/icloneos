@@ -91,6 +91,7 @@ export const install: TranslationOverrides['install'] = {
       unknown: 'インストールを完了できませんでした。'
     },
     failedIn: name => `${name} のインストール中に失敗しました。`,
+    unattributed: line => `Installer reported: ${line}`,
     fixRetry: '再試行',
     fixRepair: 'インストールを修復',
     fixFreeDisk: needed => (needed ? `ディスクの空き容量を確保…（${needed} 必要）` : 'ディスクの空き容量を確保…'),
@@ -126,7 +127,11 @@ export const install: TranslationOverrides['install'] = {
       installing: 'インストール中',
       done: '完了',
       failed: '失敗',
-      notNeeded: 'インストール済み'
+      notNeeded: 'インストール済み',
+      // English until the global plan translates the r4 states (the app ships English only).
+      verifying: 'Verifying',
+      repairing: 'Repairing',
+      stopped: 'Stopped'
     }
   }
 }

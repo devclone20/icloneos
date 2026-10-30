@@ -1,0 +1,31 @@
+icloneos-raster-text/2
+sha256 d2f5043694ff2153978eeca7ee88f03cfa12107c584617ac9be1366a96eac7b3
+transcript signed docs/media/shots/shots.json
+THE APP ON YOUR MAC
+your model • your key
+iclone os
+signed · notarised
+127.0.0.1
+token
+agent runtime
+Hermes Agent · pinned
+checked by sha256
+local model
+never leaves
+the Mac
+STAYS ON YOUR MAC
+sessions
+memory
+provider keys
+audit log
+YOUR MAC
+cloud model
+tool call
+ask
+you answer
+permission gate
+every tool call
+tools
+terminal • files
+browser • MCP
+INTERNET

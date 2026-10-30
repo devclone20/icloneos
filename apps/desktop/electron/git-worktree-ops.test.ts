@@ -484,3 +484,51 @@ test('switchBranch: repo dir still validates the branch name and switches', asyn
     fs.rmSync(dir, { recursive: true, force: true })
   }
 })
+
+// G-42 (review R1-A, round 2): the base of a new worktree is a ref the caller names as it is. Before the fix,
+// "origin/--upload-pack=<cmd>" reached `git fetch origin <it>` as an option and ran <cmd> against a local remote.
+test('a base that is an option never reaches git: no upload-pack runs and no worktree is made', async () => {
+  const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-remote-'))
+  const cloneDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-clone-'))
+  const marker = path.join(os.tmpdir(), `hermes-upload-pack-${process.pid}-${Date.now()}`)
+
+  try {
+    execFileSync('git', ['init', '-b', 'main', remoteDir])
+    execFileSync('git', [
+      '-C',
+      remoteDir,
+      '-c',
+      'user.email=hermes@localhost',
+      '-c',
+      'user.name=Hermes',
+      'commit',
+      '--allow-empty',
+      '-m',
+      'root'
+    ])
+    execFileSync('git', ['clone', remoteDir, cloneDir])
+
+    const refused = await addWorktree(
+      cloneDir,
+      { base: `origin/--upload-pack=touch ${marker};`, branch: 'x', name: 'x' },
+      'git'
+    ).then(
+      () => null,
+      (error: Error) => error
+    )
+
+    assert.equal(fs.existsSync(marker), false, 'git ran the upload-pack command')
+    assert.match(String(refused?.message), /Base branch is not a valid ref/)
+    assert.equal(fs.existsSync(path.join(cloneDir, '.worktrees', 'x')), false)
+
+    // A real base still works, through --end-of-options.
+    const made = await addWorktree(cloneDir, { base: 'origin/main', branch: 'y', name: 'y' }, 'git')
+
+    assert.equal(made.branch, 'y')
+    assert.equal(fs.existsSync(made.path), true)
+  } finally {
+    fs.rmSync(marker, { force: true })
+    fs.rmSync(remoteDir, { recursive: true, force: true })
+    fs.rmSync(cloneDir, { recursive: true, force: true })
+  }
+})

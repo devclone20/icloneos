@@ -13,6 +13,8 @@ import logging
 import math
 import os
 import secrets
+import threading
+import time
 import urllib.parse
 from typing import Any, Callable, Dict, Optional
 
@@ -26,6 +28,11 @@ from hermes_cli.dashboard_auth import (
 JWKS_CACHE_SECONDS = 300
 TOKEN_ENDPOINT_TIMEOUT_SEC = 10.0
 JSON_HEADERS = {"Accept": "application/json"}
+# Explicit Accept/User-Agent on every JWKS request (some WAFs block the library default).
+JWKS_HTTP_HEADERS = {"Accept": "application/json", "User-Agent": "HermesAgent/1.0"}
+# iclone (v0.0.4 deps r4, F1): a resolved JWKS URL is reused for as long as OIDC discovery is (one hour).
+JWKS_RESOLVE_TTL_SEC = 3600
+JWKS_RESOLVE_TIMEOUT_SEC = 10.0
 
 # Clock-skew leeway (seconds) for JWT time-claim verification (RFC 7519 §4.1.4-4.1.6
 # allow "some small leeway, usually no more than a few minutes"). Applied symmetrically
@@ -75,6 +82,24 @@ def _request_limited_response(method: str, url: str, **kwargs: Any) -> httpx.Res
             content=b"".join(chunks),
             request=response.request,
         )
+
+
+def url_origin(url: str) -> tuple:
+    """``(scheme, hostname, port)`` for an origin compare, with default ports
+    normalised so ``https://h`` and ``https://h:443`` are the same origin."""
+    parts = urllib.parse.urlparse(url)
+    scheme = parts.scheme.lower()
+    return (scheme, (parts.hostname or "").lower(),
+            parts.port or {"https": 443, "http": 80}.get(scheme))
+
+
+def require_same_origin(resolved: str, requested: str, *, label: str, anchor: str) -> None:
+    """The redirect rule for an IdP document fetched with ``follow_redirects=True`` (OIDC discovery, the JWKS):
+    it counts only when the URL that finally served it shares the origin (scheme, host, port) of ``requested``.
+    The body cannot prove where it came from, so a hop that lands on another origin (a cleartext downgrade, a
+    foreign host or port) is refused."""
+    if url_origin(resolved) != url_origin(requested):
+        raise ProviderError(f"{label} resolved to {resolved}, outside {anchor} ({requested!r})")
 
 
 # ---- Config / env resolution ----
@@ -253,14 +278,66 @@ def session_from_claims(
 
 # ---- JWT verification ----
 
-def make_jwks_client(jwks_url: str) -> Any:
-    """PyJWKClient with explicit Accept/User-Agent (some WAFs block the library default).
-    Imported lazily so plugin discovery stays cheap."""
-    from jwt import PyJWKClient
+def resolve_jwks_url(jwks_url: str) -> str:
+    """iclone (v0.0.4 deps r4, F1): the URL that finally serves ``jwks_url``.
 
-    return PyJWKClient(
-        jwks_url, cache_keys=True, lifespan=JWKS_CACHE_SECONDS,
-        headers={"Accept": "application/json", "User-Agent": "HermesAgent/1.0"})
+    PyJWT >= 2.14 refuses redirects when ``PyJWKClient`` fetches a JWKS; that protection is kept. IdPs and their
+    proxies do answer a ``jwks_uri`` with a 301/302/307/308 (canonical host or path), so the URL is resolved here,
+    once per ``JWKS_RESOLVE_TTL_SEC``, by the same rule as OIDC discovery (``require_same_origin``: the hops may
+    move the path, never the origin), and ``PyJWKClient`` is built on the result. Every failure is a
+    ``ProviderError`` (fail closed: never read as "this token is not ours")."""
+    try:
+        response = _request_limited_response(
+            "GET", jwks_url, headers=JWKS_HTTP_HEADERS, timeout=JWKS_RESOLVE_TIMEOUT_SEC, follow_redirects=True)
+    except httpx.RequestError as exc:
+        raise ProviderError(f"JWKS unreachable: {exc}") from exc
+    if response.status_code != 200:
+        raise ProviderError(f"JWKS returned {response.status_code} for {jwks_url!r}")
+    resolved = str(response.url)
+    require_same_origin(resolved, jwks_url, label="JWKS", anchor="the jwks_uri's origin")
+    return resolved
+
+
+class ResolvedJwksClient:
+    """A ``PyJWKClient`` on the URL ``resolve_jwks_url`` returns for ``jwks_url``, re-resolved after
+    ``JWKS_RESOLVE_TTL_SEC``; the inner client (and its key cache) is kept while the resolved URL is unchanged.
+    Stands in for ``PyJWKClient`` (``get_signing_key_from_jwt``). ``build(url)`` makes the inner client."""
+
+    def __init__(self, jwks_url: str, build: Callable[[str], Any]) -> None:
+        self.jwks_url = jwks_url
+        self._build = build
+        self._lock = threading.Lock()
+        self._resolved: Optional[str] = None
+        self._client: Any = None
+        self._expires_at = 0.0
+
+    def client(self) -> Any:
+        with self._lock:
+            if self._client is None or time.monotonic() >= self._expires_at:
+                resolved = resolve_jwks_url(self.jwks_url)
+                if self._client is None or resolved != self._resolved:
+                    self._client, self._resolved = self._build(resolved), resolved
+                self._expires_at = time.monotonic() + JWKS_RESOLVE_TTL_SEC
+            return self._client
+
+    def get_signing_key_from_jwt(self, token: str) -> Any:
+        import jwt
+
+        # A bearer that is not a JWT is not ours: DecodeError before any network, as PyJWKClient does (#94558).
+        jwt.get_unverified_header(token)
+        return self.client().get_signing_key_from_jwt(token)
+
+
+def make_jwks_client(jwks_url: str) -> Any:
+    """The provider's JWKS client: a ``ResolvedJwksClient`` over a ``PyJWKClient`` with explicit headers.
+    ``jwt`` is imported lazily so plugin discovery stays cheap."""
+
+    def build(url: str) -> Any:
+        from jwt import PyJWKClient
+
+        return PyJWKClient(url, cache_keys=True, lifespan=JWKS_CACHE_SECONDS, headers=dict(JWKS_HTTP_HEADERS))
+
+    return ResolvedJwksClient(jwks_url, build)
 
 
 def verify_jwt(

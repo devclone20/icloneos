@@ -90,6 +90,7 @@ export const install: TranslationOverrides['install'] = {
       unknown: 'Não foi possível terminar a instalação.'
     },
     failedIn: name => `Falhou ao instalar ${name}.`,
+    unattributed: line => `O instalador reportou: ${line}`,
     fixRetry: 'Tentar de novo',
     fixRepair: 'Reparar a instalação',
     fixFreeDisk: needed => (needed ? `Libertar espaço em disco… (faltam ${needed})` : 'Libertar espaço em disco…'),
@@ -124,7 +125,10 @@ export const install: TranslationOverrides['install'] = {
       installing: 'A instalar',
       done: 'Concluído',
       failed: 'Falhou',
-      notNeeded: 'Já presente'
+      notNeeded: 'Já presente',
+      verifying: 'A verificar',
+      repairing: 'A reparar',
+      stopped: 'Parado'
     }
   }
 }

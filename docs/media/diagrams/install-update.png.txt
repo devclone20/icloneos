@@ -1,0 +1,32 @@
+icloneos-raster-text/2
+sha256 2174be239c52c80672a9985bab22f86160d1b7feb533c4251a652dac93271003
+transcript signed docs/media/shots/shots.json
+FROM DOWNLOAD TO ALWAYS CURRENT
+DOWNLOAD
+01
+VERIFY
+02
+FIRST LAUNCH
+UPDATE
+04
+DMG or zip
+Apple silicon
+macOS 12 or later
+SHA256SUMS.txt
+Developer ID signed
+notarised by Apple
+5 stages, in view
+Agent files · in the app
+Python environment
+Packages · locked
+Settings
+Finish
+at start
+every six hours
+and on wake
+nothing downloads
+without a click
+verified before
+install
+EACH STEP VERIFIED • EVERY STEP IN VIEW
+03

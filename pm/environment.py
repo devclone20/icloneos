@@ -213,18 +213,74 @@ def venv_exclusions() -> list[str]:
     return [line.strip() for line in text.splitlines() if line.strip() and not line.lstrip().startswith("#")]
 
 
+PROJECT_PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+def declared_overrides(pyproject: Path | None = None, *, python: str | None = None) -> frozenset[tuple[str, str]]:
+    """iclone (v0.0.4 deps r2): the exact ``name==version`` pins in the project's ``[tool.uv] override-dependencies``.
+    A uv override replaces a dependency's own requirement on purpose (e.g. ``pillow==13.0.0`` over browser-harness's
+    ``pillow==12.3.0`` pin, for the 13.0.0 security fixes), and ``uv pip check`` still reports the requirer's pin.
+    Fail closed: an unreadable or malformed pyproject declares nothing, so nothing extra is tolerated.
+    iclone (v0.0.4 deps r4, S2): an override's environment marker is kept and must apply to the environment checked
+    (``python``: its interpreter's version, else this interpreter's; the platform is this machine's). A marker that
+    does not apply or cannot be evaluated declares nothing."""
+    import re
+    import tomllib
+
+    try:
+        data = tomllib.loads((pyproject or PROJECT_PYPROJECT).read_text(encoding="utf-8"))
+        entries = data["tool"]["uv"]["override-dependencies"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return frozenset()
+    exact = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)\s*==\s*([A-Za-z0-9][A-Za-z0-9.+!_-]*)\s*(?:;(.*))?$")
+    pins = (exact.match(entry) for entry in entries if isinstance(entry, str))
+    return frozenset((_pep503(pin.group(1)), pin.group(2)) for pin in pins
+                     if pin and (pin.group(3) is None or _marker_applies(pin.group(3), python)))
+
+
+def _marker_applies(marker: str, python: str | None) -> bool:
+    """True only when PEP 508 ``marker`` evaluates true for an interpreter of version ``python`` on this machine.
+    Fail closed: no ``packaging`` in PM's interpreter, a malformed marker or an evaluation error is False."""
+    try:
+        from packaging.markers import Marker
+
+        environment = {} if python is None else {
+            "python_full_version": python, "python_version": ".".join(python.split(".")[:2])}
+        return bool(Marker(marker.strip()).evaluate(environment=environment))
+    except Exception:
+        return False
+
+
+def _locked_packages(lock: Path) -> frozenset[str]:
+    """iclone (v0.0.4 deps r4, S1): the PEP 503 names in a project's ``uv.lock`` (the packages it depends on).
+    Fail closed: an unreadable or malformed lock names none."""
+    import tomllib
+
+    try:
+        packages = tomllib.loads(lock.read_text(encoding="utf-8"))["package"]
+        return frozenset(_pep503(package["name"]) for package in packages)
+    except (OSError, ValueError, KeyError, TypeError):
+        return frozenset()
+
+
 def _pep503(name: str) -> str:
     import re
 
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
-def _only_excluded_missing(output: str) -> tuple[bool, str]:
+def _only_excluded_missing(output: str, *, project: Path | None = None) -> tuple[bool, str]:
     """iclone (ruling 57.2): ``uv pip check`` fails only because a package requires a distribution PM excludes on
     purpose (the requirer falls back without it, e.g. hermes-agent's no-op Relay host). Any other problem is real.
 
     Fail closed (ruling 58): every non-empty line must be one uv prints around its report, or a requirement on an
     excluded name that is NOT installed; anything else, or a problem count that does not match, is not tolerated.
+    Also tolerated (v0.0.4 deps r2): a version mismatch whose installed version is exactly a pin the project declares
+    in ``[tool.uv] override-dependencies`` (``declared_overrides``) — the resolver put it there on purpose.
+    iclone (v0.0.4 deps r4, S1/F4): that tolerance holds only for the environment of ``project`` (the source tree it
+    was resolved from; ``None`` = any other environment, which tolerates no mismatch), only with the override read
+    from that project's own ``pyproject.toml`` for the interpreter uv reports (``Using Python X.Y.Z``), and only when
+    the requirer is a package that project's ``uv.lock`` holds and PM does not exclude.
     Returns ``(True, "")`` when the report is tolerated, else ``(False, reason)`` naming the first line not read."""
     import re
 
@@ -241,12 +297,29 @@ def _only_excluded_missing(output: str) -> tuple[bool, str]:
     # Only those are dropped (a report captured without --color never still parses); any other control sequence
     # leaves its line unread, which refuses.
     output = re.sub(r"\x1b\[[0-9;]*m", "", output)
+    mismatch = re.compile(r"^The package `([^`]+)` requires `([A-Za-z0-9][A-Za-z0-9._-]*)(?:[<>=!~;\[ ][^`]*)?`, "
+                          r"but `([^`]+)` is installed$")
+    checked = re.search(r"^Using Python (\d+\.\d+\.\d+)\S* environment at: ", output, re.MULTILINE)
+    overrides, requirers = frozenset(), frozenset()
+    if project is not None and checked:
+        overrides = declared_overrides(project / "pyproject.toml", python=checked.group(1))
+        requirers = _locked_packages(project / "uv.lock") - excluded
     tolerated, counted, seen = 0, None, set()
     for line in (line.strip() for line in output.splitlines()):
         if not line or info.match(line):
             continue
         if (summary := found.match(line)) and counted is None:
             counted = int(summary.group(1))
+            continue
+        if (overridden := mismatch.match(line)) and (_pep503(overridden.group(2)), overridden.group(3)) in overrides:
+            if _pep503(overridden.group(1)) in excluded:
+                return False, f"an excluded distribution is installed: {line}"
+            if _pep503(overridden.group(1)) not in requirers:
+                return False, f"a requirer the project does not lock: {line}"
+            if line in seen:
+                return False, f"line repeated: {line}"
+            seen.add(line)
+            tolerated += 1
             continue
         required = missing.match(line)
         if not required:
@@ -264,7 +337,7 @@ def _only_excluded_missing(output: str) -> tuple[bool, str]:
     if counted is None:
         return False, "no `Found N incompatibilities` summary"
     if not tolerated:
-        return False, "the report names no missing excluded distribution"
+        return False, "the report names no tolerated problem (a missing excluded distribution or a declared override)"
     if counted != tolerated:
         return False, f"the report counts {counted} problems, {tolerated} read"
     return True, ""
@@ -312,15 +385,15 @@ def managed_environment(destination: Path, *, python: Path | None = None,
 
 
 @contextmanager
-def _fresh_build(environment: PythonEnvironment, *, sealed: bool) -> Iterator[None]:
-    """Own only the output claimed by this build, including failed validation."""
+def _fresh_build(environment: PythonEnvironment, *, sealed: bool, project: Path | None = None) -> Iterator[None]:
+    """Own only the output claimed by this build, including failed validation. ``project``: see ``check``."""
     out = environment.destination
     # A concurrent creator wins intact: never enter cleanup before mkdir succeeds.
     out.mkdir(parents=True)
     try:
         environment.create()
         yield
-        environment.check()
+        environment.check(project=project)
         if sealed:
             prune_site_pth(out)
     except BaseException:
@@ -517,7 +590,7 @@ class PythonEnvironment:
         requirements = source / "requirements.txt"
         self.export_requirements(source, requirements, timeout=timeout)
         self._install_requirements_file(requirements, wheelhouse=wheelhouse, timeout=timeout)
-        self.check()
+        self.check(project=source)
 
     def prune_cache(self, *, ci: bool = False) -> None:
         command = ["cache", "prune", "--no-config"]
@@ -527,15 +600,17 @@ class PythonEnvironment:
         if result.returncode:
             raise InstallError("uv", f"cache pruning failed: {result.stderr[-600:]}")
 
-    def check(self) -> None:
+    def check(self, *, project: Path | None = None) -> None:
         # The report is parsed line by line (ruling 57.2): no colour (uv honours FORCE_COLOR / CLICOLOR_FORCE even
         # when piped), and the whole output, never the streamed tail, whatever the verbose/CI mode.
+        # ``project``: the source tree this environment was resolved from (its declared overrides, its lock); None
+        # for any other environment (v0.0.4 deps r4, F4).
         result = self._run(
             ["pip", "check", "--no-config", "--color", "never", "--python", str(self.executable)],
             cwd=self.destination.parent, timeout=60, capture=True,
         )
         if not result.returncode:
             return
-        tolerated, reason = _only_excluded_missing(result.stdout + "\n" + result.stderr)
+        tolerated, reason = _only_excluded_missing(result.stdout + "\n" + result.stderr, project=project)
         if not tolerated:
             raise InstallError("venv", f"dependency validation failed ({reason}): {result.stderr[-600:]}")

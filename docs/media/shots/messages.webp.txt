@@ -1,0 +1,22 @@
+icloneos-raster-text/2
+sha256 b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387
+transcript signed docs/media/shots/shots.json
+iclone os
+Draft a plan for our launch week - keep it...
+Draft a plan for our launch week - keep it short.
+Here is a plan for the launch week:
+1. Monday - freeze the release branch and run the full test suite.
+2. Tuesday - draft the changelog and record a short walkthrough.
+3. Wednesday - publish the build and watch the update feed.
+4. Thursday - collect feedback from early users.
+5. Friday - ship the first patch.
+Want me to turn this into tasks on the board?
+0%
+Great. Also summarize today's inbox for me.
+Summary of today's inbox:
+3 replies waiting on you - design review, invoice question, meetup invite.
+1 newsletter worth reading: a deep dive on agent memory.
+Nothing urgent. I drafted answers for the first two; they're in Drafts.
+1s
+What should we tackle?
+Demo Model • Medium

@@ -12,13 +12,15 @@ Stdlib-only: the bootstrap runner imports this from a pre-3.11 system Python.
 from __future__ import annotations
 
 from collections import deque
+from contextlib import contextmanager
+from contextvars import ContextVar
 import os
 import re
 import shutil
 import subprocess
 import sys
 import time
-from typing import IO, Callable, Mapping, Optional, Protocol, Sequence
+from typing import IO, Callable, Iterator, Mapping, Optional, Protocol, Sequence
 
 TAIL_LINES = 80
 # A child that never prints a newline (a bare progress stream, a binary blob) must not
@@ -29,6 +31,19 @@ _FALSE = {"0", "false", "no", "off"}
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]")
 # A redraw per child line would dominate a fast install's runtime on slow terminals.
 _REDRAW_INTERVAL = 0.05
+# The package a contained child works for (``venv`` while uv syncs it). Its ✗ line then starts with
+# ``<owner>: `` like every other package failure, so the desktop overlay fails that row by name.
+_OWNER: ContextVar[Optional[str]] = ContextVar("pm_progress_owner", default=None)
+
+
+@contextmanager
+def failure_owner(name: str) -> Iterator[None]:
+    """Name the package every :class:`LiveTail` opened inside this block reports a failure for."""
+    token = _OWNER.set(name)
+    try:
+        yield
+    finally:
+        _OWNER.reset(token)
 
 
 class TextSink(Protocol):
@@ -63,8 +78,10 @@ class LiveTail:
     """
 
     def __init__(self, label: Optional[str], stream: Optional[IO[str]] = None, *,
-                 hide: Optional[Callable[[str], bool]] = None, indent: str = "") -> None:
+                 hide: Optional[Callable[[str], bool]] = None, indent: str = "",
+                 owner: Optional[str] = None) -> None:
         self.label = label
+        self.owner = owner if owner is not None else _OWNER.get()
         self.stream = sys.stdout if stream is None else stream
         self.hide = hide
         self.indent = indent
@@ -102,6 +119,8 @@ class LiveTail:
                 self._emit(f"{self.indent}✓ {self.label}\n")
             return
         name = self.label or "command"
+        if self.owner:
+            name = f"{self.owner}: {name}"
         if not self.tail:
             self._emit(f"{self.indent}✗ {name} failed\n")
             return

@@ -1,0 +1,35 @@
+icloneos-raster-text/2
+sha256 b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36
+transcript signed docs/media/shots/shots.json
+iclone os
+a7d7e17 Queue edits while offline
+d5e87a3 Search notes by title and body
+06806b2 Add the test runner
+3668ed2 Add the note model
+eadafa4 Start orbit-notes
+README.md
+src
+test.sh
+demo ~/projects/orbit-notes %
+running 12 tests
+notes › create
+notes › edit title
+notes › delete
+search › by title
+search › by body
+sync › offline queue
+sync › conflict keeps both
+export › markdown
+export › json
+ui › empty state
+ui › keyboard shortcuts
+ui › dark theme
+12 passed (0.84s)
+demo ~/projects/orbit-notes %
+# orbit-notes
+A tiny notes app the agent is building.
+- search by title and body
+- offline sync queue
+export interface Note { id: string; title: string; body: string }
+export const notes: Note[] = []
+demo ~/projects/orbit-notes %

@@ -1,0 +1,4 @@
+icloneos-raster-text/2
+sha256 0df0b7b0c52bb90bca1a14aec2bfc06fe5006f9d26d1f1ffc3e35113f42fd2eb
+transcript signed docs/media/shots/shots.json
+i01

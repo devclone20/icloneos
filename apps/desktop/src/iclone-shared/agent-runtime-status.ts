@@ -9,7 +9,8 @@ import {
   PACKAGES_STAGE,
   type PackagesState,
   reducePackageLine,
-  settlePackages
+  settlePackages,
+  unattributedFailures
 } from './install-packages'
 
 /** Tag the skip refusal carries across IPC so the renderer opens the app without the agent instead of a card. */
@@ -22,6 +23,9 @@ export interface AgentRuntimeStatus {
   state: AgentRuntimeState
   /** One line per package of the dependency stage, with its state and sizes. */
   packages: PackageLine[]
+  /** G-01 R3-3: the dependency stage's ✗ lines that name no package row, so no failure is invisible in Settings.
+   * Absent from records written before v0.0.4 (parsed as empty). */
+  unattributed: string[]
   /** The last failure, diagnosed (null once an install completes). */
   diagnosis: InstallDiagnosis | null
   /** Times the user chose "Skip for now" since the last install attempt from Settings. */
@@ -41,8 +45,14 @@ export function emptyAgentRuntimeStatus(now = 0): AgentRuntimeStatus {
     skippedAt: null,
     stageDurations: {},
     state: 'not-installed',
+    unattributed: [],
     updatedAt: now
   }
+}
+
+/** The status fields that mirror the package lines of a run. */
+function packageFields(packages: PackagesState): Pick<AgentRuntimeStatus, 'packages' | 'unattributed'> {
+  return { packages: packages.packages, unattributed: [...unattributedFailures(packages)] }
 }
 
 /** The bootstrap events main folds into the status (a structural subset of the runner's events). */
@@ -75,7 +85,7 @@ export function trackBootstrapEvent(
 
     return {
       run,
-      status: { ...status, packages: run.packages.packages, state: 'installing', updatedAt: now }
+      status: { ...status, ...packageFields(run.packages), state: 'installing', updatedAt: now }
     }
   }
 
@@ -106,7 +116,7 @@ export function trackBootstrapEvent(
 
     return {
       run: { ...run, packages, tail },
-      status: packages === run.packages ? status : { ...status, packages: packages.packages, updatedAt: now }
+      status: packages === run.packages ? status : { ...status, ...packageFields(packages), updatedAt: now }
     }
   }
 
@@ -127,7 +137,7 @@ export function trackBootstrapEvent(
         failedStage: ev.state === 'failed' ? ev.name : run.failedStage,
         packages
       },
-      status: { ...status, packages: packages.packages, stageDurations: durations, updatedAt: now }
+      status: { ...status, ...packageFields(packages), stageDurations: durations, updatedAt: now }
     }
   }
 
@@ -141,7 +151,7 @@ export function trackBootstrapEvent(
         diagnosis: optionalFailed.length
           ? diagnoseInstallFailure({ error: optionalFailed[0].error, log: run.tail, stage: PACKAGES_STAGE })
           : null,
-        packages: run.packages.packages,
+        ...packageFields(run.packages),
         skipCount: 0,
         skippedAt: null,
         state: optionalFailed.length ? 'incomplete' : 'installed',
@@ -160,7 +170,7 @@ export function trackBootstrapEvent(
       status: {
         ...status,
         diagnosis: diagnoseInstallFailure({ error, log: run.tail, stage }),
-        packages: run.packages.packages,
+        ...packageFields(run.packages),
         state: run.packages.packages.some(line => line.state === 'done') ? 'incomplete' : 'not-installed',
         updatedAt: now
       }
@@ -211,6 +221,9 @@ export function parseAgentRuntimeStatus(raw: unknown, now = 0): AgentRuntimeStat
     skipCount: Number.isInteger(value.skipCount) && (value.skipCount as number) >= 0 ? (value.skipCount as number) : 0,
     skippedAt: typeof value.skippedAt === 'number' ? value.skippedAt : null,
     stageDurations: value.stageDurations && typeof value.stageDurations === 'object' ? value.stageDurations : {},
+    unattributed: Array.isArray(value.unattributed)
+      ? value.unattributed.filter((line): line is string => typeof line === 'string')
+      : [],
     // A run that was "installing" when the app died is not installed.
     state: value.state && states.includes(value.state) && value.state !== 'installing' ? value.state : 'not-installed',
     updatedAt: typeof value.updatedAt === 'number' ? value.updatedAt : now

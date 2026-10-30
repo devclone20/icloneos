@@ -105,3 +105,34 @@ describe('agent runtime status (RTB-6/7, V3-ON status API)', () => {
     })
   })
 })
+
+describe('the r4 package states in the persisted status (G-01 R3-3)', () => {
+  it('a nameless ✗ and the stopped rows of a failed stage are persisted, round-trip, and old records still load', () => {
+    let tracker = { run: null, status: emptyAgentRuntimeStatus(0) } as Parameters<typeof trackBootstrapEvent>[0]
+
+    for (const ev of [
+      { type: 'manifest' },
+      { line: '  node: verifying', stage: 'python-deps', type: 'log' },
+      { line: '  ✗ uv sync failed; last 3 lines of output follow', stage: 'python-deps', type: 'log' },
+      { error: 'exit 1', name: 'python-deps', state: 'failed', type: 'stage' },
+      { error: 'exit 1', stage: 'python-deps', type: 'failed' }
+    ]) {
+      tracker = trackBootstrapEvent(tracker, ev, 1)
+    }
+
+    expect(tracker.status.unattributed).toEqual(['uv sync failed; last 3 lines of output follow'])
+    expect(tracker.status.packages.find(line => line.name === 'node')?.state).toBe('stopped')
+    const reloaded = parseAgentRuntimeStatus(JSON.parse(JSON.stringify(tracker.status)), 2)
+
+    expect(reloaded.packages).toEqual(tracker.status.packages)
+    expect(reloaded.unattributed).toEqual(tracker.status.unattributed)
+    // A record written before r4 (no `unattributed`, the old states) loads as it was, with nothing unattributed.
+    const old = { ...JSON.parse(JSON.stringify(tracker.status)), packages: [{ name: 'node', state: 'waiting' }] }
+    delete old.unattributed
+
+    expect(parseAgentRuntimeStatus(old, 3)).toMatchObject({
+      packages: [{ name: 'node', state: 'waiting' }],
+      unattributed: []
+    })
+  })
+})

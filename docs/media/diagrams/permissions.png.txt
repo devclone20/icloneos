@@ -1,0 +1,45 @@
+icloneos-raster-text/2
+sha256 fc347626c19e406b64c49f0e5562f53e6b9c23f5583114369a152f5f1bf8576f
+transcript signed docs/media/shots/shots.json
+THE PERMISSION GATE
+tool call →
+CLASSIFY
+what it does
+01
+FLOOR
+never, any mode
+02
+SWITCH
+privacy
+03
+YOUR LEVEL
+per function
+DECISION
+strictest wins
+05
+allow
+it runs • recorded
+× refuse
+ask
+the consent sheet
+no answer in 2 min = Deny
+refuse
+it does not run
+FIVE MODES
+Manual
+a fresh install
+Automatic
+Accept edits
+Plan
+Ignore permissions
+the other four need
+the Keychain setting on
+NO MODE ALLOWS
+× wiping the disk
+× changing its own permissions or its record
+reading keys to send them anywhere
+stopping the app or the gate
+typing your administrator password
+transferring an iNFT
+THE STRICTEST ANSWER WINS • EVERY DECISION RECORDED
+04

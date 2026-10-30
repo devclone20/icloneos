@@ -7,7 +7,7 @@
 <p align="center">An AI agent on your own Mac, with the iNFT you hold at the centre of it.<br>Signed with Developer ID and notarised by Apple.</p>
 
 <p align="center">
-  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.3"></a>
+  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.4"></a>
   <a href="docs/INSTALL.md"><img src="docs/media/brand/badge-macos.svg" height="22" alt="macOS 12 or later, Apple silicon"></a>
   <a href="docs/INSTALL.md#release-integrity"><img src="docs/media/brand/badge-notarised.svg" height="22" alt="Signed with Developer ID, notarised by Apple"></a>
   <a href="docs/PRIVACY.md#no-telemetry"><img src="docs/media/brand/badge-telemetry.svg" height="22" alt="No telemetry"></a>

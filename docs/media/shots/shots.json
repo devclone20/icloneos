@@ -2,6 +2,46 @@
   "app": "iclone os.app",
   "appVersion": "0.0.3",
   "capturedAt": "2026-10-29T20:19:52.635Z",
+  "contactSheet": {
+    "sha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551"
+  },
+  "otherRasters": [
+    {
+      "file": "docs/media/brand/icon.png",
+      "sha256": "0df0b7b0c52bb90bca1a14aec2bfc06fe5006f9d26d1f1ffc3e35113f42fd2eb",
+      "textSidecarSha256": "18f99d277573129c57add899dd20b1acdbab77b0502ff226972a8b927118eec4"
+    },
+    {
+      "file": "docs/media/diagrams/architecture.png",
+      "sha256": "d2f5043694ff2153978eeca7ee88f03cfa12107c584617ac9be1366a96eac7b3",
+      "textSidecarSha256": "a38de0457251fbddc2ef55d3b384db8ecef7a2caf68d1b1a53bd26181279364b"
+    },
+    {
+      "file": "docs/media/diagrams/inft.png",
+      "sha256": "fd1bc3be4b8a49777e01a445371a1173d0c8bf0b11b9b2694c8fca105f56b9a9",
+      "textSidecarSha256": "181c4e164e00c71c999c36d8245b98edb6f5379f5501adceaa400b8e0b23852b"
+    },
+    {
+      "file": "docs/media/diagrams/install-update.png",
+      "sha256": "2174be239c52c80672a9985bab22f86160d1b7feb533c4251a652dac93271003",
+      "textSidecarSha256": "3af85c664c8a778a7193aa9fe7c135f7bfb4c8b33576ccc9e1189522248c58b8"
+    },
+    {
+      "file": "docs/media/diagrams/model-choice.png",
+      "sha256": "81f0fc2f42ee88766bc156fdc4421e1504c141463f2122d12cfba4fb85a4776b",
+      "textSidecarSha256": "c950c4383b4b56901b83a4cbc0ff384cbf95ca390b1945458be383cd4a70ab2d"
+    },
+    {
+      "file": "docs/media/diagrams/permissions.png",
+      "sha256": "fc347626c19e406b64c49f0e5562f53e6b9c23f5583114369a152f5f1bf8576f",
+      "textSidecarSha256": "3d9bea66d5d906659c2344e2597a4c573e35463a146673092b24cb2a1a5dc01b"
+    },
+    {
+      "file": "docs/media/diagrams/sandbox.png",
+      "sha256": "07873dbad7dcd25a5ee2f9886993864dcbd3c80fc2cd43aebfcc03d0bc6e93e2",
+      "textSidecarSha256": "05991858f2f6eaabc2eb2d966260ac05e93d046ce059f6c5c402fb7a688bef2c"
+    }
+  ],
   "shots": [
     {
       "area": "hero",
@@ -10,8 +50,8 @@
       "file": "docs/media/shots/hero.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "410934d27008c95a5502753d4ff5df461c456dae29cc42d674e9b41ecf4ba2c0",
         "reviewer": "owner",
         "sha256": "5b4144bda0a56ecb6f53d45aa75fb16636e9f1c52ab1a4ce2daa7ee640bd3652",
@@ -44,6 +84,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "d7bb380bb1608603c4c0279651b379dcd01000cffe0fceebfcdad169e31371f2",
       "web_png_fallback": "masters/hero.png",
       "webp_quality": 92
     },
@@ -54,8 +95,8 @@
       "file": "docs/media/shots/hero-framed.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "7b86c888fd3911e824698b95c64275583bf3f8ef32187fbaef1bf14d22c0aee0",
         "reviewer": "owner",
         "sha256": "ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743",
@@ -88,6 +129,7 @@
         1840,
         1220
       ],
+      "textSidecarSha256": "3fa28286a07a7aab72c47cba9ac4550e9f8f00d8d398f0ccd9b107a600148d5a",
       "web_png_fallback": "masters/hero-framed.png",
       "webp_quality": 92
     },
@@ -98,8 +140,8 @@
       "file": "docs/media/shots/inft.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "da5847a8eec9aad25cd966aae6be9b4f55ed1d5fa7d0a9cd2396d84065e3ee6c",
         "reviewer": "owner",
         "sha256": "976ae0c12f695f3b10e37251c9620ac274b4efff33f013fd2cdbb1037e5cb77d",
@@ -132,6 +174,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "3128bb453f2569fc1c0de253b0606fa975d332088c95609c2b180e036b90b525",
       "web_png_fallback": "masters/inft.png",
       "webp_quality": 92
     },
@@ -142,8 +185,8 @@
       "file": "docs/media/shots/acp-market.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "4acf1dc893268e4e87f07065a847fd464a4666235a62104c2f71f4e33f726fc7",
         "reviewer": "owner",
         "sha256": "267066c3afe67c9b22899108b30ddb9d2ebfff984d8fffc3dce617a453297fc9",
@@ -176,6 +219,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "aeaf8edf5badf89f63d6c663f5bb43e88936cfcd7de4de81991f4fb9ed682ada",
       "web_png_fallback": "masters/acp-market.png",
       "webp_quality": 92
     },
@@ -186,8 +230,8 @@
       "file": "docs/media/shots/economyos.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "7f6e75c5b9d8400db52170a26348140610b58498ce898520c2e84bf559bbb4e0",
         "reviewer": "owner",
         "sha256": "76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc",
@@ -220,6 +264,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "1953962de550ab1f6a1b1424af7960d909e53ad6a8284fe02dffcd037ad1f35d",
       "web_png_fallback": "masters/economyos.png",
       "webp_quality": 92
     },
@@ -230,8 +275,8 @@
       "file": "docs/media/shots/settings.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "68b668e217aa0dbda07dd96738cfb523e86c78dd9df9bae52f0cccc954fd8b7e",
         "reviewer": "owner",
         "sha256": "3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e",
@@ -264,6 +309,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "734a0899f77aa5faef8b435a8f0d4fd1592a0fc7b684a2f9674ceacf3115b11e",
       "web_png_fallback": "masters/settings.png",
       "webp_quality": 92
     },
@@ -274,8 +320,8 @@
       "file": "docs/media/shots/messages.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "fec99fedb114dc06daa521ce27d54f4b5582005f1b0bcd619150774c848702f6",
         "reviewer": "owner",
         "sha256": "b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387",
@@ -308,6 +354,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "005d36f36036db735bebaec48279569105822df34049e534eafdd05ef1957f06",
       "web_png_fallback": "masters/messages.png",
       "webp_quality": 92
     },
@@ -318,8 +365,8 @@
       "file": "docs/media/shots/it.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
-        "date": "2026-10-29",
+        "contactSheetSha256": "2b37c281aaffb590b58ec789ad22b2ade1d4ee96d8880734138385f68b4c2551",
+        "date": "2026-10-30",
         "ocrVerdictSha256": "709df84a3d699203afa1e1424c108378e134d17fbc0d1b733ff5432ca0ed0736",
         "reviewer": "owner",
         "sha256": "b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36",
@@ -352,6 +399,7 @@
         1600,
         1000
       ],
+      "textSidecarSha256": "2216ebbc764ab16e276a5e3690c07dcfecc4fc1e05c767830306bd8e57e0e6ad",
       "web_png_fallback": "masters/it.png",
       "webp_quality": 92
     }

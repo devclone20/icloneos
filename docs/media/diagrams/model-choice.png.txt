@@ -1,0 +1,15 @@
+icloneos-raster-text/2
+sha256 81f0fc2f42ee88766bc156fdc4421e1504c141463f2122d12cfba4fb85a4776b
+transcript signed docs/media/shots/shots.json
+YOU BRING THE MODEL
+LOCAL ENDPOINT
+CLOUD PROVIDER
+YOUR MAC
+YOUR MAC
+your key
+agent
+model
+Ollama · llama.cpp · vLLM
+STAYS ON YOUR MACHINE
+messages · files · memory
+DIRECT, UNDER ITS TERMS

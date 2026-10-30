@@ -1,0 +1,80 @@
+icloneos-raster-text/2
+sha256 3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e
+transcript signed docs/media/shots/shots.json
+Settings
+Profile
+Agent
+Economy
+iNFT
+iNFT Book
+EconomyOS
+Payments
+Billing
+Machine
+Appearance
+Pet
+HUD
+Notifications
+Keyboard shortcuts
+iT
+Gateways
+Plugins
+Updates
+Set up
+Diagnostics
+About
+Search
+Appearance
+Choose how the app looks on this computer: light or dark, the colours, and the size of the text.
+How light or dark the app looks, and its colour palette
+Desktop palettes only. The selected mode is applied on top.
+Find a theme you have, or a new one to install
+Light
+Dark
+Search your themes or the VS Code Marketplace...
+System
+iclone natural
+cloneframe.io natural - the field under evening glass
+iclone dark
+iclone light
+cloneframe.io dark - never so dark the field disappears
+cloneframe.io light - lighter glass, not a lid
+How large the text reads
+Makes text larger or smaller across the app; windows keep their size.
+Small 85 %
+Default
+The font your terminals use
+Choose an installed font for the app's terminals. Fonts with terminal glyphs show prompt icons; leave blank to use the bundled font.
+MesloLGS NF or a CSS font stack
+Glyph preview ~/src
+How much detail each chat shows in the sidebar
+Choose how much context appears beneath session titles in the sidebar.
+Let your desktop show through the window
+Matte glass: the desktop shows through as a smooth blur while text stays sharp. Tuned separately for light and dark.
+Tint
+Fade
+Frost
+Area
+How windows open from the Dock
+Maximized fills the app; Normal size opens the window at its usual size.
+A faint image behind the conversation
+The faint statue image behind the conversation.
+Compact
+Comfortable
+22%
+0%
+Clear
+Deep
+Soft
+Bright
+Glare
+Whole window
+Sidebar only
+Maximized
+Large 2x
+Use default
+Detailed
+Glass
+Normal size
+Off
+On

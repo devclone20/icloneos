@@ -83,6 +83,8 @@ export type InstallRecoveryTranslations = {
   diagnosis: Record<InstallFailureClassKey, string>
   /** The package the failure happened in. */
   failedIn: (name: string) => string
+  /** G-01 R3-3: an installer failure line that names no package, shown with the stage failure. */
+  unattributed: (line: string) => string
   fixRetry: string
   fixRepair: string
   /** Free disk space (opens Storage settings); `needed` is a formatted size or null. */
@@ -109,10 +111,14 @@ export type InstallRecoveryTranslations = {
   packageStates: {
     waiting: string
     downloading: (percent: string, done: string, total: string) => string
+    /** A repair download before PM prints its first size. */
+    repairing: string
     unpacking: string
+    verifying: string
     installing: string
     done: string
     failed: string
+    stopped: string
     notNeeded: string
   }
 }

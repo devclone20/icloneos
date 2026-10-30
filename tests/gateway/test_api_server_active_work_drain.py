@@ -128,7 +128,15 @@ class TestDrainWaitsForApiWork:
         task_started = asyncio.Event()
         allow_task = asyncio.Event()
 
-        def delayed_create_task(coro):
+        # Hold only the queued run, keyed on the run coroutines' code objects (looked up by attribute, so a rename
+        # fails here at once). The patch replaces asyncio.create_task for every caller, and aiohttp >= 3.14.4 starts
+        # its own client tasks with create_task(..., eager_start=True): those pass through as asked.
+        run_codes = {_api_runs._execute_run.__code__, _api_runs._execute_run_via_live_owner.__code__}
+
+        def delayed_create_task(coro, **kwargs):
+            if getattr(coro, "cr_code", None) not in run_codes:
+                return original_create_task(coro, **kwargs)
+
             async def delayed():
                 task_started.set()
                 await allow_task.wait()
@@ -149,7 +157,8 @@ class TestDrainWaitsForApiWork:
             async with TestClient(TestServer(app)) as client:
                 response = await client.post("/v1/runs", json={"input": "hello"})
                 assert response.status == 202
-                await task_started.wait()
+                # Bounded: a run the fake does not hold fails here instead of hanging the suite.
+                await asyncio.wait_for(task_started.wait(), 5)
 
                 assert api._active_run_agents == {}
                 assert runner._active_api_run_count() == 1

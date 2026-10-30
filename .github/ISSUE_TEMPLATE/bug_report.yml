@@ -29,7 +29,7 @@ body:
     attributes:
       label: App version
       description: Settings › Machine › About.
-      placeholder: "0.0.3"
+      placeholder: "0.0.4"
     validations:
       required: true
   - type: input

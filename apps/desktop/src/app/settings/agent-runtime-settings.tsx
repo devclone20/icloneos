@@ -129,6 +129,9 @@ export function AgentRuntimeSection() {
         ) : (
           <ListRow title={copy.noPackages} />
         )}
+        {(status?.unattributed ?? []).map((line, index) => (
+          <ListRow data-unattributed key={`unattributed:${index}`} title={install.unattributed(line)} />
+        ))}
       </SettingsSection>
     </>
   )

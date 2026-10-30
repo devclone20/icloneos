@@ -3,6 +3,79 @@
 All notable changes to iclone os. Each release lists its assets — the DMG, the zip and `SHA256SUMS.txt` — on the
 [Releases](https://github.com/devclone20/icloneos/releases) page.
 
+## v0.0.4 — 2026-10-31
+
+The first launch installs faster, every package's row in the install screen now tells the truth about that package,
+and the app's shipped dependencies carry no known critical or high advisory except six Electron ones that need the
+next major version (planned for v0.0.5).
+
+### Improved
+
+- **Faster first launch.** The runtime installer downloads the next package while the previous one unpacks, verifies
+  and publishes. For the five core tools (ffmpeg, node, npm, Python and ripgrep) the install went from 13.9 s to 10.0 s
+  (median of five cold runs, about 1.4× faster); nothing changes once everything is installed. The Python environment
+  and the two optional tools were not part of this measurement. *How it was measured:* the real pinned archives from a
+  local server simulating one shared 100 Mbit/s link with 30 ms per request, the app's own CPython 3.14.7, five cold and
+  three warm runs of each build alternated run by run. Your network sets your real time; the overlap is what changed.
+  Fetching four packages at once was slower on that link, so the installer fetches one package ahead.
+- **The install screen names every failure.** Each package row changes only on a line that names that package. A new
+  row state, **Stopped**, marks a package that was still in progress when an install stopped; a package that finished
+  stays done; nothing is marked failed without its own failure. A failure the installer reports without a package name
+  shows in the failure card as *Installer reported: …* and in **Settings › Machine › Agent runtime**. Repairs read
+  **Repairing**. Ctrl-C in a terminal install stops within two seconds.
+- **Measured, not guessed.** A benchmark harness now ships in the source tree (`npm run bench`). It times eight parts
+  of the app on their real code paths, each with a control that must move the number, and names one it can't time yet.
+  - Five parts are inside their time budgets: the agent watchdog, the folder reader, the terminal pane bus and the
+    command spawn policy check stay in TypeScript, and the full gate suite runs in about 8 minutes, against a 30-minute
+    budget.
+  - Two parts are over budget, and neither is a CPU cost, so neither is a reason to rewrite them in another language:
+    writing each audit-log record with an fsync takes about 7.8 ms of the slowest operation's 8.1 ms (95th percentile),
+    while the cryptography itself takes 0.3 ms; and the iNFT Book holds about 352 MB of renderer memory with 1,000
+    cards, against a 300 MB budget. Both get fixed in place later.
+  - One part can't be measured yet: the app has no workspace index.
+  - The whole first launch (the five core tools, the two optional tools and the Python environment) went from 45.5 s
+    in v0.0.3 to 40.2 s in v0.0.4: the median of five cold runs of each, on a simulated 100 Mbit/s line with 20 ms per
+    request, with the load average under 4 at the start of every cold run, and the Python environment built from a
+    package cache made minutes earlier. These two totals are measured but not yet cross-checked by the harness's
+    deliberate-delay control, which could not run in those two sessions.
+
+### Security
+
+- **Dependencies.** `npm audit --omit=dev` shows 0 critical and 0 high in the packages the app ships; the WhatsApp
+  bridge and the Photon sidecar locks have 0 high. Updated: dompurify 3.4.17, js-yaml 4.3.2, simple-git 4.0.2, undici
+  7.30.1, axios, follow-redirects, @xmldom/xmldom, fast-uri; sharp 0.35.5 (WhatsApp bridge); @grpc/grpc-js 1.14.5 and
+  zod 4.6.6 (Photon sidecar); Pillow 13.0.0, PyJWT 2.15.0, certifi, brotlicffi, aiohttp 3.14.4, urllib3 2.8.0 and the
+  rest of the runtime's critical/high set. A release gate now fails the build on a critical or high advisory in any of
+  the three shipped locks.
+- **Sign-in keys.** With PyJWT 2.15 the key set of a self-hosted identity provider is never fetched through a redirect;
+  the app resolves its address once with the same rule it uses for discovery.
+- **Git in the review pane.** Commit and push pass eight named git variables from your shell (including
+  `GIT_SSH_COMMAND`, `GIT_ASKPASS` and `GIT_SSL_CAINFO`); `GIT_SSL_NO_VERIFY` is never passed.
+- **Electron (known, not fixed in v0.0.4).** v0.0.4 still ships Electron 40.10.2. Six high-severity Electron
+  advisories apply to it, and no Electron 40 release fixes any of them. Five are fixed in Electron 41.10.x
+  (GHSA-9f4c-93c8-jc8g in 41.10.3, GHSA-hq2x-r82h-9wj4 in 41.10.4, and GHSA-gr2m-v5gq-v685, GHSA-j84w-jfhq-vhvj and
+  GHSA-9qh4-3jw8-366w in 41.10.6). The sixth, GHSA-jr5w-w6x2-84p9 (compromised eMudhra intermediate certificates), is
+  fixed only from Electron 42.11.16. One upgrade to Electron 42.11.16 or later (43.8.1 or later on 43, 44.9.1 or later
+  on 44) closes all six; it is planned for v0.0.5. Until then:
+  - GHSA-9f4c-93c8-jc8g and GHSA-hq2x-r82h-9wj4 (popups opened from restricted frames): no frame in the app grants
+    `allow-popups`, and whatever frame asks, every window-open handler denies; the system browser is reached only
+    through the app's own document.
+  - GHSA-gr2m-v5gq-v685 (windows opened from a restricted top-level document): no window can be opened from page
+    content. Every handler denies.
+  - GHSA-j84w-jfhq-vhvj (file/http protocol handlers, cross-origin reads): the app registers no `file` or `http`
+    protocol handler. Its one privileged scheme is the app's own media protocol.
+  - GHSA-9qh4-3jw8-366w (`<webview>` Node.js in Web Workers): every webview is forced to
+    `nodeIntegrationInWorker=false`.
+  - GHSA-jr5w-w6x2-84p9 (eMudhra certificates): applies to all TLS traffic. There is no in-app mitigation before the
+    upgrade.
+
+  Electron 40.10.6, the last release of the same major, fixes one moderate advisory (GHSA-r4w5-6pfg-jxp5) and none of
+  the six; it goes in with the v0.0.5 upgrade.
+- **Other runtime locks.** The ACP CLI, which the app installs only when you ask, carries its own lock with 3 high
+  advisories (ws, zod, js-cookie; npm counts 14 packages as high, including the ones that depend on them), triaged
+  as not reachable from the app. The WhatsApp bridge keeps 2 moderate
+  advisories (music-metadata, qs). Both are tracked for a later release.
+
 ## v0.0.3 — 2026-10-30
 
 Your agent now asks before it acts, runs its commands in a sandbox, pays only under a mandate you sign, and shows

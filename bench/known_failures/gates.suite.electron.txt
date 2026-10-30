@@ -1,0 +1,16 @@
+# gates.suite: electron vitest failures that are pre-existing on main 047ca895c5.
+# Each entry failed in two separate runs of the electron project: one on main at 047ca895c5, one on a branch built on
+# it. Failures seen in only one of the two runs are not listed, nor any entry that passed in the pinned run of
+# bench/baselines/gates.suite.collected.tsv.
+# What the row does with it: failures are reported, never judged, and each reported failure is counted as on this
+# list or not, so a new failure stands out. A bare `<file>` entry (a file that errors before any test runs) is also
+# kept out of the errored-files guard, by exact path, only if the pinned file also names it `errored_known`: it errors
+# on main too and in the pinned run, so it cannot make a run shorter than the pinned counts. Nothing else here changes
+# a verdict.
+# Format: `<file> :: <vitest fullName>` for one test; `<file>` alone for a file that fails before any test
+# (load / hook error). Paths are relative to apps/desktop. Add nothing here that is not proven to fail on main.
+electron/iclone-confinement/refusal-gate.test.ts :: createRefusalGate — the real members folder (fs.watch) a token file written by a run starts the stream
+electron/iclone-privy.wiring.test.ts :: privy sign-in record ordering (real wiring) a stale probe 'out' landing after the login window signed in keeps the record 'in' and answers null
+electron/iclone-privy.wiring.test.ts :: privy sign-in record ordering (real wiring) the next restart after that still probes (the wallet is not forgotten)
+electron/iclone-x402/skill-defaults.test.ts :: agentcard-disabled: first launch (fix JM1) — a missing config is created, never left missing agentcard-disabled: a profile folder that appears is seeded by the watch (profiles/ created later too)
+scripts/after-pack.test.mjs

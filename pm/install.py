@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 from contextlib import ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,8 +29,8 @@ LOG = logging.getLogger(__name__)
 # multi-archive labels follow lockfile order.
 
 
-def _prepare_artifacts(package, store, scratch, artifacts, version, target, *,
-                       progress=None, pause_event=None, download_progress=None):
+def _download_tick(artifacts, progress=None, download_progress=None):
+    """fetch_many's aggregate tick as ``progress("download", …)``, labelled by lockfile order."""
     def tick(done, total, ranges):
         if progress is not None:
             active = next(reversed(ranges))
@@ -39,8 +40,14 @@ def _prepare_artifacts(package, store, scratch, artifacts, version, target, *,
         if download_progress is not None:
             download_progress(done, total, ranges)
 
+    return tick
+
+
+def _prepare_artifacts(package, store, scratch, artifacts, version, target, *,
+                       progress=None, pause_event=None, download_progress=None):
     staged = scratch / "tree"
-    archives = store.fetch_many(artifacts, scratch, progress=tick, pause_event=pause_event)
+    archives = store.fetch_many(artifacts, scratch, progress=_download_tick(artifacts, progress, download_progress),
+                                pause_event=pause_event)
     for index, archive in enumerate(archives):
         if pause_event is not None and pause_event.is_set():
             raise DownloadPaused("install paused")
@@ -488,6 +495,10 @@ class _InstallOperation:
         self.stack = ExitStack()
         self.store: Store | None = None
         self.checked: set[tuple[str, str | None, str, str]] = set()
+        # Entries this operation published itself, each verified and digested at
+        # publication under the lock it still holds: a later publication in the
+        # same operation touches only its own entry, so these need no re-hash.
+        self.published: set[tuple[str, str | None, str, str]] = set()
 
     def lock(self) -> Store:
         if self.store is None:
@@ -497,8 +508,226 @@ class _InstallOperation:
 
     def close(self) -> None:
         self.checked.clear()
+        self.published.clear()
         self.store = None
         self.stack.close()
+
+
+def _package_identity(package, lockfile, target) -> tuple[str, str | None, str, str]:
+    return (package.name, lockfile.version(package.name), target,
+            json.dumps(_identity(lockfile, package.name, target), sort_keys=True))
+
+
+def _missing_packages(chain, lockfile, target, checked, *, verify: bool) -> list:
+    """The packages of ``chain`` without a current install; present ones join ``checked``."""
+    missing = []
+    for package in chain:
+        identity = _package_identity(package, lockfile, target)
+        if identity in checked:
+            continue
+        if _installed_location(package, lockfile, target, verify=verify) is None:
+            missing.append(package)
+        else:
+            checked.add(identity)
+    return missing
+
+
+# Owners (requested names) are fetched in install order, ahead of the serial
+# unpack; each owner's packages stay in chain order, so its progress lines read
+# as a serial install's would. One owner ahead, in install order, measured
+# faster than four at once: on a shared link, fetching several at once splits the
+# bandwidth, so the package that installs next arrives later. Each archive
+# already uses several ranged connections (Download.CONNECTIONS). The bound
+# stays: a higher value fetches that many owners at once.
+PREFETCH_CONCURRENCY = 1
+# How long an interrupt (Ctrl-C) waits for the workers before giving them up:
+# a worker blocked in a stalled socket read only returns at the read timeout.
+PREFETCH_STOP_GRACE = 2.0
+# How long the loop's wait for one owner blocks before it returns to the
+# interpreter. An untimed lock acquire is not interruptible by Ctrl-C on
+# Windows (bpo-29971): a bounded wait delivers the interrupt within this.
+PREFETCH_WAIT_SLICE = 1.0
+
+
+class Prefetch:
+    """Downloads running ahead of the serial install loop.
+
+    ``start`` plans, from the recorded facts alone, what ``ensure(name,
+    explicit=True)`` would download for each name and fetches those archives,
+    ``concurrency`` owners at a time, into the store's hash-verified cache
+    (``fetch-<sha256>``). Nothing is unpacked, published or re-hashed here:
+    ``ensure`` keeps every check it makes without a prefetch (a present entry
+    whose bytes moved is not prefetched; ensure repairs it serially).
+
+    The loop calls ``wait(owner)`` before ``ensure(owner)``: it returns True
+    while every archive of that owner is in the cache, False when the owner
+    had nothing to fetch, its prefetch failed or its cache entries are gone.
+    A failure is never raised: that owner's ensure downloads again and
+    reports exactly what it reports today. A pause stops every owner between
+    chunks and ``wait`` raises DownloadPaused; completed archives stay
+    cached, partial bytes resumable. Publication stays serial under the
+    operation's install lock.
+
+    Workers are daemon threads: leaving the context normally or on an error
+    joins them (no archive lands in the store after its lock is released);
+    leaving it on KeyboardInterrupt joins for ``PREFETCH_STOP_GRACE`` and
+    sets ``stalled`` when one is still blocked in a socket read.
+    """
+
+    def __init__(self, plans: dict[str, list[list[dict]]], store: Store, *, progress_for=None,
+                 pause_event: threading.Event | None = None, concurrency: int | None = None):
+        from concurrent.futures import Future
+
+        concurrency = PREFETCH_CONCURRENCY if concurrency is None else concurrency
+
+        self.plans = plans
+        self.failed: dict[str, str] = {}
+        self.stalled = False
+        self._store = store
+        self._progress_for = progress_for
+        self._pause_event = pause_event
+        self._stop = threading.Event()
+        self._emit = threading.Lock()
+        self._futures: dict[str, Future] = {owner: Future() for owner in plans}
+        # Aggregate totals of the archive sets each owner fetched: ensure's replay of exactly these is dropped.
+        # The loop's order: concurrency 1 is the serial download order.
+        self._queue = list(plans)
+        self._queue_lock = threading.Lock()
+        self._threads = [threading.Thread(target=self._work, name=f"hermes-prefetch-{i}", daemon=True)
+                         for i in range(min(max(1, int(concurrency)), len(plans)))]
+        for thread in self._threads:
+            thread.start()
+
+    @classmethod
+    def start(cls, names: list[str], *, progress_for=None, pause_event: threading.Event | None = None,
+              concurrency: int | None = None, _operation: _InstallOperation) -> "Prefetch":
+        lockfile = _lockfile()
+        target = current_target()
+        store = _operation.lock()
+        plans: dict[str, list[list[dict]]] = {}
+        claimed: set[str] = set()
+        for name in dict.fromkeys(names):
+            try:
+                chain = [p for p in walk([name]) if not isinstance(p, StatePackage) and p.name not in claimed]
+                # Facts only: hashing every present tree here would delay the first byte by the sum of those
+                # digests; ensure verifies each package at its own turn, as it does without a prefetch.
+                missing = _missing_packages(chain, lockfile, target, set(), verify=False)
+            except Exception as e:  # an unknown name or unreadable state: ensure reports it
+                LOG.debug("prefetch skips %s: %s", name, e)
+                continue
+            for package in missing:
+                claimed.add(package.name)
+                if (getattr(package, "pin_only", False) or lockfile.version(package.name) is None
+                        or package.missing_reason(target) is not None):
+                    continue
+                artifacts = lockfile.artifacts(package.name, target)
+                if artifacts:
+                    plans.setdefault(name, []).append(artifacts)
+        return cls(plans, store, progress_for=progress_for, pause_event=pause_event, concurrency=concurrency)
+
+    def _next(self):
+        with self._queue_lock:
+            while self._queue:
+                owner = self._queue.pop(0)
+                if self._futures[owner].set_running_or_notify_cancel():
+                    return owner
+        return None
+
+    def _work(self) -> None:
+        while (owner := self._next()) is not None:
+            future = self._futures[owner]
+            try:
+                self._fetch(owner, self.plans[owner])
+            except BaseException as error:  # recorded; wait() decides
+                future.set_exception(error)
+            else:
+                future.set_result(None)
+
+    def _fetch(self, owner: str, owned: list[list[dict]]) -> None:
+        reporter = self._progress_for(owner) if self._progress_for is not None else None
+
+        def report(stage, done, total, label):
+            if reporter is not None:
+                with self._emit:
+                    reporter(stage, done, total, label)
+
+        for artifacts in owned:
+            if self._stop.is_set():
+                raise DownloadPaused("prefetch stopped")
+            with self._store.scratch() as scratch:
+                self._store.fetch_many(artifacts, scratch, pause_event=self._stop,
+                                       progress=_download_tick(artifacts, report))
+
+    def _cached(self, owner: str) -> bool:
+        """Every archive of ``owner`` is still in the cache as fetch_many reads it:
+        exactly one regular file per ``fetch-<sha256>`` entry."""
+        for artifacts in self.plans[owner]:
+            for artifact in artifacts:
+                entry = self._store.entry(f"fetch-{artifact['sha256']}")
+                try:
+                    files = list(entry.iterdir())
+                except OSError:
+                    return False
+                if len(files) != 1 or not files[0].is_file():
+                    return False
+        return True
+
+    def wait(self, owner: str) -> bool:
+        future = self._futures.get(owner)
+        if future is None:
+            return False
+        from concurrent.futures import wait as wait_for
+
+        # Bounded slices on every platform: each return to the interpreter delivers a pending Ctrl-C.
+        # A pause is polled at 10 Hz (it must stop the workers between chunks promptly).
+        slice_ = PREFETCH_WAIT_SLICE if self._pause_event is None else min(PREFETCH_WAIT_SLICE, 0.1)
+        while not wait_for([future], timeout=slice_).done:
+            if self._pause_event is not None and self._pause_event.is_set():
+                self._stop.set()
+        error = future.exception()
+        if error is None:
+            if self._cached(owner):
+                return True
+            # Fetched, then removed (a `pm gc` while a StatePackage released the lock, a corrupt entry):
+            # ensure downloads again and its download progress must show.
+            LOG.debug("prefetched archives of %s are gone; it downloads serially", owner)
+            return False
+        if isinstance(error, DownloadPaused) and self._pause_event is not None and self._pause_event.is_set():
+            raise DownloadPaused("install paused")
+        LOG.debug("prefetch for %s failed; it installs serially: %s", owner, error)
+        self.failed[owner] = str(error) or type(error).__name__
+        return False
+
+    def settle(self) -> None:
+        """Wait for every owner, before a step that releases the install lock
+        (a StatePackage ensure closes the operation): no archive is published
+        into the store while this process does not hold its lock."""
+        for owner in list(self._futures):
+            self.wait(owner)
+
+    def close(self, *, timeout: float | None = None) -> bool:
+        """Stop what still runs (between chunks), cancel owners not started,
+        join the workers (at most ``timeout`` s). True when all have ended."""
+        if not all(f.done() for f in self._futures.values()):
+            self._stop.set()
+        with self._queue_lock:
+            for owner in self._queue:
+                self._futures[owner].cancel()
+            self._queue.clear()
+        deadline = None if timeout is None else time.monotonic() + timeout
+        for thread in self._threads:
+            thread.join(None if deadline is None else max(0.0, deadline - time.monotonic()))
+        return not any(thread.is_alive() for thread in self._threads)
+
+    def __enter__(self) -> "Prefetch":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        interrupted = exc_type is not None and issubclass(exc_type, KeyboardInterrupt)
+        # Stalled until the join completes: a second Ctrl-C during the join leaves it True, so the CLI still
+        # takes the exit that does not wait for a worker blocked in a socket read.
+        self.stalled = True
+        self.stalled = not self.close(timeout=PREFETCH_STOP_GRACE if interrupted else None)
 
 
 @contextmanager
@@ -547,16 +776,7 @@ def ensure(
     checked = _operation.checked if _operation is not None else set()
     if _operation is not None:
         _operation.lock()
-    missing = []
-    for package in chain:
-        identity = (package.name, lockfile.version(package.name), target,
-                    json.dumps(_identity(lockfile, package.name, target), sort_keys=True))
-        if identity in checked:
-            continue
-        if _installed_location(package, lockfile, target, verify=explicit and verify) is None:
-            missing.append(package)
-        else:
-            checked.add(identity)
+    missing = _missing_packages(chain, lockfile, target, checked, verify=explicit and verify)
     if missing and not explicit and not lazy_installs_allowed():
         raise _refuse_lazy(name, ", ".join(p.name for p in missing))
     if missing:
@@ -564,10 +784,17 @@ def ensure(
         facts = _facts() if store.root == paths.store_root() else Facts(store.root / "facts.json")
         for package in missing:
             # Publication may change entries; do not carry observations across it.
+            # Only this operation's own publications survive (see _InstallOperation).
             checked.clear()
+            if _operation is not None:
+                checked.update(_operation.published)
             _install(package, lockfile, facts, store, target, progress=progress,
                      pause_event=pause_event, download_progress=download_progress,
                      _lock_held=_operation is not None)
+            if _operation is not None:
+                identity = _package_identity(package, lockfile, target)
+                _operation.published.add(identity)
+                checked.add(identity)
     return Runner(name, env_for(name, base_env=base_env))
 
 

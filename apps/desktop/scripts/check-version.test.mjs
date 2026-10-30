@@ -16,17 +16,17 @@ const pkg = (version, mac = { bundleShortVersion: version, bundleVersion: versio
 })
 
 describe('version:check (three numbers, ruling 0)', () => {
-  test('the repo is 0.0.3 in package.json, CFBundleShortVersionString and CFBundleVersion', () => {
-    assert.equal(PKG.version, '0.0.3')
-    assert.equal(PKG.build.mac.bundleShortVersion, '0.0.3')
-    assert.equal(PKG.build.mac.bundleVersion, '0.0.3')
+  test('the repo is 0.0.4 in package.json, CFBundleShortVersionString and CFBundleVersion', () => {
+    assert.equal(PKG.version, '0.0.4')
+    assert.equal(PKG.build.mac.bundleShortVersion, '0.0.4')
+    assert.equal(PKG.build.mac.bundleVersion, '0.0.4')
     assert.deepEqual(versionProblems(PKG), [])
   })
 
   test('the script passes on the repo and says the three numbers', () => {
     const run = spawnSync(process.execPath, [path.join(DESKTOP, 'scripts', 'check-version.mjs')], { encoding: 'utf8' })
     assert.equal(run.status, 0, run.stderr)
-    assert.match(run.stdout, /ok — v0\.0\.3 /)
+    assert.match(run.stdout, /ok — v0\.0\.4 /)
   })
 
   test('accepts exactly 0.0.3 in all three places', () => {

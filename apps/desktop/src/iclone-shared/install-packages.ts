@@ -1,7 +1,13 @@
 // RTB-7 (owner override, 11:0x): the first launch installs EVERYTHING and the user sees each package as its own line.
 // The lines are derived from the runner's own output for the dependency stage (PM's per-package progress:
-// "  agent-browser:  78.3%  127.2 MiB / 162.3 MiB", "  node: unpacking", "✓ cua-driver", "✗ <error>",
-// "⚠ optional <name> was not installed…"). Pure: the install overlay, main's status record and the tests share it.
+// "  agent-browser:  78.3%  127.2 MiB / 162.3 MiB", "  node: verifying", "  node: repairing", "  node: unpacking",
+// "✓ cua-driver", "✗ <name>: <reason>", "⚠ optional <name> was not installed…"). Pure: the install overlay, main's
+// status record and the tests share it.
+//
+// G-01 r4 (lead method): a row changes only on a line that names it, and the end of the stage never invents a row's
+// outcome. A row is failed only by its own ✗; when the stage fails or is killed, every row not yet finished is
+// "stopped" and the stage's own failure carries the reason; ✗ lines that name no row stay in `unattributed`, which the
+// failure card and the persisted status show.
 
 /** The installer stage whose output carries the per-package lines. */
 export const PACKAGES_STAGE = 'python-deps'
@@ -25,14 +31,26 @@ export const EXPECTED_PACKAGES: readonly string[] = [
   'cua-driver'
 ]
 
-export type PackageState = 'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'unpacking' | 'waiting'
+export type PackageState =
+  'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'stopped' | 'unpacking' | 'verifying' | 'waiting'
+
+/** How the stage that carries the package lines ended: the runner's verdict, or a kill (cancel, watchdog). */
+export type PackagesStageEnd = 'failed' | 'killed' | 'succeeded'
+
+/** States only a line naming the row moves a row out of; the end of the stage never changes them. */
+export const TERMINAL_PACKAGE_STATES: ReadonlySet<PackageState> = new Set<PackageState>([
+  'done',
+  'failed',
+  'not-needed',
+  'stopped'
+])
 
 export interface PackageLine {
   name: string
   state: PackageState
   /** Download progress, 0–100, while downloading. */
   percent: null | number
-  /** Download sizes as PM prints them ("127.2 MiB"). */
+  /** Download sizes as PM prints them ("127.2 MiB"); `total` is cleared when the artifact is unpacked. */
   done: null | string
   total: null | string
   /** Bytes of every artifact of this package seen so far (a package can download more than one: agent-browser
@@ -42,7 +60,7 @@ export interface PackageLine {
   parts: number
   startedAt: null | number
   finishedAt: null | number
-  /** The ✗/⚠ line that failed it. */
+  /** The ✗/⚠ line that failed it: only its own (a row is never failed by another line or by the stage). */
   error: null | string
   /** PM installs it as an optional default (its failure does not fail the stage). */
   optional: boolean
@@ -50,19 +68,38 @@ export interface PackageLine {
 
 export interface PackagesState {
   packages: PackageLine[]
-  /** The package the output is currently about (where a bare "✗ <error>" lands). */
+  /** The package that printed last. Display only: no event is ever attributed through it (downloads of several
+   * packages overlap, so "the last line" is not "the package being installed"). */
   active: null | string
+  /** ✗ lines that name no row (no "<name>:" prefix, or a name that is not a row), e.g. "✗ uv sync failed; …". Never
+   * routed to a guessed row; shown in the stage failure card and persisted in the agent runtime status (G-01 R3-3). */
+  unattributed?: readonly string[]
+  /** Nameless ✗ lines past MAX_UNATTRIBUTED_LINES: counted, not kept (G-01 R4-4). */
+  unattributedMore?: number
 }
+
+/** Nameless ✗ lines are kept up to this many (the rest are counted), each cut to the length of a diagnosis's evidence:
+ * the failure card shows them and the persisted status is rewritten with them on every log line (G-01 R4-4). */
+export const MAX_UNATTRIBUTED_LINES = 20
+export const MAX_UNATTRIBUTED_CHARS = 400
 
 const PROGRESS_LINE =
   /^\s*([A-Za-z0-9][\w.+-]*):\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?\s?[KMGT]?i?B)\s*\/\s*(\d+(?:\.\d+)?\s?[KMGT]?i?B)\s*$/
 
 const UNPACK_LINE = /^\s*([A-Za-z0-9][\w.+-]*): unpacking\b/
+// PM opens each package's turn with "<name>: verifying" (hashing what is present, re-reading prefetched archives)
+// and prints it again after unpacking (the staged tree's check).
+const VERIFY_LINE = /^\s*([A-Za-z0-9][\w.+-]*): verifying\s*$/
+// A download in a prefetched package's turn that the prefetch did not cover (a present dependency whose bytes moved,
+// a cached archive that failed its hash): PM names it before its progress lines, which then count as a new part.
+const REPAIR_LINE = /^\s*([A-Za-z0-9][\w.+-]*): repairing\s*$/
 // PM prints exactly "✓ <name>" (or "✓ <name> (staged …)", "✓ venv +extra") for a package; installer chatter such as
 // "✓ uv ready (…)" or "✓ dependencies installed" has more words and is not a package.
 const DONE_LINE = /^✓ ([A-Za-z0-9][\w.+-]*)(?:\s+\(staged [^)]*\)|\s+\+[\w +-]+)?\s*$/
 const VENV_START = /^\s*→ Installing Python dependencies/
 const FAILED_LINE = /^\s*✗ (.+)$/
+// The package a ✗ belongs to: PM prints "✗ <name>: <reason>" for the package its install loop was on.
+const FAILED_NAME = /^([A-Za-z0-9][\w.+-]*):/
 const OPTIONAL_FAILED_LINE = /^\s*⚠ optional ([A-Za-z0-9][\w.+-]*) was not installed/
 const NOT_PACKAGES = new Set(['dependencies', 'test'])
 
@@ -113,8 +150,28 @@ function update(state: PackagesState, name: string, patch: (line: PackageLine) =
   return { ...state, packages }
 }
 
-const isOpen = (line: PackageLine) =>
-  line.state === 'downloading' || line.state === 'unpacking' || line.state === 'installing'
+/** A named step line ("<name>: verifying|repairing|unpacking"): the row it names, in the state the step means. */
+const STEPS: readonly { pattern: RegExp; patch: (line: PackageLine, at: number) => PackageLine }[] = [
+  {
+    pattern: UNPACK_LINE,
+    patch: (line, at) => ({ ...line, percent: null, startedAt: line.startedAt ?? at, state: 'unpacking', total: null })
+  },
+  {
+    pattern: VERIFY_LINE,
+    patch: (line, at) => ({ ...line, percent: null, startedAt: line.startedAt ?? at, state: 'verifying' })
+  },
+  {
+    pattern: REPAIR_LINE,
+    patch: (line, at) => ({
+      ...line,
+      done: null,
+      percent: 0,
+      startedAt: line.startedAt ?? at,
+      state: 'downloading',
+      total: null
+    })
+  }
+]
 
 /** Fold one line of the dependency stage's output into the package lines. */
 export function reducePackageLine(state: PackagesState, raw: string, at: number): PackagesState {
@@ -126,8 +183,9 @@ export function reducePackageLine(state: PackagesState, raw: string, at: number)
 
     return {
       ...update(state, name, prev => {
-        // A new artifact: the first progress line, or one after the previous artifact was unpacked.
-        const newPart = prev.state !== 'downloading' || prev.total !== total
+        // A new artifact: the first progress line, or one after the previous artifact was unpacked or a repair
+        // started (both clear `total`). "verifying" keeps it: a re-download of the same archive is the same part.
+        const newPart = prev.total !== total
         const bytes = parseSize(total) ?? 0
 
         return {
@@ -145,14 +203,13 @@ export function reducePackageLine(state: PackagesState, raw: string, at: number)
     }
   }
 
-  match = UNPACK_LINE.exec(line)
+  for (const step of STEPS) {
+    match = step.pattern.exec(line)
 
-  if (match) {
-    const name = match[1]
+    if (match) {
+      const name = match[1]
 
-    return {
-      ...update(state, name, prev => ({ ...prev, percent: null, startedAt: prev.startedAt ?? at, state: 'unpacking' })),
-      active: name
+      return { ...update(state, name, prev => step.patch(prev, at)), active: name }
     }
   }
 
@@ -179,7 +236,8 @@ export function reducePackageLine(state: PackagesState, raw: string, at: number)
         finishedAt: at,
         percent: null,
         startedAt: prev.startedAt ?? at,
-        state: 'done'
+        state: 'done',
+        total: null
       })),
       active: state.active === name ? null : state.active
     }
@@ -202,49 +260,64 @@ export function reducePackageLine(state: PackagesState, raw: string, at: number)
   match = FAILED_LINE.exec(line)
 
   if (match) {
-    const named = state.packages.find(pkg => isOpen(pkg) && match![1].includes(pkg.name))
-    const target = named?.name ?? state.active ?? state.packages.find(isOpen)?.name
+    const text = match[1]
+    // Attributed by the package name the line carries, exact match over every row, nothing else: never by the row
+    // that printed last or by an open row (G-01 F1/R2-1: overlapping downloads make both wrong).
+    const name = FAILED_NAME.exec(text)?.[1]
 
-    if (!target) {
-      return state
+    if (name === undefined || !state.packages.some(pkg => pkg.name === name)) {
+      const kept = state.unattributed ?? []
+
+      return kept.length < MAX_UNATTRIBUTED_LINES
+        ? { ...state, unattributed: [...kept, text.trim().slice(0, MAX_UNATTRIBUTED_CHARS)] }
+        : { ...state, unattributedMore: (state.unattributedMore ?? 0) + 1 }
     }
 
     return {
-      ...update(state, target, prev => ({ ...prev, error: match![1], finishedAt: at, percent: null, state: 'failed' })),
-      active: null
+      ...update(state, name, prev => ({
+        ...prev,
+        error: text,
+        finishedAt: at,
+        percent: null,
+        state: 'failed',
+        total: null
+      })),
+      active: state.active === name ? null : state.active
     }
   }
 
   return state
 }
 
-/** At the end of the stage: lines still waiting were not needed (already present); open ones failed if it failed. */
-export function settlePackages(state: PackagesState, stage: 'failed' | 'succeeded', at: number): PackagesState {
+/**
+ * At the end of the stage. Never invents a row's outcome: a finished row (done, failed by its own ✗, not needed,
+ * stopped) is returned unchanged. On success a row that never printed was not needed (already present). Every other
+ * unfinished row is "stopped": on a failed or killed stage the stage's failure (card, diagnosis) carries the reason;
+ * on a succeeded one PM prints ✓ for every package it installs, so a missing ✓ is reported, not assumed.
+ */
+export function settlePackages(state: PackagesState, stage: PackagesStageEnd, at: number): PackagesState {
   const packages = state.packages.map(line => {
-    if (line.state === 'waiting') {
-      return { ...line, state: stage === 'succeeded' ? ('not-needed' as const) : ('waiting' as const) }
+    if (TERMINAL_PACKAGE_STATES.has(line.state)) {
+      return line
     }
 
-    if (isOpen(line)) {
-      return stage === 'succeeded'
-        ? { ...line, finishedAt: at, percent: null, state: 'done' as const }
-        : { ...line, finishedAt: at, percent: null, state: 'failed' as const }
+    if (stage === 'succeeded' && line.state === 'waiting') {
+      return { ...line, state: 'not-needed' as const }
     }
 
-    return line
+    return { ...line, finishedAt: at, percent: null, state: 'stopped' as const }
   })
 
-  // Critic minor 5: a stage that failed before any package line opened failed in its own preparation of the Python
-  // environment — that line carries the failure, so a row (not just the stage) says where it stopped.
-  if (stage === 'failed' && !packages.some(line => line.state === 'failed')) {
-    const env = packages.findIndex(line => line.name === PYTHON_ENV_PACKAGE)
+  return { ...state, active: null, packages }
+}
 
-    if (env !== -1) {
-      packages[env] = { ...packages[env], finishedAt: at, state: 'failed' }
-    }
-  }
+/** The stage's ✗ lines that name no package row (empty when there are none), then "+N more" past the cap. */
+export function unattributedFailures(
+  state: Pick<PackagesState, 'unattributed' | 'unattributedMore'>
+): readonly string[] {
+  const kept = state.unattributed ?? []
 
-  return { active: null, packages }
+  return state.unattributedMore ? [...kept, `+${state.unattributedMore} more`] : kept
 }
 
 /** Fold a whole log (fixture replay, a reloaded renderer's snapshot). */
@@ -260,7 +333,7 @@ export function packagesFromLog(
 
 /** Weight of a line whose size PM never printed (the Python environment sync, a package already present). */
 export const UNKNOWN_PACKAGE_WEIGHT_BYTES = 32 * 2 ** 20
-/** A silent step (unpacking, the Python environment sync) creeps towards done with this time constant. */
+/** A silent step (unpacking, verifying, the Python environment sync) creeps towards done with this time constant. */
 const CREEP_TAU_MS = 30_000
 
 /**
@@ -288,11 +361,11 @@ export function packagesProgress(state: PackagesState, now = Date.now()): number
     const weight = line.totalBytes ?? UNKNOWN_PACKAGE_WEIGHT_BYTES
     total += weight
 
-    if (line.state === 'done' || line.state === 'failed') {
+    if (TERMINAL_PACKAGE_STATES.has(line.state)) {
       done += weight
     } else if (line.state === 'downloading') {
       done += weight * 0.8 * ((line.percent ?? 0) / 100)
-    } else if (line.state === 'unpacking') {
+    } else if (line.state === 'unpacking' || line.state === 'verifying') {
       done += weight * creep(line, 0.8, 0.98)
     } else if (line.state === 'installing') {
       done += weight * creep(line, 0, 0.95)

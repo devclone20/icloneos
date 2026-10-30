@@ -1,0 +1,5 @@
+icloneos-raster-text/2
+sha256 ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743
+transcript signed docs/media/shots/shots.json
+iNFT
+#5

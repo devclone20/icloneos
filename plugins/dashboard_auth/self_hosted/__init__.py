@@ -36,6 +36,7 @@ from plugins.dashboard_auth._shared import (
     pkce_login_start,
     refresh_token_from,
     register_provider,
+    require_same_origin,
     resolve_env_or_cfg,
     session_from_claims,
     validate_redirect_uri,
@@ -67,15 +68,6 @@ def _require_https_or_loopback(url: str, *, field: str) -> str:
     if parsed.scheme == "https" or (parsed.scheme == "http" and (parsed.hostname or "") in ("localhost", "127.0.0.1", "::1")):
         return url
     raise ProviderError(f"OIDC {field} must be https:// (or http on localhost), got {url!r}")
-
-
-def _origin(url: str) -> tuple:
-    """``(scheme, hostname, port)`` for an origin compare, with default ports
-    normalised so ``https://h`` and ``https://h:443`` are the same origin."""
-    parts = urllib.parse.urlparse(url)
-    scheme = parts.scheme.lower()
-    return (scheme, (parts.hostname or "").lower(),
-            parts.port or {"https": 443, "http": 80}.get(scheme))
 
 
 class SelfHostedOIDCProvider(JwtOAuthProvider):
@@ -227,10 +219,9 @@ class SelfHostedOIDCProvider(JwtOAuthProvider):
         # document came from — a single cleartext or attacker-hosted redirect hop could
         # otherwise serve a forged document asserting the configured issuer with
         # attacker jwks_uri / token_endpoint.
-        if _origin(str(response.url)) != _origin(self._issuer):
-            raise ProviderError(
-                f"OIDC discovery resolved to {response.url}, outside the configured "
-                f"issuer's origin ({self._issuer!r})")
+        # The same rule resolves the jwks_uri (``_shared.resolve_jwks_url``).
+        require_same_origin(
+            str(response.url), self._issuer, label="OIDC discovery", anchor="the configured issuer's origin")
         payload = parse_json_body(response)
         if not payload:
             raise ProviderError("OIDC discovery returned a non-JSON body")

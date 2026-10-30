@@ -11,7 +11,8 @@
 import type { SetupPackage, SetupPackageState } from './types'
 
 // ── RT-B's contract (TODO(V3-RT-B): import these from '@/iclone-shared/agent-runtime-status' after the merge) ──────
-export type PackageState = 'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'unpacking' | 'waiting'
+export type PackageState =
+  'done' | 'downloading' | 'failed' | 'installing' | 'not-needed' | 'stopped' | 'unpacking' | 'verifying' | 'waiting'
 
 export interface PackageLine {
   name: string
@@ -88,6 +89,9 @@ const VIEW_STATE: Readonly<Record<PackageState, SetupPackageState | null>> = {
   downloading: 'installing',
   installing: 'installing',
   unpacking: 'installing',
+  verifying: 'installing',
+  // The stage failed or was killed before it finished: offered again, like a skipped line.
+  stopped: 'skipped',
   waiting: 'installing',
   // Not needed on this Mac: nothing to show.
   'not-needed': null

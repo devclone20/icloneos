@@ -23,17 +23,26 @@ _JWK_CLIENTS_LOCK = threading.Lock()
 
 
 def _get_jwk_client(jwks_url: str) -> Any:
-    """Return the process-cached PyJWKClient for ``jwks_url`` (double-checked lock)."""
+    """Return the process-cached JWKS client for ``jwks_url`` (double-checked lock).
+
+    iclone (v0.0.4 deps r4, F1): PyJWT >= 2.14 refuses JWKS redirects, so the client is the dashboard providers'
+    ``ResolvedJwksClient``: the URL is resolved by the OIDC discovery redirect rule (same origin only) and
+    re-resolved hourly; ``PyJWKClient`` runs on the resolved URL."""
     client = _JWK_CLIENTS.get(jwks_url)
     if client is not None:
         return client
     with _JWK_CLIENTS_LOCK:
         client = _JWK_CLIENTS.get(jwks_url)
         if client is None:
-            from jwt import PyJWKClient
-            # Explicit Accept + User-Agent: the portal WAF 403s the default urllib fingerprint.
-            client = PyJWKClient(
-                jwks_url, headers={"Accept": "application/json", "User-Agent": "HermesAgent/1.0"})
+            from plugins.dashboard_auth._shared import JWKS_HTTP_HEADERS, ResolvedJwksClient
+
+            def build(url: str) -> Any:
+                from jwt import PyJWKClient
+
+                # Explicit Accept + User-Agent: the portal WAF 403s the default urllib fingerprint.
+                return PyJWKClient(url, headers=dict(JWKS_HTTP_HEADERS))
+
+            client = ResolvedJwksClient(jwks_url, build)
             _JWK_CLIENTS[jwks_url] = client
         return client
 

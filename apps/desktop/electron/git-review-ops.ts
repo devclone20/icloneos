@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-import simpleGit, { type DiffResult, type FileStatusResult, type SimpleGit } from 'simple-git'
+import { type DiffResult, type FileStatusResult, simpleGit, type SimpleGit } from 'simple-git'
 
 import { resolveRequestedPathForIpc } from './hardening'
 
@@ -47,7 +47,29 @@ function runGh(
   })
 }
 
-function gitFor(cwd: string, gitBin: string) {
+// The variables a shell-launched session may carry that the review pane's write ops (commit, push, and createPr
+// through push) need: who the commit is by, and how push authenticates. simple-git 4 strips every ambient GIT_*
+// variable and SSH_ASKPASS unless allowEnvironment names it; these are let through for those ops only, and
+// only from this main process's own environment. Nothing else can supply them: no review op calls .env(), the IPC
+// handlers forward fixed positional arguments (never an env), and the unsafe.allowUnsafeSshCommand /
+// allowUnsafeAskPass flags stay off, so simple-git refuses GIT_SSH_COMMAND, GIT_ASKPASS or SSH_ASKPASS supplied
+// explicitly through .env(). GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_PARAMETERS and every other guarded name stay stripped.
+// GIT_SSL_CAINFO (v0.0.4 review m6) is the eighth: the CA bundle an HTTPS push trusts, which a corporate network's
+// TLS proxy needs. It can only name the roots git trusts, never turn verification off, and simple-git's filter treats
+// it like any other allow-listed name (it has no TLS-specific rule). GIT_SSL_NO_VERIFY is never let through: it turns
+// certificate verification off for every HTTPS remote, so it stays stripped like the rest.
+const SHIP_ENVIRONMENT = Object.freeze([
+  'GIT_AUTHOR_NAME',
+  'GIT_AUTHOR_EMAIL',
+  'GIT_COMMITTER_NAME',
+  'GIT_COMMITTER_EMAIL',
+  'GIT_SSH_COMMAND',
+  'GIT_ASKPASS',
+  'SSH_ASKPASS',
+  'GIT_SSL_CAINFO'
+] as const)
+
+function makeGit(cwd: string, gitBin: string, allowEnvironment: readonly string[]) {
   // `gitBin` is resolved inside the Electron main process from known install
   // locations or PATH — never renderer/user input. simple-git's custom-binary
   // validation rejects paths containing spaces (the default Windows install is
@@ -60,8 +82,45 @@ function gitFor(cwd: string, gitBin: string) {
     binary: gitBin || 'git',
     maxConcurrentProcesses: 4,
     trimmed: false,
+    allowEnvironment,
     ...(gitBin && /\s/.test(gitBin) ? { unsafe: { allowUnsafeCustomBinary: true } } : {})
   })
+}
+
+// simple-git 4 (G-42) hands git a filtered copy of process.env: every ambient GIT_* variable and EDITOR, VISUAL,
+// PAGER, PREFIX and SSH_ASKPASS are removed unless named in allowEnvironment, and git runs with
+// GIT_TEST_DISALLOW_ABBREVIATED_OPTIONS=true. For the read ops the list is empty: they are non-interactive, they name
+// their repository by baseDir, and the filter removes a leaked GIT_DIR, GIT_WORK_TREE or GIT_INDEX_FILE (a git hook,
+// a terminal launch) that would silently point them at another repository. ssh-agent (SSH_AUTH_SOCK) and credential
+// helpers (git config) are untouched.
+function gitFor(cwd: string, gitBin: string) {
+  return makeGit(cwd, gitBin, [])
+}
+
+// The write ops (reviewCommit, reviewPush, and reviewCreatePr through reviewPush): gitFor plus SHIP_ENVIRONMENT, so a
+// shell-launched session commits as GIT_AUTHOR_* / GIT_COMMITTER_* and pushes over GIT_SSH_COMMAND / an askpass helper
+// as the same command would in that terminal (review F2), trusting the CA bundle GIT_SSL_CAINFO names (m6).
+function gitForShip(cwd: string, gitBin: string) {
+  return makeGit(cwd, gitBin, SHIP_ENVIRONMENT)
+}
+
+// G-42 (review R1-A minor 1): a ref the renderer sends (the "last turn" baseline, a rev-parse target) reaches git as a
+// positional argument AFTER the subcommand, where simple-git's guard does not look (it checks global options only),
+// so `--output=<file>` there would be read by git as an option. Two layers: the ref must look like a revision (an
+// alphanumeric first character, then only [A-Za-z0-9._/~^-]: no option, no range, no space, no reflog @{}), and every
+// ref goes after --end-of-options, so git reads it as a revision even if this check ever let one through.
+const SAFE_REF = /^[A-Za-z0-9][A-Za-z0-9._/~^-]*$/
+const SAFE_REF_MAX = 256
+
+function isSafeRef(ref: unknown): ref is string {
+  return (
+    typeof ref === 'string' &&
+    ref.length <= SAFE_REF_MAX &&
+    SAFE_REF.test(ref) &&
+    !ref.includes('..') &&
+    !ref.includes('//') &&
+    !/(?:\/|\.|\.lock)$/.test(ref)
+  )
 }
 
 // simple-git reports renames as `old => new` (and `dir/{old => new}/f`); resolve
@@ -259,12 +318,12 @@ async function reviewList(repoPath: string, scope: string, baseRef: string | nul
     if (scope === 'branch' || scope === 'lastTurn') {
       const base = scope === 'branch' ? await branchBase(git) : baseRef
 
-      if (!base) {
+      if (!isSafeRef(base)) {
         return { files: [], base: null }
       }
 
       const range = scope === 'branch' ? `${base}...HEAD` : base
-      const summary = await git.diffSummary([range])
+      const summary = await git.diffSummary(['--end-of-options', range])
 
       const files = summary.files.slice(0, REVIEW_FILE_CAP).map(file => ({
         path: resolveRenamePath(file.file),
@@ -359,11 +418,11 @@ async function reviewDiff(
   if (scope === 'branch') {
     const base = await branchBase(git)
 
-    return base ? safe([`${base}...HEAD`, '--', filePath]) : ''
+    return isSafeRef(base) ? safe(['--end-of-options', `${base}...HEAD`, '--', filePath]) : ''
   }
 
   if (scope === 'lastTurn') {
-    return baseRef ? safe([baseRef, '--', filePath]) : ''
+    return isSafeRef(baseRef) ? safe(['--end-of-options', baseRef, '--', filePath]) : ''
   }
 
   if (staged) {
@@ -470,8 +529,14 @@ async function reviewRevParse(repoPath: string, ref: string | null | undefined, 
     return null
   }
 
+  const target = ref || 'HEAD'
+
+  if (!isSafeRef(target)) {
+    return null
+  }
+
   try {
-    return (await gitFor(cwd, gitBin).revparse([ref || 'HEAD'])).trim() || null
+    return (await gitFor(cwd, gitBin).revparse(['--verify', '--end-of-options', target])).trim() || null
   } catch {
     return null
   }
@@ -482,7 +547,7 @@ async function reviewRevParse(repoPath: string, ref: string | null | undefined, 
 // setting upstream on the first push.
 async function reviewCommit(repoPath: string, message: string | string[], push: boolean, gitBin: string) {
   const cwd = resolveRequestedPathForIpc(repoPath, { purpose: 'Review commit' })
-  const git = gitFor(cwd, gitBin)
+  const git = gitForShip(cwd, gitBin)
   const status = await git.status()
 
   if (status.staged.length === 0) {
@@ -557,7 +622,7 @@ async function reviewCommitContext(repoPath: string, gitBin: string) {
 
 async function reviewPush(repoPath: string, gitBin: string) {
   const cwd = resolveRequestedPathForIpc(repoPath, { purpose: 'Review push' })
-  const git = gitFor(cwd, gitBin)
+  const git = gitForShip(cwd, gitBin)
   const status = await git.status()
 
   if (status.tracking) {
@@ -917,6 +982,8 @@ async function repoStatus(repoPath: string, gitBin: string) {
 export {
   fileDiffVsHead,
   gitFor,
+  gitForShip,
+  isSafeRef,
   repoStatus,
   resolveRenamePath,
   REVIEW_FILE_CAP,
@@ -932,5 +999,6 @@ export {
   reviewRevParse,
   reviewShipInfo,
   reviewStage,
-  reviewUnstage
+  reviewUnstage,
+  SHIP_ENVIRONMENT
 }

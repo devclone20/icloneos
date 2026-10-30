@@ -87,6 +87,7 @@ export const install: TranslationOverrides['install'] = {
       unknown: 'تعذّر إكمال التثبيت.'
     },
     failedIn: name => `فشل أثناء تثبيت ${name}.`,
+    unattributed: line => `Installer reported: ${line}`,
     fixRetry: 'أعد المحاولة',
     fixRepair: 'إصلاح التثبيت',
     fixFreeDisk: needed => (needed ? `تحرير مساحة القرص… (المطلوب ${needed})` : 'تحرير مساحة القرص…'),
@@ -120,7 +121,11 @@ export const install: TranslationOverrides['install'] = {
       installing: 'جارٍ التثبيت',
       done: 'تم',
       failed: 'فشل',
-      notNeeded: 'موجود مسبقًا'
+      notNeeded: 'موجود مسبقًا',
+      // English until the global plan translates the r4 states (the app ships English only).
+      verifying: 'Verifying',
+      repairing: 'Repairing',
+      stopped: 'Stopped'
     }
   }
 }
