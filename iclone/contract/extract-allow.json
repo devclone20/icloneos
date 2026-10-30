@@ -1,0 +1,83 @@
+{
+  "names": [
+    {
+      "name": "session.archive",
+      "reason": "keybinding action id in src/app/hooks/use-keybinds.ts; it shares its spelling with a gateway method but is never sent"
+    }
+  ],
+  "unresolved": [
+    {
+      "file": "electron/iclone-compat/probe.ts",
+      "fn": "method",
+      "reason": "the probe replays the lock's own method names (lock.methods keys) as validation probes; the name is lock-derived by design, so it is the contract under test, not new consumer demand"
+    }
+  ],
+  "env": [
+    {
+      "file": "electron/iclone-compat/adoption.ts",
+      "name": "PYTHONDONTWRITEBYTECODE",
+      "reason": "set only for the python3 child that runs served.py against a repo checkout (no .pyc in the checkout); the runtime never reads it from the app"
+    }
+  ],
+  "rest": [
+    {
+      "file": "electron/main/portal.ts",
+      "route": "GET /api/agents{}",
+      "reason": "Hermes Cloud agent discovery on the Nous portal (resolvePortalBaseUrl), a different host from the runtime; the runtime never serves it"
+    }
+  ],
+  "sinks": [
+    {
+      "file": "electron/iclone-ownership-proof.ts",
+      "fn": "raw",
+      "reason": "the ownership proof's Ethereum JSON-RPC client (POST {jsonrpc, method, params} to the chain RPC URLs); it never speaks to the runtime"
+    },
+    {
+      "file": "electron/iclone-ownership-proof.ts",
+      "fn": "all",
+      "reason": "the ownership proof's Ethereum JSON-RPC client (POST {jsonrpc, method, params} to the chain RPC URLs); it never speaks to the runtime"
+    },
+    {
+      "file": "electron/iclone-ownership-proof.ts",
+      "fn": "first",
+      "reason": "the ownership proof's Ethereum JSON-RPC client (POST {jsonrpc, method, params} to the chain RPC URLs); it never speaks to the runtime"
+    },
+    {
+      "file": "electron/iclone-privy.ts",
+      "fn": "rpcCall",
+      "reason": "the wallet's Ethereum JSON-RPC client (POST {jsonrpc, method, params} to the chain RPC URLs); it never speaks to the runtime"
+    }
+  ],
+  "events": [
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.allowed_payees",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    },
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.allowed_payment_instruments",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    },
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.amount_range",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    },
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.budget",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    },
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.execution_date",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    },
+    {
+      "file": "electron/iclone-x402/mandates.ts",
+      "name": "payment.reference",
+      "reason": "an AP2 v0.2 mandate constraint type (x402/AP2 payments, V3-J): the discriminant of the Constraint union that parseConstraint/evaluateConstraints switch on; another protocol's data, never a gateway event (K94)"
+    }
+  ]
+}

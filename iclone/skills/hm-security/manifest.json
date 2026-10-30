@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "name": "hm-security",
+  "version": "1.0.0",
+  "author": "Rodrigo Lopes",
+  "license": "MIT",
+  "upstream": {
+    "name": "highermind-code-skills",
+    "url": "https://github.com/rodrigohighermind/highermind-code-skills",
+    "license_file": "LICENSE",
+    "copyright": [
+      "Copyright (c) 2026 Rodrigo Lopes"
+    ]
+  },
+  "source": {
+    "library": "claude-code-skills",
+    "path": "hm-security",
+    "version": null,
+    "sha256": "558f433bcd7b1d37afe8b27453616406e1409b2230f4c4198d477655314a22ea",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [],
+  "requires": {
+    "os": [],
+    "bins": [
+      "git"
+    ],
+    "mcp": [],
+    "paths": []
+  },
+  "touches": [
+    "X",
+    "N"
+  ],
+  "touches_from_text": {
+    "N": 1
+  },
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 0,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 0
+  }
+}

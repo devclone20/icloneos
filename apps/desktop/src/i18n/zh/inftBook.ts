@@ -1,0 +1,48 @@
+import type { Translations } from '../types'
+
+// K21/N5: counts in this locale's own digit grouping (5,000 not 5000).
+const n = (value: number): string => value.toLocaleString('zh-CN')
+
+export const inftBook: Translations['inftBook'] = {
+  navLabel: 'iNFT Book',
+  keywords: ['inft', 'book', '图鉴', '钱包', '收藏', '主页'],
+  rule: '主页只显示你在 iNFT Book 中勾选的 iNFT。',
+  openBook: '打开 iNFT Book',
+  wallet: address => `钱包 ${address}`,
+  count: (total, onHome) => `${n(total)} 个 iNFT · 主页 ${n(onHome)} 个`,
+  rescan: '重新扫描',
+  search: '搜索 iNFT',
+  filterCollection: '收藏系列',
+  allCollections: '全部系列',
+  filterChain: '链',
+  allChains: '全部链',
+  filterState: '显示',
+  stateAll: '全部',
+  stateChecked: '在主页',
+  stateUnchecked: '不在主页',
+  checkShown: '勾选全部显示项',
+  uncheckShown: '取消勾选全部显示项',
+  confirmTitle: count => `要把 ${n(count)} 个 iNFT 放到主页吗？`,
+  confirmBody: '主页收藏越长，浏览越费时。之后可以随时取消勾选。',
+  confirmAction: '勾选它们',
+  confirmBusy: '正在勾选…',
+  confirmDone: '已勾选',
+  confirmError: '无法勾选，请重试。',
+  cancel: '取消',
+  scanning: found => `正在扫描钱包… 已找到 ${n(found)} 个`,
+  partial: loaded => `已加载 ${n(loaded)} / ? 个 — 扫描在中途停止。`,
+  capped: limit => `仅显示前 ${n(limit)} 个 iNFT。此钱包中还有更多，iNFT Book 最多读取 ${n(limit)} 个。`,
+  retry: '重试',
+  kept: count => `我们保留了 iNFT Book 之前主页上的 ${n(count)} 个。`,
+  dismiss: '关闭',
+  noWallet: '使用钱包登录即可查看其中的 iNFT。',
+  signIn: '登录',
+  none: '此钱包中还没有 iNFT。',
+  noMatch: '没有符合筛选条件的 iNFT。',
+  scanFailed: '钱包扫描失败。',
+  scanRefused: '钱包扫描被拒绝。',
+  showOnHome: name => `在主页显示 ${name}`,
+  setUp: '已设置',
+  setupNeeded: '需要设置',
+  homeEmpty: '还没有勾选要在主页显示的 iNFT。'
+}

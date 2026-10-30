@@ -1,0 +1,42 @@
+icloneOS
+Copyright (c) 2026 devclone20 (icloneOS contributors)
+
+icloneOS is a modified distribution of Hermes Agent by Nous Research
+(https://github.com/NousResearch/hermes-agent), used under the MIT License.
+Copyright (c) 2025 Nous Research.
+
+Unless stated otherwise, the source code in this repository is licensed under the MIT License (see LICENSE).
+
+Exceptions:
+- iclone/privy/privy-login.js is a compiled bundle of third-party packages under their own licences, including
+  Apache-2.0 (Privy) and the Reown Community License (WalletConnect/Reown, not an OSI licence).
+  See THIRD_PARTY_NOTICES.md, which reproduces the full Reown licence texts.
+
+  Portions © 2025 Reown, Inc. All Rights Reserved
+
+  The line above is the attribution for the WalletConnect/Reown code (AppKit and WalletKit items) inside
+  iclone/privy/privy-login.js. It is required by Section 2(a)(i) of the Reown Community License
+  ("Redistribution and Use"), which reads:
+    "a. Distribution Requirements. If You distribute or make available the AppKit Items (including any
+    modifications to or derivative works thereof) or any product or service that uses them (including
+    Your applications and wallets), You must (i) include the following copyright notice in the notices
+    or readme.txt of the product, or the about section of the website for the services: “Portions ©
+    2025 Reown, Inc. All Rights Reserved” ; (ii) provide a copy of this License Agreement with any
+    applications or wallets containing such AppKit Items or that are required for the use thereof; and
+    (iii) applicable logo and branding."
+  The WalletKit licence carries the same clause for WalletKit Items. Condition (ii) is met by
+  THIRD_PARTY_NOTICES.md. This code is not licensed under MIT; recipients take their licence from Reown.
+- iclone/skills/agentcard/SKILL.md is the AgentCard agent skill by Alchemy (https://alchemy.com), version
+  2.2.0, MIT (declared in its frontmatter), shipped unedited; its source, sha256 and the MIT text are in
+  THIRD_PARTY_NOTICES.md ("Vendored skills"). It is MIT under Alchemy's copyright, not ours.
+- Fonts keep their own licences (apps/desktop/src/fonts/**, web/public/fonts/**, web/public/fonts-terminal/**):
+  JetBrains Mono (SIL Open Font License 1.1, see apps/desktop/src/fonts/OFL.txt) and the Noto Serif Display
+  ExtraCondensed instance (SIL Open Font License 1.1, see apps/desktop/src/fonts/OFL-NotoSerifDisplay.txt; source and
+  modification in THIRD_PARTY_NOTICES.md "Fonts"); the fonts in web/public/fonts are inherited from upstream and are
+  not licensed by us.
+- Skills in iclone/skills/ written by other authors keep their own licences and credits; each one is listed
+  with its author, upstream and licence text in iclone/skills/THIRD-PARTY-NOTICES.md.
+- The icloneOS, iCLONE and CLONE FRAME names, logos, character and collection art, pixel pets and icons
+  (iclone/brand/**, iclone/pets/**, apps/desktop/src/assets/iclone-mosaic.jpg, apps/desktop/assets/icon.*,
+  apps/desktop/public/apple-touch-icon.png) are trademarks and artwork of devclone20
+  and are NOT licensed under MIT. The mosaic is the iCLONE robot collection's art; the icons are the app's own.

@@ -1,0 +1,660 @@
+/* iclone design tokens — the one home of raw values (plan AD8), written on the
+   frozen scale (RESUME/contracts/P5_scale.md, gates/P5/scale.json).
+   L0 primitives  hues, the shared alpha ladder, radius, elevation and stroke
+                  geometry, blur, type, motion. The only raw values.
+   L1 semantic    the 30 roles, one block per skin plus the field variants,
+                  and the elevation recipes (geometry + a role colour).
+   L2 component   a component's own knobs, scoped on its root, built from roles
+                  (+ one ladder step).
+   Nothing outside this file, ic-bridge.css and ic-layers.css may write a
+   colour, radius, shadow, blur or z-index literal (scripts/ic-style-ratchet.mjs
+   holds the line). Upstream (--dt-* / --theme-*) is read only by
+   ic-bridge.css; the skin ink (text-1) comes from there. */
+
+/* ── L0 primitives ─────────────────────────────────────────────────────── */
+:root {
+  /* Hues: opaque, one per tone. An alpha is a ladder step composed in L1/L2:
+     color-mix(in srgb, var(--ic-<hue>) var(--ic-aNN), transparent). */
+  --ic-ink-900: #0b0a10;
+  --ic-ink-800: #16151c;
+  --ic-ink-700: #211f2a;
+  --ic-white: #ffffff;
+  --ic-paper: #f8f7fb;
+  --ic-black: #000000;
+  --ic-gold-100: #f2ead8;
+  --ic-gold-300: #f2e6c8;
+  --ic-gold-500: #d7c9a6;
+  --ic-gold-600: #a8935f;
+  --ic-gold-700: #8d7f5f;
+  --ic-red-100: #ffb6b6;
+  --ic-red-200: #ff8a8a;
+  --ic-rose-500: #e0566b;
+  --ic-red-600: #d9433d;
+  --ic-green-300: #8fd48a;
+  --ic-green-400: #4cd9a0;
+  --ic-green-600: #1f9d6c;
+  --ic-amber-300: #f3c86b;
+  --ic-amber-600: #b8860b;
+  /* Brand tones (owner rule): each app wears the colour of the real
+     app it stands for; -deep holds contrast on paper and on a pale field. */
+  --ic-brand-wallet: #f6851b; /* MetaMask */
+  --ic-brand-wallet-deep: #e2761b;
+  --ic-brand-market: #1fb3b0; /* Virtuals Protocol teal */
+  --ic-brand-market-deep: #168389;
+  --ic-brand-card: #635bff; /* Stripe behind the Agent Card */
+  --ic-brand-email: #ea4335; /* mail red */
+  --ic-brand-email-deep: #9b1f18; /* the Email dock symbol: dark red (owner) */
+  --ic-brand-message: #34c759; /* Messages green */
+  --ic-brand-message-deep: #2fb350;
+  --ic-brand-hyperliquid: #97fce4; /* Hyperliquid mint */
+  --ic-brand-hyperliquid-deep: #1fa08b;
+  --ic-brand-system: #ececf1; /* pale frost: the system (Settings) tile, matte (owner) */
+  /* The one alpha ladder every hue shares (frozen: 18 steps + the hue itself). */
+  --ic-a05: 5%;
+  --ic-a10: 10%;
+  --ic-a14: 14%;
+  --ic-a20: 20%;
+  --ic-a25: 25%;
+  --ic-a30: 30%;
+  --ic-a35: 35%;
+  --ic-a40: 40%;
+  --ic-a45: 45%;
+  --ic-a48: 48%;
+  --ic-a54: 54%;
+  --ic-a60: 60%;
+  --ic-a67: 67%;
+  --ic-a72: 72%;
+  --ic-a75: 75%;
+  --ic-a80: 80%;
+  --ic-a85: 85%;
+  --ic-a88: 88%;
+  --ic-radius-xs: 4px;
+  --ic-radius-sm: 8px;
+  --ic-radius-md: 12px;
+  --ic-radius-lg: 18px;
+  --ic-radius-xl: 26px;
+  --ic-radius-pill: 999px;
+  --ic-radius-round: 50%;
+  /* Elevation and stroke geometry; a recipe pairs one with a role colour. */
+  --ic-shadow-e1: 0 2px 8px;
+  --ic-shadow-e2: 0 16px 36px -14px;
+  --ic-shadow-e3: 0 18px 48px;
+  --ic-shadow-e4: 0 28px 80px;
+  --ic-shadow-stroke-ring: 0 0 0 3px;
+  --ic-shadow-stroke-edge: inset 0 0 0 1px;
+  --ic-shadow-stroke-glint: inset 0 1px 0;
+  --ic-shadow-stroke-rule: inset 2px 0 0;
+  --ic-shadow-stroke-underline: inset 0 -1px 0;
+  --ic-shadow-stroke-glow: 0 0 6px;
+  --ic-shadow-stroke-haze: inset 0 0 14px;
+  --ic-blur-glass: 22px;
+  --ic-blur-deep: 26px;
+  --ic-type-2xs: 0.5625rem;
+  --ic-type-xs: 0.625rem;
+  --ic-type-sm: 0.6875rem;
+  --ic-type-md: 0.75rem;
+  --ic-type-lg: 0.8125rem;
+  --ic-type-xl: 0.9375rem;
+  --ic-type-2xl: 1.125rem;
+  --ic-dur-fast: 120ms;
+  --ic-dur-base: 180ms;
+  --ic-dur-slow: 280ms;
+  --ic-ease-std: ease;
+  --ic-ease-spring: cubic-bezier(0.22, 0.78, 0.2, 1);
+}
+
+/* ── L1 semantic ───────────────────────────────────────────────────────── */
+/* The roles. The dark skins (natural, dark — and any skin that is not ours)
+   share this block; each variant below restates only what differs. */
+:root {
+  --ic-surface: var(--ic-ink-900);
+  --ic-surface-glass: color-mix(in srgb, var(--ic-ink-900) var(--ic-a40), transparent);
+  --ic-surface-raised: color-mix(in srgb, var(--ic-paper) var(--ic-a05), transparent);
+  --ic-surface-sunken: color-mix(in srgb, var(--ic-black) var(--ic-a20), transparent);
+  --ic-overlay-scrim: color-mix(in srgb, var(--ic-ink-900) var(--ic-a54), transparent);
+  --ic-fill-hover: color-mix(in srgb, var(--ic-paper) var(--ic-a05), transparent);
+  --ic-fill-selected: color-mix(in srgb, var(--ic-gold-500) var(--ic-a10), transparent);
+  --ic-border-subtle: color-mix(in srgb, var(--ic-paper) var(--ic-a10), transparent);
+  --ic-border-strong: color-mix(in srgb, var(--ic-gold-300) var(--ic-a14), transparent);
+  --ic-hairline-accent: color-mix(in srgb, var(--ic-gold-300) var(--ic-a14), transparent);
+  --ic-text-1: var(--ic-ink);
+  --ic-text-2: color-mix(in srgb, var(--ic-ink) var(--ic-a60), transparent);
+  --ic-text-3: color-mix(in srgb, var(--ic-ink) var(--ic-a40), transparent);
+  --ic-text-on-accent: var(--ic-ink-900);
+  /* A window without ic-bridge.css (the wake indicator) has no skin accent. */
+  --ic-accent: var(--ic-skin-accent, var(--ic-gold-500));
+  --ic-accent-soft: color-mix(in srgb, var(--ic-gold-500) var(--ic-a14), transparent);
+  --ic-accent-strong: var(--ic-gold-300);
+  --ic-focus-ring: color-mix(in srgb, var(--ic-gold-500) var(--ic-a25), transparent);
+  --ic-danger: var(--ic-red-200);
+  --ic-danger-soft: color-mix(in srgb, var(--ic-rose-500) var(--ic-a14), transparent);
+  --ic-success: var(--ic-green-400);
+  --ic-success-soft: color-mix(in srgb, var(--ic-green-300) var(--ic-a14), transparent);
+  --ic-warning: var(--ic-amber-300);
+  --ic-tone: var(--ic-accent);
+  --ic-glyph: var(--ic-gold-100);
+  --ic-chrome-fill: var(--ic-ink-700);
+  --ic-chrome-line: color-mix(in srgb, var(--ic-white) var(--ic-a20), transparent);
+  --ic-chrome-ink: var(--ic-gold-100);
+  --ic-shadow-tint: color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent);
+  --ic-glint: color-mix(in srgb, var(--ic-paper) var(--ic-a10), transparent);
+  /* Skin-invariant: the chrome over the stage is night glass in every skin —
+     its body (night) and its ink (lift) — and the gilt hairline holds
+     gold-500 where accent darkens. */
+  --ic-night: var(--ic-ink-900);
+  --ic-lift: var(--ic-white);
+  --ic-gilt: var(--ic-gold-500);
+}
+/* The chat surface alpha per skin (what the retired theme plugin, AD9,
+   layered over styles.css at runtime). This file loads after styles.css. */
+:root[data-hermes-theme^='iclone-'] {
+  --ui-chat-surface-background: var(--ic-surface-glass);
+}
+:root[data-hermes-theme='iclone-dark'] {
+  --ic-surface-glass: color-mix(in srgb, var(--ic-ink-900) var(--ic-a54), transparent);
+}
+:root[data-hermes-theme='iclone-light'] {
+  --ic-surface: var(--ic-paper);
+  --ic-surface-glass: color-mix(in srgb, var(--ic-paper) var(--ic-a40), transparent);
+  --ic-surface-raised: color-mix(in srgb, var(--ic-ink-700) var(--ic-a05), transparent);
+  --ic-surface-sunken: color-mix(in srgb, var(--ic-ink-800) var(--ic-a05), transparent);
+  --ic-overlay-scrim: color-mix(in srgb, var(--ic-ink-800) var(--ic-a60), transparent);
+  --ic-fill-hover: color-mix(in srgb, var(--ic-ink-700) var(--ic-a05), transparent);
+  --ic-fill-selected: color-mix(in srgb, var(--ic-gold-700) var(--ic-a14), transparent);
+  --ic-border-subtle: color-mix(in srgb, var(--ic-ink-900) var(--ic-a05), transparent);
+  --ic-border-strong: color-mix(in srgb, var(--ic-ink-900) var(--ic-a14), transparent);
+  --ic-hairline-accent: color-mix(in srgb, var(--ic-gold-600) var(--ic-a14), transparent);
+  --ic-text-on-accent: var(--ic-white);
+  --ic-accent-soft: color-mix(in srgb, var(--ic-gold-700) var(--ic-a14), transparent);
+  --ic-accent-strong: var(--ic-gold-700);
+  --ic-focus-ring: color-mix(in srgb, var(--ic-gold-600) var(--ic-a25), transparent);
+  --ic-danger: var(--ic-red-600);
+  --ic-success: var(--ic-green-600);
+  --ic-success-soft: color-mix(in srgb, var(--ic-green-600) var(--ic-a14), transparent);
+  --ic-warning: var(--ic-amber-600);
+  --ic-chrome-fill: color-mix(in srgb, var(--ic-white) var(--ic-a88), transparent);
+  --ic-chrome-line: color-mix(in srgb, var(--ic-ink-700) var(--ic-a25), transparent);
+  --ic-chrome-ink: var(--ic-ink-700);
+  --ic-shadow-tint: color-mix(in srgb, var(--ic-ink-800) var(--ic-a14), transparent);
+  --ic-glint: color-mix(in srgb, var(--ic-white) var(--ic-a10), transparent);
+}
+/* A pale field under the home surface (set by the field sampler), whatever
+   the skin: the chrome over the stage flips to dark ink and ink-tinted glass.
+   The upstream titlebar reads --ic-field-tone through a style query (home.css). */
+:root[data-iclone-field-light] {
+  --ic-field-tone: light;
+  --ic-accent-soft: color-mix(in srgb, var(--ic-ink-700) var(--ic-a14), transparent);
+  --ic-chrome-fill: color-mix(in srgb, var(--ic-white) var(--ic-a88), transparent);
+  --ic-chrome-line: color-mix(in srgb, var(--ic-ink-700) var(--ic-a40), transparent);
+  --ic-chrome-ink: color-mix(in srgb, var(--ic-ink-700) var(--ic-a80), transparent);
+}
+:root[data-hermes-theme='iclone-light'][data-iclone-field-light] {
+  --ic-glint: color-mix(in srgb, var(--ic-paper) var(--ic-a10), transparent);
+}
+/* tone: the brand of the app a surface stands for — the dock glyph
+   (.ic-tone--<kind>) and the EconomyOS window (.iecon[data-kind]). A pale
+   field deepens it everywhere; the light skin deepens the windows. */
+.ic-tone--wallet,
+.iecon[data-kind='wallet'] {
+  --ic-tone: var(--ic-brand-wallet);
+}
+.ic-tone--market,
+.iecon[data-kind='acp'] {
+  --ic-tone: var(--ic-brand-market);
+}
+.ic-tone--card,
+.iecon[data-kind='bank'] {
+  --ic-tone: var(--ic-brand-card);
+}
+.ic-tone--email,
+.iecon[data-kind='email'] {
+  --ic-tone: var(--ic-brand-email);
+}
+.ic-tone--message {
+  --ic-tone: var(--ic-brand-message);
+}
+.ic-tone--hyperliquid,
+.iecon[data-kind='hyperliquid'] {
+  --ic-tone: var(--ic-brand-hyperliquid);
+}
+.ic-tone--system {
+  --ic-tone: var(--ic-brand-system);
+}
+/* The Email dock symbol (owner): the one coloured mark, dark red. */
+.dock__icon[data-dock='email'] {
+  --ic-tone: var(--ic-brand-email-deep);
+}
+:root[data-iclone-field-light] :is(.ic-tone--wallet, .iecon[data-kind='wallet']),
+:root[data-hermes-theme='iclone-light'] .iecon[data-kind='wallet'] {
+  --ic-tone: var(--ic-brand-wallet-deep);
+}
+:root[data-iclone-field-light] :is(.ic-tone--market, .iecon[data-kind='acp']),
+:root[data-hermes-theme='iclone-light'] .iecon[data-kind='acp'] {
+  --ic-tone: var(--ic-brand-market-deep);
+}
+:root[data-iclone-field-light] .ic-tone--message {
+  --ic-tone: var(--ic-brand-message-deep);
+}
+:root[data-iclone-field-light] :is(.ic-tone--hyperliquid, .iecon[data-kind='hyperliquid']),
+:root[data-hermes-theme='iclone-light'] .iecon[data-kind='hyperliquid'] {
+  --ic-tone: var(--ic-brand-hyperliquid-deep);
+}
+/* Chrome that keeps its dark-skin gilt where the skin or the field flips it. */
+:root[data-iclone-field-light] .itwin__rail {
+  --ic-accent-soft: color-mix(in srgb, var(--ic-gold-500) var(--ic-a14), transparent);
+}
+:root[data-hermes-theme='iclone-light'] .dock__tooltip {
+  --ic-focus-ring: var(--ic-hairline-accent);
+}
+:root[data-hermes-theme='iclone-light'][data-iclone-field-light] :is(.dock__hint, .itwin__tab--on) {
+  --ic-home-accent-30: color-mix(in srgb, var(--ic-gold-300) var(--ic-a30), transparent);
+}
+/* Elevation recipes: one geometry + a role colour (+ the top glint). */
+:root {
+  --ic-shadow-window:
+    var(--ic-shadow-e4) color-mix(in srgb, var(--ic-black) var(--ic-a35), transparent),
+    var(--ic-shadow-stroke-glint) var(--ic-glint);
+  --ic-shadow-window-paper:
+    var(--ic-shadow-e4) var(--ic-shadow-tint),
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a80), transparent);
+  --ic-shadow-panel-sm-paper:
+    var(--ic-shadow-e3) var(--ic-shadow-tint),
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a80), transparent);
+  --ic-shadow-panel:
+    var(--ic-shadow-e4) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent),
+    var(--ic-shadow-stroke-glint) var(--ic-glint);
+  --ic-shadow-panel-sm:
+    var(--ic-shadow-e3) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent),
+    var(--ic-shadow-stroke-glint) var(--ic-glint);
+  --ic-shadow-sheet:
+    var(--ic-shadow-e4) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent),
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a20), transparent);
+  --ic-shadow-frame:
+    var(--ic-shadow-e4) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent),
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a05), transparent);
+  --ic-shadow-card: var(--ic-shadow-e3) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent);
+  --ic-shadow-tile:
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a05), transparent),
+    var(--ic-shadow-e2) color-mix(in srgb, var(--ic-black) var(--ic-a35), transparent);
+  --ic-shadow-dock:
+    var(--ic-shadow-e3) color-mix(in srgb, var(--ic-ink-900) var(--ic-a40), transparent),
+    var(--ic-shadow-stroke-glint) var(--ic-glint);
+  --ic-shadow-cta:
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a14), transparent),
+    var(--ic-shadow-e2) color-mix(in srgb, var(--ic-gold-500) var(--ic-a45), transparent);
+  --ic-shadow-thumb:
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a48), transparent),
+    var(--ic-shadow-e1) color-mix(in srgb, var(--ic-black) var(--ic-a45), transparent);
+  --ic-shadow-hairdrop: var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-black) var(--ic-a35), transparent);
+  --ic-shadow-glint: var(--ic-shadow-stroke-glint) var(--ic-glint);
+  --ic-shadow-glow: var(--ic-shadow-stroke-ring) color-mix(in srgb, var(--ic-gold-500) var(--ic-a14), transparent);
+  --ic-shadow-spark: var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-gold-500) var(--ic-a60), transparent);
+}
+
+/* ── L2 component: home chrome over the stage ─────────────────────────── */
+/* The stage, the connect pill, the Message tabs / rail / chips, the opacity
+   slider (.iop) and the window controls column (window/ic-window.css), the
+   dock, the iNFT tab (collections.css) and the stage's dismiss chip / iNFT
+   name. The chrome sits on the dark stage on every skin; the light skin and
+   the pale field re-point what changes there. */
+:root {
+  --ic-stage-fill: var(--ic-surface);
+  --ic-stage-veil: color-mix(in srgb, var(--ic-shadow-tint) var(--ic-a67), transparent);
+  --ic-stage-line: color-mix(in srgb, var(--ic-lift) var(--ic-a14), transparent);
+  --ic-stage-shadow: var(--ic-shadow-sheet);
+  --ic-stage-ink-bright: color-mix(in srgb, var(--ic-text-1) var(--ic-a80), transparent);
+  --ic-stage-loading-ink: color-mix(in srgb, var(--ic-accent) var(--ic-a75), transparent);
+  --ic-stage-btn-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a25), transparent);
+  --ic-stage-btn-go-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a40), transparent);
+  --ic-chip-fill: color-mix(in srgb, var(--ic-glint) var(--ic-a54), transparent);
+  --ic-chip-fill-hover: var(--ic-glint);
+  --ic-chip-gilt: color-mix(in srgb, var(--ic-gilt) var(--ic-a14), transparent);
+  --ic-chip-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a25), transparent);
+  --ic-chip-line-on: color-mix(in srgb, var(--ic-gilt) var(--ic-a40), transparent);
+  --ic-chip-close-fill: color-mix(in srgb, var(--ic-danger) var(--ic-a20), transparent);
+  --ic-chip-close-ink: var(--ic-red-100);
+  --ic-connect-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a35), transparent);
+  --ic-connect-fill-top: color-mix(in srgb, var(--ic-glyph) var(--ic-a14), transparent);
+  --ic-connect-fill-end: color-mix(in srgb, var(--ic-gilt) var(--ic-a10), transparent);
+  --ic-connect-hover-top: color-mix(in srgb, var(--ic-glyph) var(--ic-a25), transparent);
+  --ic-connect-hover-end: color-mix(in srgb, var(--ic-gilt) var(--ic-a10), transparent);
+  --ic-titlebar-glyph: var(--ic-ink-700);
+  --ic-ctl-line: var(--ic-chrome-line);
+  --ic-ctl-fill: var(--ic-chrome-fill);
+  --ic-ctl-ink: var(--ic-chrome-ink);
+  --ic-ctl-shade: var(--ic-shadow-tint);
+  --ic-ctl-glint: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-ctl-shadow: var(--ic-shadow-e1) var(--ic-ctl-shade), var(--ic-shadow-stroke-glint) var(--ic-ctl-glint);
+  --ic-ctl-hover-line: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a54), transparent);
+  --ic-ctl-hover-fill: color-mix(in srgb, var(--ic-accent) var(--ic-a35), transparent);
+  --ic-ctl-hover-ink: var(--ic-lift);
+  --ic-ctl-track: color-mix(in srgb, var(--ic-lift) var(--ic-a30), transparent);
+  --ic-ctl-thumb-line: color-mix(in srgb, var(--ic-lift) var(--ic-a48), transparent);
+  --ic-dock-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a48), transparent);
+  --ic-dock-line: var(--ic-glint);
+  --ic-dock-tile-press: color-mix(in srgb, var(--ic-lift) var(--ic-a20), transparent);
+  /* Every dock symbol is heavy night ink (owner design). */
+  --ic-dock-glyph-ink: var(--ic-night);
+  --ic-tab-line: var(--ic-focus-ring);
+  --ic-tab-fill: var(--ic-fill-hover);
+  --ic-msg-tab-line: var(--ic-focus-ring);
+  --ic-msg-tab-fill: var(--ic-fill-hover);
+  --ic-tab-hover-fill: var(--ic-accent-soft);
+  --ic-tab-label-ink: var(--ic-accent);
+  --ic-dismiss-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a25), transparent);
+  --ic-dismiss-fill: color-mix(in srgb, var(--ic-glint) var(--ic-a54), transparent);
+  --ic-dismiss-ink: var(--ic-accent);
+  --ic-dismiss-hover-fill: color-mix(in srgb, var(--ic-gilt) var(--ic-a14), transparent);
+  --ic-dismiss-hover-ink: var(--ic-text-1);
+  --ic-inft-name-ink: var(--ic-text-3);
+  /* Panels over the stage (iNFT collections, wallet): night glass with gilt
+     lines; the paper skin re-points them. */
+  --ic-inft-panel-shadow: var(--ic-shadow-panel);
+  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a45), transparent);
+  --ic-inft-panel-line: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  --ic-econ-frame-shadow: var(--ic-shadow-window);
+  --ic-econ-frame-line: var(--ic-hairline-accent);
+  --ic-wallet-panel-shadow: var(--ic-shadow-panel-sm);
+  --ic-wallet-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a72), transparent);
+  --ic-wallet-panel-line: color-mix(in srgb, var(--ic-accent) var(--ic-a25), transparent);
+  --ic-wallet-panel-rule: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  --ic-wallet-addr-line: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  --ic-wallet-addr-fill: var(--ic-surface-raised);
+  --ic-wallet-row-hover: var(--ic-fill-hover);
+  --ic-wallet-skeleton: var(--ic-surface-raised);
+  /* The QR sits on an ink plate so it scans on the night glass. */
+  --ic-wallet-qr-fill: var(--ic-text-1);
+}
+/* Paper skin: the controls and panels turn to paper chips (text-1 is the
+   skin's ink here, so ink tints read it). */
+:root[data-hermes-theme='iclone-light'] {
+  --ic-stage-fill: var(--ic-text-1);
+  --ic-stage-veil: color-mix(in srgb, var(--ic-overlay-scrim) var(--ic-a54), transparent);
+  --ic-ctl-glint: var(--ic-chrome-fill);
+  --ic-ctl-hover-fill: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a30), transparent);
+  --ic-ctl-hover-ink: var(--ic-text-1);
+  --ic-ctl-track: color-mix(in srgb, var(--ic-text-1) var(--ic-a25), transparent);
+  --ic-ctl-thumb-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a30), transparent);
+  --ic-dock-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a54), transparent);
+  --ic-tab-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-tab-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-msg-tab-line: var(--ic-hairline-accent);
+  --ic-msg-tab-fill: var(--ic-glint);
+  --ic-tab-hover-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-econ-frame-shadow: var(--ic-shadow-window-paper);
+  --ic-econ-frame-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a60), transparent);
+  --ic-inft-panel-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-inft-panel-shadow: var(--ic-shadow-window-paper);
+  --ic-wallet-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a80), transparent);
+  --ic-wallet-panel-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-wallet-panel-shadow: var(--ic-shadow-panel-sm-paper);
+  --ic-wallet-panel-rule: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-wallet-addr-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-wallet-addr-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-wallet-row-hover: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-wallet-skeleton: linear-gradient(
+    100deg,
+    var(--ic-wallet-row-hover) 30%,
+    color-mix(in srgb, var(--ic-text-1) var(--ic-a10), transparent) 50%,
+    var(--ic-wallet-row-hover) 70%
+  );
+  --ic-wallet-qr-fill: transparent;
+  --ic-home-veil-72: color-mix(in srgb, var(--ic-text-1) var(--ic-a80), transparent);
+  --ic-home-accent-30: var(--ic-hairline-accent);
+}
+/* A pale field: every control over the stage flips to dark ink and holds
+   still on hover (the pale field outranks the hover tint). */
+:root[data-iclone-field-light] {
+  --ic-ctl-shade: color-mix(in srgb, var(--ic-chrome-line) var(--ic-a60), transparent);
+  --ic-ctl-glint: var(--ic-chrome-fill);
+  --ic-ctl-hover-line: var(--ic-chrome-line);
+  --ic-ctl-hover-fill: var(--ic-chrome-fill);
+  --ic-ctl-hover-ink: var(--ic-chrome-ink);
+  --ic-dock-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a80), transparent);
+  --ic-dock-line: color-mix(in srgb, var(--ic-surface) var(--ic-a80), transparent);
+  --ic-tab-line: var(--ic-chrome-line);
+  --ic-tab-fill: var(--ic-accent-soft);
+  --ic-tab-hover-fill: var(--ic-accent-soft);
+  --ic-tab-label-ink: var(--ic-titlebar-glyph);
+  --ic-dismiss-line: var(--ic-chrome-line);
+  --ic-dismiss-fill: var(--ic-accent-soft);
+  --ic-dismiss-ink: var(--ic-titlebar-glyph);
+  --ic-dismiss-hover-fill: var(--ic-accent-soft);
+  --ic-dismiss-hover-ink: var(--ic-titlebar-glyph);
+  --ic-inft-name-ink: color-mix(in srgb, var(--ic-surface) var(--ic-a48), transparent);
+}
+/* Light skin over a pale field: the field's chips at rest, the paper skin's
+   hover; the iNFT tab keeps the paper skin's chip. */
+:root[data-hermes-theme='iclone-light'][data-iclone-field-light] {
+  --ic-ctl-hover-line: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a54), transparent);
+  --ic-ctl-hover-fill: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a30), transparent);
+  --ic-ctl-hover-ink: var(--ic-text-1);
+  --ic-tab-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-tab-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-tab-hover-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  --ic-dock-fill: color-mix(in srgb, var(--ic-night) var(--ic-a80), transparent);
+  --ic-dock-line: color-mix(in srgb, var(--ic-night) var(--ic-a85), transparent);
+  --ic-inft-name-ink: color-mix(in srgb, var(--ic-text-1) var(--ic-a48), transparent);
+}
+
+/* ── L2 component: shared home-app knobs (files island, collections, wallet
+   panel, dock, iT terminal, iNFT setup) — a role + one ladder step each. ── */
+:root {
+  --ic-edge-gilt: var(--ic-shadow-stroke-edge) color-mix(in srgb, var(--ic-accent) var(--ic-a45), transparent);
+  --ic-ring-ok: var(--ic-shadow-stroke-ring) var(--ic-success-soft);
+  --ic-ring-alert: var(--ic-shadow-stroke-ring) var(--ic-danger-soft);
+  --ic-home-accent-30: var(--ic-focus-ring);
+  --ic-home-accent-35: color-mix(in srgb, var(--ic-accent) var(--ic-a35), transparent);
+  --ic-home-accent-40: color-mix(in srgb, var(--ic-accent) var(--ic-a40), transparent);
+  --ic-home-accent-45: color-mix(in srgb, var(--ic-accent) var(--ic-a45), transparent);
+  --ic-home-accent-54: color-mix(in srgb, var(--ic-accent) var(--ic-a54), transparent);
+  --ic-home-accent-67: color-mix(in srgb, var(--ic-accent) var(--ic-a67), transparent);
+  --ic-home-accent-80: color-mix(in srgb, var(--ic-accent) var(--ic-a80), transparent);
+  --ic-home-accent-85: color-mix(in srgb, var(--ic-accent) var(--ic-a85), transparent);
+  --ic-home-danger-10: color-mix(in srgb, var(--ic-danger) var(--ic-a10), transparent);
+  --ic-home-danger-40: color-mix(in srgb, var(--ic-danger) var(--ic-a40), transparent);
+  --ic-home-danger-60: color-mix(in srgb, var(--ic-danger) var(--ic-a60), transparent);
+  --ic-home-danger-80: color-mix(in srgb, var(--ic-danger) var(--ic-a80), transparent);
+  --ic-home-danger-88: color-mix(in srgb, var(--ic-danger) var(--ic-a88), transparent);
+  --ic-home-gilt-40: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a40), transparent);
+  --ic-home-glyph-75: color-mix(in srgb, var(--ic-glyph) var(--ic-a75), transparent);
+  --ic-home-ink-14: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-home-ink-20: color-mix(in srgb, var(--ic-text-1) var(--ic-a20), transparent);
+  --ic-home-ink-30: color-mix(in srgb, var(--ic-text-1) var(--ic-a30), transparent);
+  --ic-home-ink-45: color-mix(in srgb, var(--ic-text-1) var(--ic-a45), transparent);
+  --ic-home-ink-54: color-mix(in srgb, var(--ic-text-1) var(--ic-a54), transparent);
+  --ic-home-ink-72: color-mix(in srgb, var(--ic-text-1) var(--ic-a72), transparent);
+  --ic-home-shade-67: color-mix(in srgb, var(--ic-shadow-tint) var(--ic-a67), transparent);
+  --ic-home-veil-14: color-mix(in srgb, var(--ic-surface) var(--ic-a14), transparent);
+  --ic-home-veil-35: color-mix(in srgb, var(--ic-surface) var(--ic-a35), transparent);
+  --ic-home-veil-54: color-mix(in srgb, var(--ic-surface) var(--ic-a54), transparent);
+  --ic-home-veil-60: color-mix(in srgb, var(--ic-surface) var(--ic-a60), transparent);
+  --ic-home-veil-72: color-mix(in srgb, var(--ic-surface) var(--ic-a72), transparent);
+}
+
+/* ── L2 component: the IcWindow chassis (window/ic-window.css) ───────────── */
+/* The Message window's session sidebar (msg-sidebar.css): the collapsed
+   rail, the expanded panel and its row/button height. The chat clip starts
+   at the rail (or panel) edge. */
+:root {
+  /* Every window head's height: the floor of every Dock head (ic-window.css
+     `.ic-win__head` min-height — the econ windows, Settings and Message all
+     carry it) and the Message head band (msg-sidebar.css, msg-window.tsx
+     headBand). It is derived from the type scale, not a fixed number:
+     Settings -> Appearance -> Text size multiplies every absolute font-size by
+     --ic-text-scale (vite/postcss-text-scale.ts), so the tallest head content
+     grows with the setting. That content is the identity chip — 1px border and
+     4px padding around one line of --ic-type-md at the econ line-height 1.45
+     (econ.css `.iecon`) — inside the head's own 16px/12px padding and its 1px
+     hairline, which are px and do not scale: 39px + that line. 60px is the
+     floor the design asks for, and it is what the expression yields at the
+     default and small sizes; at large it grows past every head's own content,
+     so a head never changes height when the chip lands and every title pill
+     sits at the same height for every user. */
+  --ic-win-head-h: max(60px, calc(39px + var(--ic-type-md) * 1.45 * var(--ic-text-scale, 1)));
+  /* The app's titlebar band (shell/titlebar.ts TITLEBAR_HEIGHT): an expanded
+     window's top edge, where the macOS window buttons sit. */
+  --ic-titlebar-band-h: 34px;
+  --ic-msg-rail-w: 52px;
+  --ic-msg-sidebar-w: 264px;
+  --ic-msg-row-h: 32px;
+  --ic-win-frame-line: color-mix(in srgb, var(--ic-gilt) var(--ic-a25), transparent);
+  /* How far a window's content keeps from its right edge where the control column (close · expand/retract ·
+     opacity) hugs the top-right corner: 14px in + 26px of button + the slider's own width, with the head's air. */
+  --ic-win-controls-clear: 64px;
+}
+
+/* Expanded, a window reaches the app's top-left corner: its head starts after
+   the macOS window buttons. Declared on the head itself, not :root, because
+   --titlebar-controls-left is set inline below :root (contrib/wiring.tsx). */
+.ic-win__head {
+  --ic-win-head-inset-expanded: max(26px, calc(var(--titlebar-controls-left, 78px) + 12px));
+}
+
+/* ── L2 component: the EconomyOS window (.iecon, econ/econ.css) ─────────── */
+/* The window tone is the app's brand tone (role tone, set per data-kind in L1).
+   The Message head wears the econ title pill (contract D §14), so it reads the
+   same ladder. */
+.iecon,
+.imsg-head {
+  --ic-econ-radius: var(--ic-radius-md);
+  /* Tone-bound rings, rules and glows (they resolve per window). */
+  --ic-econ-tone-glow: var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-tone) var(--ic-a54), transparent);
+  --ic-econ-tone-rule: var(--ic-shadow-stroke-rule) var(--ic-tone);
+  --ic-econ-tone-ring: var(--ic-shadow-stroke-ring) color-mix(in srgb, var(--ic-tone) var(--ic-a14), transparent);
+  --ic-econ-tone-underline: var(--ic-shadow-stroke-underline)
+    color-mix(in srgb, var(--ic-tone) var(--ic-a75), transparent);
+  --ic-econ-gold-ring: var(--ic-shadow-stroke-ring) color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  --ic-econ-up-glow: var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-success) var(--ic-a60), transparent);
+  --ic-econ-up-ring: var(--ic-shadow-stroke-ring) color-mix(in srgb, var(--ic-success) var(--ic-a14), transparent);
+  --ic-econ-warn-ring: var(--ic-shadow-stroke-ring) color-mix(in srgb, var(--ic-warning) var(--ic-a20), transparent);
+  --ic-econ-down-rule: var(--ic-shadow-stroke-rule) color-mix(in srgb, var(--ic-danger) var(--ic-a60), transparent);
+  --ic-econ-island: var(--ic-shadow-e2) var(--ic-surface-sunken), var(--ic-shadow-e1) var(--ic-surface-sunken);
+  --ic-econ-edge: var(--ic-shadow-stroke-edge) var(--ic-border-strong);
+  --ic-econ-mute-edge: var(--ic-shadow-stroke-edge) var(--ic-text-2);
+  /* Role + one ladder step, read across the econ apps. */
+  --ic-econ-down-10: color-mix(in srgb, var(--ic-danger) var(--ic-a10), transparent);
+  --ic-econ-down-20: color-mix(in srgb, var(--ic-danger) var(--ic-a20), transparent);
+  --ic-econ-down-40: color-mix(in srgb, var(--ic-danger) var(--ic-a40), transparent);
+  --ic-econ-down-45: color-mix(in srgb, var(--ic-danger) var(--ic-a45), transparent);
+  --ic-econ-down-54: color-mix(in srgb, var(--ic-danger) var(--ic-a54), transparent);
+  --ic-econ-gilt-30: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a30), transparent);
+  --ic-econ-gold-35: color-mix(in srgb, var(--ic-accent) var(--ic-a35), transparent);
+  --ic-econ-gold-40: color-mix(in srgb, var(--ic-accent) var(--ic-a40), transparent);
+  --ic-econ-gold-75: color-mix(in srgb, var(--ic-accent) var(--ic-a75), transparent);
+  --ic-econ-ink-14: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
+  --ic-econ-ink-25: color-mix(in srgb, var(--ic-text-1) var(--ic-a25), transparent);
+  --ic-econ-ink-45: color-mix(in srgb, var(--ic-text-1) var(--ic-a45), transparent);
+  --ic-econ-ink-72: color-mix(in srgb, var(--ic-text-1) var(--ic-a72), transparent);
+  --ic-econ-ink-80: color-mix(in srgb, var(--ic-text-1) var(--ic-a80), transparent);
+  --ic-econ-ink-88: color-mix(in srgb, var(--ic-text-1) var(--ic-a88), transparent);
+  --ic-econ-sunken-60: color-mix(in srgb, var(--ic-surface-sunken) var(--ic-a60), transparent);
+  --ic-econ-tone-10: color-mix(in srgb, var(--ic-tone) var(--ic-a10), transparent);
+  --ic-econ-tone-14: color-mix(in srgb, var(--ic-tone) var(--ic-a14), transparent);
+  --ic-econ-tone-25: color-mix(in srgb, var(--ic-tone) var(--ic-a25), transparent);
+  --ic-econ-tone-40: color-mix(in srgb, var(--ic-tone) var(--ic-a40), transparent);
+  --ic-econ-tone-54: color-mix(in srgb, var(--ic-tone) var(--ic-a54), transparent);
+  --ic-econ-tone-60: color-mix(in srgb, var(--ic-tone) var(--ic-a60), transparent);
+  --ic-econ-up-40: color-mix(in srgb, var(--ic-success) var(--ic-a40), transparent);
+  --ic-econ-warn-40: color-mix(in srgb, var(--ic-warning) var(--ic-a40), transparent);
+  --ic-econ-warn-45: color-mix(in srgb, var(--ic-warning) var(--ic-a45), transparent);
+  /* Two roles, one step (P5_scale §5): the email 'confirm delete' ink. */
+  --ic-econ-down-ink: color-mix(in srgb, var(--ic-danger) var(--ic-a80), var(--ic-text-1));
+}
+
+/* The econ aliases the title pill reads (econ.css `.iecon` holds the full
+   set; the Message head is no `.iecon`, so it gets the pill's three here). */
+.imsg-head {
+  --e-raised: var(--ic-surface-raised);
+  --e-tone: var(--ic-tone);
+  --e-line: var(--ic-border-subtle);
+}
+
+/* ── L2 component: the Bank card (econ/bank/bank.css) ─────────────────── */
+.bk-root {
+  --bk-card-tint: var(--ic-econ-tone-40);
+  --bk-card-tint-end: var(--ic-econ-tone-10);
+  --bk-card-base: var(--ic-surface-sunken);
+  --bk-card-glint: var(--ic-border-subtle);
+  --bk-card-shadow: var(--ic-surface-sunken);
+  --bk-card-glow: var(--ic-econ-tone-40);
+  --bk-card-accent: var(--ic-accent);
+  --bk-chip-from: var(--ic-econ-gold-75);
+  --bk-chip-to: var(--ic-focus-ring);
+  --bk-stripe-a: var(--ic-econ-ink-25);
+  --bk-stripe-b: var(--ic-econ-ink-14);
+  --ic-bk-card-lift: var(--ic-shadow-e3) var(--bk-card-shadow), var(--ic-shadow-stroke-glint) var(--bk-card-glint);
+  --ic-bk-chip-ring: var(--ic-shadow-stroke-edge) var(--bk-chip-edge);
+}
+/* Light skin: a paler tint, a raised base instead of a sunken one, and the
+   card's indigo as the accent (gold on near-white does not hold contrast). */
+:root[data-hermes-theme='iclone-light'] .iecon[data-kind='bank'] .bk-root {
+  --bk-card-tint: color-mix(in srgb, var(--ic-tone) var(--ic-a25), transparent);
+  --bk-card-tint-end: color-mix(in srgb, var(--ic-tone) var(--ic-a05), transparent);
+  --bk-card-base: var(--ic-surface-raised);
+  --bk-card-glint: var(--ic-fill-hover);
+  --bk-card-shadow: var(--ic-border-strong);
+  --bk-card-glow: color-mix(in srgb, var(--ic-tone) var(--ic-a25), transparent);
+  --bk-card-accent: var(--ic-tone);
+  --bk-chip-from: color-mix(in srgb, var(--ic-tone) var(--ic-a54), transparent);
+  --bk-chip-to: color-mix(in srgb, var(--ic-tone) var(--ic-a20), transparent);
+  --bk-stripe-a: color-mix(in srgb, var(--ic-text-1) var(--ic-a20), transparent);
+  --bk-stripe-b: color-mix(in srgb, var(--ic-text-1) var(--ic-a10), transparent);
+}
+
+/* ── L2 component: toned dock tiles (owner design) ─────────────
+   A toned tile (today only Settings) is frosted material glass in its tone
+   with a tone glow; every other tile is the dark dock's plain frosted glass. Declared ON the toned tile so var(--ic-tone) resolves per
+   tile (a knob on :root would freeze the :root tone). */
+.dock__icon.ic-tone {
+  --ic-dock-tone-fill: color-mix(in srgb, var(--ic-tone) var(--ic-a80), transparent);
+  --ic-dock-tone-fill-hover: color-mix(in srgb, var(--ic-tone) var(--ic-a88), transparent);
+  --ic-dock-tone-press: color-mix(in srgb, var(--ic-tone) var(--ic-a67), transparent);
+  --ic-dock-tone-sheen: color-mix(in srgb, var(--ic-lift) var(--ic-a35), transparent);
+  --ic-dock-tone-edge: color-mix(in srgb, var(--ic-lift) var(--ic-a54), transparent);
+  --ic-dock-tone-base: color-mix(in srgb, var(--ic-night) var(--ic-a25), transparent);
+  --ic-dock-tone-glow:
+    var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-tone) var(--ic-a54), transparent),
+    var(--ic-shadow-e1) color-mix(in srgb, var(--ic-tone) var(--ic-a35), transparent);
+  --ic-dock-tone-glow-hover:
+    var(--ic-shadow-stroke-glow) color-mix(in srgb, var(--ic-tone) var(--ic-a72), transparent),
+    var(--ic-shadow-e1) color-mix(in srgb, var(--ic-tone) var(--ic-a54), transparent);
+}
+
+/* Settings (owner): the one toned tile — white under a heavy
+   frost: a thin white body, a milky inner haze and a deep blur, so the tile
+   reads as frosted glass over white. The symbol sits above it, crisp. */
+.dock__icon.ic-tone--system {
+  --ic-dock-tone-fill: color-mix(in srgb, var(--ic-tone) var(--ic-a40), transparent);
+  --ic-dock-tone-fill-hover: color-mix(in srgb, var(--ic-tone) var(--ic-a48), transparent);
+  --ic-dock-tone-press: color-mix(in srgb, var(--ic-tone) var(--ic-a30), transparent);
+  --ic-dock-tone-sheen: color-mix(in srgb, var(--ic-lift) var(--ic-a05), transparent);
+  --ic-dock-tone-edge: color-mix(in srgb, var(--ic-lift) var(--ic-a10), transparent);
+  --ic-dock-tone-base: color-mix(in srgb, var(--ic-night) var(--ic-a10), transparent);
+  --ic-dock-tone-glow: var(--ic-shadow-stroke-haze) color-mix(in srgb, var(--ic-night) var(--ic-a10), transparent);
+  --ic-dock-tone-glow-hover: var(--ic-shadow-stroke-haze) color-mix(in srgb, var(--ic-night) var(--ic-a05), transparent);
+  --ic-dock-tone-blur: var(--ic-blur-deep);
+}
+
+/* ── L2 component: shared controls (components/ui/button.tsx) ─────────────
+   One radius for every button, text or icon: the smallest scale step. */
+:root {
+  --ic-radius-control: var(--ic-radius-xs);
+}
+
+/* ── L2 component: the wake indicator (app/wake-indicator/wake-indicator.css)
+   Its own transparent BrowserWindow imports this file directly; no skin
+   attribute is set there, so the dark recipe is what it shows. ───────────── */
+:root {
+  --ic-wake-fill: color-mix(in srgb, var(--ic-accent) var(--ic-a60), transparent);
+  --ic-wake-edge: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a80), transparent);
+  --ic-wake-glow: color-mix(in srgb, var(--ic-accent) var(--ic-a72), transparent);
+  --ic-wake-halo: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a48), transparent);
+}
+:root[data-hermes-theme='iclone-light'] {
+  --ic-wake-fill: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a60), transparent);
+  --ic-wake-edge: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a88), transparent);
+  --ic-wake-glow: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a54), transparent);
+  --ic-wake-halo: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a35), transparent);
+}

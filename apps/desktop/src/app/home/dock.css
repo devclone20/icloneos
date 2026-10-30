@@ -1,0 +1,326 @@
+/* Vertical, left-edge Apple-style dock.
+ *
+ * Physics (raised-cosine magnification + spring settle) is computed in
+ * dock.tsx and written as ONE CSS var per item, `--s` (scale), once per
+ * animation frame. `--s` sizes the item BOX itself, so growth is layout:
+ * neighbors displace naturally, and the rail (width max-content, centered
+ * on its edge) expands around the magnified icons on every side — exactly
+ * the macOS dock. No transition is declared on what `--s` drives; the
+ * spring already eases in JS and CSS transitions racing per-frame writes
+ * stutter.
+ */
+
+.dock {
+  position: fixed;
+  left: 12px;
+  top: 50%;
+  /* --dock-shift slides the rail so the icon under the pointer stays under it
+     while the row opens — a MacBook dock grows around the cursor, not away from
+     it. dock.tsx bounds it by the row's own growth. */
+  translate: 0 calc(-50% + var(--dock-shift, 0px));
+  /* Above the dock windows (z 43): a magnified tile pops out to x≈97 and the
+     windows start at x=96, so at 40 the tile's rim and its tooltip were under
+     the window's glass — and a press on that rim went to the window. */
+  z-index: var(--ic-z-ihome-dock);
+
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+
+  border-radius: var(--ic-radius-lg);
+  background: var(--ic-dock-fill);
+  backdrop-filter: blur(var(--ic-blur-glass));
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass));
+  border: 1px solid var(--ic-dock-line);
+  box-shadow: var(--ic-shadow-dock);
+
+  /* Transforms inside still escape containment for layout purposes; this
+     only fences off layout/paint invalidation from the rest of the shell. */
+  contain: layout;
+}
+
+/* Auto-hide (dock-autohide.ts): while a window is expanded it fills the whole app, so the rail tucks away past the
+   left edge and slides back in when the pointer touches that edge, or when a tile takes keyboard focus. Only the
+   rail's own transform moves; --s and --dock-shift are untouched. Keyboard focus only — `:focus-visible`, as the
+   window controls and the iNFT tab do: the focus a click or a closed window hands back to a tile must never pin the
+   rail open over a window that fills the app. */
+.dock[data-autohide] {
+  transition:
+    transform var(--ic-dur-slow) var(--ic-ease-spring),
+    opacity var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.dock[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
+  transform: translateX(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock[data-autohide] {
+    transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+  }
+}
+
+/* macOS growth model (owner correction): the rail follows the icons ONLY
+   vertically — item HEIGHT is laid out by --s so neighbors displace and the
+   rail stretches tall; item WIDTH stays 44px so the rail keeps its slim
+   silhouette, and the magnified icon simply POPS OUT past the right edge
+   (transform, anchored on the rail's left edge) exactly like the MacBook
+   dock's icons jumping over their strip. */
+.dock {
+  width: max-content;
+}
+
+.dock__item {
+  position: relative;
+  width: 44px;
+  height: calc(var(--s, 1) * 44px);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+}
+
+.dock__icon {
+  all: unset;
+  box-sizing: border-box;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--ic-radius-md);
+  cursor: pointer;
+
+  /* The dock is dark glass in every skin (--ic-dock-fill), so its tiles lift
+     with white, never with the skin's ink: glint at rest, the stage line (one
+     ladder step up) on hover, the dock press step on press. */
+  background: var(--ic-glint);
+
+  transform: scale(var(--s, 1));
+  transform-origin: left center;
+}
+
+.dock__icon:hover {
+  background: var(--ic-stage-line);
+}
+
+.dock__icon[data-pressed] {
+  background: var(--ic-dock-tile-press);
+}
+
+/* Toned tiles (today only Settings): frosted material glass in the
+   app's tone — a lift sheen over the upper half, a glint edge on top, a night
+   base line and a soft tone glow. */
+.dock__icon.ic-tone {
+  background: linear-gradient(180deg, var(--ic-dock-tone-sheen), transparent 55%), var(--ic-dock-tone-fill);
+  box-shadow:
+    var(--ic-shadow-stroke-glint) var(--ic-dock-tone-edge),
+    var(--ic-shadow-stroke-underline) var(--ic-dock-tone-base),
+    var(--ic-dock-tone-glow);
+  backdrop-filter: blur(var(--ic-dock-tone-blur, var(--ic-blur-glass))) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--ic-dock-tone-blur, var(--ic-blur-glass))) saturate(1.4);
+  transition:
+    background-color var(--ic-dur-fast) var(--ic-ease-std),
+    box-shadow var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.dock__icon.ic-tone:hover {
+  background: linear-gradient(180deg, var(--ic-dock-tone-sheen), transparent 55%), var(--ic-dock-tone-fill-hover);
+  box-shadow:
+    var(--ic-shadow-stroke-glint) var(--ic-dock-tone-edge),
+    var(--ic-shadow-stroke-underline) var(--ic-dock-tone-base),
+    var(--ic-dock-tone-glow-hover);
+}
+
+.dock__icon.ic-tone[data-pressed] {
+  background: linear-gradient(180deg, var(--ic-dock-tone-sheen), transparent 55%), var(--ic-dock-tone-press);
+}
+
+/* The press dips the GLYPH, never the tile: swapping the tile's transform on
+   mousedown used to shrink a 1.7x tile to 0.92x under the pointer, so the
+   release landed outside it and the click was lost (dock.tsx, "THE PRESS").
+   The hit box now holds still for the whole press. */
+.dock__icon[data-pressed] .dock__glyph {
+  scale: 0.86;
+  transition: scale var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+.dock__glyph {
+  transition: scale var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+.dock__icon:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 3px;
+}
+
+.dock__glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Heavy night ink on every tone (owner design): one weight, full opacity. */
+  color: var(--ic-dock-glyph-ink);
+}
+
+.dock__glyph svg {
+  stroke-width: 2.4;
+}
+
+/* Untoned (frosted) tiles stand on the stage, not on a tone: night ink read
+   1.4:1 there (U3-03-p2), so the glyph reads the skin's text ink instead — one
+   token, the same recipe for every tile; the tile's own colour is the owner's
+   and does not move (rulings §24). */
+.dock__icon:not(.ic-tone) {
+  --ic-dock-glyph-ink: var(--ic-text-1);
+}
+
+/* The coloured symbols — the glyph only, never the tile (owner's rule,
+   2026-10-20): Email's envelope in vivid mail red, its closing flap filled;
+   Hyperliquid's mark in the brand's spring mint. Both read on the frosted
+   tile at full strength (the earlier dark red measured 1.03:1, and leaning it
+   toward the text ink turned it pink — the owner asked for the vivid red). */
+.dock__icon[data-dock='email'] .dock__glyph {
+  color: var(--ic-brand-email);
+}
+
+.dock__icon[data-dock='hyperliquid'] .dock__glyph {
+  color: var(--ic-brand-hyperliquid);
+}
+
+/* A count on the tile's top-right corner — champagne on ink, small enough to
+   live inside the 44px tile; it scales with the icon (a child of it). */
+.dock__badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: var(--ic-radius-pill);
+  display: grid;
+  place-items: center;
+  background: var(--ic-accent);
+  color: var(--ic-text-on-accent);
+  font:
+    600 9.5px/1 'SF Pro Text',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  box-shadow: var(--ic-shadow-hairdrop);
+  pointer-events: none;
+}
+
+.dock__icon {
+  position: relative;
+}
+
+/* Quiet active indicator: a 3px champagne dot outside the tile's left edge,
+   never scaled by the icon's own magnification (it is a sibling of
+   `.dock__icon`, not a descendant of it). */
+.dock__active-dot {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 3px;
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-accent);
+  box-shadow: var(--ic-shadow-spark);
+  pointer-events: none;
+}
+
+/* Tooltip label — the vertical-dock analog of "above": to the right,
+   glass pill, shown instantly on hover or keyboard focus. It is a sibling
+   of `.dock__icon` positioned against the unscaled `.dock__item` box, so it
+   never inherits the icon's magnification. */
+.dock__tooltip {
+  position: absolute;
+  left: calc(100% + 14px);
+  top: 50%;
+  translate: -4px -50%;
+
+  padding: 5px 10px;
+  border-radius: var(--ic-radius-sm);
+  white-space: nowrap;
+  pointer-events: none;
+
+  background: var(--ic-glint);
+  backdrop-filter: blur(var(--ic-blur-glass));
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass));
+  border: 1px solid var(--ic-focus-ring);
+
+  font:
+    500 12px/1.4 'SF Pro Display',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--ic-glyph);
+
+  opacity: 0;
+  transition:
+    opacity var(--ic-dur-fast) var(--ic-ease-spring),
+    translate var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+.dock__hint {
+  margin-left: 8px;
+  padding: 1px 5px;
+  border-radius: var(--ic-radius-xs);
+  border: 1px solid var(--ic-home-accent-30);
+  font: inherit;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.06em;
+  color: var(--ic-home-glyph-75);
+}
+
+.dock__item:hover .dock__tooltip,
+.dock__icon:focus-visible ~ .dock__tooltip {
+  opacity: 1;
+  translate: 0 -50%;
+  transition:
+    opacity var(--ic-dur-fast) var(--ic-ease-spring),
+    translate var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock__item {
+    height: 44px !important;
+  }
+
+  .dock__icon {
+    transform: none !important;
+    transition: background var(--ic-dur-fast) var(--ic-ease-spring);
+  }
+
+  .dock__icon:hover {
+    scale: 1.06;
+  }
+
+  .dock__icon[data-pressed] .dock__glyph,
+  .dock__glyph {
+    transition: none;
+  }
+
+  .dock__tooltip {
+    transition: opacity var(--ic-dur-fast) var(--ic-ease-spring);
+  }
+}
+
+/* RTL (U4-p2-08-p2b): the rail hugs the right edge and hides past it. */
+:root[dir='rtl'] .dock {
+  left: auto;
+  right: 12px;
+}
+
+:root[dir='rtl'] .dock[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
+  transform: translateX(calc(100% + 24px));
+}

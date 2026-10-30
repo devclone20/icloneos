@@ -1,0 +1,58 @@
+/**
+ * Wiring coverage for the main.ts gateway download transports. These functions
+ * pull in main-process singletons (https/http, electronNet, the OAuth session,
+ * the save dialog), so we assert on their source shape — the same approach as
+ * oauth-session-request.test.ts — while gateway-file-download.test.ts unit-tests
+ * the extracted streaming/decoding logic behaviorally.
+ */
+
+import assert from 'node:assert/strict'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+import { test } from 'vitest'
+
+import { readMainProcessSource } from './main/main-process-source'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const source = readMainProcessSource(__dirname)
+
+function extract(startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker)
+  assert.notEqual(start, -1, `${startMarker} should exist`)
+  const end = source.indexOf(endMarker, start + startMarker.length)
+  assert.notEqual(end, -1, `boundary after ${startMarker} should exist`)
+
+  return source.slice(start, end)
+}
+
+test('token transport streams to disk instead of buffering the whole body', () => {
+  const fn = extract('function downloadViaTokenToFile', '\nfunction ')
+
+  // Delegates byte-moving to the streaming finalizer...
+  assert.match(fn, /finalizeGatewayDownload\(/)
+  // ...and must NOT accumulate the full response before writing.
+  assert.doesNotMatch(fn, /Buffer\.concat/)
+  assert.doesNotMatch(fn, /chunks\.push/)
+  // Idle timeout is dropped once headers arrive so the dialog/stream isn't killed.
+  assert.match(fn, /setTimeout\(0\)/)
+})
+
+test('oauth transport streams to disk instead of buffering the whole body', () => {
+  const fn = extract('function downloadViaOauthSessionToFile', '\nasync function finalizeGatewayDownload')
+
+  assert.match(fn, /electronNet\.request/)
+  assert.match(fn, /finalizeGatewayDownload\(/)
+  assert.doesNotMatch(fn, /Buffer\.concat/)
+  assert.doesNotMatch(fn, /chunks\.push/)
+})
+
+test('finalizeGatewayDownload prompts a save dialog then streams the response', () => {
+  const fn = extract('async function finalizeGatewayDownload', '\nfunction readGatewayErrorText')
+
+  // The save prompt goes through the main window's dialog helper (showSaveDialogForMainWindow) since L8e.
+  assert.match(fn, /showSaveDialog(?:ForMainWindow)?\(/)
+  assert.match(fn, /pumpStreamToFile\(/)
+  // HTTP errors carry their status so a 404 can trigger the fallback.
+  assert.match(fn, /error\.statusCode = statusCode/)
+})

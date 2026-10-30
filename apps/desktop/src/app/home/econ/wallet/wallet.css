@@ -1,0 +1,323 @@
+/* Wallet — the parts econ.css does not already give every app: the hero
+   address row, the rail footer note, the assets table header, chain groups,
+   the compute gauge, the forms' presets and hints, the Receive QR tile, and
+   the inline aside used at narrow widths. Everything derives from the `--e-*`
+   tokens so the wallet never hardcodes a colour. */
+
+/* A transparent flex passthrough: it exists only so a ResizeObserver has a
+   stable root to measure for the narrow-width breakpoint. AppFrame's own
+   `flex: 1 1 auto` only fills height when its parent is itself a flex
+   container — without this, wrapping AppFrame in a plain div would collapse
+   the window to content height. */
+.wallet-app {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.wallet-addrs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 20px 14px;
+}
+
+.wallet-rail__foot {
+  margin: auto 0 0;
+  padding: 10px 10px 2px;
+  font-size: var(--ic-type-sm);
+  line-height: 1.4;
+  letter-spacing: 0.03em;
+  color: var(--e-faint);
+}
+
+/* Doubled selector beats `.e-row` on specificity regardless of stylesheet
+   load order — a header row reuses e-row's flex/border and only re-tints
+   the type. */
+.wallet-table__head.e-row {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.wallet-asset {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.wallet-asset__text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.wallet-asset__name {
+  font-size: var(--ic-type-md);
+  color: var(--e-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wallet-toggle {
+  padding: 10px 20px;
+}
+
+/* ── chain groups (All assets, more than one chain) ───────────────────────── */
+
+.wallet-group + .wallet-group {
+  margin-top: 6px;
+}
+
+.wallet-group__meta {
+  margin-left: 8px;
+  font-size: var(--ic-type-sm);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--e-faint);
+}
+
+/* ── compute view ─────────────────────────────────────────────────────────── */
+
+.wallet-compute {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 20px 20px;
+}
+
+.wallet-compute .e-note {
+  margin: 0;
+}
+
+.wallet-compute__facts {
+  margin-top: 10px;
+}
+
+.wallet-gauge {
+  height: 8px;
+  border-radius: var(--ic-radius-pill);
+  background: var(--e-sunken);
+  overflow: hidden;
+}
+
+.wallet-gauge__fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--e-tone);
+  transition: width var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.wallet-compute__form {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.wallet-compute__form .e-field {
+  flex: 0 0 140px;
+}
+
+/* ── forms shared by Top up / Send ───────────────────────────────────────── */
+
+.wallet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wallet-form__row {
+  display: flex;
+  gap: 10px;
+}
+
+.wallet-form__row .e-field {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.wallet-form__labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.wallet-form__labels .e-btn {
+  padding: 2px 8px;
+  font-size: var(--ic-type-sm);
+}
+
+.wallet-form__hint {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--e-mute);
+}
+
+.wallet-form__hint--error {
+  color: var(--e-down);
+}
+
+.wallet-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.wallet-preset {
+  all: unset;
+  box-sizing: border-box;
+  padding: 4px 10px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--e-line);
+  background: var(--e-raised);
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-mute);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.wallet-preset:hover {
+  background: var(--e-hover);
+  color: var(--e-ink);
+}
+
+.wallet-preset:focus-visible {
+  outline: none;
+  border-color: var(--e-gold);
+}
+
+.wallet-preset--on {
+  border-color: var(--e-line-strong);
+  background: var(--e-selected);
+  color: var(--e-ink);
+}
+
+/* ── receive: the code, the address, the chains ─────────────────────────── */
+
+.wallet-receive {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Paper for the code. The encoder leaves its light cells transparent, so this
+   background is the paper in every theme: the ink in the dark skin, the
+   surface itself in the light one, which keeps only the hairline. */
+.wallet-qr {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 196px;
+  height: 196px;
+  margin: 0 auto;
+  border-radius: var(--e-radius);
+  background: var(--ic-wallet-qr-fill);
+  box-shadow: var(--ic-econ-edge);
+  overflow: hidden;
+}
+
+.wallet-qr--pending {
+  background: var(--e-raised);
+}
+
+.wallet-qr--pending::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
+  background: linear-gradient(90deg, transparent 25%, var(--e-hover) 50%, transparent 75%);
+  animation: e-shimmer 1.4s ease infinite;
+  will-change: transform;
+}
+
+.wallet-qr__img {
+  display: block;
+  border-radius: var(--ic-radius-sm);
+  /* 1:1 with the encoder's raster; on a 2× display the modules stay square. */
+  image-rendering: pixelated;
+  animation: wallet-fade-in var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.wallet-qr__error {
+  padding: 0 20px;
+  text-align: center;
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--e-mute);
+}
+
+.wallet-receive__addr {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wallet-receive__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.wallet-receive__big {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-lg);
+  line-height: 1.5;
+  word-break: break-all;
+  user-select: all;
+}
+
+.wallet-receive__caption {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--e-mute);
+}
+
+.wallet-receive__chains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wallet-receive__pending {
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.04em;
+  color: var(--e-faint);
+}
+
+@keyframes wallet-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+
+/* ── narrow window: the aside folds under main instead of beside it ─────── */
+
+.wallet-inline-aside {
+  border-top: 1px solid var(--e-line);
+  max-height: 50%;
+  overflow-y: auto;
+}

@@ -1,0 +1,971 @@
+/* Our own page chassis (E3 decision #8): the frame every rebuilt page opens in.
+   Imports the token table itself so a page still paints when it is the only
+   thing mounted (home.css also imports it; identical :root declarations). */
+@import '../../app/home/ic-tokens.css';
+
+.icpg-overlay {
+  /* The page overlay's rung: UPSTREAM_LAYERS.overlay in home/ic-layers.ts (50)
+     — above the home stage (37), home itself (40) and the Files island (46),
+     below the modal ladder (--z-modal 130) the shared dialogs portal into. */
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  padding: var(--icpg-inset);
+  /* Equidistant on every side, the top gap clearing the titlebar band. */
+  --icpg-inset: calc(var(--ic-titlebar-band-h, 34px) + 6px);
+}
+
+/* Absorbs the clicks the page is not meant to receive; it never closes the
+   page (that is the ✕ and Esc) so a stray click cannot drop the user's work. */
+.icpg-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--ic-overlay-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.icpg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-sm);
+}
+
+.icpg--card {
+  margin: auto;
+  width: 100%;
+  max-width: 1180px;
+  max-height: 100%;
+  background: var(--ic-surface);
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-xl);
+  box-shadow: var(--ic-shadow-panel);
+  overflow: hidden;
+}
+
+.icpg:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -2px;
+}
+
+/* Head band — editorial: one line of type, one line of context, actions right. A host whose chrome overlaps the
+   head's end (an IcWindow's control column) sets --icpg-head-inset-end; alone, the head keeps its own 18px. */
+.icpg__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 18px 14px;
+  padding-inline-end: var(--icpg-head-inset-end, 18px);
+  border-bottom: 1px solid var(--ic-border-subtle);
+  background: linear-gradient(var(--ic-glint), transparent 60%);
+}
+
+.icpg__titles {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.icpg__title {
+  margin: 0;
+  font-size: var(--ic-type-lg);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  color: var(--ic-text-1);
+}
+
+.icpg__subtitle {
+  margin: 4px 0 0;
+  font-size: var(--ic-type-xs);
+  color: var(--ic-text-3);
+}
+
+.icpg__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.icpg__close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  border: 1px solid var(--ic-dismiss-line);
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-dismiss-fill);
+  color: var(--ic-dismiss-ink);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__close:hover {
+  background: var(--ic-dismiss-hover-fill);
+  color: var(--ic-dismiss-hover-ink);
+}
+
+.icpg__close:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Body — master rail + detail column; one column under 760px. */
+.icpg__body {
+  display: grid;
+  grid-template-columns: minmax(200px, 268px) minmax(0, 1fr);
+  gap: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.icpg__body--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (max-width: 760px) {
+  .icpg__body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.icpg__rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--ic-border-subtle);
+  background: var(--ic-surface-sunken);
+}
+
+.icpg__search {
+  padding: 12px 12px 8px;
+}
+
+.icpg__search input {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-field-tone);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-xs);
+}
+
+.icpg__search input::placeholder {
+  color: var(--ic-text-3);
+}
+
+.icpg__search input:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -1px;
+}
+
+.icpg__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 12px;
+  margin: 0;
+  list-style: none;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.icpg__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: var(--ic-radius-md);
+  text-align: start;
+  color: var(--ic-text-2);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__row:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icpg__row[aria-current='true'] {
+  background: var(--ic-fill-selected);
+  border-color: var(--ic-border-subtle);
+  color: var(--ic-text-1);
+}
+
+.icpg__row:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -1px;
+}
+
+.icpg__row-lead {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.icpg__row-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.icpg__row-title {
+  display: block;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icpg__row-meta {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--ic-type-2xs);
+  color: var(--ic-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icpg__row-trailing {
+  flex: 0 0 auto;
+}
+
+.icpg__rail-foot {
+  padding: 0 8px 10px;
+}
+
+.icpg__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+/* The three states a page must have — empty, error, loading — one look. */
+.icpg__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-height: 160px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.icpg__state-title {
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  font-weight: 600;
+  color: var(--ic-text-1);
+}
+
+.icpg__state-text {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--ic-type-xs);
+  color: var(--ic-text-3);
+}
+
+.icpg__state--error .icpg__state-title {
+  color: var(--ic-danger);
+}
+
+.icpg__state-action {
+  margin-top: 4px;
+}
+
+.icpg__spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ic-border-subtle);
+  border-top-color: var(--ic-accent);
+  border-radius: var(--ic-radius-round);
+  animation: icpg-spin 0.9s linear infinite;
+}
+
+@keyframes icpg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icpg__spinner {
+    animation-duration: 0s;
+  }
+}
+
+/* Pills, meta rows and sections — the detail column's vocabulary. */
+.icpg__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--ic-chip-line);
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-chip-fill);
+  color: var(--ic-text-2);
+  font-size: var(--ic-type-2xs);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.icpg__pill--good {
+  border-color: var(--ic-ring-ok);
+  color: var(--ic-success);
+}
+
+.icpg__pill--warn {
+  border-color: var(--ic-ring-alert);
+  color: var(--ic-warning);
+}
+
+.icpg__pill--bad {
+  border-color: var(--ic-danger-soft);
+  color: var(--ic-danger);
+}
+
+.icpg__meta {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 14px;
+  margin: 0;
+  font-size: var(--ic-type-xs);
+}
+
+.icpg__meta dt {
+  color: var(--ic-text-3);
+}
+
+.icpg__meta dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--ic-text-2);
+  overflow-wrap: anywhere;
+}
+
+.icpg__section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.icpg__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.icpg__section-label {
+  margin: 0;
+  font-size: var(--ic-type-2xs);
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ic-text-3);
+}
+
+.icpg__section-note {
+  margin: 2px 0 0;
+  font-size: var(--ic-type-xs);
+  color: var(--ic-text-3);
+}
+
+.icpg__path {
+  margin: 4px 0 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-2xs);
+  color: var(--ic-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icpg__alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--ic-danger-soft);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-danger-soft);
+  color: var(--ic-danger);
+  font-size: var(--ic-type-xs);
+}
+
+/* Our own button: the pages never reach for the upstream <Button>. */
+.icpg__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--ic-ctl-line);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-ctl-fill);
+  color: var(--ic-ctl-ink);
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__btn:hover:not(:disabled) {
+  background: var(--ic-ctl-hover-fill);
+  border-color: var(--ic-ctl-hover-line);
+  color: var(--ic-ctl-hover-ink);
+}
+
+.icpg__btn:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 1px;
+}
+
+.icpg__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.icpg__btn--accent {
+  border-color: var(--ic-accent-strong);
+  background: var(--ic-accent);
+  color: var(--ic-text-on-accent);
+}
+
+.icpg__btn--accent:hover:not(:disabled) {
+  background: var(--ic-accent-strong);
+  border-color: var(--ic-accent-strong);
+  color: var(--ic-text-on-accent);
+}
+
+.icpg__btn--danger {
+  border-color: var(--ic-danger-soft);
+  color: var(--ic-danger);
+}
+
+.icpg__btn--quiet {
+  border-color: transparent;
+  background: transparent;
+  color: var(--ic-text-3);
+}
+
+.icpg__btn--quiet:hover:not(:disabled) {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icpg__btn--block {
+  width: 100%;
+}
+
+/* Row affordances and our own fields. */
+.icpg__row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.icpg__icon-btn {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ic-radius-xs);
+  color: var(--ic-text-3);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__icon-btn:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icpg__icon-btn--danger:hover {
+  color: var(--ic-danger);
+}
+
+.icpg__icon-btn:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 1px;
+}
+
+.icpg__glyph {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-surface-raised);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-2xs);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.icpg__glyph--default {
+  border-color: var(--ic-gilt);
+}
+
+.icpg__textarea {
+  width: 100%;
+  min-height: 220px;
+  padding: 12px 14px;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-surface-sunken);
+  color: var(--ic-text-1);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-xs);
+  line-height: 1.6;
+  resize: vertical;
+  tab-size: 2;
+}
+
+.icpg__textarea:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -1px;
+}
+
+.icpg__row-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 1px;
+}
+
+.icpg__row-head .icpg__row {
+  padding-inline-end: 4px;
+}
+
+.icpg__detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.icpg__detail-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ic-text-1);
+}
+
+.icpg__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.icpg__mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.icpg__dim {
+  color: var(--ic-text-3);
+}
+
+.icpg__rail-note {
+  padding: 10px 10px 6px;
+  font-size: var(--ic-type-xs);
+  color: var(--ic-text-3);
+}
+
+/* ── Our dialog (E3d2-T1) ───────────────────────────────────────────────────
+   The rung above the page card. It is a descendant of .icpg-overlay, so this
+   z-index is read inside that stacking context: the dialog is above the page
+   it belongs to and below nothing of ours. */
+.icdlg-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  padding: var(--icpg-inset, 40px);
+}
+
+/* Absorbs stray clicks and never dismisses: Escape, Cancel and the action are
+   the only ways out, so a mis-click cannot drop what the user typed. */
+.icdlg-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--ic-overlay-scrim);
+  backdrop-filter: blur(2px);
+}
+
+.icdlg {
+  position: relative;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 100%;
+  padding: 18px;
+  background: var(--ic-surface);
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-lg);
+  box-shadow: var(--ic-shadow-panel);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-sm);
+  overflow-y: auto;
+}
+
+.icdlg:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -2px;
+}
+
+.icdlg__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.icdlg__title {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ic-text-1);
+}
+
+.icdlg__desc {
+  margin: 0;
+  font-size: var(--ic-type-xs);
+  line-height: 1.5;
+  color: var(--ic-text-3);
+}
+
+.icdlg__body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+}
+
+.icdlg__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Form controls ────────────────────────────────────────────────────────── */
+.icpg__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.icpg__label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  color: var(--ic-text-2);
+}
+
+.icpg__optional {
+  font-weight: 400;
+  color: var(--ic-text-3);
+}
+
+.icpg__hint {
+  margin: 0;
+  font-size: var(--ic-type-2xs);
+  line-height: 1.45;
+  color: var(--ic-text-3);
+}
+
+.icpg__hint--error {
+  color: var(--ic-danger);
+}
+
+.icpg__input,
+.icpg__select {
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-surface-sunken);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-xs);
+  font-family: inherit;
+}
+
+.icpg__select {
+  padding-inline-end: 6px;
+}
+
+.icpg__input::placeholder {
+  color: var(--ic-text-3);
+}
+
+.icpg__input:focus-visible,
+.icpg__select:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: -1px;
+}
+
+.icpg__input[aria-invalid='true'] {
+  border-color: var(--ic-danger);
+}
+
+.icpg__textarea--compact {
+  min-height: 112px;
+}
+
+.icpg__spin {
+  animation: icpg-spin 0.9s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icpg__spin {
+    animation: none;
+  }
+}
+
+/* Named for assistive tech only — the row buttons compose "Rename <name>"
+   from a shared verb and the row's own title, never by gluing strings. */
+.icpg__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* The emphasis the delete confirmation's profile name carries: it sits inside
+   the dialog description, which is deliberately quiet. */
+.icpg__strong {
+  font-weight: 600;
+  color: var(--ic-text-1);
+}
+
+.icpg__code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-2xs);
+  color: var(--ic-text-2);
+}
+
+.icpg__detail-titles {
+  min-width: 0;
+}
+
+/* ── Status, switch, list row, disclosure (E3d2 r2: Messaging) ──────────── */
+.icpg__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: var(--ic-radius-pill, 999px);
+  background: var(--ic-text-3);
+}
+
+.icpg__dot--good {
+  background: var(--ic-success, var(--ic-accent));
+}
+
+.icpg__dot--warn {
+  background: var(--ic-warning, var(--ic-text-2));
+}
+
+.icpg__dot--bad {
+  background: var(--ic-danger);
+}
+
+.icpg__switch {
+  position: relative;
+  width: 30px;
+  height: 17px;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--ic-ctl-line);
+  border-radius: var(--ic-radius-pill, 999px);
+  background: var(--ic-ctl-fill);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__switch[aria-checked='true'] {
+  background: var(--ic-accent);
+  border-color: var(--ic-accent);
+}
+
+.icpg__switch:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 1px;
+}
+
+.icpg__switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.icpg__switch-knob {
+  display: block;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--ic-radius-pill, 999px);
+  background: var(--ic-text-1);
+  transition: transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__switch[aria-checked='true'] .icpg__switch-knob {
+  transform: translateX(13px);
+  background: var(--ic-surface);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icpg__switch,
+  .icpg__switch-knob {
+    transition: none;
+  }
+}
+
+.icpg__listrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-surface-sunken);
+}
+
+.icpg__listrow-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.icpg__listrow-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  color: var(--ic-text-1);
+}
+
+.icpg__listrow-hint {
+  margin: 2px 0 0;
+  font-size: var(--ic-type-2xs);
+  line-height: 1.45;
+  color: var(--ic-text-3);
+}
+
+.icpg__listrow-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
+
+.icpg__disclosure-btn {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  background: none;
+  border: 0;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-2xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.icpg__disclosure-btn:hover {
+  color: var(--ic-text-1);
+}
+
+.icpg__disclosure-btn:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+.icpg__caret {
+  transition: transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpg__caret--open {
+  transform: rotate(180deg);
+}
+
+.icpg__disclosure-body {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.icpg__stack {
+  display: grid;
+  gap: 6px;
+}
+
+/* The platform chip: a brand glyph on a tint of its own colour. `--icpg-brand`
+   is set per platform by the page (brand identity, not a theme token). */
+.icpg__avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ic-radius-sm);
+  background: color-mix(in srgb, var(--icpg-brand, var(--ic-text-3)) 16%, transparent);
+  color: var(--icpg-brand, var(--ic-text-1));
+}
+
+.icpg__avatar-mono {
+  font-size: var(--ic-type-2xs);
+  font-weight: 600;
+}
+
+/* A subtree another front still owns, rendered inside one of our pages and
+   marked by `data-ic-foreign` so the token probes can measure our markup and
+   name that one by its owner. `contents` keeps the layout exactly as it was. */
+.icpg__foreign {
+  display: contents;
+}

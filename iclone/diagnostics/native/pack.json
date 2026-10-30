@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "id": "native",
+  "title": "App install",
+  "order": 7,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "native.codesign",
+      "title": "Signature and notarization",
+      "severity": "fail",
+      "timeoutMs": 20000,
+      "network": false,
+      "impl": "codesign",
+      "fix": "native.install_release",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "native.location",
+      "title": "Install location",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "installLocation",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "native.abi",
+      "title": "Native module ABI",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "nativeAbi",
+      "fix": "native.install_release"
+    },
+    {
+      "id": "native.spawn_helper",
+      "title": "Terminal helper mode",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "spawnHelper",
+      "fix": "native.chmod_spawn_helper"
+    },
+    {
+      "id": "native.rosetta",
+      "title": "Runs natively",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "rosetta",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "native.renderer_cache",
+      "title": "Renderer cache size",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "rendererCache",
+      "fix": "native.clear_cache"
+    }
+  ],
+  "fixes": [
+    {
+      "id": "native.install_release",
+      "title": "Install the notarized release",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "Nothing was changed.",
+      "impl": "installRelease"
+    },
+    {
+      "id": "native.chmod_spawn_helper",
+      "title": "Make the terminal helper executable",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous mode is listed in the backup manifest.",
+      "impl": "chmodSpawnHelper"
+    },
+    {
+      "id": "native.clear_cache",
+      "title": "Clear the renderer cache",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "Only cached web files were removed; sign-in and settings are kept.",
+      "impl": "clearCache"
+    }
+  ]
+}

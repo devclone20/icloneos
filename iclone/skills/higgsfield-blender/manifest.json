@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "name": "higgsfield-blender",
+  "version": "1.0.0",
+  "author": "the owner (ported from his Claude Code skills library)",
+  "license": "MIT",
+  "source": {
+    "library": "claude-code-skills",
+    "path": "higgsfield-blender",
+    "version": null,
+    "sha256": "e747047222887160913f944ddd2387cef11dbce9a1d9870ed8afe639a0d2013d",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [],
+  "requires": {
+    "os": [
+      "macos"
+    ],
+    "bins": [
+      "python3"
+    ],
+    "mcp": [
+      "higgsfield"
+    ],
+    "paths": [
+      "/Applications/Blender.app",
+      "$VIDEO_ENGINE_DIR"
+    ]
+  },
+  "touches": [
+    "Wo",
+    "X",
+    "N",
+    "$"
+  ],
+  "touches_from_text": {
+    "$": 2
+  },
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 1,
+    "codePaths": 1,
+    "claudeRefs": 0,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 4,
+    "layoutNames": 0,
+    "ownerPaths": 1,
+    "privateNames": 18,
+    "identity": 0,
+    "machinePaths": 2,
+    "voiceProfile": 0,
+    "redacted": 1
+  }
+}

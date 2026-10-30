@@ -1,0 +1,249 @@
+/* IcWindow chassis (home/window/ic-window.tsx, plan AD1): one paint per
+   window. A self-placed window is aside.ic-win holding .ic-win__plate (the one
+   painted surface, an empty layer under everything), then .ic-win__head and
+   .ic-win__body stacked above it, with .ic-win__controls on top. An
+   under-shell window (Message) paints nothing itself: .ic-win--under-shell is
+   only its frame decor, and its controls are not inside an .ic-win. Lengths come from --ic-* tokens, stacking from --ic-z-* (ic-layers.css). */
+
+.ic-win {
+  box-sizing: border-box;
+}
+
+/* ── self: the EconomyOS windows ── */
+
+/* The fading surface: an empty layer the opacity slider thins away to reveal
+   the 3D iNFT behind. Near-opaque at full (owner rule). Head and body are its
+   siblings, so they paint above it without being clipped by it.
+
+   The 26px backdrop blur is a per-frame filter over the WebGL stage; behind a
+   98%-opaque surface it buys nothing you can see, so it is on ONLY while the
+   slider has thinned the surface (`--glass`, window.tsx). */
+.ic-win__plate {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--ic-surface);
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+/* ── header: title · identity · status · actions ──────────────────────────── */
+
+.ic-win__head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  /* One head height for every window at every text size, with or without the identity chip: the title pill sits at
+     the same height in every econ window, in Settings (an IcWindow like the others, so its head shares this floor)
+     and in the Message head (ic-tokens.css --ic-win-head-h, derived from --ic-text-scale). */
+  box-sizing: border-box;
+  min-height: var(--ic-win-head-h);
+  /* Right padding clears the control column hugging the top-right corner (ic-tokens.css). */
+  padding-block: 14px;
+  padding-inline: 26px var(--ic-win-controls-clear);
+  border-bottom: 1px solid var(--e-line);
+}
+
+/* Expanded, the window reaches the app's top-left corner: the header starts after the macOS window buttons
+   (ic-tokens.css --ic-win-head-inset-expanded; the Message head reads the same token). */
+.ic-win[data-expanded] > .ic-win__head {
+  /* Physical, not logical: the macOS window buttons and the titlebar tools stay in their corners under RTL too. */
+  padding-left: var(--ic-win-head-inset-expanded);
+  /* The right end keeps clear of the titlebar tools (their span from the right edge, published by shell/frame-tools.tsx). */
+  padding-right: calc(var(--titlebar-tools-span, 0px) + 12px);
+}
+
+.ic-win__body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The fence: the app's relayouts and repaints stay inside the self window's
+   body (the under-shell body is the Message window's slot, not ours to fence). */
+.ic-win > .ic-win__body {
+  contain: layout paint;
+  /* The control column reaches past the head band into the body's top-right corner (the opacity slider runs
+     ~200px down): a page head laid out in the body keeps its actions clear of it (ic-page.css reads this;
+     STAGE tester 1 H-1, iNFT Book's Rescan under the slider). */
+  --icpg-head-inset-end: var(--ic-win-controls-clear);
+}
+
+/* Expanded, the window's top edge is the app's titlebar band, whose tool icons sit at the top-right: the control
+   column steps below that band so close/retract are never under the titlebar tools. */
+.ic-win[data-expanded] > .ic-win__controls {
+  /* The titlebar tool row is 34px tall (contrib/wiring.tsx); --titlebar-height reads 0 inside the home zone. */
+  top: 48px;
+}
+
+/* Expanded, the column rests on the app's right edge, where a right-edge island (FILES / the collection) lands. It
+   steps aside like the Message column, so it stays reachable and rests left of the island's hot strip. */
+:root[data-iclone-island] .ic-win[data-expanded] > .ic-win__controls {
+  right: calc(var(--iclone-island-w, 0px) + 14px);
+}
+
+/* The control column — close · expand/retract · opacity — mirrors the Message
+   window's right-edge stack, but lives INSIDE the window so it follows
+   expansion. */
+.ic-win > .ic-win__controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: var(--ic-z-local-overlay);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  /* The gaps between the buttons are the stage's — see home.css. */
+  pointer-events: none;
+}
+
+.ic-win > .ic-win__controls > * {
+  pointer-events: auto;
+}
+
+.ic-win > .ic-win__controls .iop {
+  position: static;
+}
+
+/* ── under-shell: Message ── */
+
+.ic-win--under-shell {
+  position: fixed;
+  /* Outer rect (--iwin-outer-*): the chat clip (--iwin-*) sits inside it —
+     header tabs above, the session sidebar left (bodyInsetLeft), the same
+     frame wrapping both the chat and the iT views. */
+  top: var(--iwin-outer-top, var(--iwin-top, var(--ic-frame-top)));
+  right: var(--iwin-outer-right, var(--ic-frame-right));
+  bottom: var(--iwin-outer-bottom, var(--iwin-bottom, var(--ic-frame-bottom)));
+  left: var(--iwin-outer-left, var(--ic-frame-left));
+  z-index: var(--ic-z-ihome-frame);
+  border-radius: var(--iwin-radius, var(--ic-frame-radius));
+  border: 1px solid var(--ic-win-frame-line);
+  box-shadow: var(--ic-shadow-frame);
+  pointer-events: none;
+}
+
+.ic-win__controls:not(.ic-win > *) {
+  position: fixed;
+  top: 52px;
+  right: 30px;
+  z-index: var(--ic-z-ihome-controls);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: right var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+/* A right-edge island (FILES / the collection) lands on exactly this column.
+   The island is a global layer, so it wins the pixel however high this z is —
+   the window was left with no reachable close button. Step out from under it
+   instead; see home/right-edge.ts for who publishes the width. */
+:root[data-iclone-island] .ic-win__controls:not(.ic-win > *) {
+  right: calc(var(--iclone-island-w, 0px) + 26px);
+}
+
+.ic-win__controls:not(.ic-win > *) .iop {
+  position: static;
+}
+
+/* The window controls (× · expand · opacity) sit on a 98%-opaque ink surface,
+   and a 5% white fill with a 20% border read as nothing there — the owner
+   could not find the close button. They are now a lit chip: a solid ink pill
+   with a bright rim, ivory glyphs, and a drop shadow that separates them from
+   whatever the window paints underneath. */
+.ic-win__controls > button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-ctl-line);
+  background: var(--ic-ctl-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  box-shadow: var(--ic-ctl-shadow);
+  color: var(--ic-ctl-ink);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ic-win__controls > button:hover {
+  background: var(--ic-ctl-hover-fill);
+  border-color: var(--ic-ctl-hover-line);
+  color: var(--ic-ctl-hover-ink);
+}
+
+.ic-win__controls > button:active {
+  transform: scale(0.94);
+}
+
+/* ── auto-hide while expanded (edge-autohide.ts) ──
+   An expanded window fills the app, so its control column tucks off the right edge exactly as the Dock tucks off
+   the left (dock.css): it slides back while the pointer is at that edge, level with the column, and while a control
+   has keyboard focus. Mouse focus does not count — the expand button just clicked would otherwise pin it open. */
+.ic-win__controls {
+  /* Where the right-edge hot strip starts: inside an open right-edge island, resolved to px for the hook. */
+  scroll-margin-right: var(--iclone-island-w, 0px);
+}
+
+.ic-win__controls[data-autohide] {
+  /* Keep the column on its own layer while tucked away, so the reveal's first frame does not build it (with its
+     buttons' backdrop blur) from scratch. */
+  will-change: transform, opacity;
+  /* `right` is the step aside for a right-edge island. */
+  transition:
+    right var(--ic-dur-base) var(--ic-ease-spring),
+    transform var(--ic-dur-slow) var(--ic-ease-spring),
+    opacity var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.ic-win__controls[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
+  transform: translateX(calc(100% + 24px));
+  opacity: 0;
+}
+
+/* Hidden, nothing in the column catches a pixel; (0,4,0) out-ranks home.css's (0,3,0) per-button hit rules. */
+.ic-win__controls[data-autohide]:not([data-revealed]):not(:has(:focus-visible)),
+.ic-win__controls[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) > * {
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-win__controls[data-autohide] {
+    transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+  }
+}
+
+/* RTL (U4-p2-08-p2b): the control column hugs the top-LEFT corner and hides
+   past the left edge; the head's logical padding already mirrors. */
+:root[dir='rtl'] .ic-win > .ic-win__controls,
+:root[dir='rtl'] .ic-win__controls:not(.ic-win > *) {
+  right: auto;
+  left: 14px;
+}
+
+:root[dir='rtl'] .ic-win__controls:not(.ic-win > *) {
+  left: 30px;
+}
+
+:root[dir='rtl'][data-iclone-island] .ic-win[data-expanded] > .ic-win__controls {
+  left: calc(var(--iclone-island-w, 0px) + 14px);
+}
+
+:root[dir='rtl'][data-iclone-island] .ic-win__controls:not(.ic-win > *) {
+  left: calc(var(--iclone-island-w, 0px) + 26px);
+}
+
+:root[dir='rtl'] .ic-win__controls[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
+  transform: translateX(calc(-100% - 24px));
+}

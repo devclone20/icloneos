@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "id": "runtime",
+  "title": "Agent runtime",
+  "order": 1,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "runtime.venv_python",
+      "title": "Runtime interpreter",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "venvPython",
+      "fix": "runtime.venv_repair"
+    },
+    {
+      "id": "runtime.venv_home",
+      "title": "Interpreter home in pyvenv.cfg",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "venvHome",
+      "fix": "runtime.venv_repair"
+    },
+    {
+      "id": "runtime.tcc_anchor",
+      "title": "Privacy grants anchor",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "tccAnchor",
+      "platforms": [
+        "darwin"
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "id": "runtime.venv_repair",
+      "title": "Repair the runtime interpreter",
+      "risk": "medium",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous bin/python link and pyvenv.cfg are in the backup folder; copy them back to undo.",
+      "impl": "venvRepair"
+    }
+  ]
+}

@@ -1,0 +1,125 @@
+/* ── The Message head band's own controls (msg-head.tsx) ───────────────────
+   The band itself is declared in msg-sidebar.css (`.ic-win__head.imsg-head`,
+   one height for every window — ic-tokens.css `--ic-win-head-h`). This file
+   is only what SITS on it: today the context-usage door the owner asked for
+   (2026-10-19), tomorrow the next button beside it.
+
+   The band is `pointer-events: none`, so each piece takes its own clicks
+   back — otherwise the chat under the band would keep them. */
+
+/* The right-hand cluster: background tasks, then the context door. The head
+   is a flex row with the title pill at `flex: none`: auto margin parks this at
+   the right end of the head's CONTENT box, which the head's 64px right padding
+   keeps clear of the window control column — so the ring keeps its place and
+   the new door grows to its left. The gap is the band's own. */
+.imsg-head__tools {
+  display: flex;
+  align-items: center;
+  gap: inherit;
+  margin-left: auto;
+  flex: none;
+}
+
+.imsg-head__ctx {
+  position: relative;
+  flex: none;
+  pointer-events: auto;
+}
+
+/* The title pill's own grammar, one step quieter: the name leads, the number
+   answers (econ.css `.ic-win__head h2`). */
+.imsg-head__ctx-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--ic-radius-pill);
+  background: var(--e-raised);
+  font-family: inherit;
+  font-size: var(--ic-type-sm);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ic-econ-ink-72);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.imsg-head__ctx-button:hover {
+  background: var(--ic-econ-ink-14);
+  color: var(--ic-econ-ink-88);
+}
+
+.imsg-head__ctx-button[data-open] {
+  background: var(--ic-econ-tone-14);
+  box-shadow: var(--ic-econ-tone-ring);
+  color: var(--ic-econ-ink-88);
+}
+
+.imsg-head__ctx-button:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+.imsg-head__ctx-ring {
+  flex: none;
+  /* 0 % starts at the top: the arc grows clockwise from twelve o'clock. */
+  transform: rotate(-90deg);
+}
+
+.imsg-head__ctx-ring-track {
+  stroke: var(--ic-econ-ink-14);
+}
+
+.imsg-head__ctx-ring-fill {
+  stroke: var(--ic-econ-ink-72);
+  transition: stroke-dashoffset var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.imsg-head__ctx-button:hover .imsg-head__ctx-ring-fill,
+.imsg-head__ctx-button[data-open] .imsg-head__ctx-ring-fill {
+  stroke: var(--ic-econ-ink-88);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .imsg-head__ctx-ring-fill {
+    transition: none;
+  }
+}
+
+/* One line box tied to the ring's height: at Text size Large the value's own
+   line box grew past the button and the chip sat low in the band. */
+.imsg-head__ctx-value {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.imsg-head__ctx-button > svg {
+  display: block;
+}
+
+/* The card hangs under the band, right-aligned with its button, over the chat
+   surface: the band lives inside `.ihome` (ic-layers.css global-home 40) and
+   the chat surface is a sibling at 38, so one local rung is all it needs. The
+   max-height keeps a long breakdown inside the viewport — measured from the
+   BAND's own bottom edge, not from the viewport's top: retracted, the band
+   starts at `--iwin-outer-top` (the window frame's inset), so a max-height
+   that ignored it overflowed the screen by that inset plus the 10px gap. */
+.imsg-head__ctx-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: var(--ic-z-local-peak);
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - var(--iwin-outer-top, var(--ic-frame-top)) - var(--ic-win-head-h) - 26px);
+  overflow-y: auto;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-surface);
+  box-shadow: var(--ic-shadow-panel-sm);
+  pointer-events: auto;
+}

@@ -1,0 +1,114 @@
+{
+  "allow": [
+    "home/ic-bridge.css",
+    "home/ic-layers.css",
+    "home/ic-tokens.css"
+  ],
+  "totals": {
+    "color": 0,
+    "radius": 0,
+    "shadow": 0,
+    "blur": 0,
+    "z": 0
+  },
+  "files": {
+    "home/collections.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/dock.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/bank/bank.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/econ.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/email/email.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/hyperliquid/hyperliquid.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/market/market.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/econ/wallet/wallet.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/files-island.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/home.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/it-terminal.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/wallet-panel.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "home/window/ic-window.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    },
+    "settings/inft-setup.css": {
+      "color": 0,
+      "radius": 0,
+      "shadow": 0,
+      "blur": 0,
+      "z": 0
+    }
+  }
+}

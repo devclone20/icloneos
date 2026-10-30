@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "name": "ridervoice",
+  "version": "1.0.0",
+  "author": "the owner (ported from his Claude Code skills library)",
+  "license": "MIT",
+  "source": {
+    "library": "claude-code-skills",
+    "path": "ridervoice",
+    "version": "1.5",
+    "sha256": "25adcfcb1b101a62830ff8f332058270b3a4c63a7a5d297959dfac1841e6cb74",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [
+    "references/CHANGELOG.md",
+    "references/LEARNED.md",
+    "references/pronunciation.md",
+    "references/revoice-video.md",
+    "references/training-record.md",
+    "tools/revoice.sh"
+  ],
+  "waivers": [
+    {
+      "kept": "Rider Voice",
+      "reason": "the owner's product name and public persona, kept by his decision"
+    }
+  ],
+  "requires": {
+    "os": [
+      "macos"
+    ],
+    "bins": [
+      "ffmpeg",
+      "python3"
+    ],
+    "mcp": [],
+    "paths": [
+      "$RIDERVOICE_HOME",
+      "$F5TTS_VENV",
+      "$RIDERVOICE_DIR",
+      "$RIDERVOICE_SUBTITLES_DIR",
+      "$RIDERVOICE_PIPELINE_DIR",
+      "~/Movies"
+    ]
+  },
+  "touches": [
+    "Wo",
+    "X"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 4,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 9,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 20,
+    "identity": 3,
+    "machinePaths": 0,
+    "voiceProfile": 4,
+    "redacted": 4
+  }
+}

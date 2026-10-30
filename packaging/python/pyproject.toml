@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "icloneos"
+dynamic = ["version"]
+description = "Thin, verifying launcher for the iclone os macOS app: install, launch, update, uninstall."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "CLONE FRAME" }]
+dependencies = []
+classifiers = [
+  "Environment :: Console",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Homepage = "https://cloneframe.io/"
+Releases = "https://github.com/devclone20/icloneos/releases"
+
+[project.scripts]
+icloneos = "icloneos.cli:entry_point"
+
+[tool.hatch.version]
+path = "src/icloneos/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/icloneos"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/icloneos", "tests", "README.md", "LICENSE", "pyproject.toml"]

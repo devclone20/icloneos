@@ -1,0 +1,623 @@
+/* EconomyOS — Bank (AgentCard). The card visual, the three state screens
+   (none / signin-pending / ready), the account strip, the code countdown and
+   the responsive collapse are local to this app; rows, pills, stats and scroll
+   reuse the shared `.e-*` vocabulary from econ.css. `--e-tone` is already the
+   card indigo (`data-kind="bank"`).
+
+   Every colour here reads the `--bk-*` set: the card glass, chip and stripe
+   names are L2 knobs in ic-tokens.css (dark defaults + the paper skin), the
+   ink names below alias `--e-*`, so the card's text is the skin's own ink. */
+
+.bk-root {
+  --bk-display: 'Noto Serif Display ExtraCondensed', serif;
+  --bk-card-edge: var(--e-line-strong);
+  --bk-card-ink: var(--e-ink);
+  --bk-card-number: var(--ic-econ-ink-88);
+  --bk-card-mute: var(--e-mute);
+  --bk-card-faint: var(--e-faint);
+  --bk-chip-edge: var(--e-line-strong);
+
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  container-name: bk;
+  container-type: inline-size;
+}
+
+.bk-hint {
+  font-size: var(--ic-type-md);
+  color: var(--e-mute);
+}
+
+/* ── hero: card visual + stats + account ──────────────────────────────── */
+
+.bk-hero {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 18px 20px 6px;
+}
+
+.bk-hero__side {
+  display: flex;
+  flex: 1 1 260px;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.bk-hero__side .e-stats {
+  padding: 0;
+}
+
+/* A stat that is also a button: the same face as `.e-stat`, plus a hand
+   cursor and a lift on hover. Its label/value/sub are spans, so give them
+   the block flow the paragraph versions have. */
+.bk-stat-btn {
+  appearance: none;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.bk-stat-btn > span {
+  display: block;
+}
+
+.bk-stat-btn:hover:not(:disabled) {
+  border-color: var(--e-line-strong);
+  background: var(--e-hover);
+  transform: translateY(-1px);
+}
+
+.bk-stat-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.bk-stat-btn:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 2px;
+}
+
+.bk-stat-btn:disabled {
+  cursor: default;
+}
+
+/* ── account strip: who AgentCard knows the cardholder as ────────────────── */
+
+.bk-account {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--e-radius);
+  border: 1px solid var(--e-line);
+  background: var(--e-raised);
+}
+
+.bk-account__body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bk-account__label {
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.bk-account__name {
+  font-size: var(--ic-type-lg);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--e-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bk-account__meta {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bk-account__name--missing {
+  font-weight: 500;
+  color: var(--e-mute);
+}
+
+.bk-account__empty {
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+.bk-account__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.bk-account__skeleton > span {
+  position: relative;
+  display: block;
+  height: 10px;
+  border-radius: var(--ic-radius-xs);
+  overflow: hidden;
+  background: var(--e-hover);
+}
+
+.bk-account__skeleton > span:first-child {
+  width: 46%;
+}
+
+.bk-account__skeleton > span:last-child {
+  width: 72%;
+}
+
+.bk-account__skeleton > span::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 200%;
+  background: linear-gradient(90deg, transparent 25%, var(--e-raised) 50%, transparent 75%);
+  animation: e-shimmer 1.4s ease infinite;
+  will-change: transform;
+}
+
+/* ── card visual: a real flip, front = the face, back = limit + status ──── */
+
+/* Spans throughout (the interactive variant is a <button>), so each part
+   declares its own box. */
+.bk-card {
+  position: relative;
+  display: block;
+  flex: none;
+  width: min(300px, 100%);
+  aspect-ratio: 16 / 10;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  perspective: 1200px;
+  appearance: none;
+}
+
+button.bk-card {
+  cursor: pointer;
+}
+
+button.bk-card:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 3px;
+  border-radius: var(--ic-radius-lg);
+}
+
+.bk-card__inner {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform var(--ic-dur-slow) var(--ic-ease-spring);
+}
+
+.bk-card--flipped .bk-card__inner {
+  transform: rotateY(180deg);
+}
+
+.bk-card__face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  overflow: hidden;
+  padding: 16px 18px;
+  border-radius: var(--ic-radius-lg);
+  border: 1px solid var(--bk-card-edge);
+  background: linear-gradient(155deg, var(--bk-card-tint) 0%, var(--bk-card-tint-end) 70%), var(--bk-card-base);
+  box-shadow: var(--ic-bk-card-lift);
+  color: var(--bk-card-ink);
+  backface-visibility: hidden;
+}
+
+.bk-card__face::before {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(circle at 18% 0%, var(--bk-card-glow), transparent 60%);
+  pointer-events: none;
+}
+
+.bk-card__face--back {
+  justify-content: flex-start;
+  gap: 12px;
+  transform: rotateY(180deg);
+}
+
+.bk-card--locked .bk-card__face {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
+.bk-card__top {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.bk-card__brand {
+  font-family: var(--bk-display);
+  font-size: var(--ic-type-xl);
+  letter-spacing: 0.18em;
+  text-transform: lowercase;
+  color: var(--bk-card-accent);
+}
+
+.bk-card__chip {
+  display: block;
+  width: 32px;
+  height: 24px;
+  border-radius: var(--ic-radius-xs);
+  background: linear-gradient(135deg, var(--bk-chip-from), var(--bk-chip-to));
+  box-shadow: var(--ic-bk-chip-ring);
+}
+
+.bk-card__number {
+  position: relative;
+  display: block;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-xl);
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+  color: var(--bk-card-number);
+}
+
+.bk-card__bottom {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bk-card__holder {
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bk-card-mute);
+}
+
+.bk-card__holder > span {
+  display: block;
+}
+
+.bk-card__holder b {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--ic-type-lg);
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--bk-card-ink);
+}
+
+.bk-card__mark {
+  color: var(--e-tone);
+}
+
+.bk-card__flip-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  font-size: var(--ic-type-2xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bk-card-faint);
+}
+
+.bk-card__stripe {
+  display: block;
+  flex: none;
+  height: 28px;
+  margin: 0 -18px;
+  background: repeating-linear-gradient(135deg, var(--bk-stripe-a) 0 4px, var(--bk-stripe-b) 4px 8px);
+}
+
+.bk-card__back-rows {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bk-card__back-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--bk-card-mute);
+}
+
+.bk-card__back-row b {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-lg);
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--bk-card-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── gate states: no card yet / sign-in pending ──────────────────────────── */
+
+.bk-gate {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 36px 28px;
+  overflow-y: auto;
+  text-align: center;
+}
+
+.bk-gate__title {
+  margin: 0;
+  font-size: var(--ic-type-xl);
+  font-weight: 600;
+}
+
+.bk-gate__hint {
+  margin: 0;
+  max-width: 44ch;
+  font-size: var(--ic-type-lg);
+  line-height: 1.5;
+  color: var(--e-mute);
+}
+
+.bk-gate--expired .bk-card__face {
+  opacity: 0.5;
+}
+
+.bk-stale {
+  margin: 0 0 8px;
+}
+
+.bk-gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.bk-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 340px;
+  margin: 6px auto 0;
+  padding: 0;
+  list-style: none;
+  text-align: left;
+}
+
+.bk-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: var(--ic-type-lg);
+  color: var(--e-mute);
+}
+
+.bk-step b {
+  color: var(--e-ink);
+}
+
+.bk-step__num {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ic-radius-round);
+  border: 1px solid var(--e-line-strong);
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-xs);
+  color: var(--e-faint);
+}
+
+/* ── notice: the message, then what to do about it ──────────────────────── */
+
+.bk-note__action {
+  display: inline-flex;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+/* ── spend requests table head ───────────────────────────────────────────── */
+
+.bk-thead {
+  padding: 6px 20px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+  border-bottom: 1px solid var(--e-line);
+}
+
+.bk-thead .e-cell {
+  overflow: visible;
+}
+
+/* The row's lead: what it was for, then which request it is. */
+.bk-req__amount {
+  font-variant-numeric: tabular-nums;
+}
+
+.bk-req__id {
+  margin-left: 8px;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+}
+
+.bk-detail__id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bk-detail__id > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── 3DS codes: the code, who it is for, how long it has left ────────────── */
+
+.bk-codes {
+  display: flex;
+  flex-direction: column;
+}
+
+.bk-code {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--e-line);
+  transition: opacity var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.bk-code:last-child {
+  border-bottom: none;
+}
+
+.bk-code--stale {
+  opacity: 0.5;
+}
+
+.bk-code__value {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-2xl);
+  letter-spacing: 0.18em;
+  font-variant-numeric: tabular-nums;
+}
+
+.bk-code__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.bk-code__amount {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-md);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bk-code__left {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-faint);
+  transition: color var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.bk-code--soon .bk-code__left {
+  color: var(--e-warn);
+}
+
+/* The remaining window as a hairline: scaled, never re-laid-out, and eased
+   over the second between ticks so it glides instead of stepping. */
+.bk-code__bar {
+  display: block;
+  height: 2px;
+  margin-top: 2px;
+  border-radius: var(--ic-radius-xs);
+  overflow: hidden;
+  background: var(--e-line);
+}
+
+.bk-code__bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left center;
+  background: var(--e-tone);
+  transition:
+    transform 1000ms linear,
+    background var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.bk-code--soon .bk-code__bar-fill {
+  background: var(--e-warn);
+}
+
+.bk-code--stale .bk-code__bar-fill {
+  background: var(--e-faint);
+}
+
+/* Below ~900px the request detail aside drops under the main column, same
+   rule as every other Dock app — the window goes as narrow as 560px, where a
+   fixed side column stops being usable. */
+@container bk (max-width: 900px) {
+  .bk-frame.e-app--aside {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(160px, 44%);
+    grid-template-areas: 'main' 'aside';
+  }
+
+  .bk-frame .e-aside {
+    border-top: 1px solid var(--e-line);
+    border-left: none;
+  }
+}
+
+@container bk (max-width: 560px) {
+  .bk-hero {
+    flex-direction: column;
+  }
+
+  .bk-card {
+    width: 100%;
+    max-width: 300px;
+  }
+
+  .bk-account {
+    flex-wrap: wrap;
+  }
+}

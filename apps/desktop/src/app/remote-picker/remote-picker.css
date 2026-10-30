@@ -1,0 +1,148 @@
+/* REMOTE FOLDER PICKER — our material only (--ic-* roles). The token layer
+   arrives with ic-system.css, which remote-picker.tsx imports through the
+   IcDialog it is built on, so this sheet declares no tokens of its own. */
+
+.irpick {
+  width: min(32rem, calc(100vw - 2rem));
+  max-height: min(36rem, calc(100vh - 4rem));
+}
+
+.irpick__body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.irpick__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: 1px solid var(--ic-border-subtle);
+  padding: 16px 44px 12px 18px;
+}
+
+.irpick__title {
+  font-size: var(--ic-type-md);
+}
+
+.irpick__hint {
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+.irpick__crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid var(--ic-border-subtle);
+  padding: 8px 14px;
+}
+
+.irpick__crumb {
+  border-radius: var(--ic-radius-sm);
+  padding: 2px 6px;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+  transition: color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.irpick__crumb:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.irpick__crumb[data-current] {
+  color: var(--ic-text-1);
+}
+
+.irpick__list {
+  display: flex;
+  min-height: 7rem;
+  flex: 1;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.irpick__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: var(--ic-radius-md);
+  padding: 7px 10px;
+  text-align: left;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-2);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.irpick__row:hover:not(:disabled) {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.irpick__row:disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+.irpick__row-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  flex: none;
+  color: var(--ic-text-3);
+}
+
+.irpick__row-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.irpick__note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+.irpick__note--error {
+  color: var(--ic-danger);
+}
+
+.irpick__spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+}
+
+.irpick__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--ic-border-subtle);
+  padding: 12px 18px;
+}
+
+.irpick__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+.irpick__actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}

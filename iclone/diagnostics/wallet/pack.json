@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "id": "wallet",
+  "title": "Wallet and sign-in",
+  "order": 4,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "wallet.safe_storage",
+      "title": "Encrypted storage available",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "safeStorage"
+    },
+    {
+      "id": "wallet.privy_session",
+      "title": "Sign-in session",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "privySession",
+      "fix": "wallet.sign_in_again"
+    }
+  ],
+  "fixes": [
+    {
+      "id": "wallet.sign_in_again",
+      "title": "Sign in again",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "Nothing was changed.",
+      "impl": "signInAgain"
+    }
+  ]
+}

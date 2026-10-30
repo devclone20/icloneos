@@ -1,0 +1,77 @@
+# Template for the PUBLIC launcher repository devclone20/icloneos-cli at .github/workflows/publish.yml.
+# Publishes @icloneos/cli (npm) and icloneos (PyPI) through OIDC trusted publishing: no long-lived
+# registry token exists anywhere. Triggered only by a pushed tag cli-vX.Y.Z; each job runs in a
+# protected GitHub environment that the owner must approve.
+name: publish
+
+on:
+  push:
+    tags: ["cli-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # The tag is data, never code: it reaches node only through the environment (K82), and anything but a
+      # plain X.Y.Z stops the job before it is used.
+      - name: Tag matches both package versions
+        run: |
+          tag="${GITHUB_REF_NAME#cli-v}"
+          printf '%s\n' "$tag" | grep -Eqx '[0-9]+\.[0-9]+\.[0-9]+' || { echo "tag $GITHUB_REF_NAME is not cli-vX.Y.Z" >&2; exit 1; }
+          TAG_VERSION="$tag" node -e "process.exit(require('./packages/icloneos-cli/package.json').version === process.env.TAG_VERSION ? 0 : 1)"
+          grep -qxF "__version__ = \"$tag\"" packaging/python/src/icloneos/__init__.py
+      - run: npm ci --ignore-scripts && npm run check
+        working-directory: packages/icloneos-cli
+      - run: PYTHONPATH=src python -m unittest discover -s tests
+        working-directory: packaging/python
+
+  npm:
+    needs: test
+    runs-on: ubuntu-24.04
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+      # Trusted publishing (OIDC) needs npm >= 11.5.1; pin it exactly instead of trusting the runner's npm.
+      - run: npm install -g npm@11.6.2 --ignore-scripts && npm --version
+      - run: npm publish --access public --provenance --ignore-scripts
+        working-directory: packages/icloneos-cli
+
+  pypi:
+    needs: test
+    runs-on: ubuntu-24.04
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      # K34: every build dependency pinned and hash-locked; --no-isolation builds with exactly those (no fetch).
+      - run: python -m pip install --require-hashes --only-binary=:all: -r packaging/python/build-requirements.txt
+      - run: python -m build --no-isolation --outdir dist packaging/python
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3

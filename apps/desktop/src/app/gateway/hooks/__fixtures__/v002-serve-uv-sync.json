@@ -1,0 +1,33 @@
+{
+ "source": "Shipped 0.0.2 launch 2024-03-05 08:00Z (owner ~/.hermes/logs/desktop.log, read-only): hermes serve ran its own dependency sync before announcing its port at 40.8 s after spawn. atMs from the spawn.",
+ "lines": [
+  {
+   "atMs": 536,
+   "line": "hermes: completing source-update dependencies..."
+  },
+  {
+   "atMs": 933,
+   "line": "hermes: preparing dependencies for this update..."
+  },
+  {
+   "atMs": 17217,
+   "line": "→ Resolving Python dependencies…"
+  },
+  {
+   "atMs": 18192,
+   "line": "✓ Resolving Python dependencies"
+  },
+  {
+   "atMs": 18195,
+   "line": "→ Installing Python dependencies…"
+  },
+  {
+   "atMs": 25745,
+   "line": "✓ Installing Python dependencies"
+  },
+  {
+   "atMs": 40813,
+   "line": "HERMES_BACKEND_READY port=57038"
+  }
+ ]
+}

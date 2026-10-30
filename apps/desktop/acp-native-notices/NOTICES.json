@@ -1,0 +1,437 @@
+{
+  "_doc": "REL-6 r3 (critic r2 M3, rulings 32 + 33): the licence notices of the native add-ons the app ships in Resources/acp-native/<target>. Every text is committed verbatim and pinned here by sha256; scripts/acp-native-notices.mjs --check proves the list against the lockfile and the files; stage-acp-native.mjs refuses a tarball whose texts are not these bytes and ships them beside the add-ons; third-party-closure.mjs renders the \"ACP native add-ons\" section of THIRD_PARTY_NOTICES.md from this file.",
+  "v": 1,
+  "target": "darwin-arm64",
+  "addons": [
+    {
+      "key": "node_modules/@napi-rs/keyring-darwin-arm64",
+      "package": "@napi-rs/keyring-darwin-arm64",
+      "version": "1.3.0",
+      "licence": "MIT",
+      "texts": [
+        {
+          "file": "texts/napi-rs+keyring@1.3.0--LICENSE",
+          "tarball": "node_modules/@napi-rs/keyring",
+          "path": "LICENSE",
+          "sha256": "02965ed67e29f871a53f7a7afa593a0ddc8020f86ccce0faaf1aa59215b5269e",
+          "source": "the binary's own package ships no licence file; this is the LICENSE of @napi-rs/keyring@1.3.0, the same repository (github.com/Brooooooklyn/keyring-node) and version"
+        }
+      ],
+      "linked": {
+        "what": "Rust crates statically linked into keyring.darwin-arm64.node: the binding's own, and those the Rust standard library links on aarch64-apple-darwin; and the Rust standard library itself",
+        "method": "github.com/Brooooooklyn/keyring-node at tag v1.3.0 (commit e46be75c3ba8d5fde6b88a17c6153b87ffe4b946) commits no Cargo.lock. The versions of the crates whose source paths the shipped binary names (anyhow 1.0.102, apple-native-keyring-store 1.0.0, core-foundation 0.10.1, keyring-core 1.0.0, napi 3.8.6, security-framework 3.7.0) were read from the binary; the rest of the graph was resolved by cargo against them (cargo metadata --filter-platform aarch64-apple-darwin, 2026-10-22): normal dependencies only, no build dependencies, no proc-macro crates. Licence texts come from each crate source as published on crates.io. The Rust standard library's own crates.io dependencies on aarch64-apple-darwin were read from library/Cargo.lock and library/std/Cargo.toml at the toolchain commit the binary names (59807616e1fa2540724bfbac14d7976d7e4a3860): addr2line, gimli, hashbrown, object and rustc-demangle, whose /rust/deps/ paths the binary carries, and adler2, miniz_oxide, memchr, cfg-if and libc, which std links on this target (default features, no foldhash); each .crate matched the checksum that lockfile records. scripts/acp-native-notices.mjs --pack (and stage-acp-native.mjs at build) refuse any crate path in the shipped binary (/rust/deps/\u2026 or a cargo registry path) that this list does not name.",
+        "crates": [
+          {
+            "name": "addr2line",
+            "version": "0.25.1",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/addr2line@0.25.1--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 1b5d307320b3181d6d7954e663bd7c774a838b8220fe0593c86d9fb09f498b4b, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "e99d88d232bf57d70f0fb87f6b496d44b6653f99f8a63d250a54c61ea4bcde40"
+          },
+          {
+            "name": "adler2",
+            "version": "2.0.1",
+            "licence": "0BSD OR MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/adler2@2.0.1--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+          },
+          {
+            "name": "anyhow",
+            "version": "1.0.102",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/anyhow@1.0.102--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+          },
+          {
+            "name": "apple-native-keyring-store",
+            "version": "1.0.0",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/apple-native-keyring-store@1.0.0--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "157cc607717b1b372a69f6b4526f6ad18c1279af9f3267835cca2943f37bc07d"
+          },
+          {
+            "name": "bitflags",
+            "version": "2.13.2",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/bitflags@2.13.2--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
+          },
+          {
+            "name": "cfg-if",
+            "version": "1.0.4",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/cfg-if@1.0.4--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
+          },
+          {
+            "name": "cfg-if",
+            "version": "1.0.5",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/cfg-if@1.0.5--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
+          },
+          {
+            "name": "core-foundation",
+            "version": "0.10.1",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/core-foundation@0.10.1--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
+          },
+          {
+            "name": "core-foundation-sys",
+            "version": "0.8.7",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/core-foundation-sys@0.8.7--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "62065228e42caebca7e7d7db1204cbb867033de5982ca4009928915e4095f3a3"
+          },
+          {
+            "name": "ctor",
+            "version": "0.11.1",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "file": "crates/ctor@0.11.1--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "bccaa8b6c09f94e81f06696e179dbe058464bbdfbc823b6d49cada1d71e84ac3"
+          },
+          {
+            "name": "futures",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-channel",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-channel@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-core",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-core@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-executor",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-executor@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-io",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-io@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-sink",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-sink@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-task",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-task@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "futures-util",
+            "version": "0.3.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/futures-util@0.3.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6652c868f35dfe5e8ef636810a4e576b9d663f3a17fb0f5613ad73583e1b88fd"
+          },
+          {
+            "name": "gimli",
+            "version": "0.32.3",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/gimli@0.32.3--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "7b63ecd5f1902af1b63729947373683c32745c16a10e8e6292e2e2dcd7e90ae0"
+          },
+          {
+            "name": "hashbrown",
+            "version": "0.16.1",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/hashbrown@0.16.1--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
+          },
+          {
+            "name": "keyring-core",
+            "version": "1.0.0",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/keyring-core@1.0.0--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "157cc607717b1b372a69f6b4526f6ad18c1279af9f3267835cca2943f37bc07d"
+          },
+          {
+            "name": "libc",
+            "version": "0.2.178",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/libc@0.2.178--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 37c93d8daa9d8a012fd8ab92f088405fb202ea0b6ab73ee2482ae66af4f42091, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "a8d47ff51ca256f56a8932dba07660672dbfe3004257ca8de708aac1415937a1"
+          },
+          {
+            "name": "libc",
+            "version": "0.2.191",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/libc@0.2.191--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "123a331b5dbf04c30097fa43b8f858bc85df671fe776de498d01f3d6b7c1f69e"
+          },
+          {
+            "name": "libloading",
+            "version": "0.9.0",
+            "licence": "ISC",
+            "usedUnder": "ISC",
+            "file": "crates/libloading@0.9.0--LICENSE",
+            "source": "the crate source",
+            "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f"
+          },
+          {
+            "name": "log",
+            "version": "0.4.34",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/log@0.4.34--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb"
+          },
+          {
+            "name": "memchr",
+            "version": "2.7.6",
+            "licence": "Unlicense OR MIT",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/memchr@2.7.6--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+          },
+          {
+            "name": "memchr",
+            "version": "2.8.3",
+            "licence": "Unlicense OR MIT",
+            "usedUnder": "MIT",
+            "file": "crates/memchr@2.8.3--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f"
+          },
+          {
+            "name": "miniz_oxide",
+            "version": "0.8.9",
+            "licence": "MIT OR Zlib OR Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/miniz_oxide@0.8.9--LICENSE-MIT.md",
+            "source": "the crate as published on crates.io (sha256 1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d"
+          },
+          {
+            "name": "napi",
+            "version": "3.8.6",
+            "licence": "MIT",
+            "usedUnder": "MIT",
+            "file": "crates/napi@3.8.6--LICENSE",
+            "source": "https://github.com/napi-rs/napi-rs/blob/5ed87dd7e930961e9273f95cd0ed77c2da967bc1/LICENSE (the crate ships no licence file; its .cargo_vcs_info.json names commit 5ed87dd7e930961e9273f95cd0ed77c2da967bc1)",
+            "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+          },
+          {
+            "name": "napi-sys",
+            "version": "3.4.1",
+            "licence": "MIT",
+            "usedUnder": "MIT",
+            "file": "crates/napi-sys@3.4.1--LICENSE",
+            "source": "https://github.com/napi-rs/napi-rs/blob/d9cb526c15e63ba30e06b4d169068c9854180595/LICENSE (the crate ships no licence file; its .cargo_vcs_info.json names commit d9cb526c15e63ba30e06b4d169068c9854180595)",
+            "sha256": "3f1ce66533302df3a32edbfdfc0b78f0dd34659e4c1f5817162e5ea3c2297215"
+          },
+          {
+            "name": "nohash-hasher",
+            "version": "0.2.0",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "file": "crates/nohash-hasher@0.2.0--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "ec353d4fecf7963b4c054384557e5dbc3c7a717997eb4a3815b315721a6aa75a"
+          },
+          {
+            "name": "object",
+            "version": "0.37.3",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/object@0.37.3--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "0b74dfa0bcee5c420c6b7f67b4b2658f9ab8388c97b8e733975f2cecbdd668a6"
+          },
+          {
+            "name": "pin-project-lite",
+            "version": "0.2.17",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "file": "crates/pin-project-lite@0.2.17--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+          },
+          {
+            "name": "rustc-demangle",
+            "version": "0.1.27",
+            "licence": "MIT/Apache-2.0",
+            "usedUnder": "MIT",
+            "via": "the Rust standard library (library/Cargo.lock at 59807616e1fa)",
+            "file": "crates/rustc-demangle@0.1.27--LICENSE-MIT",
+            "source": "the crate as published on crates.io (sha256 b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d, the checksum std's library/Cargo.lock at 59807616e1fa2540724bfbac14d7976d7e4a3860 records)",
+            "sha256": "378f5840b258e2779c39418f3f2d7b2ba96f1c7917dd6be0713f88305dbda397"
+          },
+          {
+            "name": "rustc-hash",
+            "version": "2.1.3",
+            "licence": "Apache-2.0 OR MIT",
+            "usedUnder": "MIT",
+            "file": "crates/rustc-hash@2.1.3--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "30fefc3a7d6a0041541858293bcbea2dde4caa4c0a5802f996a7f7e8c0085652"
+          },
+          {
+            "name": "security-framework",
+            "version": "3.7.0",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/security-framework@3.7.0--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69"
+          },
+          {
+            "name": "security-framework-sys",
+            "version": "2.17.0",
+            "licence": "MIT OR Apache-2.0",
+            "usedUnder": "MIT",
+            "file": "crates/security-framework-sys@2.17.0--LICENSE-MIT",
+            "source": "the crate source",
+            "sha256": "91e934255ba3b2f21103d68c5581c23ef34aa95c4628e4405b8c901935e11c69"
+          },
+          {
+            "name": "slab",
+            "version": "0.4.12",
+            "licence": "MIT",
+            "usedUnder": "MIT",
+            "file": "crates/slab@0.4.12--LICENSE",
+            "source": "the crate source",
+            "sha256": "8ce0830173fdac609dfb4ea603fdc002c2f4af0dc9b1a005653f5da9cf534b18"
+          }
+        ],
+        "rust": {
+          "toolchain": "rustc 59807616e1fa2540724bfbac14d7976d7e4a3860",
+          "licence": "MIT OR Apache-2.0",
+          "usedUnder": "MIT",
+          "file": "crates/rust-std@59807616e1fa--LICENSE-MIT",
+          "source": "https://github.com/rust-lang/rust/blob/59807616e1fa2540724bfbac14d7976d7e4a3860/LICENSE-MIT (the commit the binary names in its /rustc/ paths)",
+          "sha256": "b71bd43a069ca0641a9ecfe585ca7b3c53b5cc1608f8b68321168698e28b5ea1"
+        }
+      }
+    },
+    {
+      "key": "node_modules/bufferutil",
+      "package": "bufferutil",
+      "version": "4.1.0",
+      "licence": "MIT",
+      "texts": [
+        {
+          "file": "texts/bufferutil@4.1.0--LICENSE",
+          "tarball": "node_modules/bufferutil",
+          "path": "LICENSE",
+          "sha256": "2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef"
+        }
+      ]
+    },
+    {
+      "key": "node_modules/utf-8-validate",
+      "package": "utf-8-validate",
+      "version": "6.0.6",
+      "licence": "MIT",
+      "texts": [
+        {
+          "file": "texts/utf-8-validate@6.0.6--LICENSE",
+          "tarball": "node_modules/utf-8-validate",
+          "path": "LICENSE",
+          "sha256": "d7ce0f3a5cea8942c47f889baffb79070a0c667e03c5eae63b946e336dbedded"
+        },
+        {
+          "file": "texts/utf-8-validate@6.0.6--deps+is_utf8+LICENSE-MIT",
+          "tarball": "node_modules/utf-8-validate",
+          "path": "deps/is_utf8/LICENSE-MIT",
+          "sha256": "881882520076235b771a08d30f0ef6ed5be5a77771866fd899cd68ae21cba09a",
+          "source": "is_utf8, compiled into the add-on from the package's deps/is_utf8"
+        }
+      ]
+    },
+    {
+      "key": "node_modules/websocket/node_modules/utf-8-validate",
+      "package": "utf-8-validate",
+      "version": "5.0.10",
+      "licence": "MIT",
+      "texts": [
+        {
+          "file": "texts/utf-8-validate@5.0.10--LICENSE",
+          "tarball": "node_modules/websocket/node_modules/utf-8-validate",
+          "path": "LICENSE",
+          "sha256": "ebf774f60dd27325cfd62c233917dfcc8551f808f69ca8656be7d1eaf13c44f2"
+        }
+      ]
+    }
+  ]
+}

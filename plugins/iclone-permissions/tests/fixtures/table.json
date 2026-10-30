@@ -1,0 +1,133 @@
+{
+  "table": {
+    "ignore": {
+      "R": "A",
+      "Wp": "A",
+      "Wo": "A",
+      "X": "A",
+      "N": "A",
+      "$": "Q",
+      "M": "A",
+      "S": "Q",
+      "I": "A:unprivileged",
+      "D": "A:project"
+    },
+    "manual": {
+      "R": "A",
+      "Wp": "Q",
+      "Wo": "Q",
+      "X": "Q",
+      "N": "Q",
+      "$": "Q",
+      "M": "Q",
+      "S": "Q",
+      "I": "Q",
+      "D": "Q"
+    },
+    "automatic": {
+      "R": "A",
+      "Wp": "A",
+      "Wo": "Q",
+      "X": "A:safe",
+      "N": "A",
+      "$": "Q",
+      "M": "Q",
+      "S": "Q",
+      "I": "Q",
+      "D": "Q"
+    },
+    "plan": {
+      "R": "A",
+      "Wp": "R!",
+      "Wo": "R!",
+      "X": "R!",
+      "N": "A:get",
+      "$": "R!",
+      "M": "R!",
+      "S": "R!",
+      "I": "R!",
+      "D": "R!"
+    },
+    "acceptEdits": {
+      "R": "A",
+      "Wp": "A",
+      "Wo": "Q",
+      "X": "Q",
+      "N": "Q",
+      "$": "Q",
+      "M": "Q",
+      "S": "Q",
+      "I": "Q",
+      "D": "Q"
+    }
+  },
+  "ceilingKey": {
+    "R": null,
+    "Wp": "fileWriting",
+    "Wo": "fileWriting",
+    "X": "terminal",
+    "N": "webBrowsing",
+    "$": "spendTrade",
+    "M": "sendMessages",
+    "S": "automation",
+    "I": "installSoftware",
+    "D": "fileWriting"
+  },
+  "matrix": {
+    "ignore": {
+      "A1": "allow",
+      "A2": "allow",
+      "A3": "allow",
+      "A4": "ask"
+    },
+    "manual": {
+      "A1": "ask",
+      "A2": "ask",
+      "A3": "ask",
+      "A4": "ask"
+    },
+    "automatic": {
+      "A1": "allow",
+      "A2": "ask",
+      "A3": "allow",
+      "A4": "ask"
+    },
+    "plan": {
+      "A1": "refuse",
+      "A2": "refuse",
+      "A3": "refuse",
+      "A4": "refuse"
+    },
+    "acceptEdits": {
+      "A1": "allow",
+      "A2": "ask",
+      "A3": "ask",
+      "A4": "ask"
+    }
+  },
+  "actions": {
+    "A1": {
+      "cls": "Wp",
+      "facts": {
+        "inProject": true
+      }
+    },
+    "A2": {
+      "cls": "Wo",
+      "facts": {
+        "inProject": false
+      }
+    },
+    "A3": {
+      "cls": "X",
+      "facts": {
+        "dangerous": false,
+        "privileged": false
+      }
+    },
+    "A4": {
+      "cls": "$",
+      "facts": {}
+    }
+  }
+}

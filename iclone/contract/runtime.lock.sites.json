@@ -1,0 +1,750 @@
+{
+  "methods": {
+    "approval.pending": [
+      "src\/store\/prompts.ts:340"
+    ],
+    "approval.received": [
+      "src\/store\/prompts.ts:284"
+    ],
+    "approval.respond": [
+      "src\/lib\/server-requests\/legacy.ts:181",
+      "src\/store\/prompts.ts:322"
+    ],
+    "billing.auto_reload": [
+      "src\/app\/settings\/billing\/api.ts:172"
+    ],
+    "billing.charge": [
+      "src\/app\/settings\/billing\/api.ts:147"
+    ],
+    "billing.charge_status": [
+      "src\/app\/settings\/billing\/api.ts:155"
+    ],
+    "billing.state": [
+      "src\/app\/settings\/billing\/api.ts:156"
+    ],
+    "billing.step_up": [
+      "src\/app\/settings\/billing\/api.ts:168"
+    ],
+    "bot_relay.deliver": [
+      "src\/plugins\/hermes-bots\/plugin.js:1798"
+    ],
+    "bot_relay.outbox.drain": [
+      "src\/plugins\/hermes-bots\/plugin.js:1761"
+    ],
+    "bot_relay.reply": [
+      "src\/plugins\/hermes-bots\/plugin.js:1776"
+    ],
+    "bot_relay.roster.sync": [
+      "src\/plugins\/hermes-bots\/plugin.js:1714"
+    ],
+    "browser.manage": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:905"
+    ],
+    "clarify.lock": [
+      "src\/store\/clarify.ts:416"
+    ],
+    "clarify.respond": [
+      "src\/lib\/server-requests\/legacy.ts:124",
+      "src\/lib\/server-requests\/legacy.ts:135"
+    ],
+    "cli.exec": [
+      "src\/plugins\/hermes-bots\/plugin.js:2761",
+      "src\/plugins\/hermes-bots\/plugin.js:10023",
+      "src\/plugins\/hermes-bots\/plugin.js:10162",
+      "src\/plugins\/hermes-bots\/plugin.js:10386"
+    ],
+    "client.capabilities": [
+      "src\/lib\/server-requests\/index.ts:218",
+      "electron\/iclone-compat.ts:383"
+    ],
+    "command.dispatch": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:473"
+    ],
+    "commands.catalog": [
+      "src\/app\/chat\/composer\/hooks\/use-slash-completions.ts:157",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:291",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:823",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:844"
+    ],
+    "complete.path": [
+      "src\/app\/chat\/composer\/hooks\/use-at-completions.ts:193",
+      "src\/app\/session\/hooks\/use-context-suggestions.ts:37"
+    ],
+    "complete.slash": [
+      "src\/app\/chat\/composer\/hooks\/use-slash-completions.ts:228"
+    ],
+    "config.get": [
+      "src\/app\/contrib\/hooks\/use-background-sync.ts:617",
+      "src\/app\/settings\/plugins-settings.tsx:83",
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:34",
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:68",
+      "src\/app\/session\/workspace-session-target.ts:53"
+    ],
+    "config.set": [
+      "src\/store\/reactions-enabled.ts:34",
+      "src\/app\/home\/inft-switch.ts:683",
+      "src\/store\/model-presets.ts:148",
+      "src\/store\/model-presets.ts:152",
+      "src\/store\/model-presets.ts:213",
+      "src\/app\/shell\/model-menu-panel.tsx:145",
+      "src\/app\/shell\/model-menu-panel.tsx:171",
+      "src\/app\/session\/hooks\/use-model-controls.ts:268"
+    ],
+    "cron.manage": [
+      "src\/plugins\/hermes-bots\/plugin.js:11180",
+      "src\/plugins\/hermes-bots\/plugin.js:11193",
+      "src\/plugins\/hermes-bots\/plugin.js:11477",
+      "src\/plugins\/hermes-bots\/plugin.js:11821"
+    ],
+    "file.attach": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:195",
+      "src\/plugins\/hermes-bots\/plugin.js:7629"
+    ],
+    "handoff.fail": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:600"
+    ],
+    "handoff.request": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:555"
+    ],
+    "handoff.state": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:579"
+    ],
+    "image.attach": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:175"
+    ],
+    "image.attach_bytes": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:170",
+      "src\/plugins\/hermes-bots\/plugin.js:7639"
+    ],
+    "image.detach": [
+      "src\/app\/chat\/hooks\/use-composer-actions.ts:716"
+    ],
+    "image.generate": [
+      "src\/plugins\/hermes-bots\/plugin.js:4167",
+      "src\/plugins\/hermes-bots\/plugin.js:4180",
+      "src\/plugins\/hermes-bots\/plugin.js:4241",
+      "src\/plugins\/hermes-bots\/plugin.js:12351"
+    ],
+    "llm.oneshot": [
+      "src\/store\/projects.ts:836",
+      "src\/lib\/oneshot.ts:46",
+      "electron\/iclone-compat.ts:565"
+    ],
+    "mcp.catalog": [
+      "src\/plugins\/hermes-bots\/plugin.js:9416",
+      "src\/plugins\/hermes-bots\/plugin.js:10433"
+    ],
+    "mcp.servers.add": [
+      "src\/plugins\/hermes-bots\/plugin.js:3813",
+      "src\/plugins\/hermes-bots\/plugin.js:3873"
+    ],
+    "mcp.servers.list": [
+      "src\/plugins\/hermes-bots\/plugin.js:3748"
+    ],
+    "mcp.servers.oauth.poll": [
+      "src\/plugins\/hermes-bots\/plugin.js:3904"
+    ],
+    "mcp.servers.oauth.start": [
+      "src\/plugins\/hermes-bots\/plugin.js:3880"
+    ],
+    "mcp.servers.set_api_key": [
+      "src\/plugins\/hermes-bots\/plugin.js:3836"
+    ],
+    "mcp.servers.test": [
+      "src\/plugins\/hermes-bots\/plugin.js:3844"
+    ],
+    "mcp.setup.respond": [
+      "src\/lib\/server-requests\/legacy.ts:160"
+    ],
+    "message.react": [
+      "src\/store\/reactions.ts:75"
+    ],
+    "model.options": [
+      "src\/lib\/model-options.ts:162",
+      "src\/plugins\/hermes-bots\/plugin.js:9204"
+    ],
+    "pdf.attach": [
+      "src\/plugins\/hermes-bots\/plugin.js:7623"
+    ],
+    "ping": [
+      "src\/app\/gateway\/hooks\/use-gateway-boot.ts:487"
+    ],
+    "plugins.manage": [
+      "src\/store\/agent-plugins.ts:92",
+      "src\/store\/agent-plugins.ts:139",
+      "src\/store\/agent-plugins.ts:186"
+    ],
+    "preview.act.respond": [
+      "src\/lib\/server-requests\/legacy.ts:193"
+    ],
+    "preview.read.respond": [
+      "src\/lib\/server-requests\/legacy.ts:200"
+    ],
+    "preview.restart": [
+      "src\/app\/session\/hooks\/use-preview-routing.ts:48"
+    ],
+    "process.kill": [
+      "src\/store\/composer-status.ts:719",
+      "src\/store\/composer-status.ts:756",
+      "src\/app\/background-tasks\/sources\/processes.ts:133"
+    ],
+    "process.list": [
+      "src\/store\/composer-status.ts:619"
+    ],
+    "profiles.configure": [
+      "src\/plugins\/hermes-bots\/plugin.js:2013",
+      "src\/plugins\/hermes-bots\/plugin.js:8653",
+      "src\/plugins\/hermes-bots\/plugin.js:1367",
+      "src\/plugins\/hermes-bots\/plugin.js:2012",
+      "src\/plugins\/hermes-bots\/plugin.js:10054",
+      "src\/plugins\/hermes-bots\/plugin.js:10071",
+      "src\/plugins\/hermes-bots\/plugin.js:10528",
+      "src\/plugins\/hermes-bots\/plugin.js:10549"
+    ],
+    "profiles.create": [
+      "src\/plugins\/hermes-bots\/plugin.js:2707",
+      "src\/plugins\/hermes-bots\/plugin.js:10493"
+    ],
+    "profiles.describe": [
+      "src\/plugins\/hermes-bots\/plugin.js:8645",
+      "src\/plugins\/hermes-bots\/plugin.js:9415",
+      "src\/plugins\/hermes-bots\/plugin.js:10432"
+    ],
+    "profiles.get_asset": [
+      "src\/components\/assistant-ui\/thread\/user-message.tsx:154",
+      "src\/plugins\/hermes-bots\/plugin.js:2585",
+      "src\/plugins\/hermes-bots\/plugin.js:2584"
+    ],
+    "profiles.list": [
+      "src\/components\/assistant-ui\/thread\/user-message.tsx:138",
+      "src\/plugins\/hermes-bots\/plugin.js:16225",
+      "src\/plugins\/hermes-bots\/plugin.js:1638",
+      "src\/plugins\/hermes-bots\/plugin.js:1234",
+      "src\/plugins\/hermes-bots\/plugin.js:2431",
+      "src\/plugins\/hermes-bots\/plugin.js:4531",
+      "src\/plugins\/hermes-bots\/plugin.js:5869"
+    ],
+    "profiles.set_asset": [
+      "src\/plugins\/hermes-bots\/plugin.js:2030",
+      "src\/plugins\/hermes-bots\/plugin.js:2033",
+      "src\/plugins\/hermes-bots\/plugin.js:2487",
+      "src\/plugins\/hermes-bots\/plugin.js:2509",
+      "src\/plugins\/hermes-bots\/plugin.js:2029",
+      "src\/plugins\/hermes-bots\/plugin.js:2032",
+      "src\/plugins\/hermes-bots\/plugin.js:2486",
+      "src\/plugins\/hermes-bots\/plugin.js:2508",
+      "src\/plugins\/hermes-bots\/plugin.js:10554"
+    ],
+    "projects.add_folder": [
+      "src\/store\/projects.ts:1096"
+    ],
+    "projects.create": [
+      "src\/store\/projects.ts:931"
+    ],
+    "projects.delete": [
+      "src\/store\/projects.ts:1142"
+    ],
+    "projects.discover_repos": [
+      "src\/store\/projects.ts:703"
+    ],
+    "projects.list": [
+      "src\/store\/projects.ts:427"
+    ],
+    "projects.project_sessions": [
+      "src\/store\/projects.ts:589"
+    ],
+    "projects.record_repos": [
+      "src\/store\/projects.ts:766",
+      "src\/store\/projects.ts:784"
+    ],
+    "projects.set_active": [
+      "src\/store\/projects.ts:1148"
+    ],
+    "projects.tree": [
+      "src\/store\/projects.ts:492",
+      "src\/store\/projects.ts:506"
+    ],
+    "projects.update": [
+      "src\/store\/projects.ts:1017"
+    ],
+    "prompt.submit": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:336",
+      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:790",
+      "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:319",
+      "src\/plugins\/hermes-bots\/plugin.js:5759",
+      "src\/plugins\/hermes-bots\/plugin.js:7353",
+      "src\/plugins\/hermes-bots\/plugin.js:7372"
+    ],
+    "reload.env": [
+      "src\/store\/onboarding.ts:311",
+      "src\/store\/onboarding.ts:890"
+    ],
+    "reload.mcp": [
+      "src\/store\/suggestion-providers\/mcp.ts:215",
+      "src\/components\/assistant-ui\/mcp-setup-tool.tsx:225",
+      "src\/app\/skills\/mcp\/tab.tsx:326",
+      "src\/store\/suggestion-providers\/repair.ts:51"
+    ],
+    "request.answer": [
+      "src\/lib\/server-requests\/index.ts:379"
+    ],
+    "secret.respond": [
+      "src\/lib\/server-requests\/legacy.ts:174"
+    ],
+    "session.activate": [
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1032"
+    ],
+    "session.active_list": [
+      "src\/app\/contrib\/hooks\/use-background-sync.ts:648"
+    ],
+    "session.branch": [
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1890"
+    ],
+    "session.close": [
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:573",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:576",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:729",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:732",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:2176"
+    ],
+    "session.compress": [
+      "src\/app\/session\/compact\/run-compaction.ts:216"
+    ],
+    "session.context_breakdown": [
+      "src\/app\/session\/compact\/run-compaction.ts:60",
+      "src\/app\/context-panel\/use-context-panel.ts:175"
+    ],
+    "session.create": [
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:520",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:526",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:706",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:712",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1894",
+      "src\/plugins\/hermes-bots\/plugin.js:5673",
+      "src\/plugins\/hermes-bots\/plugin.js:7269"
+    ],
+    "session.cwd.set": [
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:95"
+    ],
+    "session.history": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:226"
+    ],
+    "session.interrupt": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:329",
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:744",
+      "src\/app\/chat\/session-tile-actions.ts:356",
+      "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:175",
+      "src\/plugins\/hermes-bots\/plugin.js:8066"
+    ],
+    "session.list": [
+      "src\/plugins\/hermes-bots\/plugin.js:5590"
+    ],
+    "session.redirect": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:805",
+      "src\/app\/chat\/session-tile-actions.ts:415"
+    ],
+    "session.resume": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/resolve-target-session.ts:104",
+      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:606",
+      "src\/app\/session\/hooks\/use-prompt-actions\/utils.ts:125",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1402",
+      "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:226",
+      "src\/plugins\/hermes-bots\/plugin.js:7241",
+      "src\/plugins\/hermes-bots\/plugin.js:7361",
+      "src\/plugins\/hermes-bots\/plugin.js:7596",
+      "src\/plugins\/hermes-bots\/plugin.js:7680",
+      "src\/plugins\/hermes-bots\/plugin.js:7755"
+    ],
+    "session.save": [
+      "src\/lib\/desktop-slash-commands.ts:331"
+    ],
+    "session.status": [
+      "src\/lib\/desktop-slash-commands.ts:336"
+    ],
+    "session.title": [
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:794",
+      "src\/app\/chat\/sidebar\/session-actions-menu.tsx:82",
+      "src\/plugins\/hermes-bots\/plugin.js:5699"
+    ],
+    "session.usage": [
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1045"
+    ],
+    "session.workspace.move": [
+      "src\/store\/projects.ts:627"
+    ],
+    "setup.runtime_check": [
+      "src\/lib\/runtime-readiness.ts:64"
+    ],
+    "setup.status": [
+      "src\/lib\/runtime-readiness.ts:63"
+    ],
+    "skills.manage": [
+      "src\/plugins\/hermes-bots\/plugin.js:9793",
+      "src\/plugins\/hermes-bots\/plugin.js:9815"
+    ],
+    "slash.exec": [
+      "src\/store\/goals.ts:171",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:428"
+    ],
+    "subscription.change": [
+      "src\/app\/settings\/billing\/api.ts:164"
+    ],
+    "subscription.preview": [
+      "src\/app\/settings\/billing\/api.ts:159"
+    ],
+    "subscription.resume": [
+      "src\/app\/settings\/billing\/api.ts:162"
+    ],
+    "subscription.state": [
+      "src\/app\/settings\/billing\/api.ts:157"
+    ],
+    "sudo.respond": [
+      "src\/lib\/server-requests\/legacy.ts:167"
+    ],
+    "terminal.read.respond": [
+      "src\/lib\/server-requests\/legacy.ts:207"
+    ],
+    "tour.respond": [
+      "src\/lib\/server-requests\/legacy.ts:214"
+    ],
+    "wake.feed": [
+      "src\/lib\/wake-client-capture.ts:148"
+    ],
+    "wake.pause": [
+      "src\/app\/chat\/composer\/hooks\/use-composer-voice.ts:227"
+    ],
+    "wake.resume": [
+      "src\/store\/wake-word.ts:377"
+    ],
+    "wake.start": [
+      "src\/store\/wake-word.ts:151",
+      "src\/store\/wake-word.ts:309",
+      "src\/store\/wake-word.ts:346",
+      "src\/store\/wake-word.ts:415",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:668"
+    ],
+    "wake.status": [
+      "src\/store\/wake-word.ts:284",
+      "src\/store\/wake-word.ts:385",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:641"
+    ],
+    "wake.stop": [
+      "src\/store\/wake-word.ts:77",
+      "src\/store\/wake-word.ts:339",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:684"
+    ],
+    "window.read.respond": [
+      "src\/lib\/server-requests\/legacy.ts:221"
+    ]
+  },
+  "events": {
+    "agent.terminal.output": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:177"
+    ],
+    "billing.step_up.verification": [
+      "src\/app\/settings\/billing\/use-step-up.ts:87"
+    ],
+    "bot_relay.outbox.pending": [
+      "src\/plugins\/hermes-bots\/plugin.js:1871"
+    ],
+    "browser.progress": [
+      "src\/lib\/gateway-events.ts:20"
+    ],
+    "cron.changed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:46",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:57"
+    ],
+    "display.install.sudo": [
+      "src\/lib\/server-requests\/policy.ts:10"
+    ],
+    "gateway.ready": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:22",
+      "src\/lib\/gateway-events.ts:76"
+    ],
+    "job.completed": [
+      "src\/app\/home\/econ\/events.ts:82",
+      "src\/app\/home\/econ\/market\/data\/history.ts:15",
+      "src\/app\/home\/econ\/market\/data\/history.ts:25"
+    ],
+    "job.funded": [
+      "src\/app\/home\/econ\/events.ts:82",
+      "src\/app\/home\/econ\/market\/data\/history.ts:13",
+      "src\/app\/home\/econ\/market\/data\/history.ts:23"
+    ],
+    "layout.apply": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:204"
+    ],
+    "mcp.setup": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/input-requests.ts:157",
+      "src\/lib\/server-requests\/legacy.ts:34",
+      "src\/lib\/server-requests\/legacy.ts:45",
+      "src\/lib\/server-requests\/legacy.ts:158",
+      "src\/lib\/server-requests\/policy.ts:46",
+      "src\/store\/mcp-setup.ts:50"
+    ],
+    "message.complete": [
+      "src\/app\/context-panel\/use-context-panel.ts:26",
+      "src\/app\/context-panel\/use-context-panel.ts:230",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:42",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:68",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:315",
+      "src\/lib\/gateway-events.ts:22",
+      "src\/lib\/gateway-events.ts:35"
+    ],
+    "message.delta": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:43",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:52",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:69",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:154",
+      "src\/lib\/gateway-events.ts:23"
+    ],
+    "message.interim": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:53",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:70",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:162",
+      "src\/lib\/gateway-events.ts:24"
+    ],
+    "message.reaction": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:216"
+    ],
+    "message.start": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:44",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:71",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:242",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:84",
+      "src\/lib\/gateway-events.ts:25",
+      "src\/lib\/gateway-events.ts:126",
+      "src\/lib\/gateway-events.ts:134",
+      "src\/lib\/gateway-events.ts:143",
+      "src\/store\/gateway.ts:1252"
+    ],
+    "moa.aggregating": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:58",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:265"
+    ],
+    "moa.phase": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:60",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:299"
+    ],
+    "moa.progress": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:59",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:275"
+    ],
+    "moa.reference": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:57",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:225"
+    ],
+    "notification.clear": [
+      "src\/app\/contrib\/dev\/credits-notice-demo.ts:49",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/status.ts:113"
+    ],
+    "notification.show": [
+      "src\/app\/contrib\/dev\/credits-notice-demo.ts:64",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/status.ts:83"
+    ],
+    "pairing.changed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:49",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:61"
+    ],
+    "pane.reveal": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:192"
+    ],
+    "platforms.changed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:48",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:59"
+    ],
+    "preview.act": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:47",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:80",
+      "src\/lib\/server-requests\/legacy.ts:35",
+      "src\/lib\/server-requests\/legacy.ts:191",
+      "src\/lib\/server-requests\/policy.ts:11",
+      "src\/lib\/server-requests\/policy.ts:25"
+    ],
+    "preview.close": [
+      "src\/app\/session\/hooks\/use-preview-routing.ts:108"
+    ],
+    "preview.open": [
+      "src\/app\/session\/hooks\/use-preview-routing.ts:72"
+    ],
+    "preview.read": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:47",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:108",
+      "src\/lib\/server-requests\/legacy.ts:36",
+      "src\/lib\/server-requests\/legacy.ts:198",
+      "src\/lib\/server-requests\/policy.ts:12",
+      "src\/lib\/server-requests\/policy.ts:26"
+    ],
+    "preview.restart.complete": [
+      "src\/app\/session\/hooks\/use-preview-routing.ts:148"
+    ],
+    "preview.restart.progress": [
+      "src\/app\/session\/hooks\/use-preview-routing.ts:154"
+    ],
+    "reasoning.available": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:56",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:72",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:213",
+      "src\/lib\/gateway-events.ts:26"
+    ],
+    "reasoning.delta": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:45",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:55",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:73",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:201",
+      "src\/lib\/gateway-events.ts:27"
+    ],
+    "request.cancel": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:90",
+      "src\/lib\/server-requests\/index.ts:257"
+    ],
+    "review.summary": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/status.ts:46"
+    ],
+    "session.info": [
+      "src\/app\/context-panel\/use-context-panel.ts:26",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/session-info.ts:126",
+      "src\/lib\/gateway-events.ts:80",
+      "src\/store\/gateway.ts:1268"
+    ],
+    "session.reclaimed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:71",
+      "src\/plugins\/hermes-bots\/plugin.js:16083",
+      "src\/store\/gateway.ts:1260"
+    ],
+    "session.title": [
+      "src\/app\/chat\/sidebar\/session-actions-menu.tsx:82",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/session-info.ts:413",
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:794",
+      "src\/plugins\/hermes-bots\/plugin.js:5699"
+    ],
+    "session.usage": [
+      "src\/app\/context-panel\/use-context-panel.ts:27",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/session-info.ts:393",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1045"
+    ],
+    "sessions.changed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:47"
+    ],
+    "skin.changed": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:35"
+    ],
+    "status.update": [
+      "src\/app\/session\/compact\/run-compaction.ts:188",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/status.ts:28",
+      "src\/lib\/gateway-events.ts:28"
+    ],
+    "stream.down": [
+      "electron\/iclone-acp-watch.ts:290",
+      "electron\/iclone-acp-watch.ts:529",
+      "electron\/iclone-acp-work\/supervisor.ts:87"
+    ],
+    "stream.live": [
+      "src\/app\/home\/econ\/events.ts:73",
+      "src\/app\/home\/econ\/events.ts:96",
+      "src\/app\/home\/econ\/events.ts:117",
+      "electron\/iclone-acp-watch.ts:485",
+      "electron\/iclone-acp-work\/supervisor.ts:79"
+    ],
+    "stream.stopped": [
+      "electron\/iclone-acp-watch.ts:429",
+      "electron\/iclone-acp-watch.ts:524",
+      "electron\/iclone-acp-work\/supervisor.ts:84"
+    ],
+    "stream.up": [
+      "src\/app\/home\/econ\/events.ts:96",
+      "src\/app\/home\/econ\/events.ts:117",
+      "electron\/iclone-acp-watch.ts:561",
+      "electron\/iclone-acp-work\/supervisor.ts:79"
+    ],
+    "subagent.complete": [
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:112",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:170",
+      "src\/store\/subagents.ts:183"
+    ],
+    "subagent.progress": [
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:111",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:173",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:188",
+      "src\/store\/subagents.ts:162"
+    ],
+    "subagent.spawn_requested": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/tools.ts:143",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:107"
+    ],
+    "subagent.start": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/tools.ts:143",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:108",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:172",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:189",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:190"
+    ],
+    "subagent.thinking": [
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:109",
+      "src\/store\/subagents.ts:166"
+    ],
+    "subagent.tool": [
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:110"
+    ],
+    "terminal.close": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:184"
+    ],
+    "terminal.read": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:47",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:118",
+      "src\/lib\/server-requests\/legacy.ts:39",
+      "src\/lib\/server-requests\/legacy.ts:205",
+      "src\/lib\/server-requests\/policy.ts:15",
+      "src\/lib\/server-requests\/policy.ts:27"
+    ],
+    "thinking.delta": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:46",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:54",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/message-stream.ts:179",
+      "src\/lib\/gateway-events.ts:29"
+    ],
+    "tool.complete": [
+      "src\/app\/context-panel\/use-context-panel.ts:27",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:47",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:63",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:74",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/tools.ts:58",
+      "src\/lib\/gateway-events.ts:30",
+      "src\/lib\/gateway-events.ts:149"
+    ],
+    "tool.generating": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:62",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:75",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/tools.ts:20",
+      "src\/lib\/gateway-events.ts:31"
+    ],
+    "tool.start": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:48",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:61",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/index.ts:76",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/tools.ts:43",
+      "src\/app\/session\/hooks\/use-message-stream\/utils.ts:171",
+      "src\/lib\/gateway-events.ts:32"
+    ],
+    "vault.code": [
+      "src\/lib\/server-requests\/policy.ts:17"
+    ],
+    "vault.save_login": [
+      "src\/lib\/server-requests\/policy.ts:18"
+    ],
+    "vault.unlock_prompt": [
+      "src\/lib\/server-requests\/policy.ts:19"
+    ],
+    "wake.detected": [
+      "src\/app\/contrib\/wiring.tsx:806"
+    ],
+    "window.read": [
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:47",
+      "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:157",
+      "src\/lib\/server-requests\/legacy.ts:41",
+      "src\/lib\/server-requests\/legacy.ts:219",
+      "src\/lib\/server-requests\/policy.ts:20",
+      "src\/lib\/server-requests\/policy.ts:29"
+    ]
+  }
+}

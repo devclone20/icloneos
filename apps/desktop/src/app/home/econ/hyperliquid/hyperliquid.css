@@ -1,0 +1,286 @@
+/* EconomyOS — Hyperliquid. Table heads, side/route chrome, the market row
+   with its pin, and the responsive collapse are local to this app; everything
+   else (rows, pills, stats, scroll) is the shared `.e-*` vocabulary from
+   econ.css. Colours only ever come from `--e-*`. */
+
+.hl-root {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  container-name: hl;
+  container-type: inline-size;
+}
+
+.hl-thead {
+  padding: 6px 20px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+  border-bottom: 1px solid var(--e-line);
+}
+
+.hl-thead .e-cell {
+  overflow: visible;
+}
+
+.hl-side {
+  min-width: 46px;
+  text-align: center;
+}
+
+.hl-protocols {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ── markets list ─────────────────────────────────────────────────────────── */
+
+.hl-search {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.hl-list {
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+/* The deferred filter is still catching up with the keystroke. */
+.hl-list--stale {
+  opacity: 0.72;
+}
+
+.hl-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 20px 4px;
+  font-size: var(--ic-type-xs);
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.hl-group::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--e-line);
+}
+
+/* A market row is a focusable div (the shared Row is a button, and the pin
+   inside is a button of its own). */
+.hl-mrow {
+  cursor: pointer;
+}
+
+.hl-star {
+  all: unset;
+  display: inline-flex;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ic-radius-sm);
+  color: var(--e-faint);
+  opacity: 0.45;
+  cursor: pointer;
+  transition:
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    opacity var(--ic-dur-fast) var(--ic-ease-std),
+    transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.hl-mrow:hover .hl-star,
+.hl-star:focus-visible {
+  opacity: 1;
+}
+
+.hl-star:hover {
+  color: var(--e-ink);
+  transform: scale(1.1);
+}
+
+.hl-star--on {
+  color: var(--e-gold);
+  opacity: 1;
+}
+
+.hl-star:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 1px;
+}
+
+/* ── aside: market + routes ───────────────────────────────────────────────── */
+
+.hl-aside__symbol {
+  margin: 0 0 2px;
+  font-size: var(--ic-type-2xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hl-aside__name {
+  margin: 0 0 12px;
+  font-size: var(--ic-type-lg);
+  color: var(--e-mute);
+}
+
+.hl-asof {
+  font-size: var(--ic-type-sm);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--e-faint);
+}
+
+.hl-route {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--e-line);
+}
+
+.hl-route:last-child {
+  border-bottom: none;
+}
+
+.hl-route__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.hl-route__protocol {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.hl-route__kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 12px;
+  row-gap: 4px;
+  margin: 0;
+  font-size: var(--ic-type-md);
+}
+
+.hl-route__kv dt {
+  margin: 0;
+  align-self: center;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.hl-route__kv dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.hl-aside-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hl-aside-actions .e-btn {
+  width: 100%;
+}
+
+.hl-hero-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* The state note's one action sits on the same line as its message. */
+.hl-root .e-note .e-btn {
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+/* Below ~900px of the window's own width, the aside (market/route detail)
+   drops under the main column instead of squeezing it — the window can be
+   resized as narrow as 560px, where a fixed side column stops being usable. */
+@container hl (max-width: 900px) {
+  .hl-frame.e-app--aside {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(160px, 44%);
+    grid-template-areas: 'main' 'aside';
+  }
+
+  .hl-frame.e-app--rail.e-app--aside {
+    grid-template-columns: 188px minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(160px, 44%);
+    grid-template-areas: 'rail main' 'rail aside';
+  }
+
+  .hl-frame .e-aside {
+    border-top: 1px solid var(--e-line);
+    border-left: none;
+  }
+}
+
+/* ── quote age (U3-p2-14) ─────────────────────────────────────────────────── */
+
+.hl-asof--row {
+  display: block;
+  margin: 0;
+  font-size: var(--ic-type-xs);
+  color: var(--e-faint);
+}
+
+/* ── Deposit / Withdraw (U3-p2-01) ────────────────────────────────────────── */
+
+.hl-fund {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hl-fund__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.hl-fund .e-chip {
+  all: unset;
+  cursor: pointer;
+  padding: 3px 10px;
+  border: 1px solid var(--e-line);
+  border-radius: var(--ic-radius-pill);
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+}
+
+.hl-fund .e-chip:hover,
+.hl-fund .e-chip--on {
+  color: inherit;
+  border-color: var(--e-gold);
+}
+
+.hl-fund__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+}

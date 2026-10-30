@@ -1,0 +1,25 @@
+{
+  "skill": "agentcard",
+  "source": "https://agentcard.ai/skill",
+  "version": "2.2.0",
+  "sha256": "34f7566351fc8036992643fd8a6e56da0a842a912d372885da5f51c603665f40",
+  "bytes": 24959,
+  "fetchedAt": "2026-10-21T06:34:23Z",
+  "author": "Alchemy (https://alchemy.com)",
+  "licence": "MIT (declared in the SKILL.md frontmatter; the publisher ships no separate licence text)",
+  "homepage": "https://agentcard.ai",
+  "supersedes": "2.0.0 (sha256 c6b383e4c2d0da8af7a75820f1a5981fa3d8739829bbe61ea1958771d8df07ca, ~/.claude/skills/agentcard)",
+  "rule": "Shipped unedited. To update: fetch the URL into an empty directory, replace SKILL.md byte-for-byte, update version, sha256, bytes and fetchedAt here, then run node iclone/skills/tools/build-catalog.mjs.",
+  "touches": [
+    "X",
+    "N",
+    "$"
+  ],
+  "shipped": "disabled",
+  "merged": {
+    "from": "the owner's agentcard 2.0.0 (~/.claude/skills/agentcard, sha256 c6b383e4c2d0da8af7a75820f1a5981fa3d8739829bbe61ea1958771d8df07ca)",
+    "at": "2026-10-21",
+    "result": "Superseded, nothing carried: every agentcard command 2.0.0 teaches is taught by 2.2.0 (2.2.0 adds setup --mastercard / --no-mastercard); the differences are the publisher's own wording updates. SKILL.md stays byte-for-byte the publisher's.",
+    "gates": "touches has $ (V3-F classes): request new, wallet send and wallet fetch move value and are class $ in the V3-F classifier; shipped disabled per V3-B D3 (seeded into skills.disabled once per install by electron/iclone-x402/skill-defaults.ts; the user turns it on in the Skills page); in iclone os the agent pays x402 through the x402-pay skill, not this one."
+  }
+}

@@ -1,0 +1,514 @@
+{
+ "source": "RT-4 fresh-HOME first launch 2024-03-05 08:00:00Z (rt7h desktop.log, excerpted verbatim: progress-bar repaints between the first and last line of each download dropped, paths removed). Total 112 s; python-deps 86.2 s.",
+ "events": [
+  {
+   "atMs": 0,
+   "step": "Resolving Hermes backend"
+  },
+  {
+   "atMs": 101,
+   "step": "Resolving Hermes runtime"
+  },
+  {
+   "atMs": 101,
+   "step": "Waiting for first-run setup choice",
+   "phase": "bootstrap.choice"
+  },
+  {
+   "atMs": 138,
+   "bootstrap": {
+    "type": "log",
+    "stage": null,
+    "line": "[bootstrap] starting"
+   }
+  },
+  {
+   "atMs": 147,
+   "bootstrap": {
+    "type": "log",
+    "stage": null,
+    "line": "[iclone-runtime-bundle] install.sh from the app bundle (sha256 verified)"
+   }
+  },
+  {
+   "atMs": 592,
+   "bootstrap": {
+    "type": "manifest",
+    "protocolVersion": 1,
+    "stages": [
+     {
+      "name": "prerequisites"
+     },
+     {
+      "name": "repository"
+     },
+     {
+      "name": "venv"
+     },
+     {
+      "name": "python-deps"
+     },
+     {
+      "name": "config"
+     },
+     {
+      "name": "products"
+     },
+     {
+      "name": "setup"
+     },
+     {
+      "name": "gateway"
+     },
+     {
+      "name": "complete"
+     }
+    ]
+   }
+  },
+  {
+   "atMs": 592,
+   "bootstrap": {
+    "type": "stage",
+    "name": "prerequisites",
+    "state": "running"
+   }
+  },
+  {
+   "atMs": 592,
+   "bootstrap": {
+    "type": "stage",
+    "name": "prerequisites",
+    "state": "skipped",
+    "durationMs": 0
+   }
+  },
+  {
+   "atMs": 592,
+   "bootstrap": {
+    "type": "stage",
+    "name": "repository",
+    "state": "running"
+   }
+  },
+  {
+   "atMs": 715,
+   "bootstrap": {
+    "type": "log",
+    "stage": "repository",
+    "line": "[iclone-runtime-source] installing runtime source from the app bundle"
+   }
+  },
+  {
+   "atMs": 6745,
+   "bootstrap": {
+    "type": "log",
+    "stage": "repository",
+    "line": "[iclone-runtime-source] runtime source installed (sha256 verified)"
+   }
+  },
+  {
+   "atMs": 6745,
+   "bootstrap": {
+    "type": "stage",
+    "name": "repository",
+    "state": "succeeded",
+    "durationMs": 6153
+   }
+  },
+  {
+   "atMs": 6745,
+   "bootstrap": {
+    "type": "stage",
+    "name": "venv",
+    "state": "running"
+   }
+  },
+  {
+   "atMs": 6770,
+   "bootstrap": {
+    "type": "log",
+    "stage": "venv",
+    "line": "→ Downloading uv 0.12.3 (darwin-arm64)"
+   }
+  },
+  {
+   "atMs": 8578,
+   "bootstrap": {
+    "type": "log",
+    "stage": "venv",
+    "line": "✓ uv ready"
+   }
+  },
+  {
+   "atMs": 8699,
+   "bootstrap": {
+    "type": "log",
+    "stage": "venv",
+    "line": "✓ bootstrap Python ready; PM prepares the dependency environment"
+   }
+  },
+  {
+   "atMs": 8702,
+   "bootstrap": {
+    "type": "stage",
+    "name": "venv",
+    "state": "succeeded",
+    "durationMs": 1957
+   }
+  },
+  {
+   "atMs": 8702,
+   "bootstrap": {
+    "type": "stage",
+    "name": "python-deps",
+    "state": "running"
+   }
+  },
+  {
+   "atMs": 8744,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ uv ready"
+   }
+  },
+  {
+   "atMs": 8847,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "→ Installing dependencies (hash-verified via uv.lock)"
+   }
+  },
+  {
+   "atMs": 9027,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "Preparing the isolated Hermes runtime…"
+   }
+  },
+  {
+   "atMs": 9158,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  → Installing Python dependencies…"
+   }
+  },
+  {
+   "atMs": 9600,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ✓ Installing Python dependencies"
+   }
+  },
+  {
+   "atMs": 10121,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ffmpeg:  14.7%  4.0 MiB / 27.1 MiB"
+   }
+  },
+  {
+   "atMs": 10411,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ffmpeg: 100.0%  27.1 MiB / 27.1 MiB"
+   }
+  },
+  {
+   "atMs": 10468,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ffmpeg: unpacking"
+   }
+  },
+  {
+   "atMs": 11585,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ ffmpeg"
+   }
+  },
+  {
+   "atMs": 11885,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  node:  13.9%  4.0 MiB / 28.8 MiB"
+   }
+  },
+  {
+   "atMs": 12091,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  node: 100.0%  28.8 MiB / 28.8 MiB"
+   }
+  },
+  {
+   "atMs": 12141,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  node: unpacking"
+   }
+  },
+  {
+   "atMs": 33508,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ node"
+   }
+  },
+  {
+   "atMs": 34504,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  npm: 100.0%  2.9 MiB / 2.9 MiB"
+   }
+  },
+  {
+   "atMs": 34518,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  npm: unpacking"
+   }
+  },
+  {
+   "atMs": 53899,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ npm"
+   }
+  },
+  {
+   "atMs": 54510,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  python:  15.7%  4.0 MiB / 25.4 MiB"
+   }
+  },
+  {
+   "atMs": 55101,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  python: 100.0%  25.4 MiB / 25.4 MiB"
+   }
+  },
+  {
+   "atMs": 55125,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  python: unpacking"
+   }
+  },
+  {
+   "atMs": 57541,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ python"
+   }
+  },
+  {
+   "atMs": 58327,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ripgrep: 100.0%  1.7 MiB / 1.7 MiB"
+   }
+  },
+  {
+   "atMs": 58335,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ripgrep: unpacking"
+   }
+  },
+  {
+   "atMs": 58510,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ ripgrep"
+   }
+  },
+  {
+   "atMs": 65270,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  → Installing Python dependencies…"
+   }
+  },
+  {
+   "atMs": 83394,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  ✓ Installing Python dependencies"
+   }
+  },
+  {
+   "atMs": 83724,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ venv"
+   }
+  },
+  {
+   "atMs": 85430,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  agent-browser:   2.5%  4.0 MiB / 162.3 MiB"
+   }
+  },
+  {
+   "atMs": 85694,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "  agent-browser:  27.1%  44.0 MiB / 162.3 MiB"
+   }
+  },
+  {
+   "atMs": 91577,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ agent-browser"
+   }
+  },
+  {
+   "atMs": 93963,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "Failed to load bundled provider plugin solstice: No module named 'httpx'"
+   }
+  },
+  {
+   "atMs": 94823,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ cua-driver"
+   }
+  },
+  {
+   "atMs": 94899,
+   "bootstrap": {
+    "type": "log",
+    "stage": "python-deps",
+    "line": "✓ dependencies installed"
+   }
+  },
+  {
+   "atMs": 94901,
+   "bootstrap": {
+    "type": "stage",
+    "name": "python-deps",
+    "state": "succeeded",
+    "durationMs": 86199
+   }
+  },
+  {
+   "atMs": 94901,
+   "bootstrap": {
+    "type": "stage",
+    "name": "config",
+    "state": "running"
+   }
+  },
+  {
+   "atMs": 94927,
+   "bootstrap": {
+    "type": "stage",
+    "name": "config",
+    "state": "succeeded",
+    "durationMs": 26
+   }
+  },
+  {
+   "atMs": 94927,
+   "bootstrap": {
+    "type": "stage",
+    "name": "products",
+    "state": "skipped",
+    "durationMs": 0
+   }
+  },
+  {
+   "atMs": 94946,
+   "bootstrap": {
+    "type": "stage",
+    "name": "setup",
+    "state": "skipped",
+    "durationMs": 19
+   }
+  },
+  {
+   "atMs": 94963,
+   "bootstrap": {
+    "type": "stage",
+    "name": "gateway",
+    "state": "skipped",
+    "durationMs": 17
+   }
+  },
+  {
+   "atMs": 94989,
+   "bootstrap": {
+    "type": "stage",
+    "name": "complete",
+    "state": "succeeded",
+    "durationMs": 26
+   }
+  },
+  {
+   "atMs": 95008,
+   "bootstrap": {
+    "type": "complete",
+    "marker": {}
+   }
+  },
+  {
+   "atMs": 96338,
+   "step": "Hermes runtime is ready"
+  },
+  {
+   "atMs": 104987,
+   "step": "Starting Hermes backend"
+  },
+  {
+   "atMs": 105016,
+   "step": "Waiting for Hermes backend to launch"
+  },
+  {
+   "atMs": 112267,
+   "step": "Waiting for Hermes backend to become ready"
+  },
+  {
+   "atMs": 112401,
+   "step": "Hermes backend is ready. Finalizing desktop startup"
+  }
+ ]
+}

@@ -1,0 +1,16 @@
+# The upstream commit this fork's tree was imported from.
+#
+# iclone os is a VENDOR SNAPSHOT of NousResearch/hermes-agent, not a git fork:
+# the root commit is a parentless import of the upstream tree, so our history
+# and upstream's share NO common ancestor. Every "how far behind are we"
+# question therefore has to be asked from this recorded point — asking git
+# `rev-list --count HEAD..upstream/main` instead counts upstream's ENTIRE
+# history (26354 on 2026-08-30, when the honest answer was 486).
+#
+# Update this line whenever a curated update lands: it becomes the new base
+# for the next funnel, and the App Atualisation pane and the agent's
+# `app-atualisation` skill both read it.
+#
+# One 40-character sha, alone on its line.
+
+10b388300a63d83857fac3ca4f8b05b64e01bc50

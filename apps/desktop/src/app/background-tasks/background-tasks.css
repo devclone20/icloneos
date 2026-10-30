@@ -1,0 +1,103 @@
+/* ── The Background tasks door and panel (V3-A) ─────────────────────────────
+   Design freeze S24: existing tokens only, no colour declared here. The door's
+   pill IS the context door's pill (`.imsg-head__ctx-button`, msg-head.css) and
+   the panel hangs in the context card's chassis (`.imsg-head__ctx-panel`), so
+   the two doors on the band cannot drift apart. This file is only what is new
+   inside them. */
+
+/* The band is `pointer-events: none`; the door takes its own clicks back. */
+.imsg-head__bg {
+  position: relative;
+  flex: none;
+  pointer-events: auto;
+}
+
+.imsg-head__bg-glyph {
+  display: block;
+  flex: none;
+}
+
+.imsg-head__bg-count {
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ibg-panel {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.ibg-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ibg-panel__title {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  color: var(--ic-text-1);
+}
+
+.ibg-panel__note {
+  padding: 0 10px;
+}
+
+.ibg-panel__more {
+  justify-self: center;
+}
+
+.ibg-row {
+  align-items: flex-start;
+}
+
+/* An unseen death is the reason the panel exists: its row carries the danger
+   tone on its edge until the owner opens it. */
+.ibg-row[data-state='died']:not([data-seen]) {
+  border-color: var(--ic-danger);
+}
+
+.ibg-row > .icui-dot {
+  flex: none;
+  margin-top: 7px;
+}
+
+.ibg-row__glyph {
+  display: inline-flex;
+  flex: none;
+  padding-top: 2px;
+  color: var(--ic-text-3);
+}
+
+.ibg-row__body {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ibg-row__last {
+  font-family: var(--ic-font-mono);
+}
+
+/* "Did not stop" and its Retry share one line, wrapping on a narrow panel. */
+.ibg-row__stop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ibg-row__reason {
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+.ibg-row__dismiss {
+  flex: none;
+  background: none;
+  cursor: pointer;
+}

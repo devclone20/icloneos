@@ -1,0 +1,610 @@
+/* Right-edge "collections inft" control — pull tab + frosted panel of
+   metallic iNFT cards. Glass chrome mirrors dock.css / home.css / econ-panel
+   (same rgba(215,201,166,*) champagne hairlines, `--dt-midground` /
+   `--dt-foreground` tokens, `blur(var(--ic-blur-glass))` family, `'Noto Serif Display ExtraCondensed', serif` display
+   font). The cards are quiet by owner rule: the METAL lives
+   ONLY on the 1px edge hairline — no full-card foil, brush or glare.
+     .inft-card (gentle tilt, ±3.5°)
+       > __chrome (dark base + soft bevels)
+       > __art    (render or placeholder + bottom scrim, via ::after)
+       > __edge   (the machined arris: 1px metallic hairline, angle drifts
+                   a few degrees with the pointer — barely perceptible)
+       > __meta   (name / collection / chain chip / badge)
+
+   Tilt + the edge angle read `--px` / `--py`, written from ONE rAF-throttled
+   pointermove per card in collections.tsx — this file only ever *reads*
+   those vars, and only ever animates transform/opacity, never geometry. */
+
+/* ── Pull tab ──────────────────────────────────────────────────────────── */
+
+/* The iNFT island (owner rule): a small clean VERTICAL pill on the right
+   edge — nothing but the word. */
+.inft-tab {
+  position: fixed;
+  right: 12px;
+  /* Centred by auto margins, never by a translate — edge-autohide.ts reads
+     the resting band from layout offsets, which ignore transforms. */
+  inset-block: 0;
+  margin-block: auto;
+  height: fit-content;
+  z-index: var(--ic-z-ihome-inft-tab);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 10px;
+
+  border: 1px solid var(--ic-tab-line);
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-tab-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  cursor: pointer;
+
+  transition:
+    background-color var(--ic-dur-base) var(--ic-ease-spring),
+    transform var(--ic-dur-slow) var(--ic-ease-spring);
+}
+
+.inft-tab__label {
+  writing-mode: vertical-rl;
+  font:
+    600 11px/1 -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    sans-serif;
+  letter-spacing: 0.18em;
+  color: var(--ic-tab-label-ink);
+  opacity: 0.9;
+  white-space: nowrap;
+  transition:
+    opacity var(--ic-dur-base) var(--ic-ease-spring),
+    color var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.inft-tab:hover .inft-tab__label,
+.inft-tab:focus-visible .inft-tab__label {
+  opacity: 1;
+}
+
+/* Any right-edge island lands on exactly this rect (all are `right: 12px`),
+   so an open one left the tab sitting UNDER its glass — a ghost pill readable
+   through the frost, catching nothing. It steps off the right edge instead,
+   on the easing it already declared. `data-open` covers its own panel from
+   the first frame; the root attribute covers FILES too (right-edge.ts). */
+:root[data-iclone-island] .inft-tab,
+.inft-tab[data-open='true'] {
+  transform: translateX(calc(100% + 12px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* While a window is expanded the pill tucks behind the right edge exactly as
+   the Dock tucks behind the left one (dock.css), and slides back when the
+   pointer touches that edge level with it. Keyboard focus shows it too —
+   `:focus-visible`, not `:focus`: a mouse click must not pin it open. */
+.inft-tab[data-autohide] {
+  transition:
+    background-color var(--ic-dur-base) var(--ic-ease-spring),
+    transform var(--ic-dur-slow) var(--ic-ease-spring),
+    opacity var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.inft-tab[data-autohide]:not([data-revealed]):not(:focus-visible) {
+  transform: translateX(calc(100% + 12px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inft-tab {
+    transition:
+      width var(--ic-dur-fast) var(--ic-ease-spring),
+      background-color var(--ic-dur-fast) var(--ic-ease-spring);
+  }
+
+  .inft-tab[data-open='true'] {
+    transition: none;
+  }
+
+  /* No slide: the pill fades where it rests, so hiding is seen, not a jump. */
+  .inft-tab[data-autohide] {
+    transition:
+      background-color var(--ic-dur-fast) var(--ic-ease-spring),
+      opacity var(--ic-dur-fast) var(--ic-ease-std);
+  }
+
+  .inft-tab[data-autohide]:not([data-revealed]):not(:focus-visible) {
+    transform: none;
+  }
+}
+
+/* ── Scrim + panel ─────────────────────────────────────────────────────── */
+
+.inft-scrim {
+  position: fixed;
+  inset: 0;
+  /* Modal: above every piece of the Message window's chrome (see THE LADDER
+     in home.css). At z 41 the scrim dimmed the stage but the window's own
+     controls and its conversation rail kept floating on top of the panel. */
+  z-index: var(--ic-z-ihome-inft-scrim);
+
+  background: var(--ic-home-veil-35);
+  opacity: 0;
+  transition: opacity var(--ic-dur-slow) var(--ic-ease-std);
+}
+
+/* Belt and braces for the strand class of bug: a scrim mid-close (or one a
+   stalled close leaves behind) must never eat the app's clicks — its only job
+   while closing is to fade. */
+.inft-scrim[data-phase='closing'] {
+  pointer-events: none;
+}
+
+.inft-scrim[data-phase='entering'] {
+  opacity: 0;
+  transition: none;
+}
+
+.inft-scrim[data-phase='open'] {
+  opacity: 1;
+}
+
+.inft-panel {
+  position: fixed;
+  top: 56px;
+  bottom: 28px;
+  right: 12px;
+  z-index: var(--ic-z-ihome-inft-panel);
+  width: min(384px, 92vw);
+
+  display: flex;
+  flex-direction: column;
+
+  border: 1px solid var(--ic-inft-panel-line);
+  border-radius: var(--ic-radius-lg);
+  background: var(--ic-inft-panel-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  box-shadow: var(--ic-inft-panel-shadow);
+  color: var(--ic-text-1);
+
+  transform: translateX(100%);
+  transition: none;
+}
+
+.inft-panel[data-phase='open'] {
+  transform: translateX(0);
+  transition: transform var(--ic-dur-slow) var(--ic-ease-spring);
+}
+
+.inft-panel[data-phase='closing'] {
+  transform: translateX(100%);
+  transition: transform var(--ic-dur-slow) var(--ic-ease-spring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inft-scrim {
+    transition: opacity var(--ic-dur-base) var(--ic-ease-std);
+  }
+
+  .inft-panel {
+    transform: none;
+    opacity: 0;
+    transition: opacity var(--ic-dur-base) var(--ic-ease-std);
+  }
+
+  .inft-panel[data-phase='open'] {
+    opacity: 1;
+  }
+
+  .inft-panel[data-phase='closing'] {
+    opacity: 0;
+  }
+}
+
+/* ── Panel chrome ──────────────────────────────────────────────────────── */
+
+.inft-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding: 20px 18px 14px;
+}
+
+.inft-panel__title {
+  font:
+    600 13px/1 -apple-system,
+    BlinkMacSystemFont,
+    'SF Pro Display',
+    sans-serif;
+  text-transform: lowercase;
+  letter-spacing: 0.12em;
+  color: var(--ic-home-accent-80);
+}
+
+.inft-panel__close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-fill-hover);
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+.inft-panel__close:hover,
+.inft-panel__close:focus-visible {
+  background: var(--ic-hairline-accent);
+}
+
+.inft-panel__close:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+.inft-panel__empty {
+  color: var(--ic-home-ink-54);
+}
+
+.inft-panel__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 4px 18px 20px;
+  list-style: none;
+}
+
+/* ── Card entrance (stagger, mount-only) ──────────────────────────────── */
+
+.inft-card-slot {
+  display: block;
+  opacity: 0;
+  transform: translateX(24px);
+  animation: inft-card-in var(--ic-dur-slow) var(--ic-ease-spring) forwards;
+  animation-delay: calc(var(--i, 0) * 40ms);
+  /* Reorder displacement rides the `translate` property — independent from
+     the entrance animation's transform. */
+  transition: translate var(--ic-dur-base) var(--ic-ease-std);
+}
+
+/* After the first drag the stagger retires for good: React reorders move
+   <li> nodes, and a moved node would replay its CSS animation (flash). */
+.inft-panel__body--settled .inft-card-slot {
+  animation: none;
+  opacity: 1;
+  transform: none;
+}
+
+.inft-card-slot--dragging {
+  transition: none;
+  z-index: var(--ic-z-local-peak);
+  position: relative;
+}
+
+.inft-card-slot--dragging .inft-card {
+  cursor: grabbing;
+  touch-action: none;
+  box-shadow: var(--ic-shadow-card);
+}
+
+@keyframes inft-card-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inft-card-slot {
+    opacity: 0;
+    transform: none;
+    animation: inft-card-fade var(--ic-dur-base) var(--ic-ease-std) forwards;
+    animation-delay: 0ms;
+  }
+
+  @keyframes inft-card-fade {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+/* ── Card — 7-layer metallic stack ────────────────────────────────────── */
+
+.inft-card {
+  --px: 0.5;
+  --py: 0.5;
+  --pd: 0;
+
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 200px;
+  padding: 0;
+
+  border: 0;
+  border-radius: var(--ic-radius-lg);
+  background: transparent;
+  isolation: isolate;
+  cursor: pointer;
+  text-align: left;
+
+  transform: perspective(1100px) rotateX(calc((0.5 - var(--py)) * 7deg)) rotateY(calc((var(--px) - 0.5) * 7deg));
+  transform-style: preserve-3d;
+}
+
+/* No transition while the pointer drives --px/--py per frame (it would fight
+   the writes); the elastic settle only applies once the pointer leaves. */
+.inft-card:not(:hover):not(:focus-visible) {
+  transition: transform 600ms var(--ic-ease-spring);
+}
+
+.inft-card:hover,
+.inft-card:focus-visible {
+  will-change: transform;
+}
+
+.inft-card:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 3px;
+}
+
+/* House glass — the same frosted grammar as the dock rail and econ panels:
+   translucent ink + blur + a quiet champagne hairline (owner rule: cards in
+   the iclone frame theme, transparent frosted). */
+.inft-card__chrome {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+
+  /* Pure house frost — no gray tint (owner rule): the same glass as the
+     dock tiles and window tabs, only blur + a whisper of white. */
+  background: var(--ic-fill-hover);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  border: 1px solid var(--ic-home-ink-14);
+  box-shadow: var(--ic-shadow-tile);
+}
+
+.inft-card__art {
+  position: absolute;
+  inset: 1px;
+  overflow: hidden;
+  border-radius: var(--ic-radius-lg);
+  pointer-events: none;
+}
+
+/* Legibility scrim ONLY over real art — a plain frosted card stays pure
+   glass, no gray gradient (owner rule). */
+.inft-card__art:has(.inft-card__img)::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--ic-home-veil-54) 0%, var(--ic-home-veil-14) 42%, transparent 72%);
+}
+
+.inft-card__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 0.92;
+  object-fit: cover;
+}
+
+.inft-card__placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  /* Transparent: the frosted chrome underneath IS the tile. */
+  background: var(--ic-fill-hover);
+}
+
+/* The iCLONE head mark on empty cards — quiet frost-gray silhouette. */
+.inft-card__headmark {
+  width: 96px;
+  height: 96px;
+  fill: var(--ic-text-1);
+  opacity: 0.26;
+}
+
+/* The metal, by owner rule, lives ONLY on the edge: a 1px hairline whose
+   gradient angle drifts a few degrees with the pointer — barely perceptible,
+   like light walking along a machined arris. */
+.inft-card__edge {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: var(--ic-home-ink-14);
+  -webkit-mask:
+    linear-gradient(var(--ic-surface) 0 0) content-box,
+    linear-gradient(var(--ic-surface) 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(var(--ic-surface) 0 0) content-box,
+    linear-gradient(var(--ic-surface) 0 0);
+  mask-composite: exclude;
+  opacity: 0.5;
+  transition: opacity var(--ic-dur-slow) var(--ic-ease-std);
+}
+
+.inft-card:hover .inft-card__edge,
+.inft-card:focus-visible .inft-card__edge {
+  opacity: 0.85;
+}
+
+.inft-card__meta {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 12px 14px;
+}
+
+.inft-card__top-row {
+  position: absolute;
+  top: 11px;
+  right: 13px;
+}
+
+.inft-card__chain {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 9px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-home-ink-14);
+  background: var(--ic-fill-hover);
+  font-size: var(--ic-type-2xs);
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--ic-home-ink-72);
+}
+
+.inft-card__bottom-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.inft-card__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.inft-card__name {
+  overflow: hidden;
+  font-family: 'Noto Serif Display ExtraCondensed', serif;
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ic-home-ink-72);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inft-card__collection {
+  overflow: hidden;
+  margin-top: 3px;
+  font-size: var(--ic-type-2xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--ic-home-danger-60);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inft-card__badge {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: var(--ic-radius-pill);
+  font-size: var(--ic-type-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+}
+
+.inft-card__badge--gold {
+  border: 1px solid var(--ic-home-danger-40);
+  background: var(--ic-home-danger-10);
+  color: var(--ic-home-danger-88);
+}
+
+.inft-card__badge--dim {
+  border: 1px solid var(--ic-home-ink-14);
+  background: var(--ic-fill-hover);
+  color: var(--ic-home-ink-45);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inft-card {
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .inft-card__edge {
+    background: linear-gradient(135deg, var(--ic-home-accent-45), var(--ic-home-ink-30), var(--ic-home-gilt-40));
+    transition: none !important;
+  }
+}
+
+/* The single entry to collections answered hover only in the light theme —
+   in the dark themes the label nudged 0.1 opacity and nothing else. Same
+   fill every sibling pill uses, plus the house focus ring. */
+.inft-tab:hover,
+.inft-tab:focus-visible {
+  background: var(--ic-tab-hover-fill);
+}
+
+.inft-tab:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* Scan-in-progress: card-shaped shimmer slots in the wallet skeleton's exact
+   grammar, so "loading" and "empty" stop wearing the same face. */
+.inft-panel__skeletons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.inft-panel__skeleton {
+  height: 200px;
+  border-radius: var(--ic-radius-lg);
+  background: linear-gradient(100deg, var(--ic-fill-hover) 32%, var(--ic-border-subtle) 48%, var(--ic-fill-hover) 64%);
+  background-size: 220% 100%;
+  animation: inft-skeleton-sweep 1.3s ease-in-out infinite;
+}
+
+@keyframes inft-skeleton-sweep {
+  from {
+    background-position: 130% 0;
+  }
+
+  to {
+    background-position: -70% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .inft-panel__skeleton {
+    animation: none;
+    opacity: 0.7;
+  }
+}

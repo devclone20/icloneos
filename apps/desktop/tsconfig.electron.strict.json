@@ -1,0 +1,14 @@
+{
+  "//": "PLANO L / L8: the electron project with TRUE strict (no per-flag overrides). Gate target 0 errors; when reached, the overrides leave tsconfig.electron.json and this file is deleted.",
+  "extends": "./tsconfig.electron.json",
+  "compilerOptions": {
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "composite": false,
+    "declaration": false
+  }
+}

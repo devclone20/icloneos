@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "os": "linux",
+  "available": false,
+  "reason": "not available in v0.0.3 (owner decision D3)",
+  "planned": { "backends": ["bubblewrap", "landlock"], "classes": ["research", "project", "build", "offline", "media"] }
+}

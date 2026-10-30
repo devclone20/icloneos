@@ -1,0 +1,224 @@
+{
+  "v": 3,
+  "about": "K133 + G3-1: the one definition of 'Apple container is installed', read by the app (electron/iclone-confinement/probe.test.ts) and the Hermes plugin (tests/plugins/test_iclone_confinement.py), each held to the same verdict per case. Installed = Apple silicon on macOS 26 or later (Darwin 25+) AND the first fixed path that exists (in this order; PATH never counts) AND that file is executable AND `--version` exits 0 within the timeout with stdout in the CLI's own format (versionPattern, anchored at the start: not any x.y.z anywhere). A --version that does not finish in time is `unknown` / `probe-timeout` (neutral: could not check, G3-2), never broken; red is for a definite failure only. `seen` is the clause both sides put in the spawn refusal. G3 r2 m-1: every answer is RAW BYTES (`stdoutBytes`/`stderrBytes`: one character per byte, U+0000-U+00FF, i.e. latin-1), read by both sides with one rule (`output`): at most maxBytes per stream (more is stopped: a definite failure, `output-too-large`), decoded as UTF-8 with invalid bytes replaced, stripped of exactly \" \\t\\r\\n\", matched with ASCII digits only. `read` is the text both sides must read from those bytes (decoded and stripped), checked through the stub runner. `programs` are real files (with `stdoutLength`, the exact byte count the program prints, so the bound is pinned to the byte) each side writes and runs through its REAL runner.",
+  "candidates": ["/usr/local/bin/container", "/opt/homebrew/bin/container"],
+  "versionPattern": "^container CLI version ([0-9]+\\.[0-9]+\\.[0-9]+)(?=[ \\t\\r\\n]|$)",
+  "output": {"maxBytes": 65536, "decode": "utf-8, every invalid byte replaced by U+FFFD", "strip": " \t\r\n", "overflowError": "output-too-large"},
+  "versionTimeoutMs": 3000,
+  "platform": {"platform": "darwin", "arch": "arm64", "minDarwinMajor": 25},
+  "cases": [
+    {"name": "Apple's signed installer", "present": ["/usr/local/bin/container"], "onPath": null, "installed": "/usr/local/bin/container"},
+    {"name": "Homebrew", "present": ["/opt/homebrew/bin/container"], "onPath": null, "installed": "/opt/homebrew/bin/container"},
+    {"name": "both: the installer's path wins", "present": ["/usr/local/bin/container", "/opt/homebrew/bin/container"], "onPath": null, "installed": "/usr/local/bin/container"},
+    {"name": "only on PATH: not installed", "present": ["/Users/o/bin/container"], "onPath": "/Users/o/bin/container", "installed": null},
+    {"name": "a shim earlier on PATH never replaces the fixed path", "present": ["/tmp/shim/container", "/opt/homebrew/bin/container"], "onPath": "/tmp/shim/container", "installed": "/opt/homebrew/bin/container"},
+    {"name": "nowhere", "present": [], "onPath": null, "installed": null}
+  ],
+  "verdicts": [
+    {
+      "name": "good: the CLI's own answer",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "installed", "detail": "not-wired", "version": "1.5.0", "seen": "installed (1.5.0) but not used", "runs": true}
+    },
+    {
+      "name": "good: Homebrew, a newer version than the pin",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 26},
+      "present": ["/opt/homebrew/bin/container"], "executable": ["/opt/homebrew/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.6.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "installed", "detail": "not-wired", "version": "1.6.0", "seen": "installed (1.6.0) but not used", "runs": true}
+    },
+    {
+      "name": "present but not executable: broken, and never run",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": [],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": false}
+    },
+    {
+      "name": "a non-executable installer path is not replaced by Homebrew's",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container", "/opt/homebrew/bin/container"], "executable": ["/opt/homebrew/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": false}
+    },
+    {
+      "name": "garbage output, exit 0",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "wrong tool: a version number that is not the CLI's answer",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "this tool requires macOS 26.0.1\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "wrong tool: the CLI's words, not at the start",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "my-wrapper: container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "wrong format: no word boundary after the version",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0-shim\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "the answer on stderr only",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "", "stderrBytes": "container CLI version 1.5.0\n", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "non-zero exit, even with a good-looking answer",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 1, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "XPC connection error\n", "timedOut": false, "error": null},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "it cannot be executed (exec error)",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": null, "stdoutBytes": "", "stderrBytes": "", "timedOut": false, "error": "ENOEXEC"},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "timeout under load: could not check (neutral), never broken",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": null, "stdoutBytes": "", "stderrBytes": "", "timedOut": true, "error": null},
+      "expect": {"status": "unknown", "detail": "probe-timeout", "version": null, "seen": "installed, but its check did not finish in time", "runs": true}
+    },
+    {
+      "name": "Intel, with a good binary present",
+      "host": {"platform": "darwin", "arch": "x64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "unsupported", "detail": "needs-apple-silicon", "version": null, "seen": "this Mac cannot run it", "runs": false}
+    },
+    {
+      "name": "before macOS 26, with a good binary present",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 24},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "unsupported", "detail": "needs-apple-silicon", "version": null, "seen": "this Mac cannot run it", "runs": false}
+    },
+    {
+      "name": "not on a Mac",
+      "host": {"platform": "linux", "arch": "arm64", "darwinMajor": 0},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "unsupported", "detail": "needs-apple-silicon", "version": null, "seen": "this Mac cannot run it", "runs": false}
+    },
+    {
+      "name": "not installed",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": [], "executable": [],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "not-installed", "detail": "not-installed", "version": null, "seen": "not installed on this Mac", "runs": false}
+    },
+    {
+      "name": "bytes that are not UTF-8 only: a definite failure, never an exception",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "\u00ff\u00fe\u0000garbage\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "read": "\ufffd\ufffd\u0000garbage",
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "the good line, then bytes that are not UTF-8: replaced, still the CLI's answer",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0 (build \u00ff)\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "installed", "detail": "not-wired", "version": "1.5.0", "seen": "installed (1.5.0) but not used", "runs": true}
+    },
+    {
+      "name": "Arabic-Indic digits are not the CLI's version (ASCII digits only)",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version \u00d9\u00a1.\u00d9\u00a5.\u00d9\u00a0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "read": "container CLI version \u0661.\u0665.\u0660",
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "a trailing control character (\\x1c) is not stripped",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\u001c\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "read": "container CLI version 1.5.0\u001c",
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "a no-break space after the version is not a boundary",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\u00c2\u00a0(build)\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "read": "container CLI version 1.5.0\u00a0(build)",
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "a leading byte-order mark is not stripped",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "\u00ef\u00bb\u00bfcontainer CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "read": "\ufeffcontainer CLI version 1.5.0",
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    },
+    {
+      "name": "a leading blank line and spaces are stripped",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "\n  container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "installed", "detail": "not-wired", "version": "1.5.0", "seen": "installed (1.5.0) but not used", "runs": true}
+    },
+    {
+      "name": "CRLF line ending",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": 0, "stdoutBytes": "container CLI version 1.5.0\r\n", "stderrBytes": "", "timedOut": false, "error": null},
+      "expect": {"status": "installed", "detail": "not-wired", "version": "1.5.0", "seen": "installed (1.5.0) but not used", "runs": true}
+    },
+    {
+      "name": "more than the bound: stopped, a definite failure, never the timeout",
+      "host": {"platform": "darwin", "arch": "arm64", "darwinMajor": 25},
+      "present": ["/usr/local/bin/container"], "executable": ["/usr/local/bin/container"],
+      "answer": {"code": null, "stdoutBytes": "container CLI version 1.5.0\n", "stderrBytes": "", "timedOut": false, "error": "output-too-large"},
+      "expect": {"status": "broken", "detail": "no-version", "version": null, "seen": "installed, but its check failed", "runs": true}
+    }
+  ],
+  "programs": [
+    {"name": "good", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "good, Homebrew only", "files": {"/opt/homebrew/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "good after a blank line and spaces", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf \"\\n  container CLI version 1.5.0\\n\"\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "good with CRLF", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf \"container CLI version 1.5.0\\r\\n\"\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "not executable", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 420}}, "expect": {"status": "broken", "version": null}},
+    {"name": "not executable at the installer path, good at Homebrew's", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 420}, "/opt/homebrew/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "garbage text", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"hello world\"\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "bytes that are not UTF-8 only", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf '\\377\\376\\000garbage\\n'\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "the good line, then bytes that are not UTF-8", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf 'container CLI version 1.5.0 (build \\377)\\n'\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "Arabic-Indic digits", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf 'container CLI version \\331\\241.\\331\\245.\\331\\240\\n'\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "a trailing \\x1c", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\nprintf 'container CLI version 1.5.0\\034\\n'\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "a version anywhere in a message", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"this tool requires macOS 26.0.1\"\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "non-zero exit with the good text", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nexit 1\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "the good answer on stderr only", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\" 1>&2\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "no shebang", "files": {"/usr/local/bin/container": {"bytes": "echo \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "a missing interpreter", "files": {"/usr/local/bin/container": {"bytes": "#!/nonexistent/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "good, then output just under the bound", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nhead -c 60000 /dev/zero | tr '\\\\0' x\n", "mode": 493}}, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "good, then 2 MB of output: over the bound", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nhead -c 2000000 /dev/zero | tr '\\\\0' x\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "nowhere", "files": {}, "expect": {"status": "not-installed", "version": null}},
+    {"name": "killed by a signal that is not the timeout, after the good line", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nkill -KILL $$\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "stops itself (SIGTERM) after the good line", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nkill -TERM $$\n", "mode": 493}}, "expect": {"status": "broken", "version": null}},
+    {"name": "good, then exactly the bound (65 536 bytes): kept", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nhead -c 65474 /dev/zero | tr '\\\\0' x\n", "mode": 493}}, "stdoutLength": 65536, "expect": {"status": "installed", "version": "1.5.0"}},
+    {"name": "good, then the bound + 1 (65 537 bytes): stopped", "files": {"/usr/local/bin/container": {"bytes": "#!/bin/sh\necho \"container CLI version 1.5.0 (build: release, commit: 3f2a9c1)\"\nhead -c 65475 /dev/zero | tr '\\\\0' x\n", "mode": 493}}, "stdoutLength": 65537, "expect": {"status": "broken", "version": null}}
+  ]
+}

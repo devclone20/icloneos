@@ -1,0 +1,60 @@
+import type { Dispatch, SetStateAction } from 'react'
+
+import type { HermesGateway } from '@/hermes'
+import type { IconComponent } from '@/lib/icons'
+import type { EnvVarInfo } from '@/types/hermes'
+
+export type SettingsView =
+  | 'about'
+  | 'billing'
+  | 'connections'
+  | 'diagnostics'
+  /** Legacy id of `updates`, kept for old `?tab=` links (U4-p2b-09). */
+  | 'app-atualisation'
+  | 'economyos'
+  | 'engine'
+  | 'gateway'
+  | 'hud'
+  | 'inft'
+  | 'inft-book'
+  | 'it-terminal'
+  | 'keybinds'
+  | 'keys'
+  | 'notifications'
+  | 'permissions'
+  | 'plugins'
+  | 'privacy'
+  | 'providers'
+  | 'sessions'
+  | 'sessions-bots'
+  | 'setup'
+  | 'skills'
+  | 'updates'
+  | `config:${string}`
+
+export interface SettingsPageProps {
+  gateway?: HermesGateway | null
+  onClose: () => void
+  onConfigSaved?: () => void
+  onMainModelChanged?: (provider: string, model: string) => void
+}
+
+export interface DesktopConfigSection {
+  id: string
+  label: string
+  icon: IconComponent
+  keys: string[]
+}
+
+export interface EnvRowProps {
+  varKey: string
+  info: EnvVarInfo
+  edits: Record<string, string>
+  revealed: Record<string, string>
+  saving: string | null
+  setEdits: Dispatch<SetStateAction<Record<string, string>>>
+  onSave: (key: string) => void
+  onClear: (key: string) => void
+  onReveal: (key: string) => void
+  compact?: boolean
+}

@@ -1,0 +1,1019 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OfferingEditor markup > a new, empty offering 1`] = `
+"<form aria-label="New offering" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My offerings</button>
+<span class="mk-heading">New offering</span>
+</div>
+<div class="e-toolbar__end">
+<span class="mk-usage" data-state="closed" data-slot="tooltip-trigger">2 / 40</span>
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Listing</h4>
+<p class="mk-fset__hint">What buyers read when they search the marketplace.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">0 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Token research report" spellcheck="true" class="e-input" type="text" value="">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">0 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What you deliver, how, and for whom — one or two sentences." spellcheck="true" class="e-textarea mk-textarea" rows="3">
+</textarea>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-4" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-4">Price &amp; delivery</h4>
+<p class="mk-fset__hint">The price is escrowed when a buyer funds the job.</p>
+</header>
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fixed · USDC</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">Share of job value</button>
+</div>
+<div class="mk-editor__pair">
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-5">Price</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-5-note" id="id-5" placeholder="0.5" spellcheck="false" class="e-input mk-mono" inputmode="decimal" type="text" value="">
+<span aria-hidden="true" class="mk-input__suffix">USDC</span>
+</div>
+<p class="mk-input__hint" id="id-5-note">Paid in USDC — above 0.</p>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-6">SLA</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-6-note" id="id-6" placeholder="60" spellcheck="false" class="e-input mk-mono" inputmode="numeric" type="text" value="60">
+<span aria-hidden="true" class="mk-input__suffix">min</span>
+</div>
+<p class="mk-input__hint" id="id-6-note">Delivered within 1 h.</p>
+</div>
+</div>
+<div aria-label="SLA presets" class="mk-presets" role="group">
+<button aria-pressed="false" class="mk-cat" type="button">15 min</button>
+<button aria-pressed="true" class="mk-cat mk-cat--on" type="button">1 h</button>
+<button aria-pressed="false" class="mk-cat" type="button">4 h</button>
+<button aria-pressed="false" class="mk-cat" type="button">1 day</button>
+</div>
+</section>
+<section aria-labelledby="id-7" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-7">Requirements</h4>
+<p class="mk-fset__hint">What a buyer sends when hiring. With fields or a JSON schema, ACP checks the buyer’s input before the job starts.</p>
+</header>
+<div aria-label="Requirements" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<ol class="mk-builder__list">
+<li class="mk-builder__row">
+<input aria-label="Requirements field 1 name" class="e-input mk-mono mk-builder__name" placeholder="field_name" spellcheck="false" value="">
+<select aria-label="Requirements field 1 type" class="e-select mk-builder__type">
+<option value="string">text</option>
+<option value="number">number</option>
+<option value="boolean">yes / no</option>
+<option value="array">list of text</option>
+</select>
+<label class="mk-builder__req">
+<input type="checkbox" checked="">required</label>
+<button aria-label="Remove Requirements field 1" class="e-ibtn" type="button" data-state="closed" data-slot="tooltip-trigger">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true">
+<path d="M18 6 6 18">
+</path>
+<path d="m6 6 12 12">
+</path>
+</svg>
+</button>
+<input aria-label="Requirements field 1 description" class="e-input mk-builder__desc" placeholder="What the buyer puts here" value="">
+</li>
+</ol>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-8" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-8">Deliverable</h4>
+<p class="mk-fset__hint">What the buyer receives when you deliver.</p>
+</header>
+<div aria-label="Deliverable" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<textarea aria-label="Deliverable — plain text" class="e-textarea mk-textarea" placeholder="A markdown report with sources." rows="3">
+</textarea>
+</div>
+</section>
+<section aria-labelledby="id-9" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-9">Options</h4>
+</header>
+<label class="mk-toggle" for="id-10">
+<input aria-describedby="id-10-hint" class="mk-toggle__input" id="id-10" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Requires funds up front</span>
+<span class="mk-toggle__hint" id="id-10-hint">The buyer transfers working capital with the job — for trades or purchases made on their behalf.</span>
+</span>
+</label>
+<label class="mk-toggle" for="id-11">
+<input aria-describedby="id-11-hint" class="mk-toggle__input" id="id-11" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-11-hint">Kept off marketplace search.</span>
+</span>
+</label>
+<div aria-label="Subscription packages" class="mk-subs" role="group">
+<p class="mk-input__label">
+<span>Subscription packages</span>
+</p>
+<ul class="mk-subs__list">
+<li>
+<label class="mk-subs__item">
+<input type="checkbox">
+<span class="mk-subs__name">Monthly</span>
+<span class="mk-subs__meta">25 USDC / 30 days</span>
+</label>
+</li>
+</ul>
+<p class="mk-input__hint">A buyer on an active package hires the offerings attached to it at no extra cost until it expires.</p>
+</div>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as buyers see it</p>
+<article class="mk-offer">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Untitled offering</h4>
+<span class="mk-offer__price">price on request</span>
+</header>
+<div class="mk-offer__facts">
+<span class="e-pill e-pill--muted">fixed</span>
+<span class="e-pill e-pill--muted">
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer" aria-hidden="true">
+<line x1="10" x2="14" y1="2" y2="2">
+</line>
+<line x1="12" x2="15" y1="14" y2="11">
+</line>
+<circle cx="12" cy="14" r="8">
+</circle>
+</svg>1 h SLA</span>
+</div>
+<div class="mk-offer__block">
+<p class="mk-label">Requirements</p>
+<p class="mk-offer__quiet">None — nothing to fill in.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" type="submit">Create offering</button>
+</div>
+</footer>
+</form>"
+`;
+
+exports[`OfferingEditor markup > a share-of-value offering saving after a failure, subscriptions unread 1`] = `
+"<form aria-label="New offering" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My offerings</button>
+<span class="mk-heading">New offering</span>
+</div>
+<div class="e-toolbar__end">
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Listing</h4>
+<p class="mk-fset__hint">What buyers read when they search the marketplace.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">14 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Token research report" spellcheck="true" class="e-input" type="text" value="Contract audit">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">27 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What you deliver, how, and for whom — one or two sentences." spellcheck="true" class="e-textarea mk-textarea" rows="3">Audits a Solidity contract.</textarea>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-4" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-4">Price &amp; delivery</h4>
+<p class="mk-fset__hint">The price is escrowed when a buyer funds the job.</p>
+</header>
+<div class="e-tabs" role="tablist">
+<button aria-selected="false" class="e-tab" role="tab" type="button">Fixed · USDC</button>
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Share of job value</button>
+</div>
+<div class="mk-editor__pair">
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-5">Share</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-5-note" id="id-5" placeholder="5" spellcheck="false" class="e-input mk-mono" inputmode="decimal" type="text" value="5">
+<span aria-hidden="true" class="mk-input__suffix">%</span>
+</div>
+<p class="mk-input__hint" id="id-5-note">Sent to ACP as 5 of the job’s value.</p>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-6">SLA</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-6-note" id="id-6" placeholder="60" spellcheck="false" class="e-input mk-mono" inputmode="numeric" type="text" value="240">
+<span aria-hidden="true" class="mk-input__suffix">min</span>
+</div>
+<p class="mk-input__hint" id="id-6-note">Delivered within 4 h.</p>
+</div>
+</div>
+<div aria-label="SLA presets" class="mk-presets" role="group">
+<button aria-pressed="false" class="mk-cat" type="button">15 min</button>
+<button aria-pressed="false" class="mk-cat" type="button">1 h</button>
+<button aria-pressed="true" class="mk-cat mk-cat--on" type="button">4 h</button>
+<button aria-pressed="false" class="mk-cat" type="button">1 day</button>
+</div>
+</section>
+<section aria-labelledby="id-7" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-7">Requirements</h4>
+<p class="mk-fset__hint">What a buyer sends when hiring. With fields or a JSON schema, ACP checks the buyer’s input before the job starts.</p>
+</header>
+<div aria-label="Requirements" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<ol class="mk-builder__list">
+<li class="mk-builder__row">
+<input aria-label="Requirements field 1 name" class="e-input mk-mono mk-builder__name" placeholder="field_name" spellcheck="false" value="">
+<select aria-label="Requirements field 1 type" class="e-select mk-builder__type">
+<option value="string">text</option>
+<option value="number">number</option>
+<option value="boolean">yes / no</option>
+<option value="array">list of text</option>
+</select>
+<label class="mk-builder__req">
+<input type="checkbox" checked="">required</label>
+<button aria-label="Remove Requirements field 1" class="e-ibtn" type="button" data-state="closed" data-slot="tooltip-trigger">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true">
+<path d="M18 6 6 18">
+</path>
+<path d="m6 6 12 12">
+</path>
+</svg>
+</button>
+<input aria-label="Requirements field 1 description" class="e-input mk-builder__desc" placeholder="What the buyer puts here" value="">
+</li>
+</ol>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-8" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-8">Deliverable</h4>
+<p class="mk-fset__hint">What the buyer receives when you deliver.</p>
+</header>
+<div aria-label="Deliverable" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<textarea aria-label="Deliverable — plain text" class="e-textarea mk-textarea" placeholder="A markdown report with sources." rows="3">
+</textarea>
+</div>
+</section>
+<section aria-labelledby="id-9" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-9">Options</h4>
+</header>
+<label class="mk-toggle" for="id-10">
+<input aria-describedby="id-10-hint" class="mk-toggle__input" id="id-10" role="switch" type="checkbox" checked="">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Requires funds up front</span>
+<span class="mk-toggle__hint" id="id-10-hint">The buyer transfers working capital with the job — for trades or purchases made on their behalf.</span>
+</span>
+</label>
+<label class="mk-toggle" for="id-11">
+<input aria-describedby="id-11-hint" class="mk-toggle__input" id="id-11" role="switch" type="checkbox" checked="">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-11-hint">Kept off marketplace search.</span>
+</span>
+</label>
+<div aria-label="Subscription packages" class="mk-subs" role="group">
+<p class="mk-input__label">
+<span>Subscription packages</span>
+</p>
+<ul class="mk-subs__list">
+<li>
+<label class="mk-subs__item">
+<input type="checkbox" checked="">
+<span class="mk-subs__name mk-mono">sub-1</span>
+<span class="mk-subs__meta">attached</span>
+</label>
+</li>
+</ul>
+<p class="mk-input__hint">Reading your packages…</p>
+</div>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as buyers see it</p>
+<article class="mk-offer">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Contract audit</h4>
+<span class="mk-offer__price">5%</span>
+</header>
+<div class="mk-offer__facts">
+<span class="e-pill e-pill--muted">share of value</span>
+<span class="e-pill e-pill--muted">
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer" aria-hidden="true">
+<line x1="10" x2="14" y1="2" y2="2">
+</line>
+<line x1="12" x2="15" y1="14" y2="11">
+</line>
+<circle cx="12" cy="14" r="8">
+</circle>
+</svg>4 h SLA</span>
+<span class="e-pill e-pill--warn">requires funds</span>
+<span class="e-pill e-pill--muted">hidden</span>
+</div>
+<p class="mk-offer__desc">Audits a Solidity contract.</p>
+<div class="mk-offer__block">
+<p class="mk-label">Requirements</p>
+<p class="mk-offer__quiet">None — nothing to fill in.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<p class="e-note e-note--error" role="alert">Price must be a number.</p>
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" disabled="" type="submit">Creating…</button>
+</div>
+</footer>
+</form>"
+`;
+
+exports[`OfferingEditor markup > an offering being edited 1`] = `
+"<form aria-label="Edit offering" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My offerings</button>
+<span class="mk-heading">Edit offering</span>
+</div>
+<div class="e-toolbar__end">
+<span class="mk-usage" data-state="closed" data-slot="tooltip-trigger">3 / 40</span>
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Listing</h4>
+<p class="mk-fset__hint">What buyers read when they search the marketplace.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">14 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Token research report" spellcheck="true" class="e-input" type="text" value="Contract audit">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">27 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What you deliver, how, and for whom — one or two sentences." spellcheck="true" class="e-textarea mk-textarea" rows="3">Audits a Solidity contract.</textarea>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-4" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-4">Price &amp; delivery</h4>
+<p class="mk-fset__hint">The price is escrowed when a buyer funds the job.</p>
+</header>
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fixed · USDC</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">Share of job value</button>
+</div>
+<div class="mk-editor__pair">
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-5">Price</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-5-note" id="id-5" placeholder="0.5" spellcheck="false" class="e-input mk-mono" inputmode="decimal" type="text" value="120">
+<span aria-hidden="true" class="mk-input__suffix">USDC</span>
+</div>
+<p class="mk-input__hint" id="id-5-note">Paid in USDC — above 0.</p>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-6">SLA</label>
+</div>
+<div class="mk-input__box mk-input__box--suffix">
+<input aria-describedby="id-6-note" id="id-6" placeholder="60" spellcheck="false" class="e-input mk-mono" inputmode="numeric" type="text" value="240">
+<span aria-hidden="true" class="mk-input__suffix">min</span>
+</div>
+<p class="mk-input__hint" id="id-6-note">Delivered within 4 h.</p>
+</div>
+</div>
+<div aria-label="SLA presets" class="mk-presets" role="group">
+<button aria-pressed="false" class="mk-cat" type="button">15 min</button>
+<button aria-pressed="false" class="mk-cat" type="button">1 h</button>
+<button aria-pressed="true" class="mk-cat mk-cat--on" type="button">4 h</button>
+<button aria-pressed="false" class="mk-cat" type="button">1 day</button>
+</div>
+</section>
+<section aria-labelledby="id-7" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-7">Requirements</h4>
+<p class="mk-fset__hint">What a buyer sends when hiring. With fields or a JSON schema, ACP checks the buyer’s input before the job starts.</p>
+</header>
+<div aria-label="Requirements" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<ol class="mk-builder__list">
+<li class="mk-builder__row">
+<input aria-label="Requirements field 1 name" class="e-input mk-mono mk-builder__name" placeholder="field_name" spellcheck="false" value="">
+<select aria-label="Requirements field 1 type" class="e-select mk-builder__type">
+<option value="string">text</option>
+<option value="number">number</option>
+<option value="boolean">yes / no</option>
+<option value="array">list of text</option>
+</select>
+<label class="mk-builder__req">
+<input type="checkbox" checked="">required</label>
+<button aria-label="Remove Requirements field 1" class="e-ibtn" type="button" data-state="closed" data-slot="tooltip-trigger">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true">
+<path d="M18 6 6 18">
+</path>
+<path d="m6 6 12 12">
+</path>
+</svg>
+</button>
+<input aria-label="Requirements field 1 description" class="e-input mk-builder__desc" placeholder="What the buyer puts here" value="">
+</li>
+</ol>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-8" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-8">Deliverable</h4>
+<p class="mk-fset__hint">What the buyer receives when you deliver.</p>
+</header>
+<div aria-label="Deliverable" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Plain text</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<textarea aria-label="Deliverable — plain text" class="e-textarea mk-textarea" placeholder="A markdown report with sources." rows="3">
+</textarea>
+</div>
+</section>
+<section aria-labelledby="id-9" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-9">Options</h4>
+</header>
+<label class="mk-toggle" for="id-10">
+<input aria-describedby="id-10-hint" class="mk-toggle__input" id="id-10" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Requires funds up front</span>
+<span class="mk-toggle__hint" id="id-10-hint">The buyer transfers working capital with the job — for trades or purchases made on their behalf.</span>
+</span>
+</label>
+<label class="mk-toggle" for="id-11">
+<input aria-describedby="id-11-hint" class="mk-toggle__input" id="id-11" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-11-hint">Kept off marketplace search.</span>
+</span>
+</label>
+<div aria-label="Subscription packages" class="mk-subs" role="group">
+<p class="mk-input__label">
+<span>Subscription packages</span>
+</p>
+<p class="mk-input__hint">No packages yet. A package lets a buyer pay once for repeated jobs — ask Atlas to create one.</p>
+</div>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as buyers see it</p>
+<article class="mk-offer">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Contract audit</h4>
+<span class="mk-offer__price">120 USDC</span>
+</header>
+<div class="mk-offer__facts">
+<span class="e-pill e-pill--muted">fixed</span>
+<span class="e-pill e-pill--muted">
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-timer" aria-hidden="true">
+<line x1="10" x2="14" y1="2" y2="2">
+</line>
+<line x1="12" x2="15" y1="14" y2="11">
+</line>
+<circle cx="12" cy="14" r="8">
+</circle>
+</svg>4 h SLA</span>
+</div>
+<p class="mk-offer__desc">Audits a Solidity contract.</p>
+<div class="mk-offer__block">
+<p class="mk-label">Requirements</p>
+<p class="mk-offer__quiet">None — nothing to fill in.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" type="submit">Save changes</button>
+</div>
+</footer>
+</form>"
+`;
+
+exports[`ResourceEditor markup > a filled resource 1`] = `
+"<form aria-label="New resource" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My resources</button>
+<span class="mk-heading">New resource</span>
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Endpoint</h4>
+<p class="mk-fset__hint">Other agents call it directly — no job, no escrow.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">12 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Live token price" spellcheck="true" class="e-input" type="text" value="Weather feed">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">30 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What it returns, and how often it updates." spellcheck="true" class="e-textarea mk-textarea" rows="3">Hourly forecasts for any city.</textarea>
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-4">URL</label>
+<span class="mk-input__count">31 / 500</span>
+</div>
+<div class="mk-input__box">
+<input aria-describedby="id-4-note" id="id-4" placeholder="https://api.example.com/v1/price" spellcheck="false" class="e-input mk-mono" inputmode="url" type="text" value="https://api.example.com/weather">
+</div>
+<p class="mk-input__hint" id="id-4-note">https only — every buyer can read it, so keep keys and tokens out.</p>
+</div>
+</section>
+<section aria-labelledby="id-5" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-5">Params</h4>
+<p class="mk-fset__hint">The query a caller sends. No fields means it takes none.</p>
+</header>
+<div aria-label="Params" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<p class="mk-input__hint">No fields — callers send nothing.</p>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-6" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-6">Options</h4>
+</header>
+<label class="mk-toggle" for="id-7">
+<input aria-describedby="id-7-hint" class="mk-toggle__input" id="id-7" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-7-hint">Kept off marketplace search.</span>
+</span>
+</label>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as callers see it</p>
+<article class="mk-offer mk-res">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Weather feed</h4>
+</header>
+<p class="mk-offer__desc">Hourly forecasts for any city.</p>
+<p class="mk-res__url">
+<button class="e-link" type="button" data-state="closed" data-slot="tooltip-trigger">
+<span class="mk-res__href">https://api.example.com/weather</span>
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link" aria-hidden="true">
+<path d="M15 3h6v6">
+</path>
+<path d="M10 14 21 3">
+</path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6">
+</path>
+</svg>
+</button>
+</p>
+<div class="mk-offer__block">
+<p class="mk-label">Params</p>
+<p class="mk-offer__quiet">None — call it as is.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" type="submit">Publish resource</button>
+</div>
+</footer>
+</form>"
+`;
+
+exports[`ResourceEditor markup > a hidden resource saving after a failure 1`] = `
+"<form aria-label="New resource" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My resources</button>
+<span class="mk-heading">New resource</span>
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Endpoint</h4>
+<p class="mk-fset__hint">Other agents call it directly — no job, no escrow.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">12 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Live token price" spellcheck="true" class="e-input" type="text" value="Weather feed">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">30 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What it returns, and how often it updates." spellcheck="true" class="e-textarea mk-textarea" rows="3">Hourly forecasts for any city.</textarea>
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-4">URL</label>
+<span class="mk-input__count">31 / 500</span>
+</div>
+<div class="mk-input__box">
+<input aria-describedby="id-4-note" id="id-4" placeholder="https://api.example.com/v1/price" spellcheck="false" class="e-input mk-mono" inputmode="url" type="text" value="https://api.example.com/weather">
+</div>
+<p class="mk-input__hint" id="id-4-note">https only — every buyer can read it, so keep keys and tokens out.</p>
+</div>
+</section>
+<section aria-labelledby="id-5" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-5">Params</h4>
+<p class="mk-fset__hint">The query a caller sends. No fields means it takes none.</p>
+</header>
+<div aria-label="Params" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<p class="mk-input__hint">No fields — callers send nothing.</p>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-6" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-6">Options</h4>
+</header>
+<label class="mk-toggle" for="id-7">
+<input aria-describedby="id-7-hint" class="mk-toggle__input" id="id-7" role="switch" type="checkbox" checked="">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-7-hint">Kept off marketplace search.</span>
+</span>
+</label>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as callers see it</p>
+<article class="mk-offer mk-res">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Weather feed</h4>
+<span class="e-pill e-pill--muted">hidden</span>
+</header>
+<p class="mk-offer__desc">Hourly forecasts for any city.</p>
+<p class="mk-res__url">
+<button class="e-link" type="button" data-state="closed" data-slot="tooltip-trigger">
+<span class="mk-res__href">https://api.example.com/weather</span>
+<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-external-link" aria-hidden="true">
+<path d="M15 3h6v6">
+</path>
+<path d="M10 14 21 3">
+</path>
+<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6">
+</path>
+</svg>
+</button>
+</p>
+<div class="mk-offer__block">
+<p class="mk-label">Params</p>
+<p class="mk-offer__quiet">None — call it as is.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<p class="e-note e-note--error" role="alert">The service refused the write.</p>
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" disabled="" type="submit">Publishing…</button>
+</div>
+</footer>
+</form>"
+`;
+
+exports[`ResourceEditor markup > a new, empty resource 1`] = `
+"<form aria-label="New resource" class="mk-editor" novalidate="">
+<div class="e-toolbar">
+<div class="e-toolbar__start">
+<button class="mk-back__btn" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left" aria-hidden="true">
+<path d="m12 19-7-7 7-7">
+</path>
+<path d="M19 12H5">
+</path>
+</svg>My resources</button>
+<span class="mk-heading">New resource</span>
+</div>
+</div>
+<div class="e-scroll mk-editor__scroll">
+<div class="mk-editor__grid">
+<div class="mk-editor__form">
+<section aria-labelledby="id-1" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-1">Endpoint</h4>
+<p class="mk-fset__hint">Other agents call it directly — no job, no escrow.</p>
+</header>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-2">Name</label>
+<span class="mk-input__count">0 / 120</span>
+</div>
+<div class="mk-input__box">
+<input id="id-2" placeholder="Live token price" spellcheck="true" class="e-input" type="text" value="">
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-3">Description</label>
+<span class="mk-input__count">0 / 2,000</span>
+</div>
+<div class="mk-input__box">
+<textarea id="id-3" placeholder="What it returns, and how often it updates." spellcheck="true" class="e-textarea mk-textarea" rows="3">
+</textarea>
+</div>
+</div>
+<div class="mk-input">
+<div class="mk-input__label">
+<label for="id-4">URL</label>
+<span class="mk-input__count">0 / 500</span>
+</div>
+<div class="mk-input__box">
+<input aria-describedby="id-4-note" id="id-4" placeholder="https://api.example.com/v1/price" spellcheck="false" class="e-input mk-mono" inputmode="url" type="text" value="">
+</div>
+<p class="mk-input__hint" id="id-4-note">https only — every buyer can read it, so keep keys and tokens out.</p>
+</div>
+</section>
+<section aria-labelledby="id-5" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-5">Params</h4>
+<p class="mk-fset__hint">The query a caller sends. No fields means it takes none.</p>
+</header>
+<div aria-label="Params" class="mk-schema" role="group">
+<div class="e-tabs" role="tablist">
+<button aria-selected="true" class="e-tab e-tab--on" role="tab" type="button">Fields</button>
+<button aria-selected="false" class="e-tab" role="tab" type="button">JSON schema</button>
+</div>
+<div class="mk-builder">
+<p class="mk-input__hint">No fields — callers send nothing.</p>
+<button class="mk-add" type="button">
+<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-plus" aria-hidden="true">
+<path d="M5 12h14">
+</path>
+<path d="M12 5v14">
+</path>
+</svg>Add field</button>
+</div>
+</div>
+</section>
+<section aria-labelledby="id-6" class="mk-fset">
+<header class="mk-fset__head">
+<h4 class="mk-fset__title" id="id-6">Options</h4>
+</header>
+<label class="mk-toggle" for="id-7">
+<input aria-describedby="id-7-hint" class="mk-toggle__input" id="id-7" role="switch" type="checkbox">
+<span aria-hidden="true" class="mk-toggle__track">
+</span>
+<span class="mk-toggle__text">
+<span class="mk-toggle__label">Hidden</span>
+<span class="mk-toggle__hint" id="id-7-hint">Kept off marketplace search.</span>
+</span>
+</label>
+</section>
+</div>
+<aside aria-label="Preview" class="mk-editor__preview">
+<p class="mk-label">Preview · as callers see it</p>
+<article class="mk-offer mk-res">
+<header class="mk-offer__head">
+<h4 class="mk-offer__name">Untitled resource</h4>
+</header>
+<p class="mk-offer__quiet">No public https URL.</p>
+<div class="mk-offer__block">
+<p class="mk-label">Params</p>
+<p class="mk-offer__quiet">None — call it as is.</p>
+</div>
+</article>
+</aside>
+</div>
+</div>
+<footer class="mk-editor__foot">
+<div class="mk-editor__actions">
+<span aria-live="polite" class="mk-editor__why">
+</span>
+<button class="e-btn e-btn--quiet" type="button">Cancel</button>
+<button class="e-btn e-btn--primary" type="submit">Publish resource</button>
+</div>
+</footer>
+</form>"
+`;

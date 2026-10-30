@@ -1,0 +1,436 @@
+{
+  "v": 1,
+  "base": "10b38830",
+  "range": "10b38830..upstream/main",
+  "scope": [
+    "apps/desktop",
+    "apps/shared"
+  ],
+  "generatedBy": "RESUME/run.nosync/scratch/P4a_docs_ui_r5/gen_features.py",
+  "states": "pristine = untouched since base; diverged = ours changed it; replaced = ours re-implemented it; absent = not in our tree",
+  "features": [
+    {
+      "id": "chat-composer",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/app/chat/**",
+        "apps/desktop/src/components/chat/**",
+        "apps/desktop/src/lib/chat-messages*",
+        "apps/desktop/src/lib/markdown-*",
+        "apps/desktop/electron/composer*",
+        "apps/desktop/electron/chat*"
+      ]
+    },
+    {
+      "id": "assistant-ui",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/components/assistant-ui/**"
+      ]
+    },
+    {
+      "id": "session",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/session/**",
+        "apps/desktop/src/app/session-*",
+        "apps/desktop/src/app/open-session*",
+        "apps/desktop/electron/session*",
+        "apps/desktop/electron/handoff*"
+      ]
+    },
+    {
+      "id": "settings",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/app/settings/**",
+        "apps/desktop/src/app/profiles/**",
+        "apps/desktop/electron/profile*"
+      ]
+    },
+    {
+      "id": "capabilities",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/capabilities/**",
+        "apps/desktop/src/hermes-capability-*"
+      ]
+    },
+    {
+      "id": "contrib",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/app/contrib/**",
+        "apps/desktop/src/contrib/**"
+      ]
+    },
+    {
+      "id": "right-sidebar",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/app/right-sidebar/**",
+        "apps/desktop/src/app/artifacts/**"
+      ]
+    },
+    {
+      "id": "shell-layout",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/debug/**",
+        "apps/desktop/src/components/brand-mark*",
+        "apps/desktop/src/components/error-boundary*",
+        "apps/desktop/src/components/overlay-error-boundary*",
+        "apps/desktop/src/components/boot-failure-*",
+        "apps/desktop/src/components/confirm-host*",
+        "apps/desktop/src/components/external-open-*",
+        "apps/desktop/src/components/language-switcher*",
+        "apps/desktop/src/components/watched-atoms*",
+        "apps/desktop/src/components/find-bar*",
+        "apps/desktop/src/components/notifications*",
+        "apps/desktop/src/app/shell/**",
+        "apps/desktop/src/components/pane-shell/**",
+        "apps/desktop/src/app/routes*",
+        "apps/desktop/src/app/layout-*",
+        "apps/desktop/src/app/master-detail*",
+        "apps/desktop/src/app/types.ts",
+        "apps/desktop/src/app/hooks/**",
+        "apps/desktop/src/app/context-menu/**",
+        "apps/desktop/src/app/agents/**",
+        "apps/desktop/src/main.tsx",
+        "apps/desktop/src/styles.css",
+        "apps/desktop/src/vite-env.d.ts",
+        "apps/desktop/src/global.d.ts",
+        "apps/desktop/src/AGENTS.md",
+        "apps/desktop/index.html",
+        "apps/desktop/electron/window*",
+        "apps/desktop/electron/titlebar*",
+        "apps/desktop/electron/minimize*",
+        "apps/desktop/electron/close*",
+        "apps/desktop/electron/zoom*",
+        "apps/desktop/electron/tray*",
+        "apps/desktop/electron/dock*",
+        "apps/desktop/electron/application-*",
+        "apps/desktop/electron/f12-*"
+      ]
+    },
+    {
+      "id": "overlays-palette",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/components/prompt-overlays*",
+        "apps/desktop/src/components/model-picker*",
+        "apps/desktop/src/components/model-visibility-*",
+        "apps/desktop/src/app/overlays/**",
+        "apps/desktop/src/app/*-overlay*",
+        "apps/desktop/src/app/command-*/**",
+        "apps/desktop/src/app/quick-entry/**",
+        "apps/desktop/electron/quick*",
+        "apps/desktop/electron/select*",
+        "apps/desktop/electron/find*"
+      ]
+    },
+    {
+      "id": "skills",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/skills/**",
+        "apps/desktop/electron/plugin*",
+        "apps/desktop/electron/mcp*"
+      ]
+    },
+    {
+      "id": "gateway-api",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/types/**",
+        "apps/desktop/src/components/gateway-connecting-*",
+        "apps/desktop/src/components/provider-status-*",
+        "apps/desktop/src/components/hermes*",
+        "apps/desktop/src/components/sync-status*",
+        "apps/desktop/src/app/gateway/**",
+        "apps/desktop/src/api/**",
+        "apps/desktop/src/hermes.ts",
+        "apps/desktop/src/hermes.test.ts",
+        "apps/desktop/src/hermes-parity*",
+        "apps/desktop/src/webhooks-*",
+        "apps/desktop/src/app/webhooks/**",
+        "apps/desktop/src/pairing-*",
+        "apps/shared/src/json-rpc-*",
+        "apps/desktop/electron/gateway*",
+        "apps/desktop/electron/api-*",
+        "apps/desktop/electron/connection*",
+        "apps/desktop/electron/stream*",
+        "apps/desktop/electron/event*",
+        "apps/desktop/electron/payload*"
+      ]
+    },
+    {
+      "id": "hud-starmap",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/app/hud/**",
+        "apps/desktop/src/app/starmap/**",
+        "apps/desktop/electron/hud*"
+      ]
+    },
+    {
+      "id": "cron-routines",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/cron/**",
+        "apps/desktop/src/hermes-cron-*"
+      ]
+    },
+    {
+      "id": "messaging",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/messaging/**",
+        "apps/desktop/electron/notification*",
+        "apps/desktop/electron/link*",
+        "apps/desktop/electron/deep*",
+        "apps/desktop/electron/open*"
+      ]
+    },
+    {
+      "id": "pet",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/app/pet-*",
+        "apps/desktop/src/components/pet/**",
+        "apps/desktop/electron/pet*"
+      ]
+    },
+    {
+      "id": "updates",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/components/update-*",
+        "apps/desktop/src/components/version-details*",
+        "apps/desktop/src/components/desktop-install-*",
+        "apps/desktop/electron/updater/**",
+        "apps/desktop/electron/update*",
+        "apps/desktop/electron/app-updater*",
+        "apps/desktop/electron/app-installer*",
+        "apps/desktop/electron/appinstaller*",
+        "apps/desktop/electron/semver*",
+        "apps/desktop/electron/install*",
+        "apps/desktop/electron/managed*",
+        "apps/desktop/update-feed*",
+        "apps/desktop/e2e/update/**",
+        "apps/desktop/src/app/updates-overlay*",
+        "apps/desktop/src/store/updates*",
+        "apps/desktop/src/app/retirement-*",
+        "apps/shared/src/update-*",
+        "apps/desktop/'/var/**"
+      ]
+    },
+    {
+      "id": "ui-kit-themes",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/components/haptics-*",
+        "apps/desktop/src/components/ui/**",
+        "apps/desktop/src/themes/**",
+        "apps/desktop/src/hooks/**",
+        "apps/desktop/src/components/haptics-*/**",
+        "apps/desktop/src/components/shared-*/**",
+        "apps/shared/src/theme-*",
+        "apps/shared/src/skin*",
+        "apps/shared/src/translucency*",
+        "apps/desktop/electron/translucency*"
+      ]
+    },
+    {
+      "id": "onboarding",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/components/first-run-*",
+        "apps/desktop/src/components/billing-*",
+        "apps/desktop/src/components/onboarding*/**",
+        "apps/desktop/src/components/intro-*/**",
+        "apps/desktop/src/components/remote-setup/**",
+        "apps/desktop/src/components/free-tier/**",
+        "apps/desktop/electron/first*",
+        "apps/desktop/electron/intro*",
+        "apps/desktop/electron/guest*",
+        "apps/desktop/electron/challenge*"
+      ]
+    },
+    {
+      "id": "tips-tour-wisdom",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/components/wisdom-*",
+        "apps/desktop/src/components/tips/**",
+        "apps/desktop/src/lib/tips*",
+        "apps/desktop/src/lib/tour*",
+        "apps/desktop/src/components/wisdom-*/**",
+        "apps/shared/src/wisdom-*"
+      ]
+    },
+    {
+      "id": "plugin-bots",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/plugins/hermes-bots/**"
+      ]
+    },
+    {
+      "id": "plugins",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/plugins/**"
+      ]
+    },
+    {
+      "id": "stores",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/store/**"
+      ]
+    },
+    {
+      "id": "lib",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/lib/**"
+      ]
+    },
+    {
+      "id": "voice",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/lib/voice*",
+        "apps/desktop/src/store/voice*",
+        "apps/desktop/src/lib/wake-*",
+        "apps/desktop/electron/wake*",
+        "apps/desktop/electron/media*"
+      ]
+    },
+    {
+      "id": "preview",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/lib/preview*",
+        "apps/desktop/electron/preview*",
+        "apps/desktop/electron/embed*",
+        "apps/desktop/electron/portal*",
+        "apps/desktop/electron/web*"
+      ]
+    },
+    {
+      "id": "i18n",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/src/i18n/**"
+      ]
+    },
+    {
+      "id": "sdk",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/src/sdk/**"
+      ]
+    },
+    {
+      "id": "shared-lib",
+      "state": "pristine",
+      "paths": [
+        "apps/shared/**"
+      ]
+    },
+    {
+      "id": "backend-runtime",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/electron/backend*",
+        "apps/desktop/electron/pool*",
+        "apps/desktop/electron/bootstrap*",
+        "apps/desktop/electron/venv*",
+        "apps/desktop/electron/active-runtime*",
+        "apps/desktop/electron/local*",
+        "apps/desktop/electron/source*",
+        "apps/desktop/electron/bundle*",
+        "apps/desktop/electron/primary*",
+        "apps/desktop/electron/roster*",
+        "apps/desktop/electron/host*",
+        "apps/desktop/electron/python*",
+        "apps/desktop/electron/data*",
+        "apps/desktop/electron/machine*",
+        "apps/desktop/electron/registry*",
+        "apps/desktop/electron/power*"
+      ]
+    },
+    {
+      "id": "remote-platforms",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/electron/remote*",
+        "apps/desktop/electron/ssh*",
+        "apps/desktop/electron/wsl*",
+        "apps/desktop/electron/linux*",
+        "apps/desktop/electron/windows*",
+        "apps/desktop/electron/cloud*",
+        "apps/desktop/electron/native/**",
+        "apps/desktop/electron/native*",
+        "apps/desktop/electron/mac*",
+        "apps/desktop/electron/oauth*",
+        "apps/desktop/electron/github*",
+        "apps/desktop/electron/git*"
+      ]
+    },
+    {
+      "id": "electron-main",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/electron/**"
+      ]
+    },
+    {
+      "id": "packaging-assets",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/assets/**",
+        "apps/desktop/packaging/**",
+        "apps/desktop/public/**",
+        "apps/desktop/pr-assets/**",
+        "apps/desktop/electron-builder*",
+        "apps/desktop/product-identity*",
+        "apps/desktop/package.json"
+      ]
+    },
+    {
+      "id": "build-tooling",
+      "state": "diverged",
+      "paths": [
+        "apps/desktop/scripts/**",
+        "apps/desktop/tsconfig*.json",
+        "apps/desktop/vite.config.ts",
+        "apps/desktop/vitest.*",
+        "apps/desktop/playwright.config.ts"
+      ]
+    },
+    {
+      "id": "tests-e2e",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/e2e/**",
+        "apps/desktop/src/test/**",
+        "apps/desktop/electron/fixtures/**",
+        "apps/desktop/electron/pool-retirement-live-fixture/**"
+      ]
+    },
+    {
+      "id": "docs",
+      "state": "pristine",
+      "paths": [
+        "apps/desktop/AGENTS.md",
+        "apps/desktop/BUILDING.md",
+        "apps/desktop/DESIGN.md",
+        "apps/desktop/ENGINEERING.md",
+        "apps/desktop/README.md"
+      ]
+    }
+  ]
+}

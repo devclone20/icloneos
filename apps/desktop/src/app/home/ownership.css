@@ -1,0 +1,68 @@
+/* R9 — the "iNFT Deactivated" signal. Existing tokens only: the pill is the
+   card badge's shape in the danger tint the gold badge already uses. */
+.ownership-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  border: 1px solid var(--ic-home-danger-40);
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-home-danger-10);
+  color: var(--ic-home-danger-88);
+  font-size: var(--ic-type-2xs);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.istage__deactivated {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.ownership-dialog__signal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ic-type-2xs);
+}
+
+.ownership-dialog__options {
+  display: grid;
+  gap: 6px;
+}
+
+.ownership-option {
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--ic-radius-sm);
+  text-align: left;
+}
+
+.ownership-option:hover {
+  background: var(--dt-accent);
+}
+
+.ownership-option[data-picked='true'] {
+  border-color: var(--ic-home-danger-40);
+  background: var(--ic-home-danger-10);
+}
+
+.ownership-confirm {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  font-size: 0.875rem;
+}
+
+.ownership-link {
+  text-decoration: underline;
+}

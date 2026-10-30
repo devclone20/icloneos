@@ -1,0 +1,243 @@
+/* iclone os — per-iNFT Virtuals CLI setup wizard (EconomyOS & iNFT pane).
+   House grammar: champagne-gold accents on frosted ink, hairline borders. */
+
+.iws {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+  padding: 4px 0 24px;
+}
+
+.iws__intro {
+  font-size: var(--ic-type-lg);
+  line-height: 1.55;
+  color: var(--ic-text-2);
+}
+
+.iws__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 18px;
+  border: 1px dashed var(--ic-home-accent-35);
+  border-radius: var(--ic-radius-md);
+  font-size: var(--ic-type-lg);
+}
+
+/* ── iNFT picker ── */
+
+.iws__picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.iws__pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: var(--ic-radius-md);
+  border: 1px solid var(--ic-focus-ring);
+  background: var(--ic-fill-hover);
+  font-size: var(--ic-type-md);
+  cursor: pointer;
+  transition:
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.iws__pick span {
+  opacity: 0.55;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.06em;
+}
+
+.iws__pick--on {
+  border-color: var(--ic-home-accent-67);
+  background: var(--ic-fill-selected);
+}
+
+.iws__badge {
+  font-style: normal;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.55;
+}
+
+.iws__badge--gold {
+  color: var(--ic-accent);
+  opacity: 1;
+}
+
+.iws__refresh {
+  display: inline-flex;
+  padding: 7px;
+  border-radius: var(--ic-radius-sm);
+  border: 1px solid transparent;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.iws__refresh:hover {
+  opacity: 1;
+}
+
+/* ── steps ── */
+
+.iws__step {
+  border: 1px solid var(--ic-home-ink-14);
+  border-radius: var(--ic-radius-md);
+  padding: 12px 14px;
+}
+
+.iws__step--done {
+  border-color: var(--ic-home-accent-40);
+}
+
+.iws__step-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.iws__step-head h3 {
+  flex: 1;
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.iws__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--ic-radius-round);
+  border: 1px solid var(--ic-home-accent-40);
+  font-size: var(--ic-type-sm);
+  color: var(--ic-accent);
+}
+
+.iws__step--done .iws__dot {
+  background: var(--ic-accent-soft);
+}
+
+.iws__ask {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-home-ink-14);
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.08em;
+  opacity: 0.65;
+  cursor: pointer;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.iws__ask:hover {
+  opacity: 1;
+}
+
+.iws__step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 32px;
+}
+
+.iws__step-body:empty {
+  display: none;
+}
+
+.iws__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.iws__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--ic-radius-sm);
+  border: 1px solid var(--ic-home-ink-14);
+  font-size: var(--ic-type-md);
+  cursor: pointer;
+  transition:
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.iws__btn:hover:not(:disabled) {
+  border-color: var(--ic-home-accent-54);
+}
+
+.iws__btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.iws__btn--primary {
+  border-color: var(--ic-home-accent-45);
+  background: var(--ic-fill-selected);
+}
+
+.iws__btn--gold {
+  border-color: var(--ic-accent);
+  background: var(--ic-accent-soft);
+  color: var(--ic-accent);
+}
+
+.iws__input {
+  min-width: 130px;
+  padding: 6px 10px;
+  border-radius: var(--ic-radius-sm);
+  border: 1px solid var(--ic-home-ink-14);
+  background: var(--ic-fill-hover);
+  font-size: var(--ic-type-md);
+}
+
+.iws__note {
+  font-size: var(--ic-type-md);
+  color: var(--ic-text-2);
+}
+
+.iws__note code {
+  font-size: var(--ic-type-sm);
+  padding: 1px 5px;
+  border-radius: var(--ic-radius-xs);
+  background: var(--ic-fill-hover);
+}
+
+.iws__mono {
+  font-family: var(--ic-font-mono);
+}
+
+.iws__error {
+  font-size: var(--ic-type-md);
+  color: var(--ic-danger);
+}
+
+.iws__out {
+  max-height: 180px;
+  overflow: auto;
+  padding: 9px 11px;
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-home-shade-67);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

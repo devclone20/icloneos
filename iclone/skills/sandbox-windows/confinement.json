@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "os": "windows",
+  "available": false,
+  "reason": "not available in v0.0.3 (owner decision D3)",
+  "planned": { "backends": ["appcontainer-or-wsl2"], "classes": ["research", "project", "build", "offline", "media"] }
+}

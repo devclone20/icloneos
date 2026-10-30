@@ -1,0 +1,5 @@
+name: claude-code-provider
+kind: model-provider
+version: 1.0.0
+description: Claude Code (the user's own subscription) via the local claude CLI over stdio
+author: iclone os

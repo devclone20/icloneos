@@ -1,0 +1,32 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const agents: TranslationOverrides['agents'] = {
+  close: '關閉代理',
+  title: '派生樹',
+  subtitle: '目前回合的子代理即時活動。',
+  emptyTitle: '暫無活躍子代理',
+  emptyDesc: '當某個回合派發任務時，子代理會在此即時顯示進度。',
+  running: '執行中',
+  failed: '失敗',
+  done: '完成',
+  streaming: '串流傳輸中',
+  files: '檔案',
+  moreFiles: count => `還有 ${count} 個檔案`,
+  delegation: index => `派發 ${index}`,
+  workers: count => `${count} 個工作單元`,
+  workersActive: count => `${count} 個活躍`,
+  agentsCount: count => `${count} 個代理`,
+  activeCount: count => `${count} 個活躍`,
+  failedCount: count => `${count} 個失敗`,
+  toolsCount: count => `${count} 個工具`,
+  filesCount: count => `${count} 個檔案`,
+  updatedAgo: age => `更新於 ${age}`,
+  ageNow: '剛才',
+  ageSeconds: seconds => `${seconds} 秒前`,
+  ageMinutes: minutes => `${minutes} 分鐘前`,
+  ageHours: hours => `${hours} 小時前`,
+  ageDays: days => `${days} 天前`,
+  durationSeconds: seconds => `${seconds} 秒`,
+  durationMinutes: (minutes, seconds) => `${minutes} 分 ${seconds} 秒`,
+  tokens: value => `${value} 詞元`
+}

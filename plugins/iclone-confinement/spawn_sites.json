@@ -1,0 +1,28 @@
+{
+ "_": "V3-UP r5, rulings 50 + 56: the sites the spawn guard lets start a program in a confined process \u2014 fixed: an app-fixed program, only as the sandbox-exec argv confine_program sealed (inside the agent's Seatbelt); hermes: this runtime's own interpreter, confined. Generated from tests/fixtures/host_exec_sites.json, never edited by hand",
+ "fixed": [
+  "gateway/platforms/base.py::_detect_macos_system_proxy",
+  "gateway/platforms/base.py::transcode_to_ogg_opus",
+  "hermes_constants.py::_run_version_probe",
+  "plugins/iclone-confinement/providers.py::_run_version",
+  "tools/browser_tool_session.py::_popen_agent_browser",
+  "tools/env_probe.py::_run",
+  "tools/transcription_audio.py::_run_quiet",
+  "tools/transcription_local.py::_sysctl_value",
+  "tools/tts_tool_delivery.py::_ffmpeg_run",
+  "tools/vision_tools_image_prep.py::_rasterize_svg_to_png",
+  "tui_gateway/compute_host.py::_rss_mb",
+  "tui_gateway/host_supervisor.py::_check_output",
+  "tui_gateway/methods_prompt.py::_"
+ ],
+ "hermes": [
+  "plugins/google_meet/process_manager.py::start",
+  "plugins/web/ddgs/provider.py::_spawn_worker",
+  "tools/bot_mode_dm.py::_run_delivery",
+  "tools/bot_mode_dm.py::_run_local_turn._turn",
+  "tools/mcp_tool.py::_spawn_death_supervisor",
+  "tools/tts_tool_local.py::_run_helper",
+  "tui_gateway/host_supervisor.py::HostSupervisor._spawn_locked",
+  "tui_gateway/server.py::_SlashWorker.__init__"
+ ]
+}

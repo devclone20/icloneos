@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "name": "fable-orchestrator",
+  "version": "1.0.0",
+  "author": "the owner (ported from his Claude Code skills library)",
+  "license": "MIT",
+  "source": {
+    "library": "claude-code-skills",
+    "path": "fable-orchestrator",
+    "version": null,
+    "sha256": "f87f40cd09abb4631fd943282111257ef793b01fe58bf15d2ab4e3a2ffcbf59a",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [
+    "references/clone-frame-map.md"
+  ],
+  "requires": {
+    "os": [],
+    "bins": [
+      "git",
+      "node"
+    ],
+    "mcp": [],
+    "paths": []
+  },
+  "touches": [
+    "Wp",
+    "X",
+    "N"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 1,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 0
+  }
+}

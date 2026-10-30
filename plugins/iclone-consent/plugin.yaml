@@ -1,0 +1,6 @@
+name: iclone-consent
+version: "0.1.0"
+description: "icloneOS microphone consent (V3-FX FX-4): Hermes' own microphone capture (wake word, voice mode, /voice) obeys the same switch as the icloneOS app's voice input — off means the microphone is never opened, and a stream already open stops within half a second of the switch going off. It also refuses every diagnostics or log upload to a third party (ruling 47: /debug, debug share, share_nous); /debug local still renders the report locally. Inert unless icloneOS started Hermes (ICLONE_CONSENT_MICROPHONE)."
+author: "CLONE FRAME (icloneOS)"
+# Bundled backends auto-load; the plugin stays inert outside icloneOS, so plain Hermes is unaffected.
+kind: backend

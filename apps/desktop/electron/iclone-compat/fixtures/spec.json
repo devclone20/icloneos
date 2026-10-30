@@ -1,0 +1,184 @@
+{
+  "spec": 1,
+  "rev": "1111111111111111111111111111111111111111",
+  "describe": "v2026.10.1",
+  "openrpcSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "specTier": "openrpc",
+  "methods": {
+    "clarify.respond": {
+      "params": "ClarifyRespondParams",
+      "result": "OkResult",
+      "handlerFile": "tui_gateway/methods_prompt.py"
+    },
+    "session.create": {
+      "params": "SessionCreateParams",
+      "result": "SessionCreateResult",
+      "handlerFile": "tui_gateway/methods_session.py"
+    }
+  },
+  "serverRequests": {
+    "approval": {
+      "params": "ApprovalRequestParams",
+      "result": "ApprovalResult"
+    },
+    "sudo": {
+      "params": "SudoRequestParams",
+      "result": "OkResult"
+    }
+  },
+  "notifications": {
+    "clarify.request": {
+      "payload": "ClarifyRequestPayload"
+    },
+    "message.delta": {
+      "payload": "MessageDeltaPayload"
+    }
+  },
+  "schemas": {
+    "ApprovalRequestParams": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string"
+        }
+      },
+      "required": ["command"]
+    },
+    "ApprovalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "choice": {
+          "type": "string",
+          "enum": ["once", "deny"]
+        }
+      },
+      "required": ["choice"]
+    },
+    "ClarifyRequestPayload": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["choice", "text"]
+        }
+      },
+      "required": ["request_id", "kind"]
+    },
+    "ClarifyRespondParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "request_id": {
+          "type": "string"
+        },
+        "answer": {
+          "type": "string"
+        }
+      },
+      "required": ["request_id", "answer"]
+    },
+    "MessageDeltaPayload": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": ["text"]
+    },
+    "OkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "type": "boolean"
+        }
+      },
+      "required": ["ok"]
+    },
+    "SessionCreateParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwd": {
+          "type": "string"
+        },
+        "profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": ["cwd"]
+    },
+    "SessionCreateResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string"
+        },
+        "info": {
+          "$ref": "#/components/schemas/SessionInfo"
+        }
+      },
+      "required": ["session_id", "info"]
+    },
+    "SessionInfo": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/components/schemas/SessionStatus"
+        },
+        "turns": {
+          "type": "array",
+          "items": {
+            "type": "integer"
+          }
+        }
+      },
+      "required": ["status"]
+    },
+    "SessionStatus": {
+      "type": "string",
+      "enum": ["idle", "running"],
+      "title": "SessionStatus"
+    },
+    "SudoRequestParams": {
+      "type": "object",
+      "properties": {
+        "prompt": {
+          "type": "string"
+        }
+      },
+      "required": ["prompt"]
+    }
+  },
+  "stateVersions": {
+    "db": 31,
+    "config": 50
+  },
+  "handlerFiles": {
+    "clarify.respond": "tui_gateway/methods_prompt.py",
+    "session.create": "tui_gateway/methods_session.py"
+  },
+  "rest": ["GET /api/health", "GET /api/sessions/{session_id}"],
+  "cli": {
+    "serve": ["--host", "--port", "--profile"]
+  },
+  "configKeys": ["approvals.mode", "display.theme"],
+  "errorCodes": [4001],
+  "env": ["HERMES_DESKTOP"],
+  "disk": [".hermes-update-in-progress"],
+  "receipt": ["outcome", "post_update.sha", "pre_update.sha", "steps"]
+}

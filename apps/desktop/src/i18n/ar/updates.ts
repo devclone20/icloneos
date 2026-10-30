@@ -1,0 +1,81 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const updates: TranslationOverrides['updates'] = {
+  stages: {
+    idle: 'جار التحضير...',
+    prepare: 'جار التحضير...',
+    fetch: 'جار التنزيل...',
+    pull: 'أوشكنا على الانتهاء...',
+    pydeps: 'جار الإنهاء...',
+    update: 'جارٍ تحديث iclone os...',
+    rebuild: 'جار إعادة بناء تطبيق سطح المكتب...',
+    restart: 'جارٍ إعادة تشغيل iclone os...',
+    done: 'اكتمل التحديث',
+    manual: 'التحديث من الطرفية',
+    guiSkew: 'تحديث تطبيق سطح المكتب',
+    error: 'تم إيقاف التحديث مؤقتا'
+  },
+  checking: 'جار البحث عن تحديثات...',
+  checkFailedTitle: 'تعذّر التحقق من التحديثات',
+  tryAgain: 'إعادة المحاولة',
+  notAvailableTitle: 'التحديث غير متاح',
+  unsupportedMessage: 'لا يمكن لهذا الإصدار من iclone os تحديث نفسه من داخل التطبيق.',
+  connectionRetry: 'تحقق من اتصالك وأعد المحاولة.',
+  latestBody: 'أنت تستخدم أحدث إصدار.',
+  latestBodyBackend: 'الواجهة الخلفية تعمل بأحدث إصدار.',
+  allSetTitle: 'كل شيء جاهز',
+  availableTitle: 'يتوفر تحديث جديد',
+  availableBody: 'إصدار جديد من iclone os جاهز للتثبيت.',
+  availableTitleBackend: 'يتوفر تحديث للواجهة الخلفية',
+  availableBodyBackend: 'إصدار أحدث من واجهة الوكيل الخلفية المتصلة جاهز للتثبيت.',
+  availableBodyNoChangelog: 'إصدار أحدث جاهز. ملاحظات الإصدار غير متاحة لنوع التثبيت هذا.',
+  updateNow: 'التحديث الآن',
+  maybeLater: 'ربما لاحقا',
+  moreChanges: count => `+ ${count} تغيير${count === 1 ? '' : 'ات'} إضافي مُضمَّن.`,
+  manualTitle: 'التحديث من الطرفية',
+  manualBody: 'لقد ثبّتت الوكيل من سطر الأوامر، لذا تُجرى التحديثات من هناك أيضا. الصق هذا في طرفيتك:',
+  manualPickedUp: 'سيلتقط الوكيل الإصدار الجديد في المرة التالية التي تشغّله فيها.',
+  guiSkewTitle: 'تحديث تطبيق سطح المكتب',
+  guiSkewBody:
+    'تم تحديث الواجهة الخلفية، لكن حزمة تطبيق سطح المكتب هذه لم تتغير. حدّث أو أعد تثبيت تطبيق iclone os لسطح المكتب (ملف AppImage / ‎.deb / ‎.rpm) لمطابقته.',
+  copy: 'نسخ',
+  copied: 'تم النسخ',
+  done: 'تم',
+  applyingBody:
+    'يتولّى المُحدِّث المهمة في نافذته الخاصة ويعيد فتح iclone os تلقائيا عند الانتهاء. الرجاء عدم إعادة فتح iclone os بنفسك أثناء التحديث.',
+  applyingBodyBackend:
+    'تطبّق الواجهة الخلفية البعيدة التحديث وستعيد التشغيل. يعيد iclone os الاتصال تلقائيا عند عودتها.',
+  applyingClose: 'ستُغلق هذه النافذة أثناء تشغيل التحديث، ثم يعيد iclone os فتح نفسه تلقائيا.',
+  errorTitle: 'لم يكتمل التحديث',
+  errorBody: 'لا داعي للقلق — لم يُفقد شيء. يمكنك إعادة المحاولة الآن.',
+  blockerTitle: 'إغلاق المعاينات المحلية لتحديث iclone os؟',
+  blockerBody: 'يحتاج iclone os إلى إيقاف هذه المعاينات المحلية قبل التحديث. لن يؤدي ذلك إلى تعديل ملفاتك أو حذفها.',
+  foreignBlockerTitle: 'أغلق العمليات الأخرى لتحديث iclone os',
+  foreignBlockerBody:
+    'لا يمكن لـ iclone os إغلاق هذه العمليات تلقائيًا بأمان. أغلق التطبيق أو الطرفية أو الخدمة التي تشغّل كل عملية، ثم حاول التحديث مرة أخرى.',
+  mixedBlockerBody:
+    'يمكن لـ iclone os إغلاق المعاينات المحلية المدرجة أدناه. يجب إغلاق العمليات الأخرى يدويًا قبل متابعة التحديث.',
+  closePreviewsAndUpdate: 'إغلاق المعاينات والتحديث',
+  closePreviewsAndCheckAgain: 'إغلاق المعاينات والتحقق مجددًا',
+  localPreview: 'معاينة محلية',
+  portLabel: port => `المنفذ ${port}`,
+  pidLabel: pid => `معرّف العملية ${pid}`,
+  technicalDetails: 'التفاصيل التقنية',
+  notNow: 'ليس الآن',
+  clientAlsoBehindTitle: 'تطبيق سطح المكتب متأخر',
+  clientAlsoBehindMessage:
+    'الخادم الخلفي محدث، لكن تطبيق سطح المكتب هذا لا يزال على إصدار أقدم. حدّثه للحصول على أحدث الإصلاحات.',
+  clientAlsoBehindAction: 'تحديث تطبيق سطح المكتب',
+  everythingDispatched: 'تم إرسال التحديث',
+  everythingSkipped: 'تم التخطي',
+  everythingRowFailed: 'فشل التحديث',
+  everythingFanoutFailedTitle: 'تعذر تحديث المثيلات الأخرى',
+  applyStatus: {
+    preparing: 'جار تحديث الواجهة الخلفية...',
+    pulling: 'جار تحديث الواجهة الخلفية...',
+    restarting: 'تعيد الواجهة الخلفية التشغيل لتحميل التحديث...',
+    notAvailable: 'التحديث غير متاح لهذه الواجهة الخلفية.',
+    failed: 'فشل تحديث الواجهة الخلفية.',
+    noReturn: 'لم تعد الواجهة الخلفية إلى الاتصال. قد لا يكون التحديث قد اكتمل — تحقق من مضيف الواجهة الخلفية.'
+  }
+}

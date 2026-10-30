@@ -1,0 +1,8 @@
+# iclone (V3-RT, ruling 57.2): distributions PM never installs into the runtime environment (one PEP 503 name per line).
+# Same names as V3-FX's iclone/telemetry/runtime-venv-exclusions.txt (a test keeps them equal); applied as
+# uv sync --no-install-package <name> by pm/environment.py. Telemetry is denied by a closed inventory (ruling 54).
+langfuse
+nemo-relay
+opentelemetry-exporter-otlp-proto-common
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-proto

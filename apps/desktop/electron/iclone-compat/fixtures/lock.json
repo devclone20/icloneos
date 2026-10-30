@@ -1,0 +1,59 @@
+{
+  "lockVersion": 1,
+  "generator": "fixture",
+  "methods": {
+    "clarify.respond": {
+      "params": {
+        "request_id": "string",
+        "answer": "string"
+      },
+      "resultReads": []
+    },
+    "session.create": {
+      "params": {
+        "cwd": "string",
+        "profile?": "string"
+      },
+      "resultReads": ["session_id", "info.status"]
+    }
+  },
+  "serverRequests": {
+    "advertises": true,
+    "handled": ["approval"],
+    "declineOk": {
+      "sudo": "declined: password prompts stay in the terminal"
+    },
+    "answersUnknown": false
+  },
+  "events": {
+    "clarify.request": {
+      "payloadReads": ["request_id", "kind"]
+    },
+    "message.delta": {
+      "payloadReads": ["text"]
+    }
+  },
+  "errorCodes": [-32601, 4001],
+  "rest": {
+    "GET /api/health": {},
+    "GET /api/sessions/{id}": {}
+  },
+  "cli": {
+    "serve": ["--help", "--host", "--port"]
+  },
+  "config": {
+    "approvals.mode": "write",
+    "display.theme": "read"
+  },
+  "env": ["HERMES_DESKTOP"],
+  "disk": {
+    ".hermes-update-in-progress": "path"
+  },
+  "engineDeps": {
+    "openrpc": "apps/shared/src/gateway-contract.openrpc.json",
+    "health": "/api/health#commit",
+    "schemaVersion": "hermes_state_common.py#SCHEMA_VERSION",
+    "configVersion": "hermes_cli/config_defaults.py#_config_version",
+    "receipt": ["outcome", "pre_update.sha", "post_update.sha", "steps"]
+  }
+}

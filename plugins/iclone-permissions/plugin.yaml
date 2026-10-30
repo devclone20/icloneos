@@ -1,0 +1,8 @@
+name: iclone-permissions
+version: "0.1.0"
+description: "icloneOS permission modes (Ignore permissions, Manual, Automatic, Plan, Accept edits): classifies every tool call, decides from the policy the icloneOS app signs for this Hermes process, asks the owner on the app's consent sheet, and records every decision in the app's hash-chained audit trail. Inert unless icloneOS started Hermes (ICLONE_POLICY_LOCK=1)."
+author: "CLONE FRAME (icloneOS)"
+# Bundled backends auto-load; the plugin stays inert outside icloneOS, so plain Hermes is unaffected.
+kind: backend
+hooks:
+  - pre_tool_call

@@ -1,0 +1,12 @@
+{
+  "id": "clarify",
+  "doc": "The clarify tool asks the user through a server->client request; the app's lock decides whether it is answered.",
+  "prompt": "canary: ask me one question before you continue",
+  "toolCall": {
+    "name": "clarify",
+    "arguments": { "questions": [{ "question": "Which colour should the canary use?", "choices": ["red", "blue"] }] }
+  },
+  "serverRequest": "clarify",
+  "answer": { "answers": { "0": "red" } },
+  "timeoutMs": 45000
+}

@@ -1,0 +1,600 @@
+{
+ "source": "RT re-run first launch 2024-03-05 08:00Z (rt8h desktop.log, every python-deps log event verbatim, paths removed). python-deps 29.7 s (warm uv cache).",
+ "log": [
+  {
+   "ts": 0,
+   "stage": "python-deps",
+   "line": "✓ uv ready (uv 0.12.3 (507230998 2026-08-07 aarch64-apple-darwin))"
+  },
+  {
+   "ts": 40,
+   "stage": "python-deps",
+   "line": "→ Installing dependencies (hash-verified via uv.lock)"
+  },
+  {
+   "ts": 105,
+   "stage": "python-deps",
+   "line": "Preparing the isolated Hermes runtime…"
+  },
+  {
+   "ts": 166,
+   "stage": "python-deps",
+   "line": "  → Installing Python dependencies…"
+  },
+  {
+   "ts": 385,
+   "stage": "python-deps",
+   "line": "  ✓ Installing Python dependencies"
+  },
+  {
+   "ts": 820,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  14.7%  4.0 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 864,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  29.5%  8.0 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 907,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  44.2%  12.0 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 949,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  59.0%  16.0 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 1005,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  76.6%  20.8 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 1048,
+   "stage": "python-deps",
+   "line": "  ffmpeg:  93.4%  25.3 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 1091,
+   "stage": "python-deps",
+   "line": "  ffmpeg: 100.0%  27.1 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 1128,
+   "stage": "python-deps",
+   "line": "  ffmpeg: 100.0%  27.1 MiB / 27.1 MiB"
+  },
+  {
+   "ts": 1128,
+   "stage": "python-deps",
+   "line": "  ffmpeg: unpacking"
+  },
+  {
+   "ts": 1888,
+   "stage": "python-deps",
+   "line": "✓ ffmpeg"
+  },
+  {
+   "ts": 2099,
+   "stage": "python-deps",
+   "line": "  node:  13.9%  4.0 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2146,
+   "stage": "python-deps",
+   "line": "  node:  27.8%  8.0 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2267,
+   "stage": "python-deps",
+   "line": "  node:  43.7%  12.6 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2299,
+   "stage": "python-deps",
+   "line": "  node:  58.3%  16.8 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2344,
+   "stage": "python-deps",
+   "line": "  node:  72.2%  20.8 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2379,
+   "stage": "python-deps",
+   "line": "  node:  88.9%  25.6 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2442,
+   "stage": "python-deps",
+   "line": "  node: 100.0%  28.8 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2469,
+   "stage": "python-deps",
+   "line": "  node: 100.0%  28.8 MiB / 28.8 MiB"
+  },
+  {
+   "ts": 2469,
+   "stage": "python-deps",
+   "line": "  node: unpacking"
+  },
+  {
+   "ts": 11241,
+   "stage": "python-deps",
+   "line": "✓ node"
+  },
+  {
+   "ts": 11925,
+   "stage": "python-deps",
+   "line": "  npm: 100.0%  2.9 MiB / 2.9 MiB"
+  },
+  {
+   "ts": 11928,
+   "stage": "python-deps",
+   "line": "  npm: 100.0%  2.9 MiB / 2.9 MiB"
+  },
+  {
+   "ts": 11928,
+   "stage": "python-deps",
+   "line": "  npm: unpacking"
+  },
+  {
+   "ts": 13198,
+   "stage": "python-deps",
+   "line": "✓ npm"
+  },
+  {
+   "ts": 14034,
+   "stage": "python-deps",
+   "line": "  python:  15.7%  4.0 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14052,
+   "stage": "python-deps",
+   "line": "  python:  31.5%  8.0 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14090,
+   "stage": "python-deps",
+   "line": "  python:  47.9%  12.2 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14122,
+   "stage": "python-deps",
+   "line": "  python:  63.6%  16.2 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14161,
+   "stage": "python-deps",
+   "line": "  python:  81.5%  20.7 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14209,
+   "stage": "python-deps",
+   "line": "  python:  99.3%  25.2 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14216,
+   "stage": "python-deps",
+   "line": "  python: 100.0%  25.4 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14232,
+   "stage": "python-deps",
+   "line": "  python: 100.0%  25.4 MiB / 25.4 MiB"
+  },
+  {
+   "ts": 14232,
+   "stage": "python-deps",
+   "line": "  python: unpacking"
+  },
+  {
+   "ts": 14687,
+   "stage": "python-deps",
+   "line": "✓ python"
+  },
+  {
+   "ts": 15582,
+   "stage": "python-deps",
+   "line": "  ripgrep: 100.0%  1.7 MiB / 1.7 MiB"
+  },
+  {
+   "ts": 15584,
+   "stage": "python-deps",
+   "line": "  ripgrep: 100.0%  1.7 MiB / 1.7 MiB"
+  },
+  {
+   "ts": 15584,
+   "stage": "python-deps",
+   "line": "  ripgrep: unpacking"
+  },
+  {
+   "ts": 15691,
+   "stage": "python-deps",
+   "line": "✓ ripgrep"
+  },
+  {
+   "ts": 17691,
+   "stage": "python-deps",
+   "line": "  → Installing Python dependencies…"
+  },
+  {
+   "ts": 20570,
+   "stage": "python-deps",
+   "line": "  ✓ Installing Python dependencies"
+  },
+  {
+   "ts": 20750,
+   "stage": "python-deps",
+   "line": "✓ venv"
+  },
+  {
+   "ts": 22316,
+   "stage": "python-deps",
+   "line": "  agent-browser:   2.5%  4.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22340,
+   "stage": "python-deps",
+   "line": "  agent-browser:   4.9%  8.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22406,
+   "stage": "python-deps",
+   "line": "  agent-browser:   7.4%  12.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22477,
+   "stage": "python-deps",
+   "line": "  agent-browser:   9.9%  16.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22562,
+   "stage": "python-deps",
+   "line": "  agent-browser:  12.3%  20.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22566,
+   "stage": "python-deps",
+   "line": "  agent-browser:  14.8%  24.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22585,
+   "stage": "python-deps",
+   "line": "  agent-browser:  17.2%  28.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22602,
+   "stage": "python-deps",
+   "line": "  agent-browser:  19.7%  32.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22609,
+   "stage": "python-deps",
+   "line": "  agent-browser:  22.2%  36.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22691,
+   "stage": "python-deps",
+   "line": "  agent-browser:  24.6%  40.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22731,
+   "stage": "python-deps",
+   "line": "  agent-browser:  27.1%  44.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22815,
+   "stage": "python-deps",
+   "line": "  agent-browser:  29.6%  48.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22826,
+   "stage": "python-deps",
+   "line": "  agent-browser:  32.0%  52.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22832,
+   "stage": "python-deps",
+   "line": "  agent-browser:  34.5%  56.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22844,
+   "stage": "python-deps",
+   "line": "  agent-browser:  37.0%  60.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22858,
+   "stage": "python-deps",
+   "line": "  agent-browser:  39.4%  64.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22876,
+   "stage": "python-deps",
+   "line": "  agent-browser:  41.9%  68.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22905,
+   "stage": "python-deps",
+   "line": "  agent-browser:  44.4%  72.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22935,
+   "stage": "python-deps",
+   "line": "  agent-browser:  46.8%  76.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22958,
+   "stage": "python-deps",
+   "line": "  agent-browser:  49.3%  80.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22974,
+   "stage": "python-deps",
+   "line": "  agent-browser:  51.7%  84.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 22997,
+   "stage": "python-deps",
+   "line": "  agent-browser:  54.2%  88.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23014,
+   "stage": "python-deps",
+   "line": "  agent-browser:  56.7%  92.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23039,
+   "stage": "python-deps",
+   "line": "  agent-browser:  59.1%  96.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23059,
+   "stage": "python-deps",
+   "line": "  agent-browser:  61.8%  100.3 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23088,
+   "stage": "python-deps",
+   "line": "  agent-browser:  64.9%  105.3 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23116,
+   "stage": "python-deps",
+   "line": "  agent-browser:  67.3%  109.3 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23217,
+   "stage": "python-deps",
+   "line": "  agent-browser:  70.6%  114.6 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23301,
+   "stage": "python-deps",
+   "line": "  agent-browser:  73.2%  118.9 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23306,
+   "stage": "python-deps",
+   "line": "  agent-browser:  75.7%  122.9 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23339,
+   "stage": "python-deps",
+   "line": "  agent-browser:  78.3%  127.2 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23416,
+   "stage": "python-deps",
+   "line": "  agent-browser:  81.0%  131.5 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23563,
+   "stage": "python-deps",
+   "line": "  agent-browser:  83.6%  135.7 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 23906,
+   "stage": "python-deps",
+   "line": "  agent-browser:  86.1%  139.7 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 24260,
+   "stage": "python-deps",
+   "line": "  agent-browser:  88.6%  143.7 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 24432,
+   "stage": "python-deps",
+   "line": "  agent-browser:  91.0%  147.7 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 24655,
+   "stage": "python-deps",
+   "line": "  agent-browser:  93.7%  152.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 24999,
+   "stage": "python-deps",
+   "line": "  agent-browser:  96.1%  156.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 25327,
+   "stage": "python-deps",
+   "line": "  agent-browser:  98.6%  160.0 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 25488,
+   "stage": "python-deps",
+   "line": "  agent-browser: 100.0%  162.3 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 25583,
+   "stage": "python-deps",
+   "line": "  agent-browser: 100.0%  162.3 MiB / 162.3 MiB"
+  },
+  {
+   "ts": 25583,
+   "stage": "python-deps",
+   "line": "  agent-browser: unpacking"
+  },
+  {
+   "ts": 26579,
+   "stage": "python-deps",
+   "line": "  agent-browser:  12.9%  4.0 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 26656,
+   "stage": "python-deps",
+   "line": "  agent-browser:  28.9%  9.0 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 26716,
+   "stage": "python-deps",
+   "line": "  agent-browser:  41.8%  13.0 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 26745,
+   "stage": "python-deps",
+   "line": "  agent-browser:  54.7%  17.0 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 26807,
+   "stage": "python-deps",
+   "line": "  agent-browser:  70.0%  21.8 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 26948,
+   "stage": "python-deps",
+   "line": "  agent-browser:  84.6%  26.3 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 27222,
+   "stage": "python-deps",
+   "line": "  agent-browser: 100.0%  31.1 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 27241,
+   "stage": "python-deps",
+   "line": "  agent-browser: 100.0%  31.1 MiB / 31.1 MiB"
+  },
+  {
+   "ts": 27241,
+   "stage": "python-deps",
+   "line": "  agent-browser: unpacking"
+  },
+  {
+   "ts": 27372,
+   "stage": "python-deps",
+   "line": "✓ agent-browser"
+  },
+  {
+   "ts": 28196,
+   "stage": "python-deps",
+   "line": "  cua-driver:   6.3%  4.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28245,
+   "stage": "python-deps",
+   "line": "  cua-driver:  12.6%  8.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28259,
+   "stage": "python-deps",
+   "line": "  cua-driver:  18.9%  12.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28288,
+   "stage": "python-deps",
+   "line": "  cua-driver:  25.2%  16.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28318,
+   "stage": "python-deps",
+   "line": "  cua-driver:  31.5%  20.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28357,
+   "stage": "python-deps",
+   "line": "  cua-driver:  37.7%  24.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28462,
+   "stage": "python-deps",
+   "line": "  cua-driver:  44.0%  28.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28496,
+   "stage": "python-deps",
+   "line": "  cua-driver:  50.3%  32.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28514,
+   "stage": "python-deps",
+   "line": "  cua-driver:  56.6%  36.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28540,
+   "stage": "python-deps",
+   "line": "  cua-driver:  62.9%  40.0 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28570,
+   "stage": "python-deps",
+   "line": "  cua-driver:  70.6%  44.9 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28593,
+   "stage": "python-deps",
+   "line": "  cua-driver:  78.4%  49.8 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28625,
+   "stage": "python-deps",
+   "line": "  cua-driver:  84.7%  53.8 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28656,
+   "stage": "python-deps",
+   "line": "  cua-driver:  92.5%  58.8 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28694,
+   "stage": "python-deps",
+   "line": "  cua-driver: 100.0%  63.6 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28731,
+   "stage": "python-deps",
+   "line": "  cua-driver: 100.0%  63.6 MiB / 63.6 MiB"
+  },
+  {
+   "ts": 28731,
+   "stage": "python-deps",
+   "line": "  cua-driver: unpacking"
+  },
+  {
+   "ts": 29025,
+   "stage": "python-deps",
+   "line": "Failed to load bundled provider plugin solstice: No module named 'httpx'"
+  },
+  {
+   "ts": 29627,
+   "stage": "python-deps",
+   "line": "✓ cua-driver"
+  },
+  {
+   "ts": 29662,
+   "stage": "python-deps",
+   "line": "✓ dependencies installed"
+  },
+  {
+   "ts": 29663,
+   "stage": "python-deps",
+   "line": "{\"ok\":true,\"stage\":\"python-deps\",\"skipped\":false}"
+  }
+ ]
+}

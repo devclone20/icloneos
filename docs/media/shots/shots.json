@@ -1,0 +1,360 @@
+{
+  "app": "iclone os.app",
+  "appVersion": "0.0.3",
+  "capturedAt": "2026-10-29T20:19:52.635Z",
+  "shots": [
+    {
+      "area": "hero",
+      "bytes": 181804,
+      "data_on_screen": "iNFT #5: public GLB from the collection's own metadata",
+      "file": "docs/media/shots/hero.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "410934d27008c95a5502753d4ff5df461c456dae29cc42d674e9b41ecf4ba2c0",
+        "reviewer": "owner",
+        "sha256": "5b4144bda0a56ecb6f53d45aa75fb16636e9f1c52ab1a4ce2daa7ee640bd3652",
+        "verdict": "clean"
+      },
+      "master": "masters/hero@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 0
+        }
+      },
+      "route": "Home (stage mode) with the summoned iNFT and the Dock",
+      "sha256": "5b4144bda0a56ecb6f53d45aa75fb16636e9f1c52ab1a4ce2daa7ee640bd3652",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/hero.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "hero",
+      "bytes": 200142,
+      "data_on_screen": "iNFT #5: public GLB from the collection's own metadata",
+      "file": "docs/media/shots/hero-framed.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "7b86c888fd3911e824698b95c64275583bf3f8ef32187fbaef1bf14d22c0aee0",
+        "reviewer": "owner",
+        "sha256": "ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743",
+        "verdict": "clean"
+      },
+      "master": "masters/hero-framed@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        3312,
+        2196
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 0
+        }
+      },
+      "route": "Home (stage mode) with the summoned iNFT and the Dock",
+      "sha256": "ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743",
+      "size": [
+        1840,
+        1220
+      ],
+      "web_png_fallback": "masters/hero-framed.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "inft",
+      "bytes": 241400,
+      "data_on_screen": "roster = public Studio Experimentals metadata via demo wallet session",
+      "file": "docs/media/shots/inft.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "da5847a8eec9aad25cd966aae6be9b4f55ed1d5fa7d0a9cd2396d84065e3ee6c",
+        "reviewer": "owner",
+        "sha256": "976ae0c12f695f3b10e37251c9620ac274b4efff33f013fd2cdbb1037e5cb77d",
+        "verdict": "clean"
+      },
+      "master": "masters/inft@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 11
+        }
+      },
+      "route": "Home › iNFT island (right edge \"iNFT\" tab)",
+      "sha256": "976ae0c12f695f3b10e37251c9620ac274b4efff33f013fd2cdbb1037e5cb77d",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/inft.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "acp-market",
+      "bytes": 144562,
+      "data_on_screen": "demo agents/offerings (demo-content.json), answered by the in-memory demo ACP bridge",
+      "file": "docs/media/shots/acp-market.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "4acf1dc893268e4e87f07065a847fd464a4666235a62104c2f71f4e33f726fc7",
+        "reviewer": "owner",
+        "sha256": "267066c3afe67c9b22899108b30ddb9d2ebfff984d8fffc3dce617a453297fc9",
+        "verdict": "clean"
+      },
+      "master": "masters/acp-market@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 84
+        }
+      },
+      "route": "Dock › ACP Market › Discover",
+      "sha256": "267066c3afe67c9b22899108b30ddb9d2ebfff984d8fffc3dce617a453297fc9",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/acp-market.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "economyos",
+      "bytes": 119114,
+      "data_on_screen": "demo per-iNFT status map + pinned ACP tools version from the build",
+      "file": "docs/media/shots/economyos.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "7f6e75c5b9d8400db52170a26348140610b58498ce898520c2e84bf559bbb4e0",
+        "reviewer": "owner",
+        "sha256": "76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc",
+        "verdict": "clean"
+      },
+      "master": "masters/economyos@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 49
+        }
+      },
+      "route": "Settings › Economy › EconomyOS (per-iNFT setup)",
+      "sha256": "76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/economyos.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "settings",
+      "bytes": 134128,
+      "data_on_screen": "defaults of a fresh profile",
+      "file": "docs/media/shots/settings.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "68b668e217aa0dbda07dd96738cfb523e86c78dd9df9bae52f0cccc954fd8b7e",
+        "reviewer": "owner",
+        "sha256": "3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e",
+        "verdict": "clean"
+      },
+      "master": "masters/settings@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 76
+        }
+      },
+      "route": "Settings › Machine › Appearance",
+      "sha256": "3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/settings.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "messages",
+      "bytes": 63902,
+      "data_on_screen": "prompts from demo-content.json; replies from demo-model.py through the real Hermes runtime",
+      "file": "docs/media/shots/messages.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "fec99fedb114dc06daa521ce27d54f4b5582005f1b0bcd619150774c848702f6",
+        "reviewer": "owner",
+        "sha256": "b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387",
+        "verdict": "clean"
+      },
+      "master": "masters/messages@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 18
+        }
+      },
+      "route": "Dock › Message (chat)",
+      "sha256": "b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/messages.png",
+      "webp_quality": 92
+    },
+    {
+      "area": "it",
+      "bytes": 70892,
+      "data_on_screen": "throwaway HOME demo project (git author \"Demo\"), neutral zsh prompt, PATH=/usr/bin:/bin",
+      "file": "docs/media/shots/it.webp",
+      "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
+      "humanReview": {
+        "contactSheetSha256": "b1ee39be3a2da6319a5333c91528f0087de3cbe6e5e71bc1063d7985ff88cc11",
+        "date": "2026-10-29",
+        "ocrVerdictSha256": "709df84a3d699203afa1e1424c108378e134d17fbc0d1b733ff5432ca0ed0736",
+        "reviewer": "owner",
+        "sha256": "b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36",
+        "verdict": "clean"
+      },
+      "master": "masters/it@2x.png",
+      "master_png_chunks": [
+        "IDAT",
+        "IEND",
+        "IHDR"
+      ],
+      "master_size": [
+        2880,
+        1800
+      ],
+      "privacy": {
+        "clean": true,
+        "dom": {
+          "findings": []
+        },
+        "ocr": {
+          "engine": "Apple Vision, on-device",
+          "findings": [],
+          "lines": 32
+        }
+      },
+      "route": "Message window rail › iT (terminal), ⌘D / ⌘⇧D splits",
+      "sha256": "b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36",
+      "size": [
+        1600,
+        1000
+      ],
+      "web_png_fallback": "masters/it.png",
+      "webp_quality": 92
+    }
+  ],
+  "tool": "tools/capture-shots.mjs"
+}

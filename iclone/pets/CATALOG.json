@@ -1,0 +1,150 @@
+{
+  "v": 1,
+  "legions": [
+    "play",
+    "death",
+    "god"
+  ],
+  "pets": [
+    {
+      "legion": "play",
+      "id": "n2",
+      "name": "#2",
+      "plate": "#bbca91",
+      "accent": "#1affe7"
+    },
+    {
+      "legion": "play",
+      "id": "n37",
+      "name": "#37",
+      "plate": "#89d2c4",
+      "accent": "#ff1a32"
+    },
+    {
+      "legion": "play",
+      "id": "n87",
+      "name": "#87",
+      "plate": "#d9ab82",
+      "accent": "#ff7e1a"
+    },
+    {
+      "legion": "play",
+      "id": "n162",
+      "name": "#162",
+      "plate": "#ca91b5",
+      "accent": "#ff1abd"
+    },
+    {
+      "legion": "play",
+      "id": "n217",
+      "name": "#217",
+      "plate": "#919aca",
+      "accent": "#cd1aff"
+    },
+    {
+      "legion": "play",
+      "id": "n1952",
+      "name": "#1952",
+      "plate": "#f2d869",
+      "accent": "#1a24ff"
+    },
+    {
+      "legion": "play",
+      "id": "n1007",
+      "name": "#1007",
+      "plate": "#91aeca",
+      "accent": "#1a8cff"
+    },
+    {
+      "legion": "death",
+      "id": "n16",
+      "name": "#16",
+      "plate": "#d08f8b",
+      "accent": "#ff1a2e"
+    },
+    {
+      "legion": "death",
+      "id": "n56",
+      "name": "#56",
+      "plate": "#d0a48b",
+      "accent": "#ff731a"
+    },
+    {
+      "legion": "death",
+      "id": "n161",
+      "name": "#161",
+      "plate": "#d2ce88",
+      "accent": "#fff81a"
+    },
+    {
+      "legion": "death",
+      "id": "n181",
+      "name": "#181",
+      "plate": "#b7d685",
+      "accent": null
+    },
+    {
+      "legion": "death",
+      "id": "n196",
+      "name": "#196",
+      "plate": "#81dad4",
+      "accent": "#1afff7"
+    },
+    {
+      "legion": "death",
+      "id": "n151",
+      "name": "#151",
+      "plate": "#9196ca",
+      "accent": "#1a41ff"
+    },
+    {
+      "legion": "death",
+      "id": "n136",
+      "name": "#136",
+      "plate": "#bf8dcd",
+      "accent": "#cd1aff"
+    },
+    {
+      "legion": "god",
+      "id": "n30",
+      "name": "#30",
+      "plate": "#bd798a",
+      "accent": "#1ab0ff"
+    },
+    {
+      "legion": "god",
+      "id": "n445",
+      "name": "#445",
+      "plate": "#91caa5",
+      "accent": "#79ff1a"
+    },
+    {
+      "legion": "god",
+      "id": "n715",
+      "name": "#715",
+      "plate": "#91b9ca",
+      "accent": null
+    },
+    {
+      "legion": "god",
+      "id": "n255",
+      "name": "#255",
+      "plate": "#cab991",
+      "accent": null
+    },
+    {
+      "legion": "god",
+      "id": "n250",
+      "name": "#250",
+      "plate": "#9c7ccd",
+      "accent": "#1aadff"
+    },
+    {
+      "legion": "god",
+      "id": "n1405",
+      "name": "#1405",
+      "plate": "#ca9c91",
+      "accent": "#ff991a"
+    }
+  ]
+}

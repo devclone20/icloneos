@@ -1,0 +1,8 @@
+[
+  {
+    "name": "hermes:hud:native-drag",
+    "reason": "ipcMain.on handler (electron/hud-ipc.ts) with no sender: the channel string appears in no ipcRenderer call in electron/preload.ts nor anywhere else under src/ or electron/ (checker-resolved scan + grep, 2026-10-07); owned by P2/P3 (hud), not P4a",
+    "ticket": "P4a-r1-T1",
+    "expires": "2026-10-21"
+  }
+]

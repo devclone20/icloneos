@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "name": "davinci-resolve",
+  "version": "1.0.0",
+  "author": "the owner (ported from his Claude Code skills library)",
+  "license": "MIT",
+  "source": {
+    "library": "claude-code-skills",
+    "path": "davinci-resolve",
+    "version": null,
+    "sha256": "efee85f2e85bbe3f1cdef02505400cf35374c2a0428ba8ebfbea888c0d0e027f",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [],
+  "requires": {
+    "os": [
+      "macos"
+    ],
+    "bins": [],
+    "mcp": [
+      "davinci-resolve"
+    ],
+    "paths": [
+      "/Applications/DaVinci Resolve.app",
+      "~/Movies",
+      "~/Movies/ResolveBridge",
+      "~/Movies/.resolve-bridge"
+    ]
+  },
+  "touches": [
+    "Wo",
+    "X",
+    "S"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 1,
+    "codePaths": 1,
+    "claudeRefs": 1,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 0
+  }
+}

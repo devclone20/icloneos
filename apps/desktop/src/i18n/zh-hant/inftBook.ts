@@ -1,0 +1,48 @@
+import type { TranslationOverrides } from '../define-locale'
+
+// K21/N5: counts in this locale's own digit grouping (5,000 not 5000).
+const n = (value: number): string => value.toLocaleString('zh-TW')
+
+export const inftBook: TranslationOverrides['inftBook'] = {
+  navLabel: 'iNFT Book',
+  keywords: ['inft', 'book', '圖鑑', '錢包', '收藏', '首頁'],
+  rule: '首頁只顯示你在 iNFT Book 中勾選的 iNFT。',
+  openBook: '開啟 iNFT Book',
+  wallet: address => `錢包 ${address}`,
+  count: (total, onHome) => `${n(total)} 個 iNFT · 首頁 ${n(onHome)} 個`,
+  rescan: '重新掃描',
+  search: '搜尋 iNFT',
+  filterCollection: '收藏系列',
+  allCollections: '全部系列',
+  filterChain: '鏈',
+  allChains: '全部鏈',
+  filterState: '顯示',
+  stateAll: '全部',
+  stateChecked: '在首頁',
+  stateUnchecked: '不在首頁',
+  checkShown: '勾選全部顯示項',
+  uncheckShown: '取消勾選全部顯示項',
+  confirmTitle: count => `要把 ${n(count)} 個 iNFT 放到首頁嗎？`,
+  confirmBody: '首頁收藏越長，瀏覽越費時。之後可以隨時取消勾選。',
+  confirmAction: '勾選它們',
+  confirmBusy: '正在勾選…',
+  confirmDone: '已勾選',
+  confirmError: '無法勾選，請再試一次。',
+  cancel: '取消',
+  scanning: found => `正在掃描錢包… 已找到 ${n(found)} 個`,
+  partial: loaded => `已載入 ${n(loaded)} / ? 個 — 掃描在中途停止。`,
+  capped: limit => `僅顯示前 ${n(limit)} 個 iNFT。此錢包中還有更多，iNFT Book 最多讀取 ${n(limit)} 個。`,
+  retry: '重試',
+  kept: count => `我們保留了 iNFT Book 之前首頁上的 ${n(count)} 個。`,
+  dismiss: '關閉',
+  noWallet: '使用錢包登入即可查看其中的 iNFT。',
+  signIn: '登入',
+  none: '此錢包中還沒有 iNFT。',
+  noMatch: '沒有符合篩選條件的 iNFT。',
+  scanFailed: '錢包掃描失敗。',
+  scanRefused: '錢包掃描被拒絕。',
+  showOnHome: name => `在首頁顯示 ${name}`,
+  setUp: '已設定',
+  setupNeeded: '需要設定',
+  homeEmpty: '還沒有勾選要在首頁顯示的 iNFT。'
+}

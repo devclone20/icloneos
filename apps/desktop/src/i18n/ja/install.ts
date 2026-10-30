@@ -1,0 +1,132 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const install: TranslationOverrides['install'] = {
+  stageStates: {
+    pending: '待機中',
+    running: 'インストール中',
+    succeeded: '完了',
+    skipped: 'スキップ',
+    failed: '失敗'
+  },
+  oneTimeTitle: 'エージェントには一度限りのインストールが必要です',
+  unsupportedDesc: platform =>
+    `${platform} では自動の初回インストールはまだ利用できません。ターミナルを開いて以下のコマンドを実行し、このアプリを再起動してください。以降の起動ではこの手順はスキップされます。`,
+  installCommand: 'インストールコマンド',
+  copyCommand: 'コマンドをコピー',
+  viewDocs: 'インストールドキュメントを見る',
+  installTo: 'インストール先',
+  retryAfterRun: '実行しました — 再試行',
+  setupChoiceTitle: 'iclone os をセットアップ',
+  setupChoiceDesc:
+    'すでに実行しているエージェントのゲートウェイに接続するか、このコンピューターにエージェントをローカルインストールします。',
+  connectExistingTitle: '既存のエージェントに接続',
+  connectExistingShort: '既存環境に接続',
+  connectExistingDesc:
+    'セッショントークンまたはブラウザーサインインでリモートバックエンドを使用します。ローカルインストールは開始されません。',
+  installLocalTitle: 'エージェントをローカルにインストール',
+  installLocalDesc:
+    'エージェントをダウンロードし、Python 環境を作成して、このコンピューターでバックエンドを実行します。',
+  localStartUnavailable: 'ローカルインストールを開始できません。iclone os を再起動して、もう一度お試しください。',
+  remoteSetupTitle: '既存のエージェントに接続',
+  remoteSetupDesc:
+    'ゲートウェイ URL を入力してください。iclone os がトークンとブラウザーサインインのどちらが必要かを検出します。',
+  remoteUrlTitle: 'ゲートウェイ URL',
+  remoteUrlDesc: 'エージェントのゲートウェイのベース URL を使用します。リモートの場合は https:// を含めてください。',
+  remoteUrlPlaceholder: 'https://gateway.example.com/agent',
+  probing: 'ゲートウェイ認証方式を検出中...',
+  probeError: 'そのエージェントのゲートウェイに到達できませんでした。',
+  identityProvider: 'ID プロバイダー',
+  authTitle: '認証',
+  authNeedsOauth: provider => `このゲートウェイをテストする前に ${provider} でサインインしてください。`,
+  authSignedIn: 'ブラウザーサインインが完了しました。',
+  connected: '接続済み',
+  signIn: 'サインイン',
+  signInWith: provider => `${provider} でサインイン`,
+  enterUrlFirst: '先にゲートウェイ URL を入力してください。',
+  signInIncomplete: '認証が完了する前にサインインウィンドウが閉じられました。',
+  tokenTitle: 'セッショントークン',
+  tokenDesc: 'リモートゲートウェイの .env ファイルからセッショントークンを貼り付けます。',
+  pasteSessionToken: 'セッショントークンを貼り付け',
+  incompleteSignInTest: 'OAuth で保護されたこのゲートウェイをテストする前にサインインしてください。',
+  incompleteTokenTest: 'このゲートウェイをテストする前にセッショントークンを入力してください。',
+  testConnection: '接続をテスト',
+  testSucceeded: (baseUrl, version) => `${baseUrl}${version ? ` (${version})` : ''} に接続しました。`,
+  applyRemote: '適用して再接続',
+  backToSetup: '戻る',
+  failedTitle: 'インストールに失敗しました',
+  settingUpTitle: 'エージェントを設定中',
+  finishingTitle: '仕上げ中',
+  failedDesc:
+    'インストール手順のいずれかが失敗しました。Windows では、別のエージェントの CLI またはデスクトップインスタンスが実行中の場合に発生することがあります。実行中のエージェントのインスタンスをすべて停止してから再試行してください。詳細は以下またはデスクトップログで確認できます。',
+  activeDesc:
+    'これは一回限りのセットアップです。エージェントのインストーラーが依存関係をダウンロードしてマシンを設定しています。以降の起動ではこの手順はスキップされます。',
+  runtimeUpgradeDesc:
+    'アプリは検証済みの独自のエージェントランタイムを使うようになりました。フォルダ ~/.hermes/hermes-agent は変更されていません。',
+  progress: (completed, total) => `${total} ステップ中 ${completed} 完了`,
+  currentStage: stage => ` — 現在: ${stage}`,
+  fetchingManifest: 'インストーラーマニフェストを取得中...',
+  error: 'エラー',
+  hideOutput: 'インストーラーの出力を非表示',
+  showOutput: 'インストーラーの出力を表示',
+  lines: count => `${count} 行`,
+  noOutput: 'まだ出力がありません。',
+  cancelling: 'キャンセル中...',
+  cancelInstall: 'インストールをキャンセル',
+  transcriptSaved: 'フルトランスクリプトを保存しました:',
+  copiedOutput: 'コピーしました！',
+  copyOutput: '出力をコピー',
+  reloadRetry: '再読み込みして再試行',
+  recovery: {
+    diagnosis: {
+      cancelled: 'インストールはキャンセルされました。',
+      disk: 'インストールを完了するための空きディスク容量が足りません。',
+      integrity: 'ダウンロードしたファイルが期待される指紋と一致しないため、使用しませんでした。',
+      interpreter: 'エージェントに必要な Python インタープリタが見つかりません。',
+      killed: 'インストールが完了する前にシステムによって停止されました。',
+      network: 'インストールがインターネットに接続できませんでした（接続がないか、サーバーが応答しません）。',
+      permission: 'アプリが自身のフォルダに書き込めませんでした。',
+      resolver: '依存関係をこの Mac 用にビルドできませんでした。',
+      slow: 'ネットワークまたはこの Mac が遅く、15 分以内にインストールを完了できませんでした（約 4 Mbps 必要）。再試行すると中断したところから続行します。',
+      stalled: 'インストールが 2 分間進まなかった（出力・処理・書き込みなし）ため停止しました。',
+      unknown: 'インストールを完了できませんでした。'
+    },
+    failedIn: name => `${name} のインストール中に失敗しました。`,
+    fixRetry: '再試行',
+    fixRepair: 'インストールを修復',
+    fixFreeDisk: needed => (needed ? `ディスクの空き容量を確保…（${needed} 必要）` : 'ディスクの空き容量を確保…'),
+    fixNetworkSettings: 'ネットワーク設定を開く',
+    fixRevealFolder: 'アプリのフォルダを表示',
+    retryNow: '再試行',
+    skipForNow: '今はスキップ',
+    skipHint:
+      'スキップするとエージェントなしでアプリが開きます。後で 設定 → マシン → エージェントランタイム からインストールできます。',
+    showDetails: '詳細を表示',
+    hideDetails: '詳細を隠す',
+    packagesTitle: 'パッケージ',
+    failedDesc: '失われたものはありません。完了した手順は保持され、再試行すると中断したところから続行します。',
+    failedDescRepair:
+      '失われたものはありません。チャットと設定はそのままです。「インストールを修復」でエージェントのファイルを最初から準備し直します。',
+    transcriptHint: '完全な記録は「詳細を表示」とデスクトップのログにあります。',
+    stageNames: {
+      prerequisites: 'この Mac を確認',
+      repository: 'エージェントのファイル',
+      venv: 'Python 環境',
+      'python-deps': 'パッケージ',
+      config: '設定',
+      products: 'コマンドラインツール',
+      setup: 'API キー',
+      gateway: 'ゲートウェイ',
+      complete: '完了'
+    },
+    pythonEnvironment: 'Python パッケージ',
+    packageStates: {
+      waiting: '待機中',
+      downloading: (percent, done, total) => `${percent} % · ${done} / ${total}`,
+      unpacking: '展開中',
+      installing: 'インストール中',
+      done: '完了',
+      failed: '失敗',
+      notNeeded: 'インストール済み'
+    }
+  }
+}

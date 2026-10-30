@@ -1,0 +1,336 @@
+import { type Locale, useI18n } from '@/i18n'
+import { enDiagnostics } from '@/i18n/en'
+
+type Status = 'fail' | 'pass' | 'skip' | 'warn'
+
+// The Diagnostics pane's words in every locale. English extends the shared
+// enDiagnostics catalogue with the pane's row sentences; the others are whole.
+const en = {
+  ...enDiagnostics,
+  undoHint: 'To undo the fix, put that backup back in place.',
+  packTitles: {
+    runtime: 'The agent installed on this computer',
+    gateway: 'The agent’s connection and sessions',
+    acp: 'Your agent’s marketplace account',
+    native: 'How the app is installed',
+    network: 'Your internet connection',
+    permissions: 'Permissions you have given the app',
+    storage: 'Your data on this computer',
+    wallet: 'Your wallet and sign-in'
+  } as Record<string, string>,
+  packFallback: 'More checks of this computer',
+  progress: (pack: string, done: number, total: number) => `${pack} · checking ${done} of ${total}`,
+  intro: 'Everything runs on this device; nothing is sent.',
+  runTitle: 'Check this computer, the agent and your local data',
+  packHint: (state: string, count: number) => (state ? `${state} · ${count} checks` : `${count} checks`),
+  show: 'Show checks',
+  hide: 'Hide checks',
+  permissionHint: 'Opens Privacy & Security in System Settings; run the check again once you have granted it.',
+  permissionTitle: 'This fix needs a permission you have not given',
+  live: 'Let the checks reach the internet',
+  copyHint: 'The report is plain text, ready to paste into a chat or an email.',
+  copyTitle: 'Copy the last report to paste it anywhere',
+  sendTitle: 'Save a diagnostics report to a file',
+  sendHint: 'You see what it holds first; secrets are removed and nothing is uploaded.',
+  logsHint: 'The files there show what the app did, step by step, for anyone helping you.',
+  logsTitle: 'Open the folder where the app keeps its logs'
+}
+
+export type DiagnosticsCopy = typeof en
+
+const ar: DiagnosticsCopy = {
+  packTitles: {
+    runtime: 'الوكيل المثبّت على هذا الحاسوب',
+    gateway: 'اتصال الوكيل وجلساته',
+    acp: 'حساب وكيلك في السوق',
+    native: 'كيف ثُبّت التطبيق',
+    network: 'اتصالك بالإنترنت',
+    permissions: 'الأذونات التي منحتها للتطبيق',
+    storage: 'بياناتك على هذا الحاسوب',
+    wallet: 'محفظتك وتسجيل الدخول'
+  } as Record<string, string>,
+  packFallback: 'فحوص أخرى لهذا الحاسوب',
+  title: 'التشخيص',
+  intro: 'كل شيء يعمل على هذا الجهاز؛ لا يُرسل أي شيء.',
+  runAll: 'افحص الكل',
+  running: 'جارٍ الفحص…',
+  notRun: 'لم يُشغَّل بعد',
+  lastRun: (age, duration) => `آخر فحص ${age} · ${duration}`,
+  allClear: age => `كل شيء سليم · ${age}`,
+  summary: (fail, warn) =>
+    [fail ? `${fail} للإصلاح` : '', warn ? `${warn} للمراجعة` : ''].filter(Boolean).join(' · ') || 'كل شيء سليم',
+  progress: (pack, done, total) => `جارٍ فحص ${pack} · ${done} من ${total}`,
+  state: { pass: 'سليم', warn: 'راجِع', fail: 'أصلِح', skip: 'تم التخطي' } as Record<Status, string>,
+  preview: 'معاينة',
+  previewTitle: 'ما سيفعله هذا الإصلاح',
+  previewEmpty: 'لا شيء لفعله — هذا الفحص ناجح بالفعل.',
+  applied: dir => (dir ? `تم. توجد نسخة احتياطية في ${dir}.` : 'تم.'),
+  undoHint: 'للتراجع عن الإصلاح، أعِد النسخة الاحتياطية إلى مكانها.',
+  needsConsent: key => `يحتاج هذا الإصلاح إلى إذن ${key}. فعّله أولًا في الإعدادات › الخصوصية.`,
+  openPrivacy: 'افتح الخصوصية',
+  needsYou: 'يحتاج إلى موافقتك',
+  copyReport: 'انسخ التقرير',
+  copied: 'تم النسخ',
+  sendDiagnostics: 'حفظ التشخيص',
+  openLogs: 'افتح مجلد السجلات',
+  live: 'اسمح للفحوصات بالوصول إلى الإنترنت',
+  liveHint: 'متوقف افتراضيًا. عند تشغيله، تتصل فحوصات الشبكة بالإنترنت مرة واحدة في كل فحص.',
+  unavailable: 'التشخيص متاح في تطبيق سطح المكتب.',
+  justNow: 'الآن',
+  minAgo: n => `قبل ${n} د`,
+  hoursAgo: n => `قبل ${n} س`,
+  daysAgo: n => `قبل ${n} ي`,
+  runTitle: 'افحص هذا الحاسوب والوكيل وبياناتك المحلية',
+  packHint: (state, count) => (state ? `${state} · ${count} فحوصات` : `${count} فحوصات`),
+  show: 'أظهر الفحوصات',
+  hide: 'أخفِ الفحوصات',
+  permissionHint: 'يفتح «الخصوصية والأمان» في إعدادات النظام؛ أعد الفحص بعد منح الإذن.',
+  permissionTitle: 'يحتاج هذا الإصلاح إلى إذن لم تمنحه بعد',
+  copyHint: 'التقرير نص عادي جاهز للصقه في محادثة أو بريد إلكتروني.',
+  copyTitle: 'انسخ آخر تقرير لتلصقه في أي مكان',
+  sendTitle: 'احفظ تقرير تشخيص في ملف',
+  sendHint: 'ترى محتواه أولًا؛ تُزال الأسرار ولا يُرفع أي شيء.',
+  logsHint: 'الملفات هناك تُظهر ما فعله التطبيق خطوة بخطوة لمن يساعدك.',
+  logsTitle: 'افتح المجلد الذي يحفظ فيه التطبيق سجلاته'
+}
+
+const ja: DiagnosticsCopy = {
+  packTitles: {
+    runtime: 'このコンピューターにインストールされたエージェント',
+    gateway: 'エージェントの接続とセッション',
+    acp: 'エージェントのマーケットプレイスアカウント',
+    native: 'アプリのインストール状態',
+    network: 'インターネット接続',
+    permissions: 'アプリに与えた権限',
+    storage: 'このコンピューター上のあなたのデータ',
+    wallet: 'ウォレットとサインイン'
+  } as Record<string, string>,
+  packFallback: 'このコンピューターのその他のチェック',
+  title: '診断',
+  intro: 'すべてこのデバイス上で実行され、何も送信されません。',
+  runAll: 'すべて確認',
+  running: '確認中…',
+  notRun: 'まだ実行していません',
+  lastRun: (age, duration) => `前回の実行 ${age} · ${duration}`,
+  allClear: age => `すべて問題ありません · ${age}`,
+  summary: (fail, warn) =>
+    [fail ? `修正 ${fail} 件` : '', warn ? `確認 ${warn} 件` : ''].filter(Boolean).join(' · ') ||
+    'すべて問題ありません',
+  progress: (pack, done, total) => `${pack} を確認中 · ${done} / ${total}`,
+  state: { pass: 'OK', warn: '確認', fail: '修正', skip: 'スキップ' } as Record<Status, string>,
+  preview: 'プレビュー',
+  previewTitle: 'この修正で行うこと',
+  previewEmpty: '何もする必要はありません。このチェックはすでに合格しています。',
+  applied: dir => (dir ? `完了しました。バックアップは ${dir} にあります。` : '完了しました。'),
+  undoHint: '元に戻すには、そのバックアップを元の場所に戻してください。',
+  needsConsent: key => `この修正には ${key} の許可が必要です。先に「設定 › プライバシー」でオンにしてください。`,
+  openPrivacy: 'プライバシーを開く',
+  needsYou: 'あなたの承認が必要です',
+  copyReport: 'レポートをコピー',
+  copied: 'コピーしました',
+  sendDiagnostics: '診断を保存',
+  openLogs: 'ログフォルダを開く',
+  live: 'チェックがインターネットに接続できるようにする',
+  liveHint: '既定ではオフです。オンにすると、ネットワークのチェックが実行ごとに一度インターネットに接続します。',
+  unavailable: '診断はデスクトップアプリで利用できます。',
+  justNow: 'たった今',
+  minAgo: n => `${n} 分前`,
+  hoursAgo: n => `${n} 時間前`,
+  daysAgo: n => `${n} 日前`,
+  runTitle: 'このコンピュータ、エージェント、ローカルデータを確認する',
+  packHint: (state, count) => (state ? `${state} · ${count} 件のチェック` : `${count} 件のチェック`),
+  show: 'チェックを表示',
+  hide: 'チェックを隠す',
+  permissionHint: 'システム設定の「プライバシーとセキュリティ」を開きます。許可したら、もう一度チェックしてください。',
+  permissionTitle: 'この修正には、まだ許可していない権限が必要です',
+  copyHint: 'レポートはプレーンテキストで、チャットやメールにそのまま貼り付けられます。',
+  copyTitle: '最新のレポートをコピーして、どこにでも貼り付ける',
+  sendTitle: '診断レポートをファイルに保存する',
+  sendHint: '先に内容を確認できます。秘密情報は取り除かれ、何もアップロードされません。',
+  logsHint: 'そこにあるファイルは、アプリが何をしたかを順を追って示します。助けてくれる人のためのものです。',
+  logsTitle: 'アプリがログを保存するフォルダを開く'
+}
+
+const zh: DiagnosticsCopy = {
+  packTitles: {
+    runtime: '安装在这台电脑上的智能体',
+    gateway: '智能体的连接和会话',
+    acp: '你的智能体的市场账户',
+    native: '应用的安装情况',
+    network: '你的网络连接',
+    permissions: '你授予应用的权限',
+    storage: '你在这台电脑上的数据',
+    wallet: '你的钱包和登录'
+  } as Record<string, string>,
+  packFallback: '这台电脑的其他检查',
+  title: '诊断',
+  intro: '一切都在这台设备上运行，不会发送任何内容。',
+  runAll: '全部检查',
+  running: '正在检查…',
+  notRun: '尚未运行',
+  lastRun: (age, duration) => `上次运行 ${age} · ${duration}`,
+  allClear: age => `一切正常 · ${age}`,
+  summary: (fail, warn) =>
+    [fail ? `${fail} 项待修复` : '', warn ? `${warn} 项待查看` : ''].filter(Boolean).join(' · ') || '一切正常',
+  progress: (pack, done, total) => `正在检查 ${pack} · ${done} / ${total}`,
+  state: { pass: '正常', warn: '查看', fail: '修复', skip: '已跳过' } as Record<Status, string>,
+  preview: '预览',
+  previewTitle: '此修复将执行的操作',
+  previewEmpty: '无需操作——此检查已通过。',
+  applied: dir => (dir ? `已完成。备份位于 ${dir}。` : '已完成。'),
+  undoHint: '要撤销此修复，请将该备份放回原处。',
+  needsConsent: key => `此修复需要 ${key} 权限。请先在“设置 › 隐私”中开启。`,
+  openPrivacy: '打开隐私',
+  needsYou: '需要你的批准',
+  copyReport: '复制报告',
+  copied: '已复制',
+  sendDiagnostics: '保存诊断',
+  openLogs: '打开日志文件夹',
+  live: '允许检查连接互联网',
+  liveHint: '默认关闭。开启后，网络检查每次运行时会连接一次互联网。',
+  unavailable: '诊断功能可在桌面应用中使用。',
+  justNow: '刚刚',
+  minAgo: n => `${n} 分钟前`,
+  hoursAgo: n => `${n} 小时前`,
+  daysAgo: n => `${n} 天前`,
+  runTitle: '检查这台电脑、智能体和你的本地数据',
+  packHint: (state, count) => (state ? `${state} · ${count} 项检查` : `${count} 项检查`),
+  show: '显示检查项',
+  hide: '隐藏检查项',
+  permissionHint: '打开系统设置中的「隐私与安全性」；授予权限后再运行一次检查。',
+  permissionTitle: '此修复需要一项你尚未授予的权限',
+  copyHint: '报告是纯文本，可直接粘贴到聊天或邮件中。',
+  copyTitle: '复制最近的报告，以便粘贴到任何地方',
+  sendTitle: '把诊断报告保存到文件',
+  sendHint: '你会先看到其中的内容；密钥等会被移除，不会上传任何内容。',
+  logsHint: '那里的文件逐步记录了应用做过的事，方便帮助你的人查看。',
+  logsTitle: '打开应用保存日志的文件夹'
+}
+
+const zhHant: DiagnosticsCopy = {
+  packTitles: {
+    runtime: '安裝在這台電腦上的智慧代理',
+    gateway: '智慧代理的連線和工作階段',
+    acp: '你的智慧代理的市集帳戶',
+    native: '應用程式的安裝情況',
+    network: '你的網路連線',
+    permissions: '你授予應用程式的權限',
+    storage: '你在這台電腦上的資料',
+    wallet: '你的錢包和登入'
+  } as Record<string, string>,
+  packFallback: '這台電腦的其他檢查',
+  title: '診斷',
+  intro: '一切都在這台裝置上執行，不會傳送任何內容。',
+  runAll: '全部檢查',
+  running: '正在檢查…',
+  notRun: '尚未執行',
+  lastRun: (age, duration) => `上次執行 ${age} · ${duration}`,
+  allClear: age => `一切正常 · ${age}`,
+  summary: (fail, warn) =>
+    [fail ? `${fail} 項待修復` : '', warn ? `${warn} 項待檢視` : ''].filter(Boolean).join(' · ') || '一切正常',
+  progress: (pack, done, total) => `正在檢查 ${pack} · ${done} / ${total}`,
+  state: { pass: '正常', warn: '檢視', fail: '修復', skip: '已略過' } as Record<Status, string>,
+  preview: '預覽',
+  previewTitle: '此修復將執行的動作',
+  previewEmpty: '無需動作——此檢查已通過。',
+  applied: dir => (dir ? `已完成。備份位於 ${dir}。` : '已完成。'),
+  undoHint: '若要復原此修正，請將該備份放回原處。',
+  needsConsent: key => `此修復需要 ${key} 權限。請先在「設定 › 隱私」中開啟。`,
+  openPrivacy: '開啟隱私',
+  needsYou: '需要你的核准',
+  copyReport: '拷貝報告',
+  copied: '已拷貝',
+  sendDiagnostics: '儲存診斷',
+  openLogs: '開啟記錄檔資料夾',
+  live: '允許檢查連線至網際網路',
+  liveHint: '預設關閉。開啟後，網路檢查每次執行時會連線一次網際網路。',
+  unavailable: '診斷功能可在桌面應用程式中使用。',
+  justNow: '剛剛',
+  minAgo: n => `${n} 分鐘前`,
+  hoursAgo: n => `${n} 小時前`,
+  daysAgo: n => `${n} 天前`,
+  runTitle: '檢查這台電腦、代理程式和你的本機資料',
+  packHint: (state, count) => (state ? `${state} · ${count} 項檢查` : `${count} 項檢查`),
+  show: '顯示檢查項目',
+  hide: '隱藏檢查項目',
+  permissionHint: '開啟系統設定中的「隱私權與安全性」；授予權限後再執行一次檢查。',
+  permissionTitle: '此修復需要一項你尚未授予的權限',
+  copyHint: '報告是純文字，可直接貼到聊天或郵件中。',
+  copyTitle: '拷貝最近的報告，以便貼到任何地方',
+  sendTitle: '把診斷報告儲存到檔案',
+  sendHint: '你會先看到其中的內容；密鑰等會被移除，不會上傳任何內容。',
+  logsHint: '那裡的檔案逐步記錄了應用程式做過的事，方便幫助你的人查看。',
+  logsTitle: '開啟應用程式儲存記錄檔的資料夾'
+}
+
+const ptPt: DiagnosticsCopy = {
+  packTitles: {
+    runtime: 'O agente instalado neste computador',
+    gateway: 'A ligação e as sessões do agente',
+    acp: 'A conta do seu agente no marketplace',
+    native: 'Como a aplicação está instalada',
+    network: 'A sua ligação à internet',
+    permissions: 'As permissões que deu à aplicação',
+    storage: 'Os seus dados neste computador',
+    wallet: 'A sua carteira e o início de sessão'
+  } as Record<string, string>,
+  packFallback: 'Mais verificações deste computador',
+  title: 'Diagnóstico',
+  intro: 'Tudo corre neste dispositivo; nada é enviado.',
+  runAll: 'Verificar tudo',
+  running: 'A verificar…',
+  notRun: 'Ainda não verificado',
+  lastRun: (age, duration) => `Última verificação ${age} · ${duration}`,
+  allClear: age => `Está tudo bem · ${age}`,
+  summary: (fail, warn) =>
+    [fail ? `${fail} a corrigir` : '', warn ? `${warn} a rever` : ''].filter(Boolean).join(' · ') || 'Está tudo bem',
+  progress: (pack, done, total) => `${pack} · a verificar ${done} de ${total}`,
+  state: { pass: 'Em ordem', warn: 'Rever', fail: 'Corrigir', skip: 'Ignorado' } as Record<Status, string>,
+  preview: 'Pré-visualizar',
+  previewTitle: 'O que esta correção vai fazer',
+  previewEmpty: 'Nada a fazer — esta verificação já passa.',
+  applied: dir => (dir ? `Concluído. Há uma cópia de segurança em ${dir}.` : 'Concluído.'),
+  undoHint: 'Para anular a correção, reponha essa cópia de segurança no lugar.',
+  needsConsent: key => `Esta correção precisa da permissão ${key}. Ative-a primeiro em Definições › Privacidade.`,
+  openPrivacy: 'Abrir Privacidade',
+  needsYou: 'Precisa da sua aprovação',
+  copyReport: 'Copiar relatório',
+  copied: 'Copiado',
+  sendDiagnostics: 'Guardar diagnóstico',
+  openLogs: 'Abrir pasta de registos',
+  live: 'Deixar as verificações aceder à internet',
+  liveHint:
+    'Desativado por predefinição. Quando ativado, as verificações de rede contactam a internet uma vez por execução.',
+  unavailable: 'O diagnóstico está disponível na aplicação para computador.',
+  justNow: 'agora mesmo',
+  minAgo: n => `há ${n} min`,
+  hoursAgo: n => `há ${n} h`,
+  daysAgo: n => `há ${n} d`,
+  runTitle: 'Verificar este computador, o agente e os seus dados locais',
+  packHint: (state, count) => {
+    const checks = `${count} ${count === 1 ? 'verificação' : 'verificações'}`
+
+    return state ? `${state} · ${checks}` : checks
+  },
+  show: 'Mostrar verificações',
+  hide: 'Ocultar verificações',
+  permissionHint:
+    'Abre Privacidade e segurança nas Definições do Sistema; volte a executar a verificação depois de a conceder.',
+  permissionTitle: 'Esta correção precisa de uma permissão que não deu',
+  copyHint: 'O relatório é texto simples, pronto a colar numa conversa ou num e-mail.',
+  copyTitle: 'Copiar o último relatório para o colar em qualquer lado',
+  sendTitle: 'Guardar um relatório de diagnóstico num ficheiro',
+  sendHint: 'Vê primeiro o que contém; os segredos são removidos e nada é enviado.',
+  logsHint: 'Os ficheiros aí mostram o que a aplicação fez, passo a passo, para quem o estiver a ajudar.',
+  logsTitle: 'Abrir a pasta onde a aplicação guarda os registos'
+}
+
+const BY_LOCALE: Record<Locale, DiagnosticsCopy> = { ar, en, ja, 'pt-PT': ptPt, zh, 'zh-hant': zhHant }
+
+export function diagnosticsCopy(locale: Locale): DiagnosticsCopy {
+  return BY_LOCALE[locale] ?? en
+}
+
+export function useDiagnosticsCopy(): DiagnosticsCopy {
+  return diagnosticsCopy(useI18n().locale)
+}

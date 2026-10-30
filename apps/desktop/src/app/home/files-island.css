@@ -1,0 +1,276 @@
+/* FILES island — right-edge frosted island (same grammar as the iNFT
+   island): fixed rect, glass, champagne hairlines. Mounted app-wide on the
+   global rung --ic-z-global-files (ic-layers.ts): above all of .ihome — the
+   in-.ihome modals included, the ladder's one named exception — and below
+   the upstream overlay views. */
+
+/* Mounted app-wide, so it cannot count on home.css having loaded the ladder. */
+@import './ic-layers.css';
+
+.ifiles {
+  position: fixed;
+  top: 56px;
+  right: 12px;
+  bottom: 28px;
+  z-index: var(--ic-z-global-files);
+  display: flex;
+  flex-direction: column;
+  width: min(30rem, calc(100vw - 96px));
+  overflow: hidden;
+  border-radius: var(--ic-radius-xl);
+  border: 1px solid var(--ic-home-accent-30);
+  background: var(--ic-home-veil-60);
+  backdrop-filter: blur(var(--ic-blur-deep)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-deep)) saturate(1.3);
+  /* The house spring — every sibling island enters on it; plain ease made
+     this the one panel that arrived flat. */
+  animation: ifiles-in var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+@keyframes ifiles-in {
+  from {
+    translate: 24px 0;
+    opacity: 0;
+  }
+}
+
+.ifiles__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 8px 18px;
+}
+
+.ifiles__title {
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  color: var(--ic-home-accent-85);
+}
+
+.ifiles__head-actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.ifiles__icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--ic-radius-pill);
+  color: var(--ic-home-ink-54);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ifiles__icon-btn:hover {
+  background: var(--ic-hairline-accent);
+  color: var(--ic-text-1);
+}
+
+.ifiles__roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 14px 10px;
+}
+
+.ifiles__root {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-hairline-accent);
+  background: var(--ic-fill-hover);
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ifiles__root--on {
+  border-color: var(--ic-home-accent-40);
+  background: var(--ic-accent-soft);
+}
+
+.ifiles__root-btn {
+  padding: 2px 8px;
+  border-radius: var(--ic-radius-pill);
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.06em;
+  color: var(--ic-home-ink-72);
+  cursor: pointer;
+}
+
+.ifiles__root--on .ifiles__root-btn {
+  color: var(--ic-text-1);
+}
+
+.ifiles__root-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ic-radius-pill);
+  color: var(--ic-home-ink-45);
+  cursor: pointer;
+}
+
+.ifiles__root-x:hover {
+  background: var(--ic-hairline-accent);
+  color: var(--ic-text-1);
+}
+
+.ifiles__root-add {
+  padding: 4px 9px;
+  color: var(--ic-text-2);
+  cursor: pointer;
+}
+
+.ifiles__root-add:hover {
+  background: var(--ic-accent-soft);
+  color: var(--ic-text-1);
+}
+
+.ifiles__tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 8px 14px;
+  scrollbar-width: thin;
+}
+
+.ifiles__row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--ic-radius-sm);
+  text-align: left;
+  color: var(--ic-text-2);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ifiles__row:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.ifiles__name {
+  overflow: hidden;
+  font-size: var(--ic-type-md);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ifiles__name--dir {
+  color: var(--ic-home-accent-85);
+}
+
+.ifiles__empty,
+.ifiles__error,
+.ifiles__notice {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-home-ink-45);
+}
+
+.ifiles__error {
+  color: var(--ic-home-danger-80);
+}
+
+.ifiles__file {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ifiles__file-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 12px 8px 16px;
+  color: var(--ic-home-ink-72);
+}
+
+.ifiles__file-name {
+  overflow: hidden;
+  flex: 1;
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ifiles__file-size {
+  font-size: var(--ic-type-xs);
+  color: var(--ic-text-3);
+}
+
+.ifiles__save {
+  padding: 3px 12px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-home-accent-30);
+  background: var(--ic-accent-soft);
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.06em;
+  color: var(--ic-text-1);
+  cursor: pointer;
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ifiles__save:hover {
+  background: var(--ic-focus-ring);
+}
+
+.ifiles__save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ifiles__editor {
+  flex: 1;
+  min-height: 0;
+  margin: 0 10px 12px;
+  overflow: hidden;
+  border-radius: var(--ic-radius-md);
+  border: 1px solid var(--ic-accent-soft);
+}
+
+.ifiles__editor > * {
+  height: 100%;
+}
+
+.ifiles__image {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  margin: 0 10px 12px;
+  overflow: hidden;
+  border-radius: var(--ic-radius-md);
+  border: 1px solid var(--ic-accent-soft);
+  background: var(--ic-home-shade-67);
+}
+
+.ifiles__image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ifiles {
+    animation: none;
+  }
+}

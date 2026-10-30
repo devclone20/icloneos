@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "version": 1,
+  "updatedAt": "2026-10-16",
+  "remote": { "url": null, "publicKey": null },
+  "entries": [
+    {
+      "id": "robinhood-icloneos-i01",
+      "chain": "Robinhood",
+      "chainId": 4663,
+      "contract": "0x4dfb27e4e6ade6afc8a21ab14751ee8b7ac75631",
+      "standard": "erc721",
+      "collection": "icloneOS i01 · Studio Experimentals",
+      "soulSource": "agent_bootstrap",
+      "explorer": "https://robinhoodchain.blockscout.com",
+      "indexer": "https://robinhoodchain.blockscout.com/api/v2",
+      "rpcs": ["https://rpc.mainnet.chain.robinhood.com"],
+      "logWindow": 50000,
+      "activeFrom": 0,
+      "agentStatus": null
+    },
+    {
+      "id": "base-atlas",
+      "chain": "Base",
+      "chainId": 8453,
+      "contract": "0x3d9f35e08c41a80155353862f883f2b70119809f",
+      "standard": "erc721",
+      "collection": "CLONE FRAME · ATLAS",
+      "soulSource": "agent_bootstrap",
+      "explorer": "https://base.blockscout.com",
+      "indexer": "https://base.blockscout.com/api/v2",
+      "rpcs": ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.llamarpc.com", "https://1rpc.io/base"],
+      "logWindow": 10000,
+      "activeFrom": 0,
+      "agentStatus": null
+    },
+    {
+      "id": "base-erc8004-identity",
+      "chain": "Base",
+      "chainId": 8453,
+      "contract": "0x8004a169fb4a3325136eb29fa0ceb6d2e539a432",
+      "standard": "erc721",
+      "collection": "ERC-8004 AgentIdentity",
+      "soulSource": "agent_bootstrap",
+      "explorer": "https://base.blockscout.com",
+      "indexer": "https://base.blockscout.com/api/v2",
+      "rpcs": ["https://mainnet.base.org", "https://base-rpc.publicnode.com", "https://base.llamarpc.com", "https://1rpc.io/base"],
+      "logWindow": 10000,
+      "activeFrom": 0,
+      "agentStatus": null
+    }
+  ]
+}

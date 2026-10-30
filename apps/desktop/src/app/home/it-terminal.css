@@ -1,0 +1,382 @@
+/* iT — the in-Message terminal band. House glass: frosted ink, champagne
+   hairlines, steady (never blinking) tab lights — the HUB iT grammar. */
+
+.itwin {
+  position: fixed;
+  /* Fills the Message window's BODY — iT is a full VIEW of the window, never
+     a band under the chat (owner rule). The top is the MEASURED body rect
+     (window/rect.ts publishBodyRect: the window's top edge + the head band),
+     as the sidebar's is (msg-sidebar.css): since the owner's
+     decision the band is in both views, and an offset of its own would cover
+     the shell's first lines at every text size the band grows with. No corner
+     clearance here — the band, not the window's rounded corner, is what this
+     edge meets. */
+  top: var(--iwin-top, calc(var(--ic-frame-top) + var(--ic-win-head-h)));
+  /* 10px clears the window's rounded corners: the shells parked under this
+     panel are square, and a square corner stays inside a radius-26 corner
+     only from ≥ 7.6px in (R·(1 − 1/√2)). At 6px they poked past the plate. */
+  left: calc(var(--iwin-left, var(--ic-frame-left)) + 10px);
+  right: calc(var(--iwin-right, var(--ic-frame-right)) + 10px);
+  bottom: calc(var(--iwin-outer-bottom, var(--ic-frame-bottom)) + 10px);
+  z-index: var(--ic-z-ihome-itwin);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Concentric with the window: radius 26 − 10px inset. No border — iT is
+     the window's own view, not a box inside it. */
+  border-radius: var(--ic-radius-lg);
+  /* NO fill and NO backdrop-filter over the body: the shells are parked
+     UNDER this layer by the host (it-host.tsx, z 39 global, below .ihome's
+     40), so a tint here would wash every terminal and a blur would smear the
+     text. The rail below carries the glass; the window plate (home.css
+     `.iwin-plate`) paints everything around and between the panes. */
+  background: transparent;
+}
+
+.itwin--hidden {
+  visibility: hidden;
+  pointer-events: none !important;
+}
+
+/* iT's chrome fades with the Message opacity slider. The shells fade with it
+   too, through home.css's own `[data-terminal]` rule — they live outside this
+   element now, so the two can no longer double-apply. */
+.itwin {
+  opacity: var(--iclone-msg-opacity, 1);
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.itwin__rail {
+  position: relative;
+  z-index: var(--ic-z-local-base);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--ic-accent-soft);
+  background: var(--ic-home-veil-72);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+}
+
+.itwin__rail-gap {
+  flex: 1;
+}
+
+.itwin__panes-n {
+  font-style: normal;
+  font-size: var(--ic-type-2xs);
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+.itwin__mark {
+  margin-right: 4px;
+  font-family: 'Noto Serif Display ExtraCondensed', serif;
+  font-weight: 700;
+  font-size: var(--ic-type-lg);
+  color: var(--ic-accent);
+}
+
+.itwin__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: var(--ic-radius-sm);
+  border: 1px solid transparent;
+}
+
+.itwin__tab--on {
+  border-color: var(--ic-home-accent-30);
+  background: var(--ic-fill-hover);
+}
+
+.itwin__tab-name {
+  transition: color var(--ic-dur-fast) var(--ic-ease-std);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.06em;
+  color: var(--ic-home-ink-72);
+  cursor: pointer;
+}
+
+.itwin__tab--on .itwin__tab-name {
+  color: var(--ic-text-1);
+}
+
+/* Steady per-tab light — one colour, never blinking (owner order from iT). */
+.itwin__light {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-home-accent-54);
+}
+
+.itwin__tab--on .itwin__light {
+  background: var(--ic-accent);
+}
+
+/* Unread: a shell in a workspace you are not looking at printed something.
+   Steady, never blinking (owner rule from the HUB's iT) — a filled dot with a
+   halo, so it reads at a glance without pulling the eye. */
+.itwin__light--unread {
+  background: var(--ic-accent);
+  box-shadow: var(--ic-shadow-stroke-ring) var(--ic-focus-ring);
+}
+
+.itwin__tab-close,
+.itwin__add {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ic-radius-sm);
+  color: var(--ic-home-ink-54);
+  cursor: pointer;
+}
+
+.itwin__tab-close:hover,
+.itwin__add:hover:not(:disabled, [aria-disabled='true']) {
+  color: var(--ic-text-1);
+  background: var(--ic-fill-hover);
+}
+
+.itwin__add:is(:disabled, [aria-disabled='true']) {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.itwin__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Multiplex: tabs stay mounted; the active one shows ─────────────────── */
+
+.itwin__tabpane {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* visibility is descendant-overridable — every re-show must be scoped to the
+   VISIBLE iT, or hidden panes float above the chat and eat its clicks.
+   VISIBILITY ONLY: this used to re-enable pointer-events too, from the days
+   when a pane CONTAINED its xterm. The shells live beneath this layer now, so
+   re-enabling here put an invisible sheet over every one of them and the
+   terminal stopped taking clicks. */
+.itwin:not(.itwin--hidden) .itwin__tabpane--on {
+  visibility: visible;
+}
+
+.itwin__split {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.itwin__split--h {
+  flex-direction: row;
+}
+
+.itwin__split--v {
+  flex-direction: column;
+}
+
+/* A cell is its own stacking context, pinned BELOW the divider beside it.
+   Without this every divider in the tree sat at the same z=2 in one shared
+   context and plain DOM order decided the T-junctions: a divider's 7px grab
+   area overhangs its cells by 3px (the negative margins below), so a nested
+   perpendicular divider reached back over its parent's spine and stole the
+   very pixel at the parent's centre. Trapping each cell's subtree under z:1
+   makes the rule structural — at every depth, the divider wins over whatever
+   lives inside the cells it separates, which is the one that should move when
+   you grab the crossing. */
+.itwin__cell {
+  position: relative;
+  z-index: var(--ic-z-local-base);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The HUB divider: 7px hit area, a 1px line at its center, accent on hover. */
+.itwin__div {
+  flex: 0 0 7px;
+  position: relative;
+  z-index: var(--ic-z-local-raised);
+  touch-action: none;
+}
+
+.itwin__split--h > .itwin__div {
+  cursor: col-resize;
+  margin: 0 -3px;
+}
+
+.itwin__split--v > .itwin__div {
+  cursor: row-resize;
+  margin: -3px 0;
+}
+
+.itwin__div::before {
+  content: '';
+  position: absolute;
+  background: var(--ic-hairline-accent);
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.itwin__split--h > .itwin__div::before {
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.itwin__split--v > .itwin__div::before {
+  top: 3px;
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.itwin__div:hover::before {
+  background: var(--ic-accent);
+}
+
+/* A pane is an empty RECT — the host measures it and parks a shell over it.
+   Hit-transparent on purpose: the shell sits beneath this layer, so every
+   click, drag-select and scroll has to fall through to it. The pieces that
+   must stay clickable (the divider, the close button) opt back in. */
+.itwin__pane {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  pointer-events: none;
+}
+
+/* Focus ring — only when a tab holds more than one pane (the HUB rule). */
+.itwin__pane--focus::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--ic-radius-sm);
+  box-shadow: var(--ic-edge-gilt);
+}
+
+/* V3-D attention: a pane that asked for the owner (bell, OSC 9/777, `it bus
+   attention`) wears the unread light's ring until it is focused. Steady,
+   never animated (owner rule on the unread light, it-terminal.css :125). */
+.itwin__pane--attention::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--ic-radius-sm);
+  box-shadow: inset var(--ic-shadow-stroke-ring) var(--ic-focus-ring);
+}
+
+/* V3-D the per-pane line under a sidebar iT row: branch · dir · ports · signal. */
+.itwin__pane-lines {
+  display: grid;
+  gap: 2px;
+  padding: 0 10px 4px 24px;
+}
+
+.itwin__pane-line {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+  font-size: var(--ic-type-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ic-text-2);
+}
+
+.itwin__pane-line > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itwin__pane-line > span:first-child {
+  flex: none;
+  color: var(--ic-text-1);
+}
+
+.itwin__pane-line[data-attention] > span:first-child {
+  color: var(--ic-accent);
+}
+
+.itwin__pane-close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  z-index: var(--ic-z-local-overlay);
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ic-radius-xs);
+  color: var(--ic-home-ink-45);
+  cursor: pointer;
+  pointer-events: auto;
+  /* The pane itself takes no pointer events, so it can never report :hover —
+     the close button carries its own resting state instead of appearing on a
+     hover that will never fire. */
+  opacity: 0.4;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.itwin__pane-close:hover {
+  color: var(--ic-text-1);
+  background: var(--ic-border-subtle);
+}
+
+/* Hover + keyboard parity for the rail: the tabs answered only to a click. */
+.itwin__tab-name:hover {
+  color: var(--ic-text-1);
+}
+
+.itwin__tab-name:focus-visible,
+.itwin__tab-add:focus-visible,
+.itwin__tab-close:focus-visible,
+.itwin__pane-close:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* The crash card of the whole iT view has no shells under it: it takes its
+   own clicks, so Retry is reachable. */
+.ihome .itwin[role='alert'] {
+  pointer-events: auto;
+}
+
+/* One pane's crash card, inside that pane's shell box (it-host.tsx): the
+   siblings keep running, only this pane offers Retry · Close pane. */
+.itwin__crash {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--ic-surface);
+}
+
+/* Read by screen readers only: the helper textarea's aria-describedby points
+   here (use-terminal-session.ts), so the way out of the terminal is announced. */
+.itwin__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

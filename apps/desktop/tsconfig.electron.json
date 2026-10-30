@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "strict": true,
+    // PLANO L / L8 finished 2026-10-19: the six strict-family overrides that used
+    // to sit here are gone — the electron tree compiles under TRUE strict with 0
+    // errors, down from 1 917. The two below are NOT part of the `strict` family
+    // and never were part of that goal; they stay explicit so nobody reads their
+    // absence as a regression. (A "//" KEY inside compilerOptions is rejected as an
+    // unknown compiler option — tsconfig is JSONC, so comments go like this.)
+    "noUncheckedIndexedAccess": false,
+    "exactOptionalPropertyTypes": false,
+    "ignoreDeprecations": "6.0",
+    "composite": true,
+    "declaration": true,
+    "rootDir": "..",
+    "outDir": "build/electron-types"
+  },
+  "include": ["electron", "src/iclone-shared", "../shared/src/data-url-read-max.ts", "../shared/src/translucency.ts"],
+  "exclude": ["electron/**/*.e2e.mts"]
+}

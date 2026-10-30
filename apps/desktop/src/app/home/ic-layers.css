@@ -1,0 +1,54 @@
+/* ── THE LADDER (generated from home/ic-layers.ts — edit it there) ─────────
+   global rungs order the siblings of .ihome; .ihome is ONE stacking context
+   at global-home, so its rungs can never outrank a global rung above it.
+   Upstream overlay views sit at 50, upstream modals at 120.
+
+    37  --ic-z-global-stage        .istage-layer: the field + live 3D iNFT, and the Message window plate on them
+    38  --ic-z-global-chat         the chat surface (the shell, clipped into the Message window)
+    39  --ic-z-global-shells       the iT shells (it-host.tsx parks them over the iT slots)
+    40  --ic-z-global-home         .ihome: all the chrome of the ihome scope lives in here
+    46  --ic-z-global-files        .ifiles: the Files island (mounted app-wide)
+    39  --ic-z-ihome-frame         .iwin-frame: the window's champagne border (decor)
+    41  --ic-z-ihome-itwin         .itwin: the iT terminal filling the window
+    42  --ic-z-ihome-chrome        .imsg-side: the Message window's session sidebar
+    43  --ic-z-ihome-econ          .iecon: a dock window opened over the Message window
+    44  --ic-z-ihome-dock          .dock: the rail, above the windows it opens
+    45  --ic-z-ihome-inft-tab      .inft-tab: the collections tab on the stage edge
+    60  --ic-z-ihome-controls      .iwin-controls .iop: the window's controls
+    61  --ic-z-ihome-inft-scrim    .inft-scrim: collections, modal, above every control
+    62  --ic-z-ihome-inft-panel    .inft-panel
+    64  --ic-z-ihome-wallet-scrim  .iwbal-scrim: wallet, modal
+    65  --ic-z-ihome-wallet-panel  .iwbal
+     1  --ic-z-local-base          lifted off the flow (plate, rail, cell, checkbox)
+     2  --ic-z-local-raised        over a base part (pane divider)
+     3  --ic-z-local-overlay       over the content (pane close, window controls)
+     4  --ic-z-local-float         floating header or flash region
+     5  --ic-z-local-peak          menus and a dragged card
+
+   Rule for anything added later: a piece with a scrim is modal and belongs
+   ABOVE the window controls; a piece without one belongs below them.
+   ────────────────────────────────────────────────────────────────────── */
+
+:root {
+  --ic-z-global-stage: 37;
+  --ic-z-global-chat: 38;
+  --ic-z-global-shells: 39;
+  --ic-z-global-home: 40;
+  --ic-z-global-files: 46;
+  --ic-z-ihome-frame: 39;
+  --ic-z-ihome-itwin: 41;
+  --ic-z-ihome-chrome: 42;
+  --ic-z-ihome-econ: 43;
+  --ic-z-ihome-dock: 44;
+  --ic-z-ihome-inft-tab: 45;
+  --ic-z-ihome-controls: 60;
+  --ic-z-ihome-inft-scrim: 61;
+  --ic-z-ihome-inft-panel: 62;
+  --ic-z-ihome-wallet-scrim: 64;
+  --ic-z-ihome-wallet-panel: 65;
+  --ic-z-local-base: 1;
+  --ic-z-local-raised: 2;
+  --ic-z-local-overlay: 3;
+  --ic-z-local-float: 4;
+  --ic-z-local-peak: 5;
+}

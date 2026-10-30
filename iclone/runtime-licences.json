@@ -1,0 +1,41 @@
+{
+  "about": "V3-RT RT-LIC (critic r1 m1): the licence of every non-code file the bundled runtime ships, and of every file whose licence is not the root LICENSE (MIT, Nous Research 2025 + devclone20 2026). The gate (RESUME run/gates/V3RT_gates.sh, RTLIC rows) fails on an asset with no row here, on a row whose file is not shipped, on a source file that is not shipped, on any shipped PDF or TeX style file, and on any shipped file that holds a font program.",
+  "rows": [
+    {
+      "path": "gateway/assets/telegram-botfather-threads-settings.jpg",
+      "licence": "MIT",
+      "source": "LICENSE",
+      "note": "a screenshot made by the upstream for its Telegram topics setup message"
+    },
+    {
+      "path": "native/fts5_cjk/vendor/sqlite3.h",
+      "licence": "public-domain",
+      "source": "native/fts5_cjk/vendor/sqlite3.h",
+      "note": "the SQLite authors disclaim copyright in the file's own header"
+    },
+    {
+      "path": "native/fts5_cjk/vendor/sqlite3ext.h",
+      "licence": "public-domain",
+      "source": "native/fts5_cjk/vendor/sqlite3ext.h",
+      "note": "the SQLite authors disclaim copyright in the file's own header"
+    },
+    {
+      "path": "optional-skills/security/unbroker/assets/unbroker.png",
+      "licence": "MIT",
+      "source": "LICENSE",
+      "note": "the upstream's skill icon"
+    },
+    {
+      "path": "tools/bot_desktop/wallpaper.png",
+      "licence": "MIT",
+      "source": "LICENSE",
+      "note": "the upstream's sandbox desktop wallpaper"
+    },
+    {
+      "path": "tools/wakewords/hey_hermes.tflite",
+      "licence": "MIT",
+      "source": "LICENSE",
+      "note": "trained by the upstream with the openWakeWord pipeline (provenance: tools/wakewords/README.md); the upstream's own artifact"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+import type { Translations } from '../types'
+
+export const agents: Translations['agents'] = {
+  close: '关闭智能体',
+  title: '派生树',
+  subtitle: '当前回合的子智能体实时活动。',
+  emptyTitle: '暂无活跃子智能体',
+  emptyDesc: '当某个回合派发任务时，子智能体会在此实时显示进度。',
+  running: '运行中',
+  failed: '失败',
+  done: '完成',
+  streaming: '流式传输',
+  files: '文件',
+  moreFiles: count => `还有 ${count} 个文件`,
+  delegation: index => `派发 ${index}`,
+  workers: count => `${count} 个工作单元`,
+  workersActive: count => `${count} 个活跃`,
+  agentsCount: count => `${count} 个智能体`,
+  activeCount: count => `${count} 个活跃`,
+  failedCount: count => `${count} 个失败`,
+  toolsCount: count => `${count} 个工具`,
+  filesCount: count => `${count} 个文件`,
+  updatedAgo: age => `更新于 ${age}`,
+  ageNow: '刚刚',
+  ageSeconds: seconds => `${seconds} 秒前`,
+  ageMinutes: minutes => `${minutes} 分钟前`,
+  ageHours: hours => `${hours} 小时前`,
+  ageDays: days => `${days} 天前`,
+  durationSeconds: seconds => `${seconds} 秒`,
+  durationMinutes: (minutes, seconds) => `${minutes} 分 ${seconds} 秒`,
+  tokens: value => `${value} 词元`
+}

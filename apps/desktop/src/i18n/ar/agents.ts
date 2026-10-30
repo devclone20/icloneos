@@ -1,0 +1,32 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const agents: TranslationOverrides['agents'] = {
+  close: 'إغلاق الوكلاء',
+  title: 'شجرة التوليد',
+  subtitle: 'نشاط الوكلاء الفرعيين المباشر للدور الحالي.',
+  emptyTitle: 'لا يوجد وكلاء فرعيون مباشرون',
+  emptyDesc: 'عندما يفوّض دور ما عملا، يبث الوكلاء الأبناء تقدّمهم هنا.',
+  running: 'قيد التشغيل',
+  failed: 'فشل',
+  done: 'تم',
+  streaming: 'جار البث',
+  files: 'الملفات',
+  moreFiles: count => `+${count} ملفات إضافية`,
+  delegation: index => `التفويض ${index}`,
+  workers: count => `${count} عامل`,
+  workersActive: count => `${count} نشط`,
+  agentsCount: count => `${count} ${count === 1 ? 'وكيل' : 'وكلاء'}`,
+  activeCount: count => `${count} نشط`,
+  failedCount: count => `${count} فشل`,
+  toolsCount: count => `${count} أداة`,
+  filesCount: count => `${count} ملف`,
+  updatedAgo: age => `تم التحديث ${age}`,
+  ageNow: 'الآن',
+  ageSeconds: seconds => `قبل ${seconds} ث`,
+  ageMinutes: minutes => `قبل ${minutes} د`,
+  ageHours: hours => `قبل ${hours} س`,
+  durationSeconds: seconds => `${seconds} ث`,
+  durationMinutes: (minutes, seconds) => `${minutes} د ${seconds} ث`,
+  tokens: value => `${value} رمز`,
+  ageDays: days => `منذ ${days} يوم`
+}

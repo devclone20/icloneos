@@ -1,0 +1,12 @@
+{
+  "rev": "1ac3f97fbe0958aa2743c0c26202b20b3b4e760e",
+  "recorded": "2026-10-07, canary sandbox, the shipped probe's first frame (approval.pending)",
+  "probeKey": {
+    "code": 4000,
+    "message": "invalid params for approval.pending: __iclone_probe: Extra inputs are not permitted — the client and the Hermes backend are out of sync (different versions); run `hermes update` and restart both"
+  },
+  "renamedKey": {
+    "code": 4000,
+    "message": "invalid params for session.status: turn_author: Extra inputs are not permitted — the client and the Hermes backend are out of sync (different versions); run `hermes update` and restart both"
+  }
+}

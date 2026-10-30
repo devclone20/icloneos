@@ -1,0 +1,1353 @@
+{
+  "schema": 1,
+  "category": "iclone",
+  "count": 60,
+  "skills": [
+    {
+      "name": "acp-agent-identity",
+      "version": "1.0.0",
+      "description": "Use when creating an agent, signer or ERC-8004 entry. The split sign-in, agent list before create, the non-blocking signer flow with an explicit policy, ERC-8004 registration, migration, and the error codes that say which step is missing.",
+      "whenToOpen": "Use when creating an agent, signer or ERC-8004 entry.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "identity",
+        "signer",
+        "ERC-8004"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "consent",
+        "acp-wallet-ops",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-events-watch",
+      "version": "1.0.0",
+      "description": "Use when watching job events or running a provider loop. Background listener to a file, drain in batches, one blocking watch per job, the event types, one listener per agent, and what to do when the stream crash-loops.",
+      "whenToOpen": "Use when watching job events or running a provider loop.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "events",
+        "provider",
+        "monitoring"
+      ],
+      "relatedSkills": [
+        "acp-jobs",
+        "acp-job-stuck",
+        "acp-troubleshooting",
+        "economyos"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-job-conditions",
+      "version": "1.0.0",
+      "description": "Use when writing a job description or its conditions. Requirement JSON that passes the offering schema, checkable acceptance criteria, expiry, fee vs working capital, reason texts and the review, with the exact acp 1.0.38 flags.",
+      "whenToOpen": "Use when writing a job description or its conditions.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "jobs",
+        "requirements",
+        "acceptance"
+      ],
+      "relatedSkills": [
+        "acp-jobs",
+        "acp-offerings",
+        "acp-troubleshooting",
+        "economyos",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-job-stuck",
+      "version": "1.0.0",
+      "description": "Use when an ACP job is stuck at a phase. Phase table (who acts next, with which command, when to wait, nudge or close), the read-only checks that tell you where it really is, and the links to the cataloged failures.",
+      "whenToOpen": "Use when an ACP job is stuck at a phase.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "jobs",
+        "stuck",
+        "troubleshooting"
+      ],
+      "relatedSkills": [
+        "acp-jobs",
+        "acp-troubleshooting",
+        "acp-events-watch",
+        "economyos",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-jobs",
+      "version": "1.0.0",
+      "description": "Use when hiring an agent or doing/checking an ACP job. Do an ACP marketplace job correctly, end to end, as the iNFT inside iclone os — as PROVIDER (find the hire, price it, execute for real, self-verify, submit a deliverable with proof, get paid) and as CLIENT (find the offering, create the job, fund the escrow only after budget.set, evaluate, complete or reject). The job state machine, the CLI calls in order, the traps that cost real trades, the scoring and budget rules. Use when the owner asks to hire an agent, to deliver a job, to check a job, or when a job is stuck.",
+      "whenToOpen": "Use when hiring an agent or doing/checking an ACP job.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "jobs",
+        "escrow",
+        "provider",
+        "client",
+        "marketplace"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "acp-offerings",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-offering-review",
+      "version": "1.0.0",
+      "description": "Use when an offering gets no jobs or fails to publish. A review checklist (listing, discoverability, price, schema, capacity, online provider), the read-only checks in order, and the fix that keeps history: update by id.",
+      "whenToOpen": "Use when an offering gets no jobs or fails to publish.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "offerings",
+        "marketplace",
+        "review"
+      ],
+      "relatedSkills": [
+        "acp-offerings",
+        "acp-troubleshooting",
+        "acp-events-watch",
+        "economyos",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-offerings",
+      "version": "1.0.0",
+      "description": "Use when creating, pricing or editing an ACP offering. Define, publish, update and retire what an iNFT sells on the Virtuals ACP marketplace — offerings (paid jobs), resources (free reference endpoints) and subscriptions — with the exact CLI flags, the JSON catalog file iclone os keeps per iNFT, the JSON-schema rules for requirements and deliverables, and the hard limits (40 offerings per agent). Use when the owner asks to create, list, price, edit, hide or delete an offering or a resource, to publish references/links, or when `offering create` fails.",
+      "whenToOpen": "Use when creating, pricing or editing an ACP offering.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "offerings",
+        "resources",
+        "subscriptions",
+        "marketplace",
+        "JSON schema"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "acp-jobs",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-paid-subscription-checkout",
+      "version": "1.1.0",
+      "description": "Use when buying or reviewing a paid subscription. Complete, hand off, or review bounded paid subscription checkouts using ACP agent email, agent card, browser checkout, receipt checks, and paid-access verification. Use live mode only when local acp-cli, browser automation, and card tools are available; use handoff or evidence-review mode on desktop or chat-only surfaces.",
+      "whenToOpen": "Use when buying or reviewing a paid subscription.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "card",
+        "subscription",
+        "checkout",
+        "browser"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "acp-troubleshooting",
+        "browse-and-work"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-signin",
+      "version": "1.0.0",
+      "description": "Use when an iNFT's ACP session needs signing in. The split sign-in run from the chat: mint the link, hand it to the owner to approve, poll until authenticated, never touch another iNFT's config.",
+      "whenToOpen": "Use when an iNFT's ACP session needs signing in.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "sign-in",
+        "login",
+        "session",
+        "iNFT"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "agentic-economy",
+        "acp-troubleshooting",
+        "agent-email",
+        "iclone-os"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-trade-hyperliquid",
+      "version": "1.0.0",
+      "description": "Use when swapping tokens or trading on Hyperliquid. Reads first, a dry-run preview, the exact flags for swaps, Hyperliquid deposits, spot, perps (size, leverage, reduce-only, TP/SL), cancels and withdrawals, each behind the owner's yes.",
+      "whenToOpen": "Use when swapping tokens or trading on Hyperliquid.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "trade",
+        "Hyperliquid",
+        "perps",
+        "swap"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "consent",
+        "acp-wallet-ops",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-troubleshooting",
+      "version": "1.1.0",
+      "description": "Use when an ACP job, offering or acp CLI call fails. Production-validated troubleshooting catalog for Virtuals Protocol ACP v2 agents on Base (chainId 8453), operated through the acp CLI (@virtuals-protocol/acp-cli). Covers 26 cataloged failures with exact error strings, root causes, and fixes, plus headless server deployment and the dual offering-schema reference. Use when an ACP job is failing or stuck mid-lifecycle, an offering is rejected or invisible after import, you hit signer/KeyRevoked/\"cipher: message authentication failed\" errors, an agent can't self-hire (\"execution reverted\"), escrow/fund errors appear (\"exceeds balance\"), you have headless/server deploy problems (keyring, systemd, token migration), or the acp CLI is lying about job state. Also use when embedding offering_id in requirements, choosing priceV2 vs price schemas, or migrating an agent between machines.",
+      "whenToOpen": "Use when an ACP job, offering or acp CLI call fails.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "troubleshooting",
+        "errors",
+        "signer",
+        "offerings"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "acp-offerings",
+        "acp-jobs"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "acp-wallet-ops",
+      "version": "1.0.0",
+      "description": "Use when checking balance, topping up or signing. Address and balance per chain, top-up by Coinbase or card, signing and raw transactions, wallet policies and the signer policy, compute status — reads first, every write behind the owner's yes.",
+      "whenToOpen": "Use when checking balance, topping up or signing.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "wallet",
+        "policy",
+        "signer"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "consent",
+        "acp-agent-identity",
+        "acp-trade-hyperliquid",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agent-email",
+      "version": "1.0.0",
+      "description": "Use when reading or sending the agent's own email. The acp email commands: identity and provisioning, inbox paging by cursor, search, threads, OTP and link extraction, attachments, and the consent rule for compose and reply.",
+      "whenToOpen": "Use when reading or sending the agent's own email.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "email",
+        "inbox",
+        "OTP",
+        "ACP",
+        "Virtuals"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "consent",
+        "agentcard-signup",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agent-self-repo",
+      "version": "1.0.0",
+      "description": "Use when publishing your own skills, soul and config. Pushes them to your own repo.",
+      "whenToOpen": "Use when publishing your own skills, soul and config.",
+      "tags": [
+        "Git",
+        "GitHub",
+        "Security",
+        "Sterilization",
+        "Self-Repo",
+        "iNFT"
+      ],
+      "relatedSkills": [
+        "iclone-os"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agentcard",
+      "version": "2.2.0",
+      "description": "Lets an AI agent pay merchants securely with the user's own card — through Mastercard Agent Pay (the default for Mastercard holders, passkey-approved per purchase) or, for any other card, a one-time card number capped to the purchase — completes KYC verification when required, handles checkout 3DS challenges, manages the user's AgentCard agent email inbox, and uses the AgentCard USDC wallet for Base/x402 payments. Use when an agent needs to pay a merchant, complete required KYC, complete a checkout, fetch paid x402 content, send or read agent email, inspect spend limits, or troubleshoot AgentCard CLI payments.",
+      "whenToOpen": "Lets an AI agent pay merchants securely with the user's own card — through Mastercard Agent Pay (the default for Mastercard holders, passkey-approved per purchase) or, for any other card, a one-time card number capped to the purchase — completes KYC verification when required, handles checkout 3DS challenges, manages the user's AgentCard agent email inbox, and uses the AgentCard USDC wallet for Base/x402 payments.",
+      "tags": [
+        "payments",
+        "commerce",
+        "identity",
+        "mastercard-agent-pay",
+        "virtual-cards",
+        "agent-commerce",
+        "email",
+        "wallet",
+        "x402",
+        "3ds"
+      ],
+      "relatedSkills": [],
+      "platforms": []
+    },
+    {
+      "name": "agentcard-cli",
+      "version": "2.0.0",
+      "description": "Use when using the direct agentcard CLI (0.4.0). Pick the path first (the iNFT's acp card or the owner's own agentcard.ai account), read its status without leaking secrets, and walk the owner through signup, setup, KYC and limits on the direct account.",
+      "whenToOpen": "Use when using the direct agentcard CLI (0.4.0).",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "AgentCard",
+        "card",
+        "KYC",
+        "Mastercard Agent Pay"
+      ],
+      "relatedSkills": [
+        "agentcard",
+        "agentcard-signup",
+        "agentcard-troubleshooting",
+        "economyos",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agentcard-signup",
+      "version": "1.1.1",
+      "description": "Use when signing up or resuming an AgentCard account. The acp card setup order (whoami, signup, signup-poll, profile, payment method, limit), the poll schedule, the magic link from the agent inbox and the one-signup-per-state rule.",
+      "whenToOpen": "Use when signing up or resuming an AgentCard account.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "AgentCard",
+        "card",
+        "signup",
+        "email"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "consent",
+        "agent-email",
+        "agentcard-troubleshooting",
+        "agentcard-cli",
+        "agentcard",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agentcard-troubleshooting",
+      "version": "1.1.0",
+      "description": "Use when a card is held, declined, blocked or missing. Map the acp card answer to its cause: 403/429 holds that survive a restart, signin-pending, refused card issue, last4-only listings, the 3DS window, KYC links and a declined-payment checklist.",
+      "whenToOpen": "Use when a card is held, declined, blocked or missing.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "AgentCard",
+        "card",
+        "troubleshooting",
+        "3DS"
+      ],
+      "relatedSkills": [
+        "agentcard-signup",
+        "agentcard-cli",
+        "agentcard",
+        "economyos",
+        "consent",
+        "diagnostics",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "agentic-economy",
+      "version": "1.0.0",
+      "description": "Use when a request touches agent commerce. Load it first. The map of the iNFT's economy inside iclone os and the law over all of it: which skill carries which commands (economyos · acp-offerings · acp-jobs · acp-paid-subscription-checkout · acp-troubleshooting) and the rule that you operate and the owner spends. Load FIRST when a request touches agent commerce, an agent wallet/email/card, hiring or selling agent work, subscriptions, ERC-8004 identity or tokenising an agent — it routes; it does not carry commands.",
+      "whenToOpen": "Use when a request touches agent commerce.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "router",
+        "law"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "acp-offerings",
+        "acp-jobs",
+        "acp-paid-subscription-checkout",
+        "acp-troubleshooting"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "app-atualisation",
+      "version": "4.0.0",
+      "description": "Use when asked to update iclone os or its Hermes agent. Also when you notice the agent is outdated: you suggest Settings › Updates › Agent and the user clicks; you never run the update, even when asked. Also covers the upstream channel.",
+      "whenToOpen": "Use when asked to update iclone os or its Hermes agent.",
+      "tags": [
+        "iclone-os",
+        "updates",
+        "upstream",
+        "adoption",
+        "compatibility",
+        "engineering",
+        "runtime"
+      ],
+      "relatedSkills": [
+        "iclone-os",
+        "agent-self-repo",
+        "it-orchestration"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "backups-restore",
+      "version": "1.0.0",
+      "description": "Use when backing up or restoring agent or server state. What to include (config, env files, state, keyring file, signer keys, skills), explicit-include archives, 3-2-1 copies, provider snapshots, encryption and a tested restore drill.",
+      "whenToOpen": "Use when backing up or restoring agent or server state.",
+      "tags": [
+        "iclone-os",
+        "backup",
+        "restore",
+        "server",
+        "security"
+      ],
+      "relatedSkills": [
+        "hermes-gateway-server",
+        "server-agent-service",
+        "cron-timers",
+        "acp-troubleshooting",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "browse-and-work",
+      "version": "1.0.0",
+      "description": "Use when a task needs a browser: click, type, record. Browse the web and act.",
+      "whenToOpen": "Use when a task needs a browser: click, type, record.",
+      "tags": [
+        "browser",
+        "web",
+        "automation",
+        "recording",
+        "iclone-os"
+      ],
+      "relatedSkills": [
+        "iclone-os",
+        "app-atualisation"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "camera-and-action",
+      "version": "1.0",
+      "description": "Use when a web page must record itself to video. Camera & Action — the in-page recorder: makes any web page (canvas, WebGL, 2D, bitmap engine, or a device-size stage) record ITSELF into clean MP4/WebM video files — the page's own pixels, never the screen: no macOS pointer, no other app, no browser bar, none of the recorder's own controls. Covers the architecture to pick, the frame pipeline (captureStream + requestFrame + MediaRecorder), the recorder UI and its Settings (\"Camera & Action\"), takes (free, scripted/tour, series), crash recovery, the gates that prove it, the adversarial critic, batch recording to files (one at a time, verified with ffprobe, conformed to exact 60 fps without re-encoding), and every trap already paid. Use whenever the owner says camera&action, camera & action, camera and action, in-page recorder, record the page, record the screen without the pointer, recorder, record this page/episode/scene/tour, make videos of the HTML, or asks to add a record button / v…",
+      "whenToOpen": "Use when a web page must record itself to video.",
+      "tags": [
+        "owner-library",
+        "video",
+        "recorder",
+        "canvas",
+        "WebGL",
+        "ffmpeg"
+      ],
+      "relatedSkills": [
+        "videoediting"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "consent",
+      "version": "1.0.0",
+      "description": "Use when a step needs a permission the user may have off. Use BEFORE a step that needs a permission the user may have left off — running terminal commands, writing files, browsing or calling online tools, controlling other apps, screenshots, the clipboard, installing packages, creating scheduled tasks, sending email or messages, or spending/trading. Check ICLONE_CONSENT_<KEY>; when it is 0 or ask, ask the user through the app with `acp consent request <key> --reason \"…\"` instead of failing or working around it.",
+      "whenToOpen": "Use when a step needs a permission the user may have off.",
+      "tags": [
+        "iclone-os",
+        "consent",
+        "permissions",
+        "privacy",
+        "terminal",
+        "files",
+        "browsing",
+        "clipboard",
+        "automation",
+        "screen",
+        "packages",
+        "cron",
+        "email",
+        "spending"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "iclone-os"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "cron-timers",
+      "version": "1.0.0",
+      "description": "Use when scheduling a recurring task on a machine. Choosing crontab, a systemd timer or launchd, OnCalendar and Persistent, flock against overlaps, logging, env in files instead of the schedule, and how to list and verify schedules.",
+      "whenToOpen": "Use when scheduling a recurring task on a machine.",
+      "tags": [
+        "iclone-os",
+        "cron",
+        "systemd",
+        "timers",
+        "launchd",
+        "scheduling"
+      ],
+      "relatedSkills": [
+        "watchdog-keepalive",
+        "backups-restore",
+        "server-agent-service",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "davinci-resolve",
+      "version": "1.0.0",
+      "description": "Use when editing video in DaVinci Resolve. Edit video in DaVinci Resolve (21.1, Mac App Store / Free build) from Claude Code via the `davinci-resolve` MCP + ResolveBridge (Lua) inside the app. Use ALWAYS when the owner talks about DaVinci, Resolve, editing/cutting/assembling video, timeline, rendering/exporting video, markers, color/Fusion, or asks to \"edit the videos together\".",
+      "whenToOpen": "Use when editing video in DaVinci Resolve.",
+      "tags": [
+        "owner-library",
+        "video",
+        "DaVinci Resolve",
+        "MCP"
+      ],
+      "relatedSkills": [
+        "videoediting"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "diagnostics",
+      "version": "1.0.0",
+      "description": "Use when something in iclone os does not work. Diagnose and self-repair the app, the runtime, the gateway, ACP, the wallet, permissions, local data and the install with `acp doctor` — local only, no network unless asked. When to run which pack, how to read the JSON report, which fixes you may apply alone (risk low) and which go to the owner (medium/high, Settings › Diagnostics).",
+      "whenToOpen": "Use when something in iclone os does not work.",
+      "tags": [
+        "iclone-os",
+        "diagnostics",
+        "doctor",
+        "self-repair",
+        "troubleshooting"
+      ],
+      "relatedSkills": [
+        "acp-troubleshooting",
+        "economyos"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "docker-for-agents",
+      "version": "1.0.0",
+      "description": "Use when containerising an agent with Docker Compose. Compose template with env_file, restart policy, healthcheck, volumes and log limits, a .dockerignore, secrets kept out of images, pinned tags, and the daily compose commands.",
+      "whenToOpen": "Use when containerising an agent with Docker Compose.",
+      "tags": [
+        "iclone-os",
+        "docker",
+        "compose",
+        "containers",
+        "server"
+      ],
+      "relatedSkills": [
+        "server-agent-service",
+        "backups-restore",
+        "watchdog-keepalive",
+        "server-troubleshooting",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "economyos",
+      "version": "1.0.0",
+      "description": "Use when emailing or using the wallet, card or ACP. Act as the iNFT's EconomyOS inside iclone os: send and read its email, use its wallet, card, Hyperliquid and the ACP marketplace through the Virtuals CLI, always on THIS iNFT's own isolated config (`acp --inft <iNFT>`).",
+      "whenToOpen": "Use when emailing or using the wallet, card or ACP.",
+      "tags": [
+        "iclone-os",
+        "EconomyOS",
+        "ACP",
+        "Virtuals",
+        "email",
+        "wallet",
+        "card",
+        "Hyperliquid",
+        "marketplace",
+        "iNFT"
+      ],
+      "relatedSkills": [
+        "agentic-economy",
+        "acp-offerings",
+        "acp-jobs",
+        "acp-paid-subscription-checkout",
+        "acp-troubleshooting",
+        "iclone-os"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "fable-orchestrator",
+      "version": "1.0.0",
+      "description": "Use when orchestrating CLONE FRAME HUB work. Fable Orchestrator — multi-model orchestration mode for developing the CLONE FRAME HUB executable app. Use ALWAYS when the user mentions \"fable orchestrator\", \"orchestrate this\", \"orchestrator mode\", asks for parallel work with several models (Haiku/Sonnet/Opus), sends screenshots/photos of parts of the CLONE FRAME app to implement, or asks for any implementation, fix or adaptation in the CLONE FRAME HUB app (index.html + bridge) — even without saying the word \"orchestrator\". Fable 5 takes command: it decomposes the work, delegates fleets of subagents (5, 10, 20, 100 — whatever the work calls for; Opus/Sonnet/Haiku when available, other subagents when not) and directly implements the most complex integrations. Priority no. 1: implementation quality, above token spend. Includes the Part-by-Part Protocol for implementing exactly what is in each photo the user sends.",
+      "whenToOpen": "Use when orchestrating CLONE FRAME HUB work.",
+      "tags": [
+        "owner-library",
+        "orchestration",
+        "CLONE FRAME",
+        "multi-model"
+      ],
+      "relatedSkills": [
+        "parrallello"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hermes-gateway-server",
+      "version": "1.0.0",
+      "description": "Use when running the Hermes gateway on a server. One owner of the process, setup, install as a service, status, the 0600 .env with the bot token and allowlist, long polling without inbound ports, one gateway per host, and upgrades with a backup.",
+      "whenToOpen": "Use when running the Hermes gateway on a server.",
+      "tags": [
+        "iclone-os",
+        "hermes",
+        "gateway",
+        "server",
+        "telegram",
+        "service"
+      ],
+      "relatedSkills": [
+        "server-agent-service",
+        "backups-restore",
+        "app-atualisation",
+        "diagnostics",
+        "hermes-agent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "higgsfield-blender",
+      "version": "1.0.0",
+      "description": "Use when making a Blender video with Higgsfield. Claude → Higgsfield Bridge → Blender pipeline on this Mac — block a scene in Blender with the iCLONE hero, render the previz, generate the final video with Higgsfield (Seedance). Use whenever the owner mentions Higgsfield, Blender video/animation of the GLB model, previz/blocking, Seedance, \"Sample Project\", or asks for a video of the robot in a 3D world.",
+      "whenToOpen": "Use when making a Blender video with Higgsfield.",
+      "tags": [
+        "owner-library",
+        "Blender",
+        "3D",
+        "Higgsfield",
+        "video"
+      ],
+      "relatedSkills": [
+        "davinci-resolve"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-deploy",
+      "version": "1.0.0",
+      "description": "Use when validating a deploy or a local environment.",
+      "whenToOpen": "Use when validating a deploy or a local environment.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "deploy",
+        "docker",
+        "security"
+      ],
+      "relatedSkills": [
+        "hm-security",
+        "hm-qa"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-designer",
+      "version": "1.0.0",
+      "description": "Use when reviewing an interface against the bar.",
+      "whenToOpen": "Use when reviewing an interface against the bar.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "design",
+        "review"
+      ],
+      "relatedSkills": [
+        "hm-engineer"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-engineer",
+      "version": "1.0.0",
+      "description": "Use when auditing code quality in every layer.",
+      "whenToOpen": "Use when auditing code quality in every layer.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "review",
+        "security",
+        "performance"
+      ],
+      "relatedSkills": [
+        "hm-security",
+        "hm-qa"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-init",
+      "version": "1.0.0",
+      "description": "Use when starting a project with the right stack.",
+      "whenToOpen": "Use when starting a project with the right stack.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "scaffold",
+        "stack"
+      ],
+      "relatedSkills": [
+        "hm-engineer",
+        "hm-deploy"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-qa",
+      "version": "1.0.0",
+      "description": "Use when testing everything and finding the gaps.",
+      "whenToOpen": "Use when testing everything and finding the gaps.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "QA",
+        "testing"
+      ],
+      "relatedSkills": [
+        "hm-engineer",
+        "hm-security"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "hm-security",
+      "version": "1.0.0",
+      "description": "Use when auditing security before shipping.",
+      "whenToOpen": "Use when auditing security before shipping.",
+      "tags": [
+        "owner-library",
+        "highermind",
+        "security",
+        "OWASP",
+        "secrets"
+      ],
+      "relatedSkills": [
+        "hm-deploy",
+        "hm-qa"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "iclone-os",
+      "version": "1.0.0",
+      "description": "Use when driving or explaining the iclone os desktop app.",
+      "whenToOpen": "Use when driving or explaining the iclone os desktop app.",
+      "tags": [
+        "iclone-os",
+        "iT",
+        "Terminal",
+        "iNFT",
+        "EconomyOS",
+        "Desktop",
+        "CLI"
+      ],
+      "relatedSkills": [
+        "economyos",
+        "app-atualisation",
+        "it-orchestration"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "inft",
+      "version": "1.0.0",
+      "description": "Use when explaining or building an iNFT agent. Canonical context for the iNFT concept and the global inft-i01 template. Use ALWAYS when the user says \"/inft\", \"inft\", \"iNFT\", asks what an iNFT is, works on the inft-i01 repo, on the PI agent with a marketplace name, on NFT agent metadata, on bootstrapping/forging an agent from metadata, or on any mint/sale of an AI agent as an NFT. Loads the whole philosophy so it never has to be re-explained.",
+      "whenToOpen": "Use when explaining or building an iNFT agent.",
+      "tags": [
+        "owner-library",
+        "iNFT",
+        "agent",
+        "NFT",
+        "monorepo"
+      ],
+      "relatedSkills": [
+        "iclone-os",
+        "economyos"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "it-orchestration",
+      "version": "1.0.0",
+      "description": "Use when orchestrating work across iT terminal panes.",
+      "whenToOpen": "Use when orchestrating work across iT terminal panes.",
+      "tags": [
+        "iT",
+        "Multiplex",
+        "Panes",
+        "Orchestration",
+        "Agents",
+        "Terminal"
+      ],
+      "relatedSkills": [
+        "iclone-os"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "parrallello",
+      "version": "1.0.0",
+      "description": "Use when running big work as parallel fronts. Parrallello — autonomous parallel execution engine: single-writer fronts, blocks of up to 3 rounds of FRESH builders + an ADVERSARIAL critic that approves only on numeric gates, a lead that does not read code and changes method when something recurs, and ONE-PASS agents that pre-stage future waves. Verified quality on few tokens. ALWAYS use when the owner says 'parrallello' / 'parallello' / 'paralello', 'engines + critic', 'builder and critic', 'until the critic approves', 'parallel fronts', 'blocks of rounds', 'Sample Project', 'pre-stage the waves', or asks for big, multi-front, autonomous work (hours to days) — web engines, Blender/3D scenes, data pipelines, refactors, apps — with measurable targets. The owner invoking the skill = explicit authorisation for Workflow and background agents.",
+      "whenToOpen": "Use when running big work as parallel fronts.",
+      "tags": [
+        "owner-library",
+        "orchestration",
+        "parallel",
+        "critic",
+        "gates"
+      ],
+      "relatedSkills": [
+        "fable-orchestrator",
+        "spec-driven"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "release-publish",
+      "version": "1.0.0",
+      "description": "Use when tagging versions or publishing a GitHub release. Version in every manifest, build, gates, a pathspec commit, push of main or one tag (never --tags, never --force), a draft release with checksums, promotion and a stranger's download check.",
+      "whenToOpen": "Use when tagging versions or publishing a GitHub release.",
+      "tags": [
+        "iclone-os",
+        "github",
+        "release",
+        "versioning",
+        "publish"
+      ],
+      "relatedSkills": [
+        "sterilise-before-commit",
+        "github",
+        "agent-self-repo",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "ridervoice",
+      "version": "1.5",
+      "description": "Use when speaking text in the owner's own voice. Rider Voice — the owner's voice spoken by a model trained on his voice (F5-TTS v1 Base fine-tuned). Use ALWAYS when the owner says /ridervoice, 'speak in my voice', 'say this in my voice', 'make an audio of me', 'narration in my voice', 'voice over', asks for an English audio/voice-over/narration for a video, podcast, presentation or message, or asks to re-train/improve/evaluate the voice model. Covers: speaking a text (say.sh), measuring against his real profile (check.sh), revoicing a finished video fitted to its subtitles (revoice.sh), a RAW video made from scratch with his voice (voice first, sample_project), the text rules, the gates, re-training with new voice data and the mandatory self-improvement.",
+      "whenToOpen": "Use when speaking text in the owner's own voice.",
+      "tags": [
+        "owner-library",
+        "voice",
+        "TTS",
+        "F5-TTS"
+      ],
+      "relatedSkills": [
+        "videoediting"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "sandbox-linux",
+      "version": "1.0.0",
+      "description": "Use when asked about agent confinement on Linux. In icloneOS v0.0.3 it is not available: the same five activity classes are planned on bubblewrap and Landlock, so on Linux commands run as the user with the permission mode as the only gate, and this skill says what to tell the owner.",
+      "whenToOpen": "Use when asked about agent confinement on Linux.",
+      "tags": [
+        "iclone-os",
+        "sandbox",
+        "confinement",
+        "linux",
+        "security"
+      ],
+      "relatedSkills": [
+        "sandbox-macos",
+        "sandbox-windows",
+        "consent",
+        "docker-for-agents"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "sandbox-macos",
+      "version": "1.0.0",
+      "description": "Use when a Mac command is refused by confinement. Explains the five activity classes (research, project, build, offline, media), what each Seatbelt profile lets a command read, write and reach, why the network opens only with a grant, why the keychain and home secrets are never reachable, and how to ask the owner instead of working around a refusal.",
+      "whenToOpen": "Use when a Mac command is refused by confinement.",
+      "tags": [
+        "iclone-os",
+        "sandbox",
+        "confinement",
+        "seatbelt",
+        "macos",
+        "security"
+      ],
+      "relatedSkills": [
+        "sandbox-linux",
+        "sandbox-windows",
+        "consent"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "sandbox-windows",
+      "version": "1.0.0",
+      "description": "Use when asked about agent confinement on Windows. In icloneOS v0.0.3 it is not available: commands run as the user with the permission mode as the only gate; this skill says what is planned and what to tell the owner meanwhile.",
+      "whenToOpen": "Use when asked about agent confinement on Windows.",
+      "tags": [
+        "iclone-os",
+        "sandbox",
+        "confinement",
+        "windows",
+        "security"
+      ],
+      "relatedSkills": [
+        "sandbox-macos",
+        "sandbox-linux",
+        "consent"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "secret-rotation",
+      "version": "1.0.0",
+      "description": "Use when a secret leaked or must be rotated. The safe order: revoke at the provider, new value in env files (0600) on every host, restart, purge git history only with the owner's yes, re-scan and prove the old value is dead.",
+      "whenToOpen": "Use when a secret leaked or must be rotated.",
+      "tags": [
+        "iclone-os",
+        "security",
+        "secrets",
+        "rotation",
+        "git",
+        "incident"
+      ],
+      "relatedSkills": [
+        "sterilise-before-commit",
+        "telegram-bot-troubleshooting",
+        "github",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "server-agent-service",
+      "version": "1.0.0",
+      "description": "Use when running an agent 24/7 as a systemd service. Unit template with a non-root user, a 0600 env file, restart policy and sandboxing, the enable-plus-restart rule, journalctl, ghost and orphan units, and headless keyring notes.",
+      "whenToOpen": "Use when running an agent 24/7 as a systemd service.",
+      "tags": [
+        "iclone-os",
+        "server",
+        "systemd",
+        "service",
+        "agent",
+        "linux"
+      ],
+      "relatedSkills": [
+        "watchdog-keepalive",
+        "hermes-gateway-server",
+        "server-troubleshooting",
+        "acp-troubleshooting",
+        "consent"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "server-troubleshooting",
+      "version": "1.0.0",
+      "description": "Use when a server is slow, full, unreachable or crashing. Read-only triage for disk, memory and OOM kills, CPU, ports, DNS and clock drift, failed units, logins lost after a reboot and service logs, then the fix the owner approves.",
+      "whenToOpen": "Use when a server is slow, full, unreachable or crashing.",
+      "tags": [
+        "iclone-os",
+        "server",
+        "troubleshooting",
+        "linux",
+        "systemd",
+        "logs"
+      ],
+      "relatedSkills": [
+        "server-agent-service",
+        "watchdog-keepalive",
+        "acp-troubleshooting",
+        "diagnostics",
+        "systematic-debugging"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "spec-driven",
+      "version": "1.0.0",
+      "description": "Use when writing specs before code.",
+      "whenToOpen": "Use when writing specs before code.",
+      "tags": [
+        "owner-library",
+        "spec",
+        "planning",
+        "constitution"
+      ],
+      "relatedSkills": [
+        "hm-engineer",
+        "hm-qa"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "ssh-access",
+      "version": "1.0.0",
+      "description": "Use when creating SSH keys or an ssh alias for a host. Ed25519 keys with a passphrase, installing the public key, a ~/.ssh/config Host block, 700/600 permissions, agent forwarding caution, rotation, and never showing a private key.",
+      "whenToOpen": "Use when creating SSH keys or an ssh alias for a host.",
+      "tags": [
+        "iclone-os",
+        "ssh",
+        "keys",
+        "security",
+        "server"
+      ],
+      "relatedSkills": [
+        "vps-provision",
+        "server-troubleshooting",
+        "consent",
+        "github"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "sterilise-before-commit",
+      "version": "1.0.0",
+      "description": "Use when you commit or push to a shared or public repo. The ordered checklist with exact commands: status and diff review, gitleaks on staged changes, a personal-data grep, .gitignore hygiene, a noreply commit identity, a pre-commit hook and what to do once a secret is in git's history.",
+      "whenToOpen": "Use when you commit or push to a shared or public repo.",
+      "tags": [
+        "iclone-os",
+        "git",
+        "security",
+        "secrets",
+        "gitleaks",
+        "hygiene"
+      ],
+      "relatedSkills": [
+        "secret-rotation",
+        "release-publish",
+        "agent-self-repo",
+        "github",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "telegram-bot-build",
+      "version": "1.0.0",
+      "description": "Use when building a Telegram bot from scratch. BotFather token, privacy mode, command menus by scope, an allowed-user list, a minimal long-polling bot that answers every message and button press, and Telegram's flood limits.",
+      "whenToOpen": "Use when building a Telegram bot from scratch.",
+      "tags": [
+        "iclone-os",
+        "telegram",
+        "bot",
+        "botfather",
+        "polling"
+      ],
+      "relatedSkills": [
+        "telegram-bot-deploy",
+        "telegram-bot-troubleshooting",
+        "secret-rotation",
+        "consent",
+        "hermes-agent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "telegram-bot-deploy",
+      "version": "1.0.0",
+      "description": "Use when deploying a Telegram bot to a server or webhook. Polling or webhook, HTTPS reverse proxy with secret_token, fast 200 and idempotent handlers, setWebhook/getWebhookInfo, the bot's systemd unit and a local end-to-end test.",
+      "whenToOpen": "Use when deploying a Telegram bot to a server or webhook.",
+      "tags": [
+        "iclone-os",
+        "telegram",
+        "bot",
+        "webhook",
+        "systemd",
+        "deploy"
+      ],
+      "relatedSkills": [
+        "telegram-bot-build",
+        "telegram-bot-troubleshooting",
+        "vps-provision",
+        "server-agent-service",
+        "consent"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "telegram-bot-troubleshooting",
+      "version": "1.0.0",
+      "description": "Use when a Telegram bot is mute, slow or double-replying. Reads getWebhookInfo, fixes 409 polling-plus-webhook, privacy mode in groups, timeouts that cause redelivery, errors lost behind a webhook, BotFather's stale texts and leaked tokens.",
+      "whenToOpen": "Use when a Telegram bot is mute, slow or double-replying.",
+      "tags": [
+        "iclone-os",
+        "telegram",
+        "bot",
+        "webhook",
+        "troubleshooting"
+      ],
+      "relatedSkills": [
+        "telegram-bot-deploy",
+        "telegram-bot-build",
+        "secret-rotation",
+        "diagnostics",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "videoediting",
+      "version": "1.0",
+      "description": "Use when editing or re-voicing the owner's videos. Video Editing — the owner's own video post pipeline, end to end: correcting HIS OWN VOICE in a finished video (hesitations cut from the real recording, wrong words regenerated with F5-TTS in-filling, never a re-read), re-timing the picture and the burned text to the new voice, the robot panel and Apple-TV-style subtitles, the music bed / typing / limiter mix, the brand vignettes (and the rule NEVER to add them twice), and the measured delivery gates that prove a file is shippable. Use whenever the owner asks to edit, fix, re-cut, re-voice, re-mix, subtitle or re-deliver a video or a screencast — 'fix the audio', 'fix my voice', 'remove the hesitations', 'add the subtitles', 'assemble the video', 'check the video', 'deliver the videos', 'same fix on the other videos' — or any work on sample_project / EXAMPLE SERIES / Sample Project deliverables.",
+      "whenToOpen": "Use when editing or re-voicing the owner's videos.",
+      "tags": [
+        "owner-library",
+        "video",
+        "ffmpeg",
+        "subtitles",
+        "voice"
+      ],
+      "relatedSkills": [
+        "ridervoice",
+        "camera-and-action"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "vps-provision",
+      "version": "1.0.0",
+      "description": "Use when setting up a new VPS or cloud droplet. Hardened first boot: snapshot, non-root sudo user, SSH keys only, root login off, two firewall layers, fail2ban, unattended upgrades, time sync, swap and a verification list.",
+      "whenToOpen": "Use when setting up a new VPS or cloud droplet.",
+      "tags": [
+        "iclone-os",
+        "server",
+        "vps",
+        "security",
+        "ssh",
+        "firewall",
+        "linux"
+      ],
+      "relatedSkills": [
+        "ssh-access",
+        "server-agent-service",
+        "backups-restore",
+        "server-troubleshooting",
+        "consent"
+      ],
+      "platforms": []
+    },
+    {
+      "name": "watchdog-keepalive",
+      "version": "1.0.0",
+      "description": "Use when a process must stay alive or restart on its own. systemd Restart and WatchdogSec, health-check timers, pid-file ownership, a budget watchdog with a floor, macOS caffeinate and launchd KeepAlive, alerts, and no pattern kills.",
+      "whenToOpen": "Use when a process must stay alive or restart on its own.",
+      "tags": [
+        "iclone-os",
+        "watchdog",
+        "keepalive",
+        "systemd",
+        "launchd",
+        "server"
+      ],
+      "relatedSkills": [
+        "server-agent-service",
+        "cron-timers",
+        "server-troubleshooting",
+        "diagnostics",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    },
+    {
+      "name": "x402-pay",
+      "version": "1.0.0",
+      "description": "Use when a resource answers 402 or you must send USDC. Pay for an HTTP 402 (x402) resource, or send USDC to a payee the owner allowlisted, through iclone os's own pay socket: the app holds the key, checks the owner's caps and his signed mandate, and asks him on the permission sheet before every payment. Also: your spend status, and the hard stop.",
+      "whenToOpen": "Use when a resource answers 402 or you must send USDC.",
+      "tags": [
+        "iclone-os",
+        "payments",
+        "x402",
+        "usdc",
+        "base",
+        "mandate",
+        "spending",
+        "p2p"
+      ],
+      "relatedSkills": [
+        "agentic-economy",
+        "economyos",
+        "consent"
+      ],
+      "platforms": [
+        "macos",
+        "linux"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+/* The bridge — the ONLY place our CSS reads the upstream theme (--dt-*,
+   --theme-*, and the surface tokens upstream derives from them). Everything
+   else reads --ic-* (ic-tokens.css), so an upstream rename is a one-file fix.
+
+   Upstream writes --dt-* inline on <html> (themes/context.tsx), so resolving
+   them here on :root gives every descendant the same value it read before.
+   The skin ink is text-1's source and the skin accent is accent's (the
+   retint follows it); their fallbacks are L0 hues. */
+:root {
+  --ic-ink: var(--dt-foreground, var(--ic-paper));
+  --ic-skin-accent: var(--dt-midground, var(--ic-gold-500));
+  --ic-font-mono: var(--dt-font-mono, ui-monospace, 'SF Mono', Menlo, monospace);
+  --ic-font-sans: var(--dt-font-sans, -apple-system, 'Helvetica Neue', sans-serif);
+}

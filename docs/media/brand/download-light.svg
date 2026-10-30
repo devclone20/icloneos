@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="64" viewBox="0 0 320 64" role="img" aria-labelledby="t d">
+  <title id="t">Download iclone os for macOS</title>
+  <desc id="d">Apple silicon, macOS 12 or later. Downloads the signed, notarised DMG of the latest release.</desc>
+  <rect x="0.5" y="0.5" width="319" height="63" rx="14" fill="#0B2A1E" stroke="#0B2A1E" />
+  <g fill="none" stroke="#7DF1C5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M36 20v18" /><path d="M28.5 31.5 36 39l7.5-7.5" /><path d="M27 45h18" />
+  </g>
+  <text x="62" y="30" fill="#7DF1C5" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="17" font-weight="600" letter-spacing="-0.2">Download for macOS</text>
+  <text x="62" y="48" fill="#B9F5DD" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="12.5" font-weight="500">Apple silicon · macOS 12 or later · .dmg</text>
+</svg>

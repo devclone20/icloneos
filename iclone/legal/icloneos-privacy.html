@@ -1,0 +1,368 @@
+<article class="policy" lang="en">
+  <p class="p-eyebrow">icloneOS app · macOS · iPhone · iPad</p>
+  <h1 id="policyTitle">icloneOS Policies &amp; Privacy</h1>
+  <p class="p-meta">Effective 22 October 2026 · Version 1.1</p>
+  <p class="p-note">icloneOS runs your agent on your own device, and we run no servers that receive your conversations. What leaves your device goes to services you choose to use, and this policy names every one of them, what each receives and how to stop it.</p>
+
+  <ol class="p-toc">
+    <li><a href="#pp-who">1. Who we are and what this covers</a></li>
+    <li><a href="#pp-short">2. The short version</a></li>
+    <li><a href="#pp-device">3. What stays on your device</a></li>
+    <li><a href="#pp-leaves">4. What leaves your device, and to whom</a></li>
+    <li><a href="#pp-ai">5. Third-party AI</a></li>
+    <li><a href="#pp-accounts">6. Accounts, sign-in and wallets</a></li>
+    <li><a href="#pp-economy">7. The agent economy</a></li>
+    <li><a href="#pp-chain">8. Blockchain data is public and permanent</a></li>
+    <li><a href="#pp-permissions">9. Device permissions</a></li>
+    <li><a href="#pp-never">10. What we never do</a></li>
+    <li><a href="#pp-legal">11. Legal bases (GDPR and UK GDPR)</a></li>
+    <li><a href="#pp-retention">12. Retention and deletion</a></li>
+    <li><a href="#pp-rights">13. Your rights</a></li>
+    <li><a href="#pp-children">14. Children</a></li>
+    <li><a href="#pp-security">15. Security</a></li>
+    <li><a href="#pp-transfers">16. International transfers</a></li>
+    <li><a href="#pp-agent">17. Agent actions and automated decisions</a></li>
+    <li><a href="#pp-advice">18. Not financial advice</a></li>
+    <li><a href="#pp-third">19. Third-party policies</a></li>
+    <li><a href="#pp-changes">20. Changes to this policy</a></li>
+    <li><a href="#pp-contact">21. Contact</a></li>
+  </ol>
+
+  <h2 id="pp-who">1. Who we are and what this covers</h2>
+  <p>icloneOS is published by <b>CLONE FRAME</b> (<a href="https://cloneframe.io" target="_blank" rel="noopener">cloneframe.io</a>). In this policy, “we” and “us” mean CLONE FRAME, and “you” means the person using the app. For the personal data we receive, described in this policy, we are the controller.</p>
+  <p>This policy covers the icloneOS app (bundle identifier <b>io.cloneframe.icloneos</b>) on macOS, and the iPhone and iPad versions, which follow this same policy. Where something works differently on one platform, we say so. The policy also covers anything you send us directly, such as a bug report, an email or a message on X.</p>
+  <p>icloneOS is built on Hermes, the open-source agent by Nous Research, released under the MIT licence. The app gives each iNFT you hold its own agent. An <b>iNFT</b> is an NFT that carries an AI agent. The agent runtime and its data live on your device.</p>
+  <p>Third-party services you reach through the app, such as your AI provider, Privy, Virtuals and AgentCard, have their own policies. <a href="#pp-third">Section 19</a> links to them.</p>
+
+  <h2 id="pp-short">2. The short version</h2>
+  <ul>
+    <li><b>Your agent lives on your device.</b> Its conversations, memory, persona and your files stay on your device. We run no servers that receive them.</li>
+    <li><b>You choose the AI provider.</b> When your agent works, your messages and the context it needs go directly from your device to the provider you connected, under that provider’s terms. Nothing is sent to any AI provider until you connect one.</li>
+    <li><b>Sign-in uses Privy, with an email address or a wallet.</b> We can see the account record Privy keeps for our app. Neither we nor the app ever see your wallet’s private keys.</li>
+    <li><b>The agent economy runs on accounts you open with other companies.</b> The marketplace, agent email and trading views come from Virtuals, and virtual cards come from AgentCard. You open those accounts yourself, under their terms.</li>
+    <li><b>Blockchains are public.</b> Wallet addresses, iNFT ownership and on-chain transactions can be seen by anyone, and they cannot be deleted.</li>
+    <li><b>No ads, no tracking, no selling of data, and no analytics SDK in the app.</b> The one exception to be aware of: the Privy and WalletConnect code in the sign-in window does its own event reporting to those companies.</li>
+    <li><b>You control deletion.</b> You can delete an agent profile, sign out, remove everything the app stores, or ask us to delete your account.</li>
+    <li><b>icloneOS is for adults.</b> You must be 18 or older to use it.</li>
+  </ul>
+
+  <h2 id="pp-device">3. What stays on your device</h2>
+  <p>The following data is created and kept on your device. None of it is sent to us. Some of it is sent to services you use (<a href="#pp-leaves">section 4</a>) when a feature needs it, such as your AI provider when the agent is working.</p>
+  <table>
+    <thead>
+      <tr><th>Data</th><th>Where it is kept</th><th>Why</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Conversations and sessions with your agents</td><td>The agent runtime folder, <b>~/.hermes</b> (a local database)</td><td>So you can see your history, and the agent can continue it</td></tr>
+      <tr><td>Agent memory: notes the agent keeps about its work and about you</td><td><b>~/.hermes/memories</b></td><td>So the agent remembers context between sessions</td></tr>
+      <tr><td>Agent persona (“soul”) and skills, one profile per iNFT</td><td><b>~/.hermes</b></td><td>So each iNFT’s agent keeps its own identity</td></tr>
+      <tr><td>AI provider API keys and messaging bot tokens you enter</td><td><b>~/.hermes/.env</b>, a plain-text configuration file</td><td>So the agent can connect to the services you chose (see <a href="#pp-security">section 15</a>)</td></tr>
+      <tr><td>Secrets for remote agent connections (gateway tokens, sign-in tokens)</td><td>The app’s folder in ~/Library/Application Support, in files only your user account can read. You can also turn on encryption with your macOS Keychain; it is off by default.</td><td>So the app can reconnect to an agent gateway you set up</td></tr>
+      <tr><td>Virtuals ACP sign-in token and signing key</td><td>Your macOS Keychain, written by the Virtuals ACP tool</td><td>So your agent can act in the Virtuals agent economy with the authorisation you gave</td></tr>
+      <tr><td>Each agent’s economy status: agent ID, name, wallet addresses and agent email address</td><td>The app’s folder in ~/Library/Application Support, and a registry at <b>~/.iclone-os</b> readable only by your user account</td><td>So the app can show each agent’s status without asking again</td></tr>
+      <tr><td>Interface preferences and cached views: layout, favourites, recent wallet, market and inbox lists per iNFT</td><td>The app’s local storage</td><td>So the app opens quickly where you left it. Inbox previews are stored with verification codes masked.</td></tr>
+      <tr><td>Your Privy sign-in session</td><td>A storage area used only by the sign-in window. Your wallet address, Privy user ID and account label are held in memory while the app runs.</td><td>So you stay signed in until you sign out</td></tr>
+      <tr><td>3D models of your iNFTs</td><td>A cache in the app’s folder</td><td>So models load quickly</td></tr>
+      <tr><td>Logs</td><td><b>~/.hermes/logs</b>, limited in size</td><td>To diagnose problems on your device. Logs are never uploaded automatically.</td></tr>
+      <tr><td>Usage metrics (optional)</td><td>On your device only. Off by default; if you turn them on, they keep 30 days of history and there is no remote destination.</td><td>So you can see your own usage</td></tr>
+      <tr><td>Files and folders you open, or that your agent works with</td><td>Where they already are</td><td>So you and your agent can work with them</td></tr>
+    </tbody>
+  </table>
+  <p>Because this data is on your device and not with us, we cannot see it, recover it or delete it for you. Backups you make of your device, such as Time Machine, may contain copies of it.</p>
+  <p>On iPhone and iPad, the same kinds of data are kept on the device, in the storage that the system gives the app.</p>
+
+  <h2 id="pp-leaves">4. What leaves your device, and to whom</h2>
+  <p>Data leaves your device only when you use a feature that needs it. Every internet request also reveals your IP address to the service you contact, as any connection does. This table lists every recipient.</p>
+  <table>
+    <thead>
+      <tr><th>Recipient</th><th>What it receives</th><th>When</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><b>Privy</b>, our sign-in provider</td><td>Your email address or wallet address, your Privy user ID, the embedded wallet Privy creates for you if you have none, and your session. The Privy code in the sign-in window also sends its own usage events to Privy.</td><td>When you sign in and while you stay signed in. Privy keeps your account for our app.</td></tr>
+      <tr><td><b>WalletConnect / Reown</b> and <b>Coinbase Wallet</b></td><td>Your wallet address and the connection details needed to link your wallet. The WalletConnect code also sends its own events to WalletConnect.</td><td>Only if you sign in with a wallet through them, and only from the sign-in window</td></tr>
+      <tr><td><b>The AI provider you choose</b></td><td>Your messages, files and attachments you share, the agent’s persona and memory, and the results of the agent’s tools. See <a href="#pp-ai">section 5</a>.</td><td>Each time your agent works, after you have connected a provider</td></tr>
+      <tr><td><b>Virtuals</b> (Agent Commerce Protocol, “ACP”)</td><td>Your ACP sign-in, your agent’s identity, offerings and prices you publish, jobs and subscriptions, agent email messages, and requests for trading status. Virtuals creates and manages the agent’s wallet, using Privy.</td><td>Only if you set up the agent economy for an iNFT</td></tr>
+      <tr><td><b>AgentCard</b>, with <b>Stripe</b> behind card issuing, and <b>Crossmint</b> for top-ups</td><td>Your first and last name, phone number, email address and the spending limit you set</td><td>Only if you set up a virtual card</td></tr>
+      <tr><td><b>Blockchain explorers</b> (Blockscout for Base and Robinhood Chain) and <b>public blockchain nodes</b></td><td>Your wallet addresses</td><td>To check which iNFTs you hold and to show wallet balances</td></tr>
+      <tr><td><b>IPFS, Arweave and Irys gateways, GitHub</b>, and other secure web addresses named in an iNFT’s on-chain metadata</td><td>Requests for your iNFTs’ metadata, persona and identity files, and 3D models</td><td>When the app loads an iNFT</td></tr>
+      <tr><td><b>Token logo image hosts</b> (CoinGecko, Alchemy, Covalent, 1inch)</td><td>Requests for logo images, nothing else</td><td>When a wallet view shows a token</td></tr>
+      <tr><td><b>GitHub</b>, for updates</td><td>Requests for the agent runtime and for new releases</td><td>At first launch, to install the agent runtime; every six hours, to check for app updates, which are downloaded and installed only after you agree; and when the agent runtime checks for its own updates</td></tr>
+      <tr><td><b>models.dev</b></td><td>A request for the public catalogue of AI models</td><td>When the runtime has no saved copy of the catalogue</td></tr>
+      <tr><td><b>Nous Portal</b> (Nous Research)</td><td>Your sign-in to a remote agent gateway</td><td>Only if you choose to connect one</td></tr>
+      <tr><td><b>Messaging platforms</b> (for example Telegram, Discord, Slack or WhatsApp)</td><td>Messages exchanged with your agent through that platform</td><td>Only if you connect your agent to one</td></tr>
+      <tr><td><b>Websites and services your agent uses</b></td><td>What the agent sends to do the task, as any visitor would</td><td>When your agent browses the web or uses an online tool for you</td></tr>
+      <tr><td><b>Paste services</b> (paste.rs or dpaste.com)</td><td>A diagnostic report. Anyone with the link can read it.</td><td>Only if you run the runtime’s debug-share command yourself</td></tr>
+      <tr><td><b>Us</b> (CLONE FRAME)</td><td>Only what you send us: bug reports, emails, messages on X. Through Privy we can also see your account record (<a href="#pp-accounts">section 6</a>).</td><td>When you contact us</td></tr>
+    </tbody>
+  </table>
+  <p><b>Who answers for what.</b> Privy keeps your sign-in account on our behalf. We only use service providers that protect personal data to a standard at least equal to this policy. The other recipients in this table do not act for us. You use them directly, often under your own account with them, and their own policies apply to what they receive.</p>
+  <p>Some optional runtime plugins, such as observability integrations, send data to the service they name once you set them up with that service’s credentials.</p>
+
+  <h2 id="pp-ai">5. Third-party AI</h2>
+  <h3>What is sent</h3>
+  <p>The agent’s reasoning is done by an AI model from a provider you choose. Each time the agent works, your device sends that provider:</p>
+  <ul>
+    <li>your messages, and any files, images or attachments you give the agent;</li>
+    <li>the context the agent needs: its persona, its memory (which can include facts about you) and recent conversation;</li>
+    <li>the results of the agent’s tools, which can include web pages, command output, file contents, inbox messages and, if you allow screen recording, what is on your screen.</li>
+  </ul>
+  <p>This is personal data shared with a third-party AI provider. It goes directly from your device to the provider. It does not pass through us, and we cannot see it.</p>
+  <h3>It is your choice</h3>
+  <p>icloneOS supports many providers (large commercial model providers, model routers, and model endpoints you run yourself). Nothing is sent to any of them until you connect one with your own API key or account. Connecting a provider is your explicit permission for the app to send it the data listed above whenever you ask your agent to work.</p>
+  <h3>How to withdraw it</h3>
+  <p>You can withdraw your permission at any time, and it takes effect immediately:</p>
+  <ul>
+    <li>remove the provider’s key or sign out of it in the app’s settings;</li>
+    <li>switch to a different provider; or</li>
+    <li>point the agent at a model endpoint you run yourself, so that the data does not leave your control.</li>
+  </ul>
+  <p>Withdrawing stops future sending. It does not recall what was already sent. The provider keeps that data under its own terms.</p>
+  <h3>What the provider does with it</h3>
+  <p>Your provider handles your data under its terms with you, including how long it keeps your data and whether it uses your data to train models. Many providers let you change these settings in your account with them. You pay the provider directly for what your key uses.</p>
+  <p>We do not use your conversations to train any model, and we never receive them.</p>
+  <p>AI output can be wrong. Do not paste secrets, such as passwords or recovery phrases, into a conversation: anything in the conversation is sent to your provider.</p>
+
+  <h2 id="pp-accounts">6. Accounts, sign-in and wallets</h2>
+  <h3>Signing in</h3>
+  <p>You sign in through Privy with an <b>email address</b> or a <b>wallet</b>. No other sign-in methods are offered.</p>
+  <p>Sign-in happens in a separate, isolated window. That window can only load the app’s local sign-in page, and it refuses every request for device permissions.</p>
+  <p>After you sign in, the app holds your wallet address, your Privy user ID and an account label (your email address, or your wallet address) in memory. Privy’s code keeps your session in a storage area used only by the sign-in window, until you sign out.</p>
+  <h3>What we can see</h3>
+  <p>Privy keeps the account for our app. Through Privy, we can see the account record: your email address or wallet address, your Privy user ID and your embedded wallet address. We do not see your conversations, your files or your keys.</p>
+  <h3>Wallets and keys</h3>
+  <ul>
+    <li><b>Your own wallet.</b> If you sign in with a wallet you already have, its keys stay in that wallet.</li>
+    <li><b>Embedded wallet.</b> If you sign in with an email address and have no wallet, Privy creates one for you. Its keys are secured by Privy, under Privy’s terms.</li>
+    <li>In both cases, neither the app nor CLONE FRAME ever has your private keys or recovery phrase. We cannot access, recover or move your assets.</li>
+    <li>We will never ask for your recovery phrase or private key. The sign-in page says the same: never enter a seed phrase or private key there.</li>
+  </ul>
+  <h3>Checking which iNFTs you hold</h3>
+  <p>To find your iNFTs, the app sends your wallet address to a blockchain explorer (Blockscout) or a public blockchain node. It reads ownership only from known contracts on Base and Robinhood Chain. It then loads each iNFT’s files from the addresses in its on-chain metadata.</p>
+  <h3>Virtuals sign-in</h3>
+  <p>The agent economy uses a separate sign-in to Virtuals, done in your web browser. There you also approve a signing key for your agent. That key and the Virtuals sign-in token are stored in your macOS Keychain. Virtuals creates and manages the agent’s own wallet.</p>
+
+  <h2 id="pp-economy">7. The agent economy</h2>
+  <p>These features are optional. They run on the Virtuals Agent Commerce Protocol and on AgentCard, under accounts you open with those companies.</p>
+  <h3>Marketplace</h3>
+  <p>Your agent can browse the marketplace, publish offerings and prices, take on jobs and manage subscriptions. What you publish is sent to Virtuals and is meant to be seen by other marketplace participants, together with your agent’s identity.</p>
+  <h3>Agent email</h3>
+  <p>Each agent can have its own inbox, provided by Virtuals. It is the agent’s inbox, not your personal email account. Messages are stored by Virtuals. The app shows the inbox, and lets you and your agent read, search, write and reply.</p>
+  <p>The app keeps a preview of recent messages on your device, with verification codes masked. When your agent reads a message, the message becomes part of what is sent to your AI provider.</p>
+  <h3>Virtual cards</h3>
+  <p>You can set up a virtual payment card with AgentCard. Card issuing is backed by Stripe. During setup, you give AgentCard your first and last name, phone number and email address, and you set a spending limit. AgentCard and its partners may ask you for more information to meet their own legal obligations.</p>
+  <ul>
+    <li>The app’s interface never shows full card numbers or security codes. They are removed before anything reaches the screen, and the interface cannot issue a card.</li>
+    <li>If you let your agent pay with a card from its own terminal, the card details it needs for that purchase pass through the agent, and so through your AI provider.</li>
+  </ul>
+  <h3>Trading views</h3>
+  <p>The app can show your agent’s Hyperliquid positions and open orders, read through the Virtuals ACP tool, with links to a blockchain explorer. These views are read-only: the app does not place orders from its interface. Hyperliquid is an independent third party.</p>
+  <h3>Who can move value</h3>
+  <p>The app’s panels and buttons can only read and list. They cannot sign, move value or issue a card. Actions that sign or move value run in your agent’s terminal, where you can see them, and they work only with authorisations you gave yourself: the signing key you approved for Virtuals, and the card spending limit you set. See <a href="#pp-agent">section 17</a>.</p>
+
+  <h2 id="pp-chain">8. Blockchain data is public and permanent</h2>
+  <p>Blockchains are public records. Wallet addresses, iNFT ownership, transfers, payments and other transactions can be seen by anyone, at any time. They cannot be changed or deleted, by us or by anyone else, and this does not change if you delete your account.</p>
+  <p>A wallet address can be linked to your identity: for example, through a payment or a public profile, or because you share it. On-chain records are kept by the networks themselves, not by us.</p>
+
+  <h2 id="pp-permissions">9. Device permissions</h2>
+  <p>icloneOS asks for each permission through the system’s own prompt, only when a feature needs it. Every permission is optional. If you say no, the app keeps working, and only the feature that needs that permission is unavailable.</p>
+  <p>You can change your choice at any time: on macOS in System Settings › Privacy &amp; Security, and on iPhone and iPad in the Settings app.</p>
+  <table>
+    <thead>
+      <tr><th>Permission</th><th>What it is used for</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Microphone</td><td>Voice features, such as speaking to your agent</td></tr>
+      <tr><td>Screen recording</td><td>Letting your agent take a screenshot or recording of the screen when a task needs it, and reading the titles of other apps’ windows</td></tr>
+      <tr><td>Automation (Apple Events)</td><td>Letting your agent control other apps on your Mac when you ask it to</td></tr>
+      <tr><td>Local network</td><td>Connecting to an agent gateway you run on your own network</td></tr>
+      <tr><td>Files and folders</td><td>Opening the files, folders and projects you choose. On macOS your agent can read and write files with your user account’s access, and the app’s file browser blocks known sensitive files.</td></tr>
+      <tr><td>Notifications</td><td>Showing you alerts from the app and your agent</td></tr>
+      <tr><td>Clipboard</td><td>Copying and pasting between you, the app and your agent</td></tr>
+      <tr><td>Keychain</td><td>Storing the Virtuals signing key and sign-in token, and, if you turn it on, encrypting connection secrets. macOS may ask you to allow access.</td></tr>
+    </tbody>
+  </table>
+  <p>The app does not use your camera, your location, or your contacts.</p>
+  <p>On macOS, your agent can also run commands in a terminal, with your user account’s permissions. You can see what it runs.</p>
+
+  <h2 id="pp-never">10. What we never do</h2>
+  <ul>
+    <li>We show <b>no ads</b>.</li>
+    <li>We do <b>not track you</b> across other companies’ apps and websites, and we do not use the advertising identifier. The app does not use App Tracking Transparency because it does no tracking.</li>
+    <li>We do <b>not sell</b> your personal data, and we do not share it for advertising.</li>
+    <li>We put <b>no analytics, telemetry or crash-reporting SDK</b> in the app. Crash information stays in a local log.</li>
+    <li>We do <b>not receive</b> your conversations, your agent’s memory or your files.</li>
+    <li>We do <b>not</b> give data to data brokers or build profiles of you.</li>
+  </ul>
+  <p>The code that Privy and WalletConnect provide for the sign-in window includes their own event reporting, sent to those companies under their policies. It runs only in the sign-in window. We disclose it here and in the App Store privacy details.</p>
+
+  <h2 id="pp-legal">11. Legal bases (GDPR and UK GDPR)</h2>
+  <p>If you are in the European Economic Area or the United Kingdom, these are the legal bases on which we process your personal data:</p>
+  <table>
+    <thead>
+      <tr><th>Purpose</th><th>Data</th><th>Legal basis</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Signing you in and keeping your account</td><td>Email address or wallet address, Privy user ID</td><td>Performing our contract with you</td></tr>
+      <tr><td>Finding your iNFTs and showing balances</td><td>Wallet addresses</td><td>Performing our contract with you</td></tr>
+      <tr><td>Sending your agent’s work to the AI provider you connected</td><td>Messages, files, agent context</td><td>Your consent, which you can withdraw at any time (<a href="#pp-ai">section 5</a>)</td></tr>
+      <tr><td>Optional features: permissions, messaging platforms, agent economy, virtual cards</td><td>The data each feature needs</td><td>Your consent, and your request to use the feature</td></tr>
+      <tr><td>Offering updates</td><td>The update request and your IP address</td><td>Our legitimate interest in keeping the app secure and working. You decide whether to install.</td></tr>
+      <tr><td>Answering bug reports and questions</td><td>What you send us</td><td>Our legitimate interest in supporting you, or performing our contract</td></tr>
+      <tr><td>Handling privacy requests and meeting legal duties</td><td>What the request needs</td><td>Legal obligation</td></tr>
+    </tbody>
+  </table>
+  <p>No law or contract requires you to give us personal data. Without signing in, however, the features that depend on your iNFTs do not work.</p>
+  <p>Where we rely on legitimate interests, you can object (<a href="#pp-rights">section 13</a>).</p>
+  <p>Services you use under your own account (your AI provider, Virtuals, AgentCard and Stripe, messaging platforms) decide for themselves how they process what they receive.</p>
+
+  <h2 id="pp-retention">12. Retention and deletion</h2>
+  <table>
+    <thead>
+      <tr><th>Data</th><th>How long it is kept</th><th>How it is deleted</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>On-device data (section 3)</td><td>Until you delete it. Logs are limited in size. Optional usage metrics keep 30 days.</td><td>In the app (steps below), or by removing the files</td></tr>
+      <tr><td>Privy session on your device</td><td>Until you sign out</td><td>Sign out</td></tr>
+      <tr><td>Privy account record</td><td>While you have an account</td><td>Ask us. We delete it within 30 days and confirm.</td></tr>
+      <tr><td>Bug reports and correspondence with us</td><td>As long as needed to resolve the matter, and no longer than 24 months after our last exchange</td><td>Automatically, or sooner if you ask</td></tr>
+      <tr><td>Data held by your AI provider, Virtuals, AgentCard, Stripe, Nous Portal or a messaging platform</td><td>Under that service’s policy</td><td>Through that service</td></tr>
+      <tr><td>On-chain data</td><td>Permanently</td><td>Cannot be deleted</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Delete an iNFT’s agent profile</h3>
+  <ol>
+    <li>Open the iNFT’s settings in the app.</li>
+    <li>Choose to delete its profile. This removes that agent’s runtime profile and its persona from your device.</li>
+    <li>If you also want to remove that iNFT’s cached wallet, market and inbox views, clear them as well; the app lets you clear them for each iNFT.</li>
+  </ol>
+  <p>This does not affect the token on the blockchain, or the agent’s account with Virtuals.</p>
+
+  <h3>Sign out</h3>
+  <p>Signing out clears the Privy session from your device, along with the app’s list of your iNFTs. It does not delete your Privy account, your Virtuals sign-in, your agents’ local data or the cached views stored by the app.</p>
+
+  <h3>Remove everything from your Mac</h3>
+  <ol>
+    <li>In the app’s settings, open the uninstall section.</li>
+    <li>Choose how much to remove: the app only; the app and the agent runtime, keeping your configuration, conversations and secrets; or <b>everything</b>, including conversations, secrets, scheduled jobs and logs.</li>
+    <li>To finish a complete wipe, also delete the app’s folder in ~/Library/Application Support, the folder <b>~/.iclone-os</b>, and, in the Keychain Access app, the entries saved by the Virtuals ACP tool.</li>
+  </ol>
+  <p>On iPhone and iPad, deleting the app removes the data it stores on the device.</p>
+
+  <h3>Delete your account with us</h3>
+  <ol>
+    <li>Send <a href="https://github.com/devclone20/icloneos/security/advisories/new" target="_blank" rel="noopener">a private report on github.com/devclone20/icloneos</a> (on that page: Security, then “Report a vulnerability”; only you and we can read it), or use the form at <a href="https://cloneframe.io/#/bug" target="_blank" rel="noopener">cloneframe.io/#/bug</a>. Include the email address or wallet address you sign in with. We may ask you to prove you control it, for example by signing a message. We never ask for your keys.</li>
+    <li>We delete your Privy account record, and anything else we hold about you, within 30 days.</li>
+    <li>We confirm by reply when the deletion is complete.</li>
+  </ol>
+  <p>Deleting your account does not remove assets from your wallet. If you use a Privy embedded wallet, move any assets you want to keep before you ask for deletion, because we cannot recover the wallet afterwards.</p>
+
+  <h3>Delete your accounts with other services</h3>
+  <p>Your accounts with your AI provider, Virtuals, AgentCard, Nous Portal and any messaging platform are yours and separate from us. Delete them with each service (<a href="#pp-third">section 19</a>).</p>
+
+  <h3>What cannot be deleted</h3>
+  <ul>
+    <li><b>On-chain data</b> (<a href="#pp-chain">section 8</a>).</li>
+    <li><b>Data a provider must keep by law</b>. For example, card and identity records that AgentCard or Stripe are required to retain.</li>
+    <li><b>Data already sent to a service</b> under your own account. That service’s policy applies.</li>
+  </ul>
+  <p>Everyone can delete their account, wherever they live.</p>
+
+  <h2 id="pp-rights">13. Your rights</h2>
+  <p>Most of your icloneOS data is on your device, and you can see, change, export or delete it yourself. For the data we hold, your rights are below.</p>
+  <h3>Everyone</h3>
+  <p>Wherever you live, you can ask us what data we hold about you, ask for a copy, ask us to correct it, and ask us to delete it. We answer within 30 days, and we never charge for this or treat you differently because you asked.</p>
+  <h3>European Economic Area and United Kingdom</h3>
+  <p>You have the right to:</p>
+  <ul>
+    <li>access your data;</li>
+    <li>have it corrected or erased;</li>
+    <li>restrict how it is processed;</li>
+    <li>object to processing based on legitimate interests;</li>
+    <li>receive it in a portable format;</li>
+    <li>withdraw consent at any time, without affecting what was done before.</li>
+  </ul>
+  <p>You can also complain to the data protection authority where you live or work. In the UK, that is the Information Commissioner’s Office.</p>
+  <h3>California</h3>
+  <p>Under the CCPA, as amended by the CPRA, you have the right to know what personal information we collect, use and disclose; to delete it; to correct it; to opt out of its sale or sharing; to limit the use of sensitive personal information; and not to be discriminated against for using these rights.</p>
+  <p>In the last 12 months we collected these categories of personal information:</p>
+  <ul>
+    <li><b>identifiers:</b> email address, wallet address and Privy user ID, from you, through Privy, used to sign you in;</li>
+    <li><b>communications you send us</b>, used to answer you.</li>
+  </ul>
+  <p>We do not sell or share personal information, as those terms are defined in the CCPA, and we do not use sensitive personal information to infer characteristics about you.</p>
+  <p>You can make a request in two ways: through <a href="https://github.com/devclone20/icloneos/security/advisories/new" target="_blank" rel="noopener">a private report on github.com/devclone20/icloneos</a> (on that page: Security, then “Report a vulnerability”; only you and we can read it), or through the form at <a href="https://cloneframe.io/#/bug" target="_blank" rel="noopener">cloneframe.io/#/bug</a>. We confirm that we received it within 10 business days and respond within 45 days. If we need more time, we can extend that once by another 45 days, and we will tell you. An authorised agent can make a request for you, with your signed permission.</p>
+  <h3>Other US states</h3>
+  <p>If you live in another US state with a consumer privacy law, you have similar rights, which you can exercise the same way. If we decline a request, you can appeal by replying to our answer, and we respond within the time your state’s law sets.</p>
+
+  <h2 id="pp-children">14. Children</h2>
+  <p>icloneOS is for adults. You must be 18 or older to use it, because it involves wallets, payments and trading. The app is not directed to children, and we do not knowingly collect personal data from anyone under 18.</p>
+  <p>If we learn that we hold personal data of a child, we delete it. If you are a parent or guardian and believe your child has used icloneOS, contact us and we will delete their data.</p>
+
+  <h2 id="pp-security">15. Security</h2>
+  <p>We design the app so that the most sensitive things never reach it, and the rest stays under your control.</p>
+  <ul>
+    <li><b>Private keys and recovery phrases</b> are never in the app. Wallet keys stay in your wallet or with Privy.</li>
+    <li><b>The sign-in window</b> is isolated from the rest of the app, can only load the local sign-in page, and refuses all device permission requests.</li>
+    <li><b>The Virtuals signing key and sign-in token</b> are stored in your macOS Keychain.</li>
+    <li><b>Card numbers and security codes</b> are removed before anything reaches the app’s screen. The interface cannot sign, move value or issue a card.</li>
+    <li><b>iNFT files</b> are fetched only over HTTPS, with a size limit, and never from local or private network addresses.</li>
+    <li><b>App updates</b> come from our release channel on GitHub, are signed and notarised for macOS, and are installed only after you agree.</li>
+    <li><b>The app’s own connections</b> for sign-in, blockchain lookups, iNFT files and updates use HTTPS.</li>
+  </ul>
+  <p>Where the app is weaker than it could be, here is exactly how:</p>
+  <ul>
+    <li><b>AI provider keys and bot tokens</b> you enter are stored in a plain-text file, ~/.hermes/.env. Your macOS account and disk encryption protect it, but any program running as your user can read it.</li>
+    <li><b>Connection secrets</b> for remote gateways are in files only your user account can read. Encrypting them with your Keychain is an option you can turn on, and it is off by default.</li>
+  </ul>
+  <p>We recommend you turn on FileVault, use provider keys with spending limits, and turn on Keychain encryption for connection secrets.</p>
+  <p>No system is perfectly secure. If a breach affects personal data we hold, we will tell the people affected and the authorities where the law requires, without undue delay.</p>
+
+  <h2 id="pp-transfers">16. International transfers</h2>
+  <p>The services in <a href="#pp-leaves">section 4</a> may process data in the United States and in other countries, which may not have the same data protection laws as yours.</p>
+  <p>When you send data to a service under your own account, such as your AI provider, Virtuals or AgentCard, the transfer happens at your direction, under that service’s terms.</p>
+  <p>For your Privy account, which Privy keeps for us, we rely on the transfer safeguards in Privy’s data protection terms. Where they apply, these include the European Commission’s Standard Contractual Clauses and their UK equivalent.</p>
+
+  <h2 id="pp-agent">17. Agent actions and automated decisions</h2>
+  <p>Your agent is software that acts on your instructions, using the AI model you chose. It can browse, write, run commands, send agent email, take marketplace jobs and, if you set it up, spend within a card limit. What it does, it does for you.</p>
+  <p>We make no decisions about you by automated means: no profiling, and no decisions with legal or similarly significant effects.</p>
+  <p>The limits are yours:</p>
+  <ul>
+    <li>The app’s interface cannot sign transactions, move value or issue cards.</li>
+    <li>Signing and moving value need authorisations you gave yourself: the signing key you approved for Virtuals in your browser, and the spending limit you set on a card.</li>
+    <li>You can watch what the agent runs, stop it at any time, lower or remove limits, revoke the signing key with Virtuals, and sign out.</li>
+  </ul>
+  <p>AI models make mistakes. Review what your agent does, especially anything that involves money.</p>
+
+  <h2 id="pp-advice">18. Not financial advice</h2>
+  <p>icloneOS is software. It is not a bank, broker, exchange, money transmitter or financial adviser, and nothing in the app, from us or from your agent, is financial, investment, legal or tax advice.</p>
+  <p>Trading and crypto-assets are risky, and you can lose money. Wallets, cards, the marketplace and trading venues are provided by third parties under their own terms. You are responsible for your decisions and for what your agent does under the limits you set.</p>
+
+  <h2 id="pp-third">19. Third-party policies</h2>
+  <p>These services have their own privacy policies, which apply to what they receive:</p>
+  <ul>
+    <li>Privy: <a href="https://www.privy.io/privacy-policy" target="_blank" rel="noopener">privy.io/privacy-policy</a></li>
+    <li>Virtuals: <a href="https://app.virtuals.io/privacy-policy" target="_blank" rel="noopener">app.virtuals.io/privacy-policy</a></li>
+    <li>AgentCard: <a href="https://agentcard.ai/privacy" target="_blank" rel="noopener">agentcard.ai/privacy</a></li>
+    <li>Stripe: <a href="https://stripe.com/privacy" target="_blank" rel="noopener">stripe.com/privacy</a></li>
+    <li>Nous Research: <a href="https://portal.nousresearch.com/privacy" target="_blank" rel="noopener">portal.nousresearch.com/privacy</a></li>
+    <li>WalletConnect / Reown: <a href="https://reown.com/privacy-policy" target="_blank" rel="noopener">reown.com/privacy-policy</a></li>
+    <li>GitHub: <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement" target="_blank" rel="noopener">GitHub General Privacy Statement</a></li>
+    <li><b>The AI provider you choose</b> (for example OpenAI, Anthropic, Google or another): that provider’s privacy policy and terms, which you accept when you open an account and create a key with them.</li>
+    <li>Messaging platforms, blockchain explorers and websites your agent visits: each one’s own policy.</li>
+  </ul>
+
+  <h2 id="pp-changes">20. Changes to this policy</h2>
+  <p>When we change this policy, we update the version and effective date at the top.</p>
+  <p>If a change is material — for example, a new kind of data or a new recipient — we tell you in the app or on cloneframe.io before it takes effect. Where the law requires it, we ask for your consent again.</p>
+  <p>Earlier versions are available on request.</p>
+
+  <h2 id="pp-contact">21. Contact</h2>
+  <p>For privacy questions and requests, contact CLONE FRAME:</p>
+  <ul>
+    <li>GitHub: <a href="https://github.com/devclone20/icloneos" target="_blank" rel="noopener">github.com/devclone20/icloneos</a>. Open an issue for general questions. For anything personal or sensitive, send <a href="https://github.com/devclone20/icloneos/security/advisories/new" target="_blank" rel="noopener">a private report</a> instead (on that page: Security, then “Report a vulnerability”), which only you and we can read.</li>
+    <li>Form: <a href="https://cloneframe.io/#/bug" target="_blank" rel="noopener">cloneframe.io/#/bug</a></li>
+    <li>X: <a href="https://x.com/icloneos" target="_blank" rel="noopener">@icloneos</a></li>
+  </ul>
+  <p>We answer privacy requests within the times set out in <a href="#pp-rights">section 13</a>. If you are in the EEA or the UK and are not satisfied with our answer, you can complain to your data protection authority.</p>
+</article>

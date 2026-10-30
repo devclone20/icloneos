@@ -1,0 +1,16 @@
+{
+ "noFunctionProviderReads": [
+  "brv_query",
+  "brv_status",
+  "retaindb_context",
+  "retaindb_list_files",
+  "retaindb_profile",
+  "retaindb_read_file",
+  "retaindb_search",
+  "tool_describe",
+  "tool_search",
+  "viking_browse",
+  "viking_read",
+  "viking_search"
+ ]
+}

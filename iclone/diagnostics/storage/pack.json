@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "id": "storage",
+  "title": "Local data",
+  "order": 6,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "storage.ownership",
+      "title": "iNFT ownership records",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "ownershipRecords",
+      "fix": "storage.restore_ownership"
+    },
+    {
+      "id": "storage.private_modes",
+      "title": "Private file modes",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "privateModes",
+      "fix": "storage.chmod_private"
+    },
+    {
+      "id": "storage.disk",
+      "title": "Free disk space",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "diskSpace"
+    },
+    {
+      "id": "storage.crash_dumps",
+      "title": "Crash reports",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "crashDumps"
+    }
+  ],
+  "fixes": [
+    {
+      "id": "storage.restore_ownership",
+      "title": "Restore ownership records from the mirror",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The damaged record was renamed to .corrupt-<time> and copied to the backup folder.",
+      "impl": "restoreOwnership"
+    },
+    {
+      "id": "storage.chmod_private",
+      "title": "Make local records owner-only",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous file modes are listed in the backup manifest.",
+      "impl": "chmodPrivateData"
+    }
+  ]
+}

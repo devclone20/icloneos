@@ -1,0 +1,22 @@
+/* The status pip's tone per cron job state (job-state.ts STATE_DOT). Imported
+   by that module on purpose: the chat sidebar draws these classes without
+   mounting any of our pages, and a tone read from a token that had not loaded
+   yet would leave an invisible dot. Tokens only (--ic-*). */
+
+@import '../home/ic-tokens.css';
+
+.cron-dot-live {
+  background: var(--ic-accent-strong);
+}
+
+.cron-dot-warn {
+  background: var(--ic-warning);
+}
+
+.cron-dot-danger {
+  background: var(--ic-danger);
+}
+
+.cron-dot-idle {
+  background: var(--ic-text-3);
+}

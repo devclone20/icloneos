@@ -1,0 +1,199 @@
+/* The chat skin's token ramp — our tokens, our namespace, no old-theme value anywhere.
+
+   WHY THIS FILE EXISTS. The composer, the thread, the tool cards and the model menus used the
+   upstream Tailwind alias utilities (the foreground ink, the card fill, the border line, ...).
+   Each of those aliases is a `--color-*` entry in styles.css pointing at an OLD Hermes token
+   (`--dt-*`, `--ui-*`), so the old theme reached the screen through a class that carries none of
+   those strings and no grep for them could see it (E3g contract s3.1 - the trap that let a round
+   report green over 135 live nodes). The re-base writes the token into the utility itself
+   (`text-[color:var(--ic-text-1)]`), which keeps Tailwind's variant machinery - `hover:`,
+   `focus-visible:`, `prose-*`, `marker:`, `data-[...]` - working exactly as before. A plain class
+   would have silently dropped 103 of those variant sites.
+
+   The alpha steps the old utilities expressed with `/NN` cannot be written inside `var()`, so the
+   ones actually used are declared here once, derived from a token that exists. The mapping is
+   MEASURED, not guessed: every value was read as a COMPUTED colour off lab 3 in skin iclone-dark
+   on 2026-10-20, and the comment on each group says how far ours sits from what it replaces.
+
+   THREE LOCAL TOKENS REPORTED FOR PROMOTION (the token sheet `app/home/ic-tokens.css` is front
+   E3h's, so E3g declares them here instead of writing a sheet it does not own, and never invents
+   a hex): `--ic-text-ramp-80` (the 74 % ink step), `--ic-md-line-height` (styles.css still holds
+   `--dt-line-height: 1.5`; same number, our namespace) and `--ic-diff-add` / `--ic-diff-remove`
+   (the diff tints, which were the success/danger hue at 12 %). */
+
+:root {
+  --ic-text-ramp-80: color-mix(in srgb, var(--ic-text-1) var(--ic-a80), transparent);
+  --ic-md-line-height: 1.5;
+  --ic-diff-add: color-mix(in srgb, var(--ic-success) var(--ic-a14), transparent);
+  --ic-diff-remove: color-mix(in srgb, var(--ic-danger) var(--ic-a14), transparent);
+
+  /* --ic-text-1 - was foreground / --dt-foreground (same computed value) */
+  --ic-chat-1-30: color-mix(in srgb, var(--ic-text-1) 30%, transparent);
+  --ic-chat-1-44: color-mix(in srgb, var(--ic-text-1) 44%, transparent);
+  --ic-chat-1-55: color-mix(in srgb, var(--ic-text-1) 55%, transparent);
+  --ic-chat-1-64: color-mix(in srgb, var(--ic-text-1) 64%, transparent);
+  --ic-chat-1-70: color-mix(in srgb, var(--ic-text-1) 70%, transparent);
+  --ic-chat-1-75: color-mix(in srgb, var(--ic-text-1) 75%, transparent);
+  --ic-chat-1-80: color-mix(in srgb, var(--ic-text-1) 80%, transparent);
+  --ic-chat-1-85: color-mix(in srgb, var(--ic-text-1) 85%, transparent);
+  --ic-chat-1-90: color-mix(in srgb, var(--ic-text-1) 90%, transparent);
+  --ic-chat-1-92: color-mix(in srgb, var(--ic-text-1) 92%, transparent);
+  --ic-chat-1-95: color-mix(in srgb, var(--ic-text-1) 95%, transparent);
+
+  /* --ic-text-2 - was muted-foreground / --ui-text-tertiary (54 % -> 56.4 %) */
+  --ic-chat-2-35: color-mix(in srgb, var(--ic-text-2) 35%, transparent);
+  --ic-chat-2-45: color-mix(in srgb, var(--ic-text-2) 45%, transparent);
+  --ic-chat-2-50: color-mix(in srgb, var(--ic-text-2) 50%, transparent);
+  --ic-chat-2-55: color-mix(in srgb, var(--ic-text-2) 55%, transparent);
+  --ic-chat-2-60: color-mix(in srgb, var(--ic-text-2) 60%, transparent);
+  --ic-chat-2-65: color-mix(in srgb, var(--ic-text-2) 65%, transparent);
+  --ic-chat-2-70: color-mix(in srgb, var(--ic-text-2) 70%, transparent);
+  --ic-chat-2-75: color-mix(in srgb, var(--ic-text-2) 75%, transparent);
+  --ic-chat-2-80: color-mix(in srgb, var(--ic-text-2) 80%, transparent);
+  --ic-chat-2-85: color-mix(in srgb, var(--ic-text-2) 85%, transparent);
+  --ic-chat-2-88: color-mix(in srgb, var(--ic-text-2) 88%, transparent);
+  --ic-chat-2-90: color-mix(in srgb, var(--ic-text-2) 90%, transparent);
+  --ic-chat-2-92: color-mix(in srgb, var(--ic-text-2) 92%, transparent);
+
+  /* --ic-accent - was primary / --dt-ring / --theme-primary (same value) */
+  --ic-chat-accent-10: color-mix(in srgb, var(--ic-accent) 10%, transparent);
+  --ic-chat-accent-15: color-mix(in srgb, var(--ic-accent) 15%, transparent);
+  --ic-chat-accent-20: color-mix(in srgb, var(--ic-accent) 20%, transparent);
+  --ic-chat-accent-25: color-mix(in srgb, var(--ic-accent) 25%, transparent);
+  --ic-chat-accent-30: color-mix(in srgb, var(--ic-accent) 30%, transparent);
+  --ic-chat-accent-35: color-mix(in srgb, var(--ic-accent) 35%, transparent);
+  --ic-chat-accent-40: color-mix(in srgb, var(--ic-accent) 40%, transparent);
+  --ic-chat-accent-55: color-mix(in srgb, var(--ic-accent) 55%, transparent);
+  --ic-chat-accent-60: color-mix(in srgb, var(--ic-accent) 60%, transparent);
+  --ic-chat-accent-70: color-mix(in srgb, var(--ic-accent) 70%, transparent);
+  --ic-chat-accent-80: color-mix(in srgb, var(--ic-accent) 80%, transparent);
+  --ic-chat-accent-90: color-mix(in srgb, var(--ic-accent) 90%, transparent);
+
+  /* --ic-accent-strong - was --tool-memory-legendary-icon, a 55 % blend of
+     --ui-yellow into --ui-purple. Our palette has no purple, so the legendary
+     mark is the gilt alone; REPORTED rather than given a hue nobody declared. */
+  --ic-chat-legendary-ink: var(--ic-accent-strong);
+
+  /* --ic-danger - was destructive (#e0566b -> our #ff8a8a) */
+  --ic-chat-danger-10: color-mix(in srgb, var(--ic-danger) 10%, transparent);
+  --ic-chat-danger-15: color-mix(in srgb, var(--ic-danger) 15%, transparent);
+  --ic-chat-danger-40: color-mix(in srgb, var(--ic-danger) 40%, transparent);
+  --ic-chat-danger-45: color-mix(in srgb, var(--ic-danger) 45%, transparent);
+  --ic-chat-danger-60: color-mix(in srgb, var(--ic-danger) 60%, transparent);
+  --ic-chat-danger-80: color-mix(in srgb, var(--ic-danger) 80%, transparent);
+  --ic-chat-danger-90: color-mix(in srgb, var(--ic-danger) 90%, transparent);
+
+  --ic-chat-danger-20: color-mix(in srgb, var(--ic-danger) 20%, transparent);
+
+  /* --ic-warning - was the amber ladder (amber-300/400/500/600/700/900 and
+     amber-50/100/200, which are Tailwind constants no skin can reach). One
+     token read replaces each dark:/light pair, so the SKIN regime decides. */
+  --ic-chat-warning-15: color-mix(in srgb, var(--ic-warning) 15%, transparent);
+  --ic-chat-warning-20: color-mix(in srgb, var(--ic-warning) 20%, transparent);
+  --ic-chat-warning-30: color-mix(in srgb, var(--ic-warning) 30%, transparent);
+  --ic-chat-warning-70: color-mix(in srgb, var(--ic-warning) 70%, transparent);
+  --ic-chat-warning-90: color-mix(in srgb, var(--ic-warning) 90%, transparent);
+
+  /* --ic-success - was the emerald ladder (emerald-400/500/600, same story) */
+  --ic-chat-success-15: color-mix(in srgb, var(--ic-success) 15%, transparent);
+  --ic-chat-success-20: color-mix(in srgb, var(--ic-success) 20%, transparent);
+  --ic-chat-success-70: color-mix(in srgb, var(--ic-success) 70%, transparent);
+  --ic-chat-success-80: color-mix(in srgb, var(--ic-success) 80%, transparent);
+  --ic-chat-success-85: color-mix(in srgb, var(--ic-success) 85%, transparent);
+
+  /* --ic-fill-hover - was accent (#1e1e22), the hover fill */
+  --ic-chat-hover-18: color-mix(in srgb, var(--ic-fill-hover) 18%, transparent);
+  --ic-chat-hover-25: color-mix(in srgb, var(--ic-fill-hover) 25%, transparent);
+  --ic-chat-hover-40: color-mix(in srgb, var(--ic-fill-hover) 40%, transparent);
+  --ic-chat-hover-45: color-mix(in srgb, var(--ic-fill-hover) 45%, transparent);
+  --ic-chat-hover-55: color-mix(in srgb, var(--ic-fill-hover) 55%, transparent);
+
+  /* --ic-surface-raised - was card / muted / --ui-bg-elevated */
+  --ic-chat-raised-25: color-mix(in srgb, var(--ic-surface-raised) 25%, transparent);
+  --ic-chat-raised-35: color-mix(in srgb, var(--ic-surface-raised) 35%, transparent);
+  --ic-chat-raised-40: color-mix(in srgb, var(--ic-surface-raised) 40%, transparent);
+  --ic-chat-raised-55: color-mix(in srgb, var(--ic-surface-raised) 55%, transparent);
+  --ic-chat-raised-80: color-mix(in srgb, var(--ic-surface-raised) 80%, transparent);
+
+  /* --ic-surface - was background / --dt-background, the stage */
+  --ic-chat-stage-40: color-mix(in srgb, var(--ic-surface) 40%, transparent);
+  --ic-chat-stage-50: color-mix(in srgb, var(--ic-surface) 50%, transparent);
+  --ic-chat-stage-55: color-mix(in srgb, var(--ic-surface) 55%, transparent);
+  --ic-chat-stage-60: color-mix(in srgb, var(--ic-surface) 60%, transparent);
+  --ic-chat-stage-70: color-mix(in srgb, var(--ic-surface) 70%, transparent);
+  --ic-chat-stage-80: color-mix(in srgb, var(--ic-surface) 80%, transparent);
+
+  /* --ic-border-subtle - was border / input (#26262a) */
+  --ic-chat-subtle-40: color-mix(in srgb, var(--ic-border-subtle) 40%, transparent);
+  --ic-chat-subtle-50: color-mix(in srgb, var(--ic-border-subtle) 50%, transparent);
+  --ic-chat-subtle-55: color-mix(in srgb, var(--ic-border-subtle) 55%, transparent);
+  --ic-chat-subtle-60: color-mix(in srgb, var(--ic-border-subtle) 60%, transparent);
+  --ic-chat-subtle-65: color-mix(in srgb, var(--ic-border-subtle) 65%, transparent);
+  --ic-chat-subtle-70: color-mix(in srgb, var(--ic-border-subtle) 70%, transparent);
+
+  /* --ic-border-strong - was --ui-stroke-tertiary (14.5 % -> 14 %) */
+  --ic-chat-strong-60: color-mix(in srgb, var(--ic-border-strong) 60%, transparent);
+
+  /* --ic-focus-ring - was ring / --dt-composer-ring */
+  --ic-chat-focus-50: color-mix(in srgb, var(--ic-focus-ring) 50%, transparent);
+}
+
+/* ── The composer's fill, in OUR namespace. The ladder is the composer's own
+   state machine (rest / scrolled / HUD), and every surface docked to the bar
+   paints the SAME var so the layers match by construction. styles.css (front
+   E3h's) still declares the old `--composer-fill` off `--dt-card`; nothing of
+   ours reads it any more, and the mixes below are the same ratios over our
+   tokens, so the dock cannot drift from the skin. */
+:root {
+  /* Fallback for drawers outside the main composer (e.g. edit-message). */
+  --ic-chat-composer-fill: color-mix(in srgb, var(--ic-surface-raised) 90%, var(--ic-surface));
+}
+
+[data-slot='composer-root'] {
+  --ic-chat-composer-fill: color-mix(in srgb, var(--ic-surface-raised) 72%, transparent);
+}
+
+[data-slot='composer-root'][data-thread-scrolled-up] {
+  --ic-chat-composer-fill: color-mix(in srgb, var(--ic-surface-raised) 48%, transparent);
+}
+
+[data-hud-shell] [data-slot='composer-root'] {
+  /* Opaque: anything docked to the HUD composer paints the solid fill the bar
+     does (a translucent glass can never match across two backdrops). */
+  --ic-chat-composer-fill: var(--ic-surface-raised);
+}
+
+/* ── A reference's hue, by what the reference DOES (paths are the common case,
+   things you fetch, things that act, things that change code). The groups are
+   the ones styles.css keys `--ref-color` on; the values are ours, and the two
+   old hues with no --ic twin (`--ui-accent-secondary`, `--ui-warm`) resolve to
+   their nearest kin, reported to the lead rather than invented here. */
+[data-ref] {
+  --ic-chat-ref-ink: var(--ic-accent);
+}
+
+[data-ref='file'],
+[data-ref='folder'],
+[data-ref='line'],
+[data-ref='terminal'] {
+  --ic-chat-ref-ink: var(--ic-text-2);
+}
+
+[data-ref='url'],
+[data-ref='image'],
+[data-ref='session'],
+[data-ref='theme'] {
+  --ic-chat-ref-ink: color-mix(in srgb, var(--ic-accent-strong) 82%, var(--ic-text-1));
+}
+
+[data-ref='command'],
+[data-ref='tool'] {
+  --ic-chat-ref-ink: color-mix(in srgb, var(--ic-accent) 82%, var(--ic-text-1));
+}
+
+[data-ref='skill'],
+[data-ref='git'],
+[data-ref='diff'],
+[data-ref='staged'] {
+  --ic-chat-ref-ink: color-mix(in srgb, var(--ic-warning) 82%, var(--ic-text-1));
+}

@@ -1,0 +1,13 @@
+# Ruling 57.2 — distributions the RT pack must NOT install into the runtime venv it ships (one PEP 503 name per line).
+# Every package of the pinned lock (uv.lock) that the telemetry denylist (hermes_cli/iclone_sinks.py
+# TELEMETRY_DISTRIBUTIONS) matches; a test keeps this file equal to that set. Apply with, for each name:
+#   uv sync ... --no-install-package <name>
+# then prove it with: python3 iclone/telemetry/venv_gate.py <venv>   (exit 0 = GREEN)
+# Effects: hermes-agent falls back to its no-op Relay host (nemo-relay is optional at runtime by design); the `otlp`,
+# `langfuse` and `daytona` extras cannot import their exporter and stay off (fail closed; pm refuses to install them
+# under icloneOS — hermes_cli/iclone_sinks.py extras_refusal).
+langfuse
+nemo-relay
+opentelemetry-exporter-otlp-proto-common
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-proto

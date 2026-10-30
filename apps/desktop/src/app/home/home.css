@@ -1,0 +1,657 @@
+/* iclone os — home surface + EconomyOS panel.
+   The stage itself is transparent: the frosted 1111 mosaic + skin tint painted
+   on <body> by styles.css reads through. Everything here is glass over it. */
+
+@import './ic-tokens.css';
+@import './ic-bridge.css';
+@import './ic-layers.css';
+@import './window/ic-window.css';
+
+/* ── THE FRAME — one rect for the iNFT card and every Dock window ──────────
+   The live iNFT card (.ihome__stage--live), the Message window and the five
+   EconomyOS windows all open on this rect, so a window always covers the
+   card edge to edge. The only source of these numbers: TS reads them through
+   home/window-frame.ts. The card had its own narrower inset below 1100px and
+   the windows did not — the field leaked around every window there. */
+:root {
+  --ic-frame-top: 52px;
+  --ic-frame-right: 72px;
+  --ic-frame-bottom: 40px;
+  --ic-frame-left: 96px;
+  --ic-frame-radius: var(--ic-radius-xl);
+}
+
+/* The BASE layer: mosaic field + the live 3D iNFT. z 37 keeps it UNDER the
+   Message window box (z 38) and under every ihome control (z 40), so the
+   iNFT reads through every frosted window — and performs fully when the
+   opacity slider thins the chat away. It paints the field itself because
+   the shell (sidebar/chat) sits between the body backdrop and this layer. */
+.istage-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ic-z-global-stage);
+  overflow: hidden;
+  background-image: var(--iclone-tint-layer), url('../../assets/iclone-mosaic.jpg');
+  background-size: auto, cover;
+  background-position: center top;
+}
+
+/* An OPEN iNFT owns the entire screen in ONE uniform color — its dome/field
+   hex when the token ships one, deep ink otherwise. No gradient, no
+   vignette: the owner wants one seamless field. */
+.istage-layer--live {
+  /* the field stays under the glass; the live colour is painted INSIDE the
+     frame (.ihome__stage--live), never edge to edge */
+  background-color: var(--ic-stage-fill);
+}
+
+/* A quiet vignette so the wordmark sits in a lit center, like the site stage. */
+.istage-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 120%, var(--ic-stage-veil), transparent 60%);
+}
+
+/* ── THE LADDER (generated from home/ic-layers.ts — edit it there) ─────────
+   global rungs order the siblings of .ihome; .ihome is ONE stacking context
+   at global-home, so its rungs can never outrank a global rung above it.
+   Upstream overlay views sit at 50, upstream modals at 120.
+
+    37  --ic-z-global-stage        .istage-layer: the field + live 3D iNFT, and the Message window plate on them
+    38  --ic-z-global-chat         the chat surface (the shell, clipped into the Message window)
+    39  --ic-z-global-shells       the iT shells (it-host.tsx parks them over the iT slots)
+    40  --ic-z-global-home         .ihome: all the chrome of the ihome scope lives in here
+    46  --ic-z-global-files        .ifiles: the Files island (mounted app-wide)
+    39  --ic-z-ihome-frame         .iwin-frame: the window's champagne border (decor)
+    41  --ic-z-ihome-itwin         .itwin: the iT terminal filling the window
+    42  --ic-z-ihome-chrome        .imsg-side: the Message window's session sidebar
+    43  --ic-z-ihome-econ          .iecon: a dock window opened over the Message window
+    44  --ic-z-ihome-dock          .dock: the rail, above the windows it opens
+    45  --ic-z-ihome-inft-tab      .inft-tab: the collections tab on the stage edge
+    60  --ic-z-ihome-controls      .iwin-controls .iop: the window's controls
+    61  --ic-z-ihome-inft-scrim    .inft-scrim: collections, modal, above every control
+    62  --ic-z-ihome-inft-panel    .inft-panel
+    64  --ic-z-ihome-wallet-scrim  .iwbal-scrim: wallet, modal
+    65  --ic-z-ihome-wallet-panel  .iwbal
+     1  --ic-z-local-base          lifted off the flow (plate, rail, cell, checkbox)
+     2  --ic-z-local-raised        over a base part (pane divider)
+     3  --ic-z-local-overlay       over the content (pane close, window controls)
+     4  --ic-z-local-float         floating header or flash region
+     5  --ic-z-local-peak          menus and a dragged card
+
+   Rule for anything added later: a piece with a scrim is modal and belongs
+   ABOVE the window controls; a piece without one belongs below them.
+   ────────────────────────────────────────────────────────────────────── */
+
+/* Chrome layer above the stage: transparent and hit-transparent by default —
+   drags fall through to the 3D stage below; only the controls catch. */
+.ihome {
+  position: fixed;
+  inset: 0;
+  z-index: var(--ic-z-global-home);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.ihome .dock,
+.ihome .inft-tab,
+.ihome .inft-panel,
+.ihome .inft-scrim,
+.ihome .iwbal,
+.ihome .iwbal-scrim,
+.ihome .ihome__connect {
+  pointer-events: auto;
+}
+
+/* An EconomyOS window is a box the opacity slider can thin to nothing, so the
+   box itself must not catch: only its glass surface (which switches itself
+   off below MIN_INTERACTIVE), its buttons and its resize handles do.
+   Otherwise a window faded to zero still swallowed every drag on the stage. */
+.ihome .iecon {
+  pointer-events: none;
+}
+
+.ihome .ic-win__plate,
+.ihome .ic-win > .ic-win__controls > *,
+.ihome .iecon-h {
+  pointer-events: auto;
+}
+
+/* The control column is a fixed strip down the window's right edge, and it is
+   MOSTLY the 8px gaps between its buttons. Turning the container on made those
+   gaps eat every click on the chat underneath — an audit found a transcript
+   button that could not be pressed because the empty space between × and the
+   opacity slider won its pixel. Only the buttons catch; the strip does not. */
+.ihome .ic-win__controls:not(.ic-win > *) {
+  pointer-events: none;
+}
+
+.ihome .ic-win__controls:not(.ic-win > *) > * {
+  pointer-events: auto;
+}
+
+/* iT is a WINDOW onto the shells parked beneath it (the host, z 39 global),
+   so the panel itself must not catch the mouse — its body, its split boxes
+   and its pane rects are all just layout. Only the real controls opt back in,
+   and they do it through the Message opacity slider's var, exactly like the
+   chat: at the bottom of the slider iT stops catching entirely and the drag
+   passes through to the 3D stage.
+
+   This is the whole of the "the terminal lost its click" bug: making the pane
+   rect hit-transparent was not enough while every box AROUND it still caught. */
+.ihome .itwin {
+  pointer-events: none;
+}
+
+/* Contract §12: in the Message window iT fills the body and its sessions are
+   the sidebar's rows, so the terminal's own tab rail goes. The 10px padding
+   is the corner clearance the square shells need inside the rounded frame
+   (it-terminal.css). OWNER DECISION 2026-10-19 (M1_message_head_band.md): the
+   head band is in BOTH views, so the band — not the terminal — owns the
+   window's top edge, and only the BOTTOM-right corner is rounded here; the
+   top-right radius it used to carry left a notch of bare plate under the
+   band's square bottom edge. */
+.ihome .itwin[data-scope='message'] {
+  /* The fallback matters: this rule beats it-terminal.css, and before the body
+     rect is published (first frame, or a window that never measured) a bare
+     frame-top puts the terminal UNDER the band — the covered first lines the
+     band was kept out of iT to avoid. So the fallback carries the band too. */
+  top: var(--iwin-top, calc(var(--ic-frame-top) + var(--ic-win-head-h)));
+  right: var(--iwin-right, var(--ic-frame-right));
+  bottom: var(--iwin-bottom, var(--ic-frame-bottom));
+  left: var(--iwin-left, var(--ic-frame-left));
+  padding: 10px;
+  border-radius: 0 0 var(--iwin-radius, var(--ic-frame-radius)) 0;
+}
+
+.ihome .itwin[data-scope='message'] > .itwin__rail {
+  display: none;
+}
+
+.ihome .itwin__rail,
+.ihome .itwin__div,
+.ihome .itwin__pane-close {
+  pointer-events: var(--iclone-msg-pe, auto);
+}
+
+/* The shells themselves live outside `.ihome`; give them the same slider gate
+   so the bottom of the slider really does hand the mouse to the stage. */
+[data-it-host] {
+  pointer-events: var(--iclone-msg-pe, auto);
+}
+
+.ihome__stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  pointer-events: none;
+  padding: 0 96px;
+}
+
+/* The children fade, never the stage itself: an ancestor below opacity 1
+   flattens every backdrop-filter inside it (contract E). */
+.ihome__stage > * {
+  transition: opacity var(--ic-dur-base) var(--ic-ease-std);
+}
+
+/* Set while any window is open over the stage (see home-view.tsx). The
+   wordmark yields the screen instead of burning through the frost; its
+   connect button stops catching the mouse with it. */
+.ihome__stage[data-quiet] > * {
+  opacity: 0;
+}
+
+.ihome__stage[data-quiet] .ihome__connect {
+  pointer-events: none;
+}
+
+.ihome__wordmark {
+  margin: 0;
+  font-family: 'Noto Serif Display ExtraCondensed', serif;
+  font-weight: 700;
+  font-size: clamp(3.4rem, 11.5vw, 9rem);
+  line-height: 0.9;
+  letter-spacing: 0.06em;
+  color: var(--ic-text-1);
+  mix-blend-mode: plus-lighter;
+  opacity: 0.92;
+}
+
+.ihome__tagline {
+  margin: 0;
+  font-size: var(--ic-type-xl);
+  letter-spacing: 0.04em;
+  color: var(--ic-home-ink-54);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .istage__loading {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* ── Wallet connect (Privy) — the wallet button itself is a native titlebar
+   tool (wallet-tool.tsx), icon-only by owner rule. ─────────────────────── */
+
+.ihome__connect {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 11px 22px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-connect-line);
+  background: linear-gradient(180deg, var(--ic-connect-fill-top), var(--ic-connect-fill-end));
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  color: var(--ic-accent);
+  font-size: var(--ic-type-lg);
+  letter-spacing: 0.12em;
+  cursor: pointer;
+  box-shadow: var(--ic-shadow-glint);
+  transition:
+    background var(--ic-dur-base) var(--ic-ease-std),
+    transform var(--ic-dur-base) var(--ic-ease-std),
+    box-shadow var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.ihome__connect:hover {
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, var(--ic-connect-hover-top), var(--ic-connect-hover-end));
+  box-shadow: var(--ic-shadow-cta);
+}
+
+.ihome__connect-badge {
+  padding: 3px 8px;
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-chip-gilt);
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ic-accent);
+}
+
+/* ── Window mode — the Message window over the ever-present home ─────────── */
+
+/* Window mode adds nothing: the base layer keeps the field + iNFT visible
+   behind the Message box, and .ihome is already hit-transparent glass. */
+
+/* The chat shell becomes a rounded window over the mosaic (the body paint
+   shows around it untouched). Clipped regions also stop hit-testing, so the
+   stage area is quiet. */
+:root[data-iclone-window] [data-chat-surface][data-composer-target='main'] {
+  position: fixed;
+  /* Same published body rect as the terminal, and the same band-safe fallback:
+     `--iwin-top` already carries the head band, so the value it falls back to
+     has to carry it as well or the first frame paints under the band. */
+  top: var(--iwin-top, calc(var(--ic-frame-top) + var(--ic-win-head-h)));
+  right: var(--iwin-right, var(--ic-frame-right));
+  bottom: var(--iwin-bottom, var(--ic-frame-bottom));
+  left: var(--iwin-left, var(--ic-frame-left));
+  z-index: var(--ic-z-global-chat);
+  height: auto;
+  width: auto;
+  overflow: hidden;
+  /* The session sidebar runs down the clip's left edge (msg-sidebar.css), so
+     only the right corners meet the window's own rounded edge. */
+  border-radius: 0 var(--iwin-radius, var(--ic-frame-radius)) var(--iwin-radius, var(--ic-frame-radius)) 0;
+}
+
+/* In the chat view the head band (the title pill, msg-sidebar.css) owns the
+   window's top edge, so the clip's top corner is square under it. */
+:root[data-iclone-view='chat'] [data-chat-surface][data-composer-target='main'] {
+  border-top-right-radius: 0;
+}
+
+/* ── The window PLATE — the Message window's one surface ──────────────────
+   The chat surface only covers its clip (beside the sidebar), and iT is a
+   transparent window onto shells parked beneath it, so neither can paint the
+   whole window: the sidebar band and the gaps around iT showed the iNFT field
+   (owner-reported). The plate paints the full outer rect, once, from inside
+   the base layer — above the field and the live iNFT, below the chat (38),
+   the iT shells (39) and every chrome piece in .ihome (40). One fill means
+   one alpha under the opacity slider and no seams between header and body.
+
+   The chat surface itself goes transparent: Hermes's glass translucency
+   (`data-hermes-glass`) rewrites `--ui-chat-surface-background` and its
+   scoped `[data-glass-*]` rules beat the skin, so the plate — not Hermes —
+   owns this window's paint, and the slider thins it via
+   `--iclone-msg-opacity` — as the plate's own fill alpha, never as an
+   opacity on the chat surface: an ancestor below opacity 1 flattens every
+   backdrop-filter inside it (the empty-chat glass wordmark's frost). */
+:root[data-iclone-window] [data-chat-surface][data-composer-target='main'] {
+  background-color: transparent !important;
+}
+
+.iwin-plate {
+  position: absolute;
+  top: var(--iwin-outer-top, var(--ic-frame-top));
+  right: var(--iwin-right, var(--ic-frame-right));
+  bottom: var(--iwin-outer-bottom, var(--ic-frame-bottom));
+  left: var(--iwin-outer-left, var(--ic-frame-left));
+  z-index: var(--ic-z-local-base);
+  border-radius: var(--iwin-radius, var(--ic-frame-radius));
+  background-color: color-mix(in oklab, var(--ic-surface) calc(var(--iclone-msg-opacity, 1) * 100%), transparent);
+  transition: background-color var(--ic-dur-fast) var(--ic-ease-std);
+  pointer-events: none;
+}
+
+/* iT view: the chat surface hides in place (never unmounts — drafts, the
+   composer bus and the mic all survive) while iT fills the window. */
+:root[data-iclone-view='it'] [data-chat-surface][data-composer-target='main'] {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* ── Message / iT opacity (owner rule: wordless drag, top-right, HUD only) ── */
+
+/* The shells fade as a whole (no frost inside them); the chat surface does
+   not — the plate's fill carries the slider for it (see the plate). */
+[data-terminal],
+[data-terminal-slot] {
+  opacity: var(--iclone-msg-opacity, 1);
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+[data-chat-surface][data-composer-target='main'] {
+  pointer-events: var(--iclone-msg-pe, auto);
+}
+
+.iop {
+  position: fixed;
+  top: 52px;
+  right: 30px;
+  z-index: var(--ic-z-ihome-controls);
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 132px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-ctl-line);
+  background: var(--ic-ctl-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  box-shadow: var(--ic-ctl-shadow);
+  cursor: grab;
+  touch-action: none;
+}
+
+.iop:active {
+  cursor: grabbing;
+}
+
+.iop:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+.iop__track {
+  position: relative;
+  width: 3px;
+  height: 104px;
+  border-radius: var(--ic-radius-xs);
+  background: var(--ic-ctl-track);
+}
+
+.iop__fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: var(--ic-radius-xs);
+  background: var(--ic-accent);
+  opacity: 0.85;
+}
+
+.iop__thumb {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  width: 14px;
+  height: 14px;
+  border-radius: var(--ic-radius-round);
+  border: 1px solid var(--ic-ctl-thumb-line);
+  background: var(--ic-accent);
+  box-shadow: var(--ic-shadow-thumb);
+}
+
+/* ── The live iNFT stage ─────────────────────────────────────────────────── */
+
+.ihome__stage--live {
+  pointer-events: auto;
+  /* OWNER RULE (2026-09-06): the open iNFT never fills the screen. It sits in
+     a framed card with breathing room — like the viewer on cloneframe.io —
+     clear of the dock rail (left), the iNFT island (right), the titlebar and
+     the status bar. One uniform colour inside the frame (the token's field),
+     the frosted 2222 field outside it. */
+  inset: var(--ic-frame-top) var(--ic-frame-right) var(--ic-frame-bottom) var(--ic-frame-left);
+  padding: 0;
+  border-radius: var(--ic-frame-radius);
+  overflow: hidden;
+  background: var(--istage-live-bg, var(--ic-stage-fill));
+  border: 1px solid var(--ic-stage-line);
+  box-shadow: var(--ic-stage-shadow);
+}
+
+.istage {
+  position: absolute;
+  inset: 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+.istage--dragging {
+  cursor: grabbing;
+}
+
+.istage canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.istage__loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: var(--ic-type-lg);
+  letter-spacing: 0.3em;
+  text-transform: lowercase;
+  color: var(--ic-stage-loading-ink);
+  animation: istage-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes istage-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+/* A model that will not load: the iNFT stays on stage and says so, instead of
+   vanishing without a word. Quiet type on the deep-ink fallback field. */
+.istage-fail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 96px;
+  text-align: center;
+  /* Full-bleed so the message centres on the stage, but only the buttons may
+     catch: an `auto` box this size would swallow every drag on the stage. */
+  pointer-events: none;
+}
+
+.istage-fail__head {
+  margin: 0;
+  font-family: 'Noto Serif Display ExtraCondensed', serif;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  letter-spacing: 0.04em;
+  color: var(--ic-text-1);
+  opacity: 0.9;
+}
+
+.istage-fail__why {
+  margin: 0;
+  max-width: 46ch;
+  font-size: var(--ic-type-lg);
+  letter-spacing: 0.02em;
+  color: var(--ic-home-ink-54);
+}
+
+.istage-fail__acts {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+  pointer-events: auto;
+}
+
+.istage-fail__btn {
+  padding: 8px 18px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-stage-btn-line);
+  background: var(--ic-chip-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  color: var(--ic-stage-ink-bright);
+  font-size: var(--ic-type-md);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.istage-fail__btn:hover {
+  background: var(--ic-chip-gilt);
+  color: var(--ic-text-1);
+}
+
+.istage-fail__btn--go {
+  border-color: var(--ic-stage-btn-go-line);
+  color: var(--ic-accent);
+}
+
+/* The iNFT's name: a quiet footer caption — small, plain type, translucent,
+   centered at the very bottom (owner rule: never big/showy). The ink follows
+   the field: it was pinned to dark, which is right over a pale token like
+   ATLAS and invisible over every deep-ink one. */
+.ihome__inft-name {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  translate: -50% 0;
+  margin: 0;
+  font-family: var(--ic-font-sans);
+  font-weight: 400;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.14em;
+  color: var(--ic-inft-name-ink);
+  pointer-events: none;
+}
+
+.ihome__dismiss {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-dismiss-line);
+  background: var(--ic-dismiss-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  color: var(--ic-dismiss-ink);
+  cursor: pointer;
+}
+
+.ihome__dismiss:hover {
+  background: var(--ic-dismiss-hover-fill);
+  color: var(--ic-dismiss-hover-ink);
+}
+
+/* ── Light-field chrome (owner rule: a pale iNFT field must never wash the
+   controls out). While :root[data-iclone-field-light] is set — a LIVE field
+   with high luminance — the field block in ic-tokens.css flips every control
+   over the stage to dark ink and ink-tinted glass; the window's own header
+   chrome sits on its ink plate and keeps its tone. The upstream titlebar has
+   no rule of ours to read a token, so it answers the field tone here. ──── */
+@container style(--ic-field-tone: light) {
+  :root [data-titlebar-area] button,
+  :root [data-titlebar-area] svg {
+    color: var(--ic-titlebar-glyph);
+  }
+}
+
+/* ── Keyboard focus, the house ring ──────────────────────────────────────
+   The app kills the UA outline globally, and only a handful of controls
+   re-declared one — Tab moved invisibly across most of this chrome. The
+   dock's champagne ring is the house token; every interactive piece of the
+   home surface now answers focus the way it answers hover. */
+.ic-win__controls > button:focus-visible,
+.imsg-side :is(button, [tabindex]):focus-visible,
+.ihome__connect:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* ── brand tones on the dock ──────────────────────────────────────────────
+   The TILE wears the tone of the real app it stands for (dock.css, knobs in
+   ic-tokens.css); the symbol on it is heavy night ink. */
+
+/* iNFT switch status chip (R4) — shows the one door's state on the home stage. */
+.ihome-switch-chip {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  z-index: var(--ic-z-ihome-chrome);
+  max-width: min(480px, 80vw);
+  overflow: hidden;
+  padding: 4px 10px;
+  border: 1px solid var(--ic-chip-line);
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-chip-fill);
+  color: var(--ic-text-2);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateX(-50%);
+}
+
+.ihome-switch-chip[data-phase='failed'] {
+  color: var(--ic-text-1);
+}
+
+/* RTL (U4-p2-08-p2b): the Dock side and the control-column side swap, so the
+   frame insets swap with them; the stage tools and the dismiss cross mirror. */
+:root:dir(rtl),
+:root[dir='rtl'] {
+  --ic-frame-right: 96px;
+  --ic-frame-left: 72px;
+}
+
+:root[dir='rtl'] .iop {
+  right: auto;
+  left: 30px;
+}
+
+:root[dir='rtl'] .ihome__dismiss {
+  right: auto;
+  left: 14px;
+}

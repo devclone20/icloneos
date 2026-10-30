@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "name": "hm-init",
+  "version": "1.0.0",
+  "author": "Rodrigo Lopes",
+  "license": "MIT",
+  "upstream": {
+    "name": "highermind-code-skills",
+    "url": "https://github.com/rodrigohighermind/highermind-code-skills",
+    "license_file": "LICENSE",
+    "copyright": [
+      "Copyright (c) 2026 Rodrigo Lopes"
+    ]
+  },
+  "source": {
+    "library": "claude-code-skills",
+    "path": "hm-init",
+    "version": null,
+    "sha256": "0b71278e08a8712bc0c180da87cf9265aa5ea47e80bcab1d332018b79256bfcf",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [],
+  "requires": {
+    "os": [],
+    "bins": [
+      "git",
+      "node"
+    ],
+    "mcp": [],
+    "paths": []
+  },
+  "touches": [
+    "Wp",
+    "X",
+    "I"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 0,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 0
+  }
+}

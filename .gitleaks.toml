@@ -1,0 +1,29 @@
+# Gitleaks config for the iclone os repo. Extends the default rule set.
+# One precise allowlist: the generated contract spec pins runtime source functions by their sha256
+# ("<file>:<Class>.build_api_kwargs_extras": "<64 hex>"). Those are content hashes, not credentials;
+# the generic-api-key rule matches them only because the function name contains "api_k".
+title = "iclone os"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "sha256 pins of runtime functions in the generated contract spec (content hashes, not secrets)"
+matchCondition = "AND"
+paths = ['''^iclone/contract/runtime\.spec\.json$''']
+regexTarget = "line"
+regexes = ['''build_api_kwargs_extras": "[0-9a-f]{64}"''']
+
+[[allowlists]]
+description = "served.py names the runtime's effort-table constants (_GLM_5_3_TOKENS / GLM5x_EFFORTS); identifiers, not secrets"
+matchCondition = "AND"
+paths = ['''^iclone/contract/served\.py$''']
+regexTarget = "line"
+regexes = ['''"_GLM_5_3_TOKENS", "GLM5[0-9]_EFFORTS"''']
+
+[[allowlists]]
+description = "V3-UP: upstream 1ac3f97 runtime lines that name public OAuth client ids (shipped in every Hermes install by design) and identifiers (env var labels, a comment); not secrets"
+matchCondition = "AND"
+paths = ['''^(agent/anthropic_credentials|agent/context_compressor|hermes_cli/auth_constants|hermes_cli/setup_migration)\.py$''']
+regexTarget = "line"
+regexes = ['''^(_OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"|MINIMAX_OAUTH_CLIENT_ID = "78257093-7e40-4613-99e0-527b14b39113"|XAI_OAUTH_CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"|QWEN_OAUTH_CLIENT_ID = "f0304373b74a44d2b584a3fb70ca9e56"|\s+\("ELEVENLABS_API_KEY", "TTS/ElevenLabs"\),|\s+# NO max_tokens: Anthropic/NIM wires forward it and a hard cap truncates summaries)$''']

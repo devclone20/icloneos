@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "id": "permissions",
+  "title": "Permissions and consent",
+  "order": 5,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "permissions.consent_file",
+      "title": "Consent record",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "consentFile",
+      "fix": "permissions.quarantine_consent"
+    },
+    {
+      "id": "permissions.media",
+      "title": "Microphone and screen access",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "mediaAccess",
+      "fix": "permissions.open_privacy",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "permissions.accessibility",
+      "title": "Accessibility access",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "accessibility",
+      "fix": "permissions.reset_accessibility",
+      "platforms": [
+        "darwin"
+      ]
+    }
+  ],
+  "fixes": [
+    {
+      "id": "permissions.quarantine_consent",
+      "title": "Move the unreadable consent record aside",
+      "risk": "medium",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The record was renamed to consent.json.corrupt-<time>; icloneOS asks for consent again at the next launch.",
+      "impl": "quarantineConsent"
+    },
+    {
+      "id": "permissions.open_privacy",
+      "title": "Open Privacy & Security",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "Nothing was changed.",
+      "impl": "openPrivacy"
+    },
+    {
+      "id": "permissions.reset_accessibility",
+      "title": "Reset the Accessibility permission",
+      "risk": "high",
+      "consent": "automation",
+      "dryRun": true,
+      "backup": true,
+      "undo": "macOS asks again the next time an agent controls the computer.",
+      "impl": "resetAccessibility"
+    }
+  ]
+}

@@ -1,0 +1,721 @@
+/*
+ * Capabilities — the page-local layer, on the `--ic-*` table only.
+ *
+ * Everything shared (the card, the rail, the rows, the states, the controls)
+ * comes from `../profiles/ic-page.css`. What lives here is what only this page
+ * has: the tab strip over three lists, the per-list strip (sort + the two bulk
+ * controls), a row that carries its own switch beside the select button, the
+ * frontmatter table, the SKILL.md body and the hub slot that stays mounted.
+ *
+ * REQUEST to the lead (handoff): a tab strip and a chip belong in
+ * `src/components/ic/` — this page should not be the only owner of either.
+ */
+
+.icsk__shell {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.icsk__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ic-border-subtle);
+}
+
+.icsk__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.125rem;
+}
+
+.icsk__tab {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  border-radius: var(--ic-radius-pill);
+  background: transparent;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-xs);
+  transition:
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__tab:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-2);
+}
+
+.icsk__tab[aria-selected='true'] {
+  background: var(--ic-fill-selected);
+  color: var(--ic-text-1);
+}
+
+.icsk__tab:focus-visible {
+  outline: var(--ic-focus-ring);
+}
+
+.icsk__tab-meta {
+  font-size: var(--ic-type-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ic-text-3);
+}
+
+.icsk__scope {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--ic-type-2xs);
+  color: var(--ic-text-3);
+}
+
+.icsk__content {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.icsk__strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.1rem;
+  border-bottom: 1px solid var(--ic-border-subtle);
+}
+
+.icsk__strip-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: var(--ic-type-2xs);
+  color: var(--ic-text-3);
+}
+
+.icsk__row-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.icsk__row-wrap > .icpg__row {
+  min-width: 0;
+  flex: 1;
+}
+
+.icsk__row-switch {
+  display: flex;
+  align-items: center;
+  padding-right: 0.35rem;
+}
+
+.icsk__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.icsk__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.icsk__chip {
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--ic-chip-line);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-chip-fill);
+  color: var(--ic-text-2);
+  font-size: var(--ic-type-2xs);
+}
+
+.icsk__chip-count {
+  margin-left: 0.25rem;
+  color: var(--ic-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.icsk__meta {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.6rem;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-surface-sunken);
+}
+
+.icsk__meta-row {
+  display: flex;
+  gap: 0.5rem;
+  font-size: var(--ic-type-2xs);
+  line-height: 1.45;
+}
+
+.icsk__meta-key {
+  width: 6rem;
+  flex-shrink: 0;
+  color: var(--ic-text-3);
+}
+
+.icsk__meta-val {
+  min-width: 0;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+  color: var(--ic-text-2);
+}
+
+.icsk__body {
+  overflow: auto;
+  padding: 0.6rem;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-surface-sunken);
+  color: var(--ic-text-2);
+  font-family: ui-monospace, monospace;
+  font-size: var(--ic-type-2xs);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.icsk__hub {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.icsk__hub--hidden {
+  display: none;
+}
+
+.icsk__editor {
+  display: flex;
+  min-height: 24rem;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+}
+
+.icsk__avatar {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+
+.icsk__avatar-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-surface);
+}
+
+/* ---------------------------------------------------------------------------
+ * The Skills Hub strip (embedded-hub-picker). Shrinkable (no shrink-0) and
+ * clipping its own content: the picker is a flex child of the Capabilities
+ * column, and a rigid min-content height used to starve the installed list to
+ * 0 px so the list's strip painted over this header. min-height keeps the bar
+ * itself always visible instead.
+ * ------------------------------------------------------------------------- */
+
+.icsk__hubsec {
+  position: relative;
+  display: flex;
+  min-height: 2.25rem;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--ic-border-subtle);
+}
+
+.icsk__hubsec--hidden {
+  display: none;
+}
+
+.icsk__hub-sash {
+  position: absolute;
+  z-index: 10;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 4px;
+  transform: translateY(-50%);
+  cursor: row-resize;
+}
+
+.icsk__hub-sash-line {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  left: 0;
+  height: 1px;
+  transform: translateY(-50%);
+  background: transparent;
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__hub-sash:hover .icsk__hub-sash-line,
+.icsk__hub-sash[data-ic-dragging] .icsk__hub-sash-line {
+  background: var(--ic-border-subtle);
+}
+
+.icsk__hub-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.icsk__hub-title {
+  font-size: var(--ic-type-2xs);
+  font-weight: 500;
+  color: var(--ic-text-3);
+}
+
+.icsk__hub-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.icsk__hub-spin {
+  width: 0.75rem;
+  height: 0.75rem;
+  animation: icsk-hub-spin 1s linear infinite;
+}
+
+@keyframes icsk-hub-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+.icsk__hub-body {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0 0.75rem 0.5rem;
+}
+
+.icsk__hub-frame {
+  position: relative;
+  width: 100%;
+  min-width: 20rem;
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-md);
+}
+
+/* Rendered oversized and scaled down so the cross-origin hub page starts
+ * zoomed out: 133.34% x 0.75 lands back on exactly 100%. */
+.icsk__hub-frame iframe {
+  width: 133.34%;
+  height: 133.34%;
+  border: none;
+  background: transparent;
+  transform: scale(0.75);
+  transform-origin: top left;
+}
+
+.icsk__hub-frame iframe[data-ic-inert] {
+  pointer-events: none;
+}
+
+.icsk__hub-hint {
+  flex: none;
+  padding: 0 0.25rem;
+  font-size: var(--ic-type-2xs);
+  line-height: 1rem;
+  color: var(--ic-text-3);
+}
+
+/* The MCP server toggle's shell: IcSwitch itself takes no class, so "off is
+ * dimmed" and the config header's vertical offset sit on this wrapper. */
+.icsk__srv-switch {
+  display: inline-flex;
+  flex: none;
+  cursor: pointer;
+}
+
+.icsk__srv-switch[data-ic-off] {
+  opacity: 0.6;
+}
+
+.icsk__srv-switch--offset {
+  margin-top: 0.875rem;
+}
+
+/* ------------------------------------------------------------------------- */
+/* MCP tab — the page-local chrome the upstream library used to supply.      */
+/* ------------------------------------------------------------------------- */
+
+/* Catalog/config text field: the shape the upstream `Input`/`Textarea` gave,
+ * rebuilt on the `--ic-*` table. */
+.icsk__field {
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.45rem;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-surface-sunken);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-xs);
+  line-height: 1.4;
+}
+
+.icsk__field:focus-visible {
+  outline: var(--ic-focus-ring);
+}
+
+.icsk__field::placeholder {
+  color: var(--ic-text-3);
+}
+
+.icsk__field--mono {
+  min-height: 4.5rem;
+  resize: vertical;
+  font-family: var(--ic-font-mono);
+}
+
+/* The catalog row's install button: start-aligned beside a two-line body. */
+.icsk__cat-action {
+  flex: none;
+  margin-top: 0.125rem;
+}
+
+/* Two-pane MCP frame: the fleet/config column, then the document. */
+.icsk__mcp {
+  display: grid;
+  min-height: 0;
+  height: 100%;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+}
+
+.icsk__mcp-aside {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-right: 1px solid var(--ic-border-subtle);
+}
+
+.icsk__mcp-main {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Section header over the fleet / catalog lists. Geometry mirrors
+ * `.icsk__strip` so this line lands where the sort link does on the other
+ * tabs. */
+.icsk__mcp-head {
+  display: flex;
+  height: 1.5rem;
+  flex: none;
+  align-items: center;
+  margin-bottom: 0.25rem;
+  padding: 0 0.25rem 0 0.5rem;
+}
+
+.icsk__mcp-head--split {
+  height: auto;
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--ic-border-subtle);
+}
+
+.icsk__mcp-head-label {
+  flex: 1;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-2xs);
+  font-weight: 500;
+}
+
+/* The log channel picker under the document: the page's own tab, sized down. */
+.icsk__logtab {
+  padding: 0.05rem 0.3rem;
+  font-size: var(--ic-type-2xs);
+}
+
+/* Inline icon action (probe / remove / copy): the shape the upstream icon
+ * button gave, on our tokens. */
+.icsk__iconbtn {
+  /* Hover/focus hint anchor; its reach (bubble box + gap) is read back by
+   * `./mcp/hint.ts` and by the gate, so it is declared in px. */
+  --icsk-hint-reach: 24px;
+
+  position: relative;
+  display: inline-flex;
+  height: 1.25rem;
+  width: 1.25rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  color: var(--ic-text-3);
+  transition:
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__iconbtn:hover:not(:disabled) {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icsk__iconbtn:disabled {
+  opacity: 0.5;
+}
+
+.icsk__iconbtn:focus-visible {
+  outline: var(--ic-focus-ring);
+}
+
+/* The config pane's tool-filter toggles: a struck-through name is an excluded
+ * tool, a filled one is included. */
+.icsk__tool {
+  padding: 0.1rem 0.3rem;
+  border: 0;
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  color: var(--ic-text-3);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-2xs);
+}
+
+.icsk__tool:hover {
+  color: var(--ic-text-1);
+}
+
+.icsk__tool[aria-pressed='true'] {
+  background: var(--ic-fill-selected);
+}
+
+.icsk__tool[aria-pressed='false'] {
+  opacity: 0.7;
+  text-decoration: line-through;
+}
+
+.icsk__tool:focus-visible {
+  outline: var(--ic-focus-ring);
+}
+
+/* Small muted caption inside the config pane / the document header. */
+.icsk__note {
+  margin-top: 0.125rem;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-2xs);
+  line-height: 1.45;
+}
+
+/* One env var of a configured server, as the inspector lists it. */
+.icsk__envrow {
+  padding: 0.3rem 0.5rem;
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-surface-sunken);
+}
+
+.icsk__iconbtn--danger:hover:not(:disabled) {
+  color: var(--ic-danger-text);
+}
+
+.icsk__spin {
+  animation: icsk-hub-spin 0.9s linear infinite;
+}
+
+/* One configured MCP server in the fleet list. */
+.icsk__mcprow {
+  gap: 0.5rem;
+  padding: 0 0.375rem 0 0.5rem;
+  border-radius: var(--ic-radius-md);
+  color: var(--ic-text-2);
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__mcprow:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icsk__mcprow--active {
+  background: var(--ic-fill-selected);
+  color: var(--ic-text-1);
+}
+
+/* A chip that is a hint rather than an attribute: no outline, quieter text. */
+.icsk__chip--hint {
+  flex: none;
+  border-color: transparent;
+  color: var(--ic-text-3);
+  font-weight: 400;
+}
+
+/* The server description paragraph: one rung larger than `.icsk__note`. */
+.icsk__note--body {
+  margin-top: 0.5rem;
+  font-size: var(--ic-type-xs);
+}
+
+/* "+ new server" as a full-width row under the fleet list — the list's own
+ * last row, not a floating button. It has the width for a real label, so it
+ * needs no hover hint at all. */
+.icsk__addrow {
+  display: flex;
+  height: 1.75rem;
+  width: 100%;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  border: 0;
+  border-radius: var(--ic-radius-md);
+  background: transparent;
+  color: var(--ic-text-3);
+  transition:
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__addrow:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icsk__addrow:focus-visible {
+  outline: var(--ic-focus-ring);
+}
+
+.icsk__addrow-label {
+  font-size: var(--ic-type-xs);
+}
+
+/* ── Text roles of the MCP panes ─────────────────────────────────────────────
+ * Colour lives here, on --ic-* only. The Tailwind colour utilities these rungs
+ * replace read as ours, but `src/styles.css` aliases their names to the old
+ * design's variables, so three source lines inside the catalog's map were still
+ * painting ~132 nodes with it. Layout utilities stay in the markup; only the
+ * colour-bearing ones moved. */
+
+/* A server or catalog entry's name — the strongest rung of its text column. */
+.icsk__srv-name {
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-md);
+  font-weight: 500;
+}
+
+/* The same name when the server is configured but switched off. */
+.icsk__srv-name--off {
+  color: var(--ic-text-3);
+  font-weight: 400;
+}
+
+/* The status line under a server name. */
+.icsk__srv-status {
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-xs);
+}
+
+/* A server's command or URL, as the import preview lists it. */
+.icsk__srv-cmd {
+  color: var(--ic-text-3);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-xs);
+}
+
+/* A catalog entry's two-line description. */
+.icsk__cat-desc {
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+}
+
+/* One required-env prompt above its input. */
+.icsk__envlabel {
+  color: var(--ic-text-2);
+  font-size: var(--ic-type-xs);
+}
+
+/* A caption that explains a control — one rung larger than `.icsk__note`, and
+ * carrying no margin of its own so the markup keeps owning the spacing.
+ *
+ * Both of the inspector's captions share this one rung on purpose (r5): the
+ * unsaved-connect line was 0.68rem = 10.88 px, so `sm` is its own size to
+ * +0.12 px, and the import dialog's no-match line was 0.62rem = 9.92 px, so it
+ * grows 1.08 px to join it. One role, one size — the r4 handoff's "+-0.5 px for
+ * every move" did not cover that second site, and the r5 handoff says so. */
+.icsk__hint {
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+}
+
+/* Icon-only actions name themselves on hover and on keyboard focus. Native
+ * `title` is forbidden (DESIGN.md) and no Ic tooltip exists yet (lead request,
+ * r2-r4), so the label is drawn from the control's own `aria-label`: one source
+ * of truth, and `/ ''` keeps it out of the accessibility tree so the name is
+ * not announced twice.
+ *
+ * Below the control by default, and flipped above when the control sits within
+ * the bubble's reach of the bottom of a scrolling pane: the server list is its
+ * own `overflow-y: auto` scroller, which used to eat the hint of every row near
+ * its bottom edge (measured on lab 2, r4 critic). `./mcp/hint.ts` aims it on
+ * `pointerenter`/`focus` — the two events this rule reveals it on. */
+.icsk__iconbtn::after {
+  content: attr(aria-label) / '';
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 50%;
+  z-index: 2;
+  translate: -50% 0;
+  padding: 0.125rem 0.375rem;
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-surface);
+  box-shadow: var(--ic-shadow-e1) var(--ic-shadow-tint);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-2xs);
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icsk__iconbtn[data-ic-hint='up']::after {
+  top: auto;
+  bottom: calc(100% + 0.25rem);
+}
+
+.icsk__iconbtn:hover:not(:disabled)::after,
+.icsk__iconbtn:focus-visible::after {
+  opacity: 1;
+}
+
+/*
+ * The catalog line in `IcPage`'s subtitle carries two tones the muted subtitle
+ * ink cannot say on its own: a failed Re-sync / Restart (`warn`) and the
+ * standing "a skill the agents rely on is off" sentence. Both paint
+ * `--ic-warning`, which is what `.icpg__pill--warn` already does, so no new
+ * colour enters the page. The `ok` tone keeps the subtitle's own ink.
+ */
+.icpg__subtitle [data-ic-sync-notice='warn'],
+.icpg__subtitle [data-ic-sync-warning] {
+  color: var(--ic-warning);
+}

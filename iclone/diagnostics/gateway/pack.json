@@ -1,0 +1,98 @@
+{
+  "schema": 1,
+  "id": "gateway",
+  "title": "Gateway and sessions",
+  "order": 2,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "gateway.updates_check",
+      "title": "Runtime update check is off",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "updatesCheck",
+      "fix": "gateway.updates_check_off"
+    },
+    {
+      "id": "gateway.port",
+      "title": "Gateway port owner",
+      "severity": "fail",
+      "timeoutMs": 4000,
+      "network": false,
+      "impl": "gatewayPort",
+      "fix": "gateway.free_port"
+    },
+    {
+      "id": "gateway.health",
+      "title": "Gateway health",
+      "severity": "warn",
+      "timeoutMs": 6000,
+      "network": false,
+      "impl": "gatewayHealth"
+    },
+    {
+      "id": "gateway.state_db",
+      "title": "Sessions database integrity",
+      "severity": "fail",
+      "timeoutMs": 15000,
+      "network": false,
+      "impl": "stateDb",
+      "fix": "gateway.restore_state_db"
+    },
+    {
+      "id": "gateway.wal_orphan",
+      "title": "Sessions journal files",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "walOrphan",
+      "fix": "gateway.quarantine_wal"
+    }
+  ],
+  "fixes": [
+    {
+      "id": "gateway.updates_check_off",
+      "title": "Turn the runtime update check off",
+      "risk": "medium",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "config.yaml was copied to the backup folder before the change; copy it back to undo.",
+      "impl": "updatesCheckOff"
+    },
+    {
+      "id": "gateway.free_port",
+      "title": "Stop the stale gateway process",
+      "risk": "medium",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The stopped process was a stale copy of the gateway; restart icloneOS to start a fresh one.",
+      "impl": "freePort"
+    },
+    {
+      "id": "gateway.restore_state_db",
+      "title": "Restore sessions from the newest backup",
+      "risk": "high",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The damaged state.db was moved aside as state.db.corrupt-<time> and copied to the backup folder.",
+      "impl": "restoreStateDb"
+    },
+    {
+      "id": "gateway.quarantine_wal",
+      "title": "Move the orphan journal aside",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The journal file was renamed to .corrupt-<time> and copied to the backup folder.",
+      "impl": "quarantineWal"
+    }
+  ]
+}

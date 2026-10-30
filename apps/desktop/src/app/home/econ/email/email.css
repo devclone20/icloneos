@@ -1,0 +1,1308 @@
+/* EconomyOS — Email. Built on the shared `.e-*` parts (econ.css); everything
+   here is the mail client's own layout: the row grid, the reading pane, the
+   compose sheet and the responsive collapse. Colours come only from the
+   `--e-*` tokens, so the light skin and the email tone follow for free. */
+
+.em {
+  /* The selection gutter: a row's checkbox sits at --em-check-x; the list's
+     content edge (dots, day headings, the search box) at --em-lead. The
+     gutter is always there, so a checkbox appearing never moves a row. */
+  --em-check-x: 12px;
+  --em-lead: 38px;
+
+  container: em / inline-size;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+}
+
+/* When the list is the rightmost column its right edge sits under the
+   window's control stack (close · expand · opacity), so its content keeps
+   clear of it; lines and hover still run to the edge. */
+.em-frame:not(.em-frame--pane) > .e-main {
+  --em-gutter: 60px;
+}
+
+.em-frame > .e-main .e-toolbar,
+.em-list .e-row,
+.em-list .e-section,
+.em-more {
+  padding-right: var(--em-gutter, 20px);
+}
+
+.em-list .e-note {
+  margin-right: var(--em-gutter, 20px);
+}
+
+/* The one way out of a sign-in state, inside the note that names it. */
+.em-note__action {
+  display: flex;
+  margin-top: 8px;
+}
+
+/* ── toolbar ──────────────────────────────────────────────────────────────── */
+
+/* Search and the selection bar hold the same 34px strip: swapping one for the
+   other never moves the list. */
+.em-frame > .e-main > .e-toolbar {
+  padding-left: var(--em-check-x);
+}
+
+.em-frame > .e-main > .e-toolbar > .e-toolbar__start {
+  height: 34px;
+}
+
+.em-search {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 460px;
+  display: flex;
+}
+
+.em-search[hidden] {
+  display: none;
+}
+
+.em-search .e-search {
+  box-sizing: border-box;
+  height: 34px;
+  padding-right: 34px;
+}
+
+.em-kbd {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  translate: 0 -50%;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--ic-radius-xs);
+  border: 1px solid var(--e-line-strong);
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+  pointer-events: none;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-search:focus-within .em-kbd,
+.em-search:has(.e-search:not(:placeholder-shown)) .em-kbd {
+  opacity: 0;
+}
+
+.em-draft-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ic-radius-round);
+  background: var(--e-gold);
+}
+
+/* ── selection ────────────────────────────────────────────────────────────── */
+
+.em-check {
+  all: unset;
+  box-sizing: border-box;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ic-radius-xs);
+  border: 1px solid var(--ic-econ-ink-25);
+  background: var(--e-sunken);
+  color: transparent;
+  cursor: pointer;
+  transition:
+    opacity var(--ic-dur-fast) var(--ic-ease-std),
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-check:hover:not(:disabled, [aria-disabled='true']) {
+  border-color: var(--ic-econ-ink-45);
+}
+
+.em-check:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 2px;
+}
+
+.em-check:is(:disabled, [aria-disabled='true']) {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.em-check[aria-checked='true'],
+.em-check[aria-checked='mixed'] {
+  border-color: var(--e-tone);
+  background: var(--ic-econ-tone-25);
+  color: var(--e-ink);
+}
+
+.em-item {
+  position: relative;
+}
+
+/* A row's box lives in the gutter: shown on hover, on focus, and on every
+   row while anything is selected. */
+.em-item > .em-check {
+  position: absolute;
+  z-index: var(--ic-z-local-base);
+  top: 50%;
+  left: var(--em-check-x);
+  translate: 0 -50%;
+  opacity: 0;
+}
+
+.em-item:hover > .em-check,
+.em-item:focus-within > .em-check,
+.em-list--selecting .em-item > .em-check {
+  opacity: 1;
+}
+
+/* Selected reads as a tint of the app's tone; the open row keeps its bar. */
+.em-list .em-item--checked > .e-row {
+  background: var(--ic-econ-tone-10);
+}
+
+.em-list .em-item--checked > .e-row:hover {
+  background: var(--ic-econ-tone-10);
+}
+
+.em-list .em-item--checked > .e-row--on {
+  background: var(--ic-econ-tone-14);
+}
+
+.em-bar {
+  container: em-bar / inline-size;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  animation: em-fade var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-bar__count {
+  flex: none;
+  margin-right: 10px;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-md);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-ink);
+  white-space: nowrap;
+}
+
+.em-bar .e-btn {
+  gap: 6px;
+  padding: 6px 10px;
+  letter-spacing: 0.02em;
+}
+
+.em-bar .e-btn--quiet:hover:not(:disabled, [aria-disabled='true']) {
+  background: var(--e-hover);
+}
+
+/* A narrow bar keeps its icons; the names stay for screen readers and the
+   tooltips. */
+@container em-bar (max-width: 540px) {
+  .em-bar__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .em-bar .em-bar__action {
+    padding: 6px 8px;
+  }
+}
+
+/* ── the two-step button ──────────────────────────────────────────────────── */
+
+.em-confirm__stack {
+  display: inline-grid;
+}
+
+.em-confirm__stack > span {
+  grid-area: 1 / 1;
+  text-align: center;
+}
+
+.em-confirm__off {
+  visibility: hidden;
+}
+
+.e-btn.em-confirm {
+  color: var(--ic-econ-down-ink);
+}
+
+.e-btn.em-confirm:hover {
+  background: var(--ic-econ-down-10);
+  color: var(--e-down);
+}
+
+.e-btn.em-confirm--armed,
+.e-btn.em-confirm--armed:hover {
+  border-color: var(--ic-econ-down-54);
+  background: var(--ic-econ-down-20);
+  color: var(--e-down);
+}
+
+.e-btn.em-confirm--compact {
+  padding: 4px 10px;
+  font-size: var(--ic-type-sm);
+}
+
+/* ── the flash ────────────────────────────────────────────────────────────── */
+
+/* Over the list's foot, never above the rows: a flash moves nothing. */
+.em-frame > .e-main {
+  position: relative;
+}
+
+.em-flash-region {
+  position: absolute;
+  z-index: var(--ic-z-local-float);
+  right: var(--em-gutter, 20px);
+  bottom: 18px;
+  left: 20px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.em-flash {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 16px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--e-line-strong);
+  /* The window's own surface, raised a step, as the person menu is. */
+  background: linear-gradient(var(--e-raised), var(--e-raised)), var(--ic-surface);
+  box-shadow: var(--ic-econ-island);
+  font-size: var(--ic-type-md);
+  color: var(--e-ink);
+  pointer-events: auto;
+  animation: em-flash-in var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.em-flash--undo {
+  padding-right: 6px;
+}
+
+.em-flash__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-flash__undo {
+  all: unset;
+  flex: none;
+  padding: 4px 12px;
+  border-radius: var(--ic-radius-pill);
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--e-gold);
+  cursor: pointer;
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-flash__undo:hover {
+  background: var(--e-hover);
+}
+
+.em-flash__undo:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 1px;
+}
+
+/* ── list ─────────────────────────────────────────────────────────────────── */
+
+.em-list {
+  container: em-list / inline-size;
+  /* A row that changes above the viewport must not move what is read. */
+  overflow-anchor: auto;
+}
+
+.em-list .e-row {
+  min-height: 40px;
+}
+
+.em-list .em-item > .e-row,
+.em-list .e-section {
+  padding-left: var(--em-lead);
+}
+
+/* Above the Trash list: what Trash is, and Empty trash. */
+.em-listhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px var(--em-gutter, 20px) 2px var(--em-lead);
+}
+
+.em-listhead__text {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  color: var(--e-faint);
+}
+
+.em-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 6px minmax(0, 11rem) minmax(0, 1fr) auto;
+  grid-template-areas: 'dot from text meta';
+  align-items: center;
+  column-gap: 12px;
+  font-weight: 400;
+}
+
+.em-row__dot {
+  grid-area: dot;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ic-radius-round);
+}
+
+.em-row__dot--on {
+  background: var(--e-tone);
+  box-shadow: var(--ic-econ-tone-ring);
+}
+
+.em-row__from {
+  grid-area: from;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ic-econ-ink-72);
+}
+
+.em-row__to {
+  margin-right: 6px;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.em-row__more {
+  margin-left: 6px;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+}
+
+.em-row__text {
+  grid-area: text;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-row__subject {
+  color: var(--ic-econ-ink-80);
+}
+
+.em-row__preview {
+  margin-left: 10px;
+  color: var(--ic-econ-ink-45);
+}
+
+.em-row__meta {
+  grid-area: meta;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-faint);
+  white-space: nowrap;
+}
+
+.e-row--unread .em-row__from,
+.e-row--unread .em-row__subject {
+  font-weight: 600;
+  color: var(--e-ink);
+}
+
+.e-row--unread .em-row__preview,
+.e-row--unread .em-row__meta {
+  color: var(--e-mute);
+}
+
+/* A narrow list (pane open, small window): sender + time on top, subject and
+   preview as their own lines under it. */
+@container em-list (max-width: 520px) {
+  .em-row {
+    grid-template-columns: 6px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'dot from meta'
+      '. text text';
+    row-gap: 3px;
+  }
+
+  .em-row__text {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .em-row__subject,
+  .em-row__preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .em-row__preview {
+    margin-left: 0;
+    font-size: var(--ic-type-md);
+  }
+}
+
+.em-count {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-faint);
+}
+
+.em-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding-top: 16px;
+  padding-bottom: 22px;
+  padding-left: 20px;
+}
+
+/* The paging tripwire: one pixel the observer watches above the button. */
+.em-more__sentinel {
+  align-self: stretch;
+  height: 1px;
+  margin-top: -1px;
+}
+
+.em-more .e-note {
+  align-self: stretch;
+  margin: 0;
+  text-align: center;
+}
+
+.em-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.em-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── rail: where the marks live, and the agent's address ──────────────────── */
+
+.em-rail__local {
+  margin: 2px 10px 0;
+  font-size: var(--ic-type-sm);
+  line-height: 1.5;
+  color: var(--e-faint);
+}
+
+.em-rail__foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--e-line);
+}
+
+.em-rail__foot .e-rail__title {
+  margin: 0 0 0 10px;
+}
+
+.em-rail__foot .e-pill {
+  margin-left: 10px;
+}
+
+.em-address {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  padding-left: 10px;
+}
+
+.em-address__icon {
+  flex: none;
+  color: var(--e-faint);
+}
+
+.em-address__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-md);
+  color: var(--e-ink);
+}
+
+.em-address__none {
+  margin: 0 0 0 10px;
+  font-size: var(--ic-type-md);
+  color: var(--e-faint);
+}
+
+.em-address__skeleton {
+  display: block;
+  width: calc(100% - 10px);
+  height: 14px;
+  margin-left: 10px;
+  border-radius: var(--ic-radius-xs);
+  background: linear-gradient(90deg, var(--e-raised) 25%, var(--e-hover) 50%, var(--e-raised) 75%);
+  background-size: 200% 100%;
+  animation: e-shimmer 1.4s ease infinite;
+}
+
+/* ── reading pane ─────────────────────────────────────────────────────────── */
+
+.em-pane {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  animation: em-fade var(--ic-dur-base) var(--ic-ease-std);
+}
+
+.em-pane__head {
+  flex: none;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--e-line);
+}
+
+.em-pane__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+}
+
+.em-pane__back {
+  display: none;
+}
+
+.em-pane__meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.em-pane__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* The open message's own moves, set apart from ask / reply / close. */
+.em-pane__tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-left: 1px solid var(--e-line);
+  border-right: 1px solid var(--e-line);
+}
+
+.em-pane__subject {
+  margin: 8px 0 10px;
+  font-size: var(--ic-type-2xl);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  overflow-wrap: anywhere;
+}
+
+.em-pane__people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.em-chip {
+  max-width: 100%;
+  padding: 2px 9px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--e-line-strong);
+  background: var(--e-raised);
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── people: a chip or an address that opens a menu ───────────────────────── */
+
+.em-person {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.em-person__trigger {
+  appearance: none;
+  margin: 0;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-person__trigger:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 2px;
+}
+
+.em-chip.em-person__trigger {
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+}
+
+.em-chip.em-person__trigger:hover,
+.em-chip.em-person__trigger[aria-expanded='true'] {
+  border-color: var(--ic-econ-tone-54);
+  background: var(--e-hover);
+  color: var(--e-ink);
+}
+
+.em-msg__addr.em-person__trigger {
+  padding: 0;
+  border: 0;
+  border-radius: var(--ic-radius-xs);
+  background: none;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  text-align: left;
+}
+
+.em-msg__addr.em-person__trigger:hover,
+.em-msg__addr.em-person__trigger[aria-expanded='true'] {
+  color: var(--e-ink);
+  text-decoration: underline;
+  text-decoration-color: var(--e-line-strong);
+  text-underline-offset: 3px;
+}
+
+.em-menu {
+  position: absolute;
+  z-index: var(--ic-z-local-peak);
+  top: calc(100% + 6px);
+  left: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 212px;
+  max-width: 300px;
+  padding: 5px;
+  border-radius: var(--e-radius);
+  border: 1px solid var(--e-line-strong);
+  /* The window's own surface (the theme background, near-opaque as the
+     window is), raised one step like a row: the thread beneath never reads
+     through, and no per-frame blur is spent on it. */
+  background: linear-gradient(var(--e-raised), var(--e-raised)), var(--ic-surface);
+  box-shadow: var(--ic-econ-island);
+  font-family: inherit;
+  font-size: var(--ic-type-md);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  white-space: normal;
+  animation: em-pop var(--ic-dur-fast) var(--ic-ease-spring);
+  transform-origin: top left;
+}
+
+.em-menu--end {
+  left: auto;
+  right: 0;
+  transform-origin: top right;
+}
+
+.em-menu__head {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  padding: 6px 9px 8px;
+  margin-bottom: 3px;
+  border-bottom: 1px solid var(--e-line);
+}
+
+.em-menu__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--e-ink);
+}
+
+.em-menu__addr {
+  overflow-wrap: anywhere;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+}
+
+.em-menu__item {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: var(--ic-radius-sm);
+  color: var(--e-mute);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-menu__item:hover,
+.em-menu__item:focus-visible {
+  background: var(--e-hover);
+  color: var(--e-ink);
+}
+
+.em-menu__item:focus-visible {
+  box-shadow: var(--ic-econ-edge);
+}
+
+.em-chip--more {
+  font-family: var(--e-mono);
+}
+
+.em-pane__body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 2px 14px 0;
+}
+
+.em-pane > .e-note {
+  margin: 8px 0 0;
+}
+
+/* ── one message ──────────────────────────────────────────────────────────── */
+
+.em-msg {
+  flex: none;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--e-line);
+  border-radius: var(--ic-radius-md);
+  background: var(--e-raised);
+}
+
+.em-msg--out {
+  background: transparent;
+}
+
+.em-msg__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.em-msg__who {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.em-msg__from {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--ic-type-lg);
+}
+
+.em-msg__from b {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.em-msg__addr {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+}
+
+.em-msg__to {
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-md);
+  color: var(--e-faint);
+}
+
+.em-msg__time {
+  flex: none;
+  padding-top: 2px;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-faint);
+  white-space: nowrap;
+}
+
+.em-msg__flag {
+  margin: -4px 0 10px;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.em-msg .e-note {
+  margin: 0 0 12px;
+}
+
+.em-msg--folded {
+  all: unset;
+  box-sizing: border-box;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 14px;
+  border: 1px solid var(--e-line);
+  border-radius: var(--ic-radius-md);
+  cursor: pointer;
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-msg--folded:hover {
+  background: var(--e-hover);
+}
+
+.em-msg--folded:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: -2px;
+}
+
+.em-msg__fold-from {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-lg);
+  font-weight: 600;
+}
+
+.em-msg__fold-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-md);
+  color: var(--e-mute);
+}
+
+/* ── body (text only) ─────────────────────────────────────────────────────── */
+
+.em-body__p {
+  margin: 0 0 0.85em;
+}
+
+.em-body__p:last-child {
+  margin-bottom: 0;
+}
+
+.e-prose .em-body__quote {
+  margin: 0 0 0.85em calc((var(--em-depth, 1) - 1) * 12px);
+}
+
+.em-body__fold {
+  all: unset;
+  display: inline-grid;
+  place-items: center;
+  height: 16px;
+  margin: 2px 0 8px;
+  padding: 0 8px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--e-line-strong);
+  background: var(--e-raised);
+  font-size: var(--ic-type-xs);
+  line-height: 1;
+  letter-spacing: 0.1em;
+  color: var(--e-mute);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-body__fold:hover {
+  background: var(--e-hover);
+  color: var(--e-ink);
+}
+
+.em-body__fold:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 2px;
+}
+
+.em-body__history {
+  color: var(--e-mute);
+}
+
+.em-body__empty {
+  margin: 0;
+  font-size: var(--ic-type-lg);
+  font-style: italic;
+  color: var(--e-faint);
+}
+
+.em-url-off {
+  color: var(--e-mute);
+  text-decoration: underline dotted;
+  overflow-wrap: anywhere;
+}
+
+.em-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.em-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: var(--ic-radius-sm);
+  border: 1px solid var(--e-line-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-md);
+  color: var(--e-mute);
+}
+
+/* ── reply ────────────────────────────────────────────────────────────────── */
+
+.em-reply {
+  flex: none;
+  margin-top: 10px;
+  border: 1px solid var(--e-line-strong);
+  border-radius: var(--ic-radius-md);
+  background: var(--e-sunken);
+  transition:
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    box-shadow var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.em-reply:focus-within {
+  border-color: var(--e-gold);
+  box-shadow: var(--ic-econ-gold-ring);
+}
+
+.em-reply__to {
+  display: block;
+  padding: 9px 12px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--ic-type-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--e-faint);
+}
+
+.em-reply__field {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 52px;
+  max-height: 200px;
+  field-sizing: content;
+  padding: 6px 12px 4px;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--ic-type-lg);
+  line-height: 1.5;
+}
+
+.em-reply__field::placeholder {
+  color: var(--e-faint);
+}
+
+.em-reply__error {
+  margin: 0;
+  padding: 0 12px;
+  font-size: var(--ic-type-md);
+  color: var(--e-down);
+}
+
+.em-reply__foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px 12px;
+}
+
+.em-hint {
+  margin-right: auto;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.06em;
+  color: var(--e-faint);
+  white-space: nowrap;
+}
+
+/* ── compose sheet ────────────────────────────────────────────────────────── */
+
+.em-compose {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: em-sheet-in var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.em-compose__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 26px;
+}
+
+.em-compose__head h3 {
+  margin: 0;
+  font-size: var(--ic-type-2xl);
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.em-compose__from {
+  margin: -4px 0 0;
+  font-size: var(--ic-type-md);
+  color: var(--e-faint);
+}
+
+.em-compose__from span {
+  font-family: var(--e-mono);
+  color: var(--e-mute);
+}
+
+.em-compose__body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.em-compose__body .e-textarea {
+  flex: 1 1 auto;
+  min-height: 160px;
+  resize: none;
+}
+
+.em-compose .e-note {
+  margin: 0;
+}
+
+.em-compose__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.em-field__error {
+  font-size: var(--ic-type-md);
+  color: var(--e-down);
+}
+
+.em .e-input[aria-invalid='true'],
+.em .e-textarea[aria-invalid='true'] {
+  border-color: var(--ic-econ-down-54);
+}
+
+/* ── responsive collapse ──────────────────────────────────────────────────── */
+
+/* Below ~900px the reading pane (or the compose sheet) takes the list's place;
+   the pane's back arrow returns to it. */
+@container em (max-width: 899px) {
+  .em-frame.e-app--rail.e-app--aside {
+    grid-template-columns: 188px minmax(0, 1fr);
+    grid-template-areas: 'rail aside';
+  }
+
+  .em-frame.e-app--aside > .e-main {
+    display: none;
+  }
+
+  .em-pane__back {
+    display: inline-flex;
+  }
+}
+
+/* Below ~680px the rail folds to icons; labels stay for screen readers. */
+@container em (max-width: 679px) {
+  .em-frame.e-app--rail,
+  .em-frame.e-app--rail.e-app--aside {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .em-frame .e-rail {
+    padding: 14px 6px;
+  }
+
+  .em-frame .e-rail__title,
+  .em-frame .e-rail__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .em-frame .e-rail__item {
+    position: relative;
+    justify-content: center;
+    padding: 9px 0;
+  }
+
+  .em-frame .e-rail__count {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: var(--ic-type-2xs);
+  }
+
+  .em-rail__foot,
+  .em-rail__local {
+    display: none;
+  }
+}
+
+/* ── motion ───────────────────────────────────────────────────────────────── */
+
+@keyframes em-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes em-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes em-flash-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes em-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .em-pane,
+  .em-compose,
+  .em-menu,
+  .em-address__skeleton,
+  .em-bar,
+  .em-flash {
+    animation: none;
+  }
+}

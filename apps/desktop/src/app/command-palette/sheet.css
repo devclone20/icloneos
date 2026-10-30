@@ -1,0 +1,447 @@
+/* OUR command sheet. Tokens only (--ic-*, plus the app's z and titlebar vars):
+   night glass under a gilt hairline, one soft float, editorial caps on the
+   group labels. No upstream surface, no component library. */
+
+.icp-root {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-over-modal-content);
+}
+
+/* We portal to document.body, and @radix-ui/react-dismissable-layer sets
+   body { pointer-events: none } for a modal layer's whole lifetime, so the
+   sheet has to claim pointer events back for itself (same guard as
+   components/ui/dialog.tsx). */
+.icp-root[data-state='open'] {
+  pointer-events: auto;
+}
+
+/* The exit must not swallow a click meant for the app behind it. */
+.icp-root[data-state='closed'] {
+  pointer-events: none;
+}
+
+/* Transparent on purpose: the work behind the sheet stays readable (AD2). It
+   exists so a click outside closes and so nothing behind takes a hover. */
+.icp-scrim {
+  position: absolute;
+  inset: 0;
+}
+
+.icp {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: min(34rem, calc(100vw - 2rem));
+  overflow: hidden;
+  background: var(--ic-surface-glass);
+  backdrop-filter: blur(var(--ic-blur-glass));
+  border: 1px solid var(--ic-border-strong);
+  border-radius: var(--ic-radius-lg);
+  box-shadow:
+    var(--ic-shadow-e3) var(--ic-shadow-tint),
+    var(--ic-shadow-stroke-glint) var(--ic-glint);
+  /* The sheet overlaps the titlebar's drag band, which wins hit-testing over
+     the DOM whatever the z-index — without this the search row eats clicks. */
+  -webkit-app-region: no-drag;
+  transform: translateX(-50%);
+  animation: icp-in var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+/* Narrow windows: the sheet drops below the band so it always clears the
+   macOS window controls. It portals to <body>, outside the shell that defines
+   --titlebar-height, so the var needs a fallback. */
+@media (max-width: 44rem) {
+  .icp {
+    top: calc(var(--titlebar-height, 34px) + 6px);
+  }
+}
+
+.icp[data-state='closed'] {
+  animation: icp-out var(--ic-dur-fast) var(--ic-ease-std) forwards;
+}
+
+@keyframes icp-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes icp-out {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -4px) scale(0.98);
+  }
+}
+
+/* The sheet still opens and closes instantly here; the exit fallback in
+   CommandPalette is what retires it when no animation ever runs. */
+@media (prefers-reduced-motion: reduce) {
+  .icp,
+  .icp[data-state='closed'] {
+    animation: none;
+  }
+}
+
+.icp-back {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ic-border-subtle);
+  color: var(--ic-text-2);
+  font: inherit;
+  font-size: var(--ic-type-md);
+  text-align: left;
+  cursor: default;
+  transition: color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icp-back:hover,
+.icp-back:focus-visible {
+  color: var(--ic-text-1);
+}
+
+.icp-back:focus-visible {
+  outline: none;
+  box-shadow: var(--ic-shadow-stroke-ring) var(--ic-focus-ring);
+}
+
+.icp-back__chevron {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.icp-back__crumb {
+  color: var(--ic-text-1);
+  font-weight: 500;
+}
+
+.icp-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--ic-hairline-accent);
+}
+
+.icp-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--ic-text-1);
+  font: inherit;
+  font-size: var(--ic-type-xl);
+  letter-spacing: 0.01em;
+}
+
+.icp-input::placeholder {
+  color: var(--ic-text-3);
+}
+
+.icp-list {
+  max-height: min(20rem, 56vh);
+  padding: 4px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ic-border-strong) transparent;
+}
+
+.icp-heading {
+  padding: 8px 8px 3px;
+  color: var(--ic-glyph);
+  font-size: var(--ic-type-2xs);
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.icp-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: var(--ic-radius-sm);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-lg);
+  cursor: default;
+}
+
+.icp-row[data-active] {
+  background: var(--ic-fill-selected);
+  box-shadow: var(--ic-shadow-stroke-edge) var(--ic-border-subtle);
+}
+
+.icp-row__icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--ic-text-3);
+}
+
+.icp-row[data-active] .icp-row__icon {
+  color: var(--ic-accent-strong);
+}
+
+.icp-row__body {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.icp-row__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The ⌘-held preview reads as a hint, not as the row's own name. */
+.icp-row__label[data-preview] {
+  color: var(--ic-text-2);
+}
+
+.icp-row__note {
+  overflow: hidden;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icp-mark {
+  background: none;
+  color: var(--ic-accent-strong);
+  font-weight: 500;
+}
+
+.icp-row__detail[data-tone='muted'] {
+  overflow: hidden;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `state` marks a note the row will CHANGE (a toggle's on/off): it keeps the
+   label's ink so the pair reads as one phrase and earns its separation from a
+   faint rule instead of going muted. */
+.icp-row__detail[data-tone='state'] {
+  flex: none;
+  box-shadow: var(--ic-shadow-stroke-underline) var(--ic-border-strong);
+  font-size: var(--ic-type-md);
+}
+
+.icp-row__trailing {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-md);
+}
+
+.icp-row__trailing[data-tone='success'] {
+  color: var(--ic-success);
+}
+
+.icp-row__trailing[data-tone='accent'] {
+  color: var(--ic-accent-strong);
+}
+
+.icp-row__trailing-icon {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.icp-row__trailing-icon[data-spin] {
+  animation: icp-spin 1s linear infinite;
+}
+
+@keyframes icp-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icp-row__trailing-icon[data-spin] {
+    animation: none;
+  }
+}
+
+.icp-keys {
+  display: inline-flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 3px;
+  flex: none;
+}
+
+/* A trailing chip already claimed the gap, so the keys sit beside it. */
+.icp-row__trailing + .icp-keys {
+  margin-left: 6px;
+}
+
+.icp-keys[data-dim] {
+  opacity: 0.55;
+}
+
+.icp-key {
+  min-width: 15px;
+  padding: 1px 4px;
+  background: var(--ic-surface-raised);
+  border: 1px solid var(--ic-border-subtle);
+  border-radius: var(--ic-radius-xs);
+  color: var(--ic-text-2);
+  font-family: inherit;
+  font-size: var(--ic-type-xs);
+  line-height: 1.5;
+  text-align: center;
+}
+
+.icp-row__chevron,
+.icp-row__check {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.icp-row__chevron {
+  color: var(--ic-text-3);
+}
+
+.icp-row__check {
+  color: var(--ic-accent-strong);
+}
+
+.icp-keys ~ .icp-row__chevron,
+.icp-keys ~ .icp-row__check,
+.icp-row__chevron ~ .icp-row__check {
+  margin-left: 0;
+}
+
+.icp-row__chevron:first-of-type:not(.icp-keys ~ *),
+.icp-row__check:not(.icp-keys ~ *):not(.icp-row__chevron ~ *) {
+  margin-left: auto;
+}
+
+.icp-status {
+  padding: 22px 8px;
+  color: var(--ic-text-3);
+  font-size: var(--ic-type-lg);
+  text-align: center;
+}
+
+.icp-status[data-tone='error'] {
+  color: var(--ic-danger);
+}
+
+/* A page's own loading mark, inside the status line. */
+.icp-status__icon {
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+}
+
+.icp-status__icon[data-spin] {
+  animation: icp-spin 1s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icp-status__icon[data-spin] {
+    animation: none;
+  }
+}
+
+.icp-notice {
+  padding: 6px 10px 2px;
+  color: var(--ic-danger);
+  font-size: var(--ic-type-md);
+}
+
+/* ── The ⌃Tab session switcher wears the same sheet ──────────────────────── */
+/* Same card, same rows; only its size and its layer differ, and it has no
+   search row because the keybind drives it. */
+.icp-root[data-kind='switcher'] {
+  z-index: var(--z-switcher);
+}
+
+.icp-root[data-kind='switcher'] .icp {
+  width: min(19rem, calc(100vw - 2rem));
+}
+
+.icp-root[data-kind='switcher'] .icp-list {
+  max-height: min(22rem, 64vh);
+  user-select: none;
+}
+
+.icp-row__dot {
+  flex: none;
+}
+
+/* ── The app's right-click menu wears the same card ─────────────────────── */
+/* Same glass, same hairline, same rows; it only sits at the pointer instead of
+   under the titlebar, and it never takes focus (see `context-menu/menu.tsx`). */
+.icp-root[data-kind='menu'] {
+  z-index: var(--z-over-modal-content);
+}
+
+.icp-root[data-kind='menu'] .icp {
+  top: 0;
+  left: 0;
+  width: 14rem;
+  max-width: calc(100vw - 1rem);
+  padding: 4px;
+  transform: none;
+  animation: icm-in var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+@keyframes icm-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icp-root[data-kind='menu'] .icp {
+    animation: none;
+  }
+}
+
+.icp-root[data-kind='menu'] .icp-row[aria-disabled='true'] {
+  color: var(--ic-text-3);
+  opacity: 0.5;
+}
+
+/* A hairline between sections, inside the padding so it reads as a divider
+   rather than an edge. */
+.icp-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--ic-border-subtle);
+}

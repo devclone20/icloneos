@@ -1,0 +1,155 @@
+/* Agents — the delegation tree. Tokens only; the rest of the page is the
+   shared frame and primitives. */
+
+.icag-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.icag-group__label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--ic-type-xs);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ic-text-3);
+}
+
+.icag-group__active {
+  color: var(--ic-accent-strong);
+}
+
+.icag-tree {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.icag-node {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.icag-node[data-depth='1'],
+.icag-node[data-depth='2'],
+.icag-node[data-depth='3'] {
+  padding-left: 16px;
+  border-left: 1px solid var(--ic-border-subtle);
+}
+
+.icag-node__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.icag-node__status {
+  display: flex;
+  height: 1.1rem;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.icag-node__ident {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.icag-node__goal {
+  overflow-wrap: anywhere;
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--ic-text-1);
+}
+
+.icag-node__goal[data-running='true'] {
+  color: var(--ic-text-2);
+}
+
+.icag-node__sub {
+  font-size: var(--ic-type-sm);
+  line-height: 1.4;
+  color: var(--ic-text-3);
+}
+
+.icag-node__elapsed {
+  flex-shrink: 0;
+  font-size: var(--ic-type-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ic-text-3);
+}
+
+.icag-stream {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-left: 22px;
+}
+
+.icag-stream__line {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+}
+
+.icag-stream__text {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  flex: 1;
+  color: var(--ic-text-2);
+}
+
+.icag-stream__text[data-tone='danger'] {
+  color: var(--ic-danger);
+}
+
+.icag-stream__text[data-tone='muted'] {
+  color: var(--ic-text-3);
+}
+
+.icag-stream__text[data-kind='tool'] {
+  font-family: var(--ic-font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-sm);
+}
+
+.icag-files {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-left: 22px;
+}
+
+.icag-files > p {
+  overflow-wrap: break-word;
+  margin: 0;
+  font-family: var(--ic-font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-sm);
+  line-height: 1.5;
+  color: var(--ic-text-3);
+}
+
+.icag-children {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding-left: 22px;
+}

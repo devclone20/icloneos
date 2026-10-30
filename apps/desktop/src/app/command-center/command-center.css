@@ -1,0 +1,157 @@
+/* Command center — only what the page itself adds on top of the shared
+   primitives (ic-ui.css): the gateway status band, the log pane and the usage
+   chart. Tokens only. */
+
+.icc-status {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.icc-status__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  color: var(--ic-text-1);
+}
+
+.icc-status__actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.icc-logs {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.icc-logs__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.icc-logs__filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.icc-usage {
+  display: grid;
+  gap: 20px;
+  padding-bottom: 8px;
+}
+
+.icc-usage__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.icc-usage__legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+.icc-usage__key {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--ic-radius-xs);
+}
+
+.icc-usage__key[data-series='input'],
+.icc-chart__col > span[data-series='input'] {
+  background: var(--ic-accent-strong);
+}
+
+.icc-usage__key[data-series='output'],
+.icc-chart__col > span[data-series='output'] {
+  background: var(--ic-success);
+}
+
+.icc-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 6rem;
+}
+
+.icc-chart__col {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.icc-chart__col > span {
+  width: 100%;
+  border-radius: var(--ic-radius-xs) var(--ic-radius-xs) 0 0;
+}
+
+.icc-chart__axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.icc-usage__lists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 20px;
+}
+
+.icc-list {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.icc-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.icc-list__label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--ic-font-mono, ui-monospace, monospace);
+  font-size: var(--ic-type-md);
+  color: var(--ic-text-1);
+}
+
+.icc-list__value {
+  flex-shrink: 0;
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-3);
+}
+
+/* maintenance: a titled block under a section's rows (share links, a log tail) */
+.cc-maint__block {
+  margin-top: 12px;
+}

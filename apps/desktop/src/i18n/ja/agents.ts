@@ -1,0 +1,32 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const agents: TranslationOverrides['agents'] = {
+  close: 'エージェントを閉じる',
+  title: 'スポーンツリー',
+  subtitle: '現在のターンのライブサブエージェントのアクティビティ。',
+  emptyTitle: 'ライブサブエージェントはありません',
+  emptyDesc: 'ターンで作業を委任すると、子エージェントの進捗状況がここにストリームされます。',
+  running: '実行中',
+  failed: '失敗',
+  done: '完了',
+  streaming: 'ストリーミング中',
+  files: 'ファイル',
+  moreFiles: count => `+${count} 件のファイル`,
+  delegation: index => `委任 ${index}`,
+  workers: count => `${count} ワーカー`,
+  workersActive: count => `${count} アクティブ`,
+  agentsCount: count => `${count} エージェント`,
+  activeCount: count => `${count} アクティブ`,
+  failedCount: count => `${count} 失敗`,
+  toolsCount: count => `${count} ツール`,
+  filesCount: count => `${count} ファイル`,
+  updatedAgo: age => `${age} に更新`,
+  ageNow: 'たった今',
+  ageSeconds: seconds => `${seconds}秒前`,
+  ageMinutes: minutes => `${minutes}分前`,
+  ageHours: hours => `${hours}時間前`,
+  ageDays: days => `${days}日前`,
+  durationSeconds: seconds => `${seconds}秒`,
+  durationMinutes: (minutes, seconds) => `${minutes}分 ${seconds}秒`,
+  tokens: value => `${value} トーク`
+}

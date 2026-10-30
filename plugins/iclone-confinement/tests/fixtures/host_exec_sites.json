@@ -1,0 +1,2945 @@
+{
+ "_": "V3-UP r4 (ruling 50) — every place the shipped runtime can start another program, found by PRIMITIVE.",
+ "sites": {
+  "agent/anthropic_adapter.py::_detect_claude_code_version::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 288
+  },
+  "agent/anthropic_credentials.py::_find_claude_code_keychain_item::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): /usr/bin/security reaches the keychain, which no profile opens (NEVER_EXEC) (agent/anthropic_credentials.py:265)",
+   "line": 265
+  },
+  "agent/anthropic_credentials.py::_mirror_claude_code_credentials_to_keychain::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): /usr/bin/security -i writes the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:598)",
+   "line": 598
+  },
+  "agent/anthropic_credentials.py::_read_claude_code_keychain_payload::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): /usr/bin/security reads the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:294)",
+   "line": 294
+  },
+  "agent/anthropic_credentials.py::run_hermes_oauth_login_pure::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): webbrowser -> osascript/open reach outside every sandbox (NEVER_EXEC); the URL is still shown (agent/anthropic_credentials.py:779)",
+   "line": 779
+  },
+  "agent/anthropic_credentials.py::run_oauth_setup_token::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 720
+  },
+  "agent/command_token_source.py::_mint::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 53
+  },
+  "agent/context_references.py::_run_quiet::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 400
+  },
+  "agent/copilot_acp_client.py::CopilotACPClient._spawn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 365
+  },
+  "agent/copilot_acp_client.py::_acp_supported::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 93
+  },
+  "agent/deadline.py::kill_process_tree::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 432
+  },
+  "agent/lsp/client.py::LSPClient._spawn::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 262
+  },
+  "agent/lsp/install.py::_run_installer::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 188
+  },
+  "agent/proxy_sources/iron_proxy.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 221
+  },
+  "agent/proxy_sources/iron_proxy.py::_spawn_daemon::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 735
+  },
+  "agent/secret_sources/base.py::run_cli::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 227
+  },
+  "agent/secret_sources/command.py::_run_helper::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 78
+  },
+  "agent/shell_hooks.py::_spawn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 345
+  },
+  "agent/skill_preprocessing.py::run_inline_shell::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 65
+  },
+  "agent/trace_upload.py::_git_branch::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 115
+  },
+  "agent/transports/codex_app_server.py::CodexAppServerClient.__init__::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 146
+  },
+  "agent/transports/codex_app_server.py::check_codex_binary::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 364
+  },
+  "agent/vault_backends/base.py::run_with_secret_env::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 82
+  },
+  "agent/vault_backends/base.py::run_with_stdin_secret::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 66
+  },
+  "agent/verify/runner.py::_compose_live_state_reason::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 198
+  },
+  "agent/verify/runner.py::_run_phase_command::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 99
+  },
+  "agent/verify/runner.py::_run_start_phase::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 176
+  },
+  "batch_runner.py::BatchRunner._run_pool::multiprocessing.Pool#1": {
+   "verdict": "b",
+   "why": "refused when confined: multiprocessing's spawn reaches _posixsubprocess.fork_exec, which the guard wraps; batch_runner is its own entry point (batch_runner.py:647)",
+   "line": 647
+  },
+  "batch_runner.py::_prepare_container_image::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 194
+  },
+  "batch_runner.py::_prepare_container_image::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 201
+  },
+  "cli.py::HermesCLI._run_quick_command::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1253
+  },
+  "cron/scheduler.py::_launch_external_cron_worker::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 3790
+  },
+  "cron/scheduler.py::_worktree_maintenance_repos::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 4116
+  },
+  "cron/scheduler_script.py::_run_job_script::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 487
+  },
+  "cron/scheduler_script.py::_terminate_cron_script_process::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 223
+  },
+  "gateway/platforms/base.py::_detect_macos_system_proxy::subprocess.check_output#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: scutil --proxy (configd only under a NET grant; unknown proxy otherwise) (gateway/platforms/base.py:300)",
+   "line": 300
+  },
+  "gateway/platforms/base.py::transcode_to_ogg_opus::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, media: ffmpeg reads the one input, writes the one .ogg (gateway/platforms/base.py:80)",
+   "line": 80
+  },
+  "gateway/platforms/qqbot/adapter.py::QQAdapter._convert_ffmpeg_to_wav::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1181
+  },
+  "gateway/platforms/signal.py::_remux_aac_to_m4a::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 115
+  },
+  "gateway/platforms/webhook.py::WebhookAdapter._deliver_github_comment::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 869
+  },
+  "gateway/platforms/webhook_filters.py::WebhookRouteProcessor.run_route_script::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 193
+  },
+  "gateway/restart.py::read_launchd_exit_timeout_s::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 128
+  },
+  "gateway/run.py::_probe_audio_duration::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2583
+  },
+  "gateway/run_inbound.py::GatewayInboundMixin._hm_run_exec_quick_command::asyncio.create_subprocess_shell#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1032
+  },
+  "gateway/run_shutdown.py::GatewayShutdownMixin._launch_detached_restart_command::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1518
+  },
+  "gateway/run_shutdown.py::GatewayShutdownMixin._spawn_windows_restart_watcher::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1476
+  },
+  "gateway/run_shutdown.py::GatewayShutdownMixin._spawn_windows_restart_watcher::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1479
+  },
+  "gateway/shutdown_forensics.py::_systemd_timeout_stop_us::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 232
+  },
+  "gateway/shutdown_forensics.py::spawn_async_diagnostic::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 161
+  },
+  "gateway/slash_commands.py::_spawn_detached_update::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 137
+  },
+  "gateway/slash_commands.py::_spawn_detached_update::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 153
+  },
+  "gateway/status.py::_read_process_cmdline::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 528
+  },
+  "gateway/status.py::terminate_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 429
+  },
+  "hermes_bootstrap.py::<module>::os.execv#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 599
+  },
+  "hermes_bootstrap.py::<module>::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 598
+  },
+  "hermes_cli/_early_recovery.py::_held_open::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 621
+  },
+  "hermes_cli/_early_recovery.py::_is_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 337
+  },
+  "hermes_cli/_early_recovery.py::_process_state::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 138
+  },
+  "hermes_cli/_early_recovery.py::relaunch_after_restore::os.execv#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1115
+  },
+  "hermes_cli/_early_recovery.py::relaunch_after_restore::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1114
+  },
+  "hermes_cli/_old_updater.py::_run_in_custody::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 160
+  },
+  "hermes_cli/_old_updater.py::_run_in_custody::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 159
+  },
+  "hermes_cli/_secrets_common.py::cli_version::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 97
+  },
+  "hermes_cli/_subprocess_compat.py::_legacy_kill_process_tree::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 789
+  },
+  "hermes_cli/_subprocess_compat.py::_user_safe_directories::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 364
+  },
+  "hermes_cli/_subprocess_compat.py::posix_is_zombie::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 615
+  },
+  "hermes_cli/_update_takeover.py::_head_sha::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 90
+  },
+  "hermes_cli/_update_takeover.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 139
+  },
+  "hermes_cli/anon_challenge.py::_present_in_terminal::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 347
+  },
+  "hermes_cli/auth_codex_browser.py::_codex_browser_login::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 137
+  },
+  "hermes_cli/auth_device_flow.py::_print_device_code_instructions::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 305
+  },
+  "hermes_cli/auth_oauth_pkce_plugin.py::login::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 193
+  },
+  "hermes_cli/auth_openrouter.py::_openrouter_loopback_code::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 82
+  },
+  "hermes_cli/auth_spotify.py::_spotify_interactive_setup::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 290
+  },
+  "hermes_cli/auth_spotify.py::login_spotify_command::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 351
+  },
+  "hermes_cli/bang_shell.py::run_bang_command::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 116
+  },
+  "hermes_cli/boot_bootstrap.py::read_git_head::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 46
+  },
+  "hermes_cli/browser_connect.py::_run_stdout::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 253
+  },
+  "hermes_cli/browser_connect.py::launch_chrome_debug::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1068
+  },
+  "hermes_cli/bundled_app.py::launch_detached::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 169
+  },
+  "hermes_cli/claw.py::_posix_probe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 148
+  },
+  "hermes_cli/cli_billing_mixin.py::CLIBillingMixin._open_url_in_browser::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 225
+  },
+  "hermes_cli/cli_commands_mixin.py::CLICommandsMixin._compose_in_editor::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2106
+  },
+  "hermes_cli/cli_commands_mixin.py::CLICommandsMixin._worktree_list::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1204
+  },
+  "hermes_cli/cli_modal_mixin.py::CLIModalMixin._connection_open_url::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 792
+  },
+  "hermes_cli/cli_session_mixin.py::CLISessionMixin._clear_terminal_on_exit::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1044
+  },
+  "hermes_cli/clipboard.py::_convert_to_png::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 363
+  },
+  "hermes_cli/clipboard.py::_macos_osascript::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 191
+  },
+  "hermes_cli/clipboard.py::_macos_pngpaste::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 166
+  },
+  "hermes_cli/clipboard.py::_osascript::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 125
+  },
+  "hermes_cli/clipboard.py::_pipe_to_file::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 45
+  },
+  "hermes_cli/clipboard.py::_probe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 33
+  },
+  "hermes_cli/clipboard.py::_ps_clipboard::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 258
+  },
+  "hermes_cli/clipboard.py::_wayland_save::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 330
+  },
+  "hermes_cli/clipboard.py::write_clipboard_text::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 112
+  },
+  "hermes_cli/commands_completion.py::SlashCommandCompleter._get_project_files::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 384
+  },
+  "hermes_cli/config.py::edit_config::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 3191
+  },
+  "hermes_cli/copilot_auth.py::_probe_gh_cli_token::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 140
+  },
+  "hermes_cli/dashboard_procs.py::_iter_process_table::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 60
+  },
+  "hermes_cli/dashboard_procs.py::_kill_pids_windows::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 440
+  },
+  "hermes_cli/dashboard_procs.py::_posix_descendants::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 503
+  },
+  "hermes_cli/dashboard_procs.py::_process_ppid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 817
+  },
+  "hermes_cli/doctor_live.py::_launch_browser_probe::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 71
+  },
+  "hermes_cli/doctor_platform.py::_check_web_dashboard_import::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 543
+  },
+  "hermes_cli/doctor_platform.py::_macos_desktop_dr::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 333
+  },
+  "hermes_cli/doctor_state.py::_gh_authenticated::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 553
+  },
+  "hermes_cli/doctor_state.py::check_legacy_desktop_checkout._git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 145
+  },
+  "hermes_cli/doctor_tools.py::_audit_one::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 432
+  },
+  "hermes_cli/doctor_tools.py::_run_ok::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 80
+  },
+  "hermes_cli/dump.py::_git_output::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 46
+  },
+  "hermes_cli/gateway.py::_get_parent_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 224
+  },
+  "hermes_cli/gateway.py::_get_service_pids::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 146
+  },
+  "hermes_cli/gateway.py::_get_service_pids::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 158
+  },
+  "hermes_cli/gateway.py::_get_service_pids::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 192
+  },
+  "hermes_cli/gateway.py::_launchd_print_service_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1493
+  },
+  "hermes_cli/gateway.py::_launchd_service_registered::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1504
+  },
+  "hermes_cli/gateway.py::_loginctl_enable_linger::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2442
+  },
+  "hermes_cli/gateway.py::_maybe_redirect_run_to_s6_supervision::os.execvp#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 5020
+  },
+  "hermes_cli/gateway.py::_run_systemctl::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2536
+  },
+  "hermes_cli/gateway.py::_scan_gateway_pids::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 649
+  },
+  "hermes_cli/gateway.py::_spawn_gateway_restart_watcher::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1176
+  },
+  "hermes_cli/gateway.py::_spawn_gateway_restart_watcher::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1185
+  },
+  "hermes_cli/gateway.py::_windows_scheduled_task_state::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2124
+  },
+  "hermes_cli/gateway.py::get_systemd_linger_status::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2903
+  },
+  "hermes_cli/gateway.py::systemd_status::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 3989
+  },
+  "hermes_cli/gateway_launchd.py::_launchctl_bootstrap::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 104
+  },
+  "hermes_cli/gateway_launchd.py::_launchctl_bootstrap::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 111
+  },
+  "hermes_cli/gateway_launchd.py::_launchctl_bootstrap::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 114
+  },
+  "hermes_cli/gateway_launchd.py::_launchctl_kickstart_current::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 710
+  },
+  "hermes_cli/gateway_launchd.py::_launchctl_supervised_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 147
+  },
+  "hermes_cli/gateway_launchd.py::_launchd_kickstart::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 750
+  },
+  "hermes_cli/gateway_launchd.py::_probe_launchd_domain_for_label::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 41
+  },
+  "hermes_cli/gateway_launchd.py::_probe_launchd_domain_for_label::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "hermes_cli/gateway_launchd.py::_spawn_deferred_launchd_reload::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 519
+  },
+  "hermes_cli/gateway_launchd.py::_spawn_detached_gateway::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 297
+  },
+  "hermes_cli/gateway_launchd.py::launchd_install::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 640
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 819
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 820
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 826
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#4": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 838
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#5": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 840
+  },
+  "hermes_cli/gateway_launchd.py::launchd_restart::subprocess.run#6": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 841
+  },
+  "hermes_cli/gateway_launchd.py::launchd_status::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 894
+  },
+  "hermes_cli/gateway_launchd.py::launchd_status::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 952
+  },
+  "hermes_cli/gateway_launchd.py::launchd_stop::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 737
+  },
+  "hermes_cli/gateway_launchd.py::launchd_uninstall::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 670
+  },
+  "hermes_cli/gateway_launchd.py::refresh_launchd_plist_if_needed::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 579
+  },
+  "hermes_cli/gateway_migrate_guards.py::_pid_uid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 33
+  },
+  "hermes_cli/gateway_windows.py::_exec_schtasks::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 195
+  },
+  "hermes_cli/gateway_windows.py::_spawn_detached._popen::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 784
+  },
+  "hermes_cli/git_credentials.py::_credential_fill::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 102
+  },
+  "hermes_cli/git_credentials.py::_gh_cli_token::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 73
+  },
+  "hermes_cli/git_credentials.py::run_git_with_credential_fallback::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 207
+  },
+  "hermes_cli/git_credentials.py::run_git_with_credential_fallback::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 213
+  },
+  "hermes_cli/git_credentials.py::run_git_with_credential_fallback::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 229
+  },
+  "hermes_cli/github_api.py::_gh_cli_token::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "hermes_cli/gitlock.py::_git_proc_running::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 54
+  },
+  "hermes_cli/gitlock.py::_git_version::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 678
+  },
+  "hermes_cli/gitlock.py::_history_trees_complete::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 687
+  },
+  "hermes_cli/gitlock.py::convert_treeless_checkout::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 639
+  },
+  "hermes_cli/gitlock.py::convert_treeless_checkout::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 641
+  },
+  "hermes_cli/gitlock.py::convert_treeless_checkout::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 644
+  },
+  "hermes_cli/gitlock.py::convert_treeless_checkout::subprocess.run#4": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 649
+  },
+  "hermes_cli/goals.py::run_gate::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 403
+  },
+  "hermes_cli/journey.py::_open_in_editor::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 331
+  },
+  "hermes_cli/kanban_db.py::_git_out::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 92
+  },
+  "hermes_cli/kanban_db_dispatch.py::_default_spawn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2960
+  },
+  "hermes_cli/kanban_db_dispatch.py::_pid_alive::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 343
+  },
+  "hermes_cli/kanban_db_workspace.py::_cleanup_worker_tmux::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 540
+  },
+  "hermes_cli/kanban_db_workspace.py::_cleanup_worker_tmux::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 545
+  },
+  "hermes_cli/kanban_db_workspace.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 65
+  },
+  "hermes_cli/kanban_pr_acceptance.py::_api::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 39
+  },
+  "hermes_cli/linux_desktop_entry.py::_run_quiet::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 624
+  },
+  "hermes_cli/local_runtime/devices.py::probe_devices::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 29
+  },
+  "hermes_cli/local_runtime/hardware.py::_cached_nvidia_gpu_query::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 240
+  },
+  "hermes_cli/local_runtime/hardware.py::_engine_device_pool::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 324
+  },
+  "hermes_cli/local_runtime/hardware.py::_stdout::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 66
+  },
+  "hermes_cli/local_runtime/processes.py::spawn_server::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 118
+  },
+  "hermes_cli/local_runtime/processes.py::spawn_server::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 123
+  },
+  "hermes_cli/local_runtime/supervisor.py::_direct_io_args::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 101
+  },
+  "hermes_cli/macos_signing.py::sign_managed_python::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 28
+  },
+  "hermes_cli/macos_signing.py::sign_managed_python::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 38
+  },
+  "hermes_cli/macos_tcc_anchor.py::_passes_boot_gate::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 256
+  },
+  "hermes_cli/main.py::_resolve_workspace_key::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1293
+  },
+  "hermes_cli/main_container.py::_probe_container::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 18
+  },
+  "hermes_cli/main_container.py::exec_in_container::os.execvp#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 104
+  },
+  "hermes_cli/main_dashboard.py::_attach_to_host_backend::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 940
+  },
+  "hermes_cli/main_dashboard.py::_respawn_dashboard_processes::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 423
+  },
+  "hermes_cli/main_dashboard.py::_route_named_profile_dashboard::os.execvpe#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1010
+  },
+  "hermes_cli/main_dashboard.py::_route_named_profile_dashboard::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1007
+  },
+  "hermes_cli/main_dashboard.py::_run_probe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 89
+  },
+  "hermes_cli/main_desktop.py::_codesign_verify::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 610
+  },
+  "hermes_cli/main_desktop.py::_desktop_linux_sandbox_fixup::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1242
+  },
+  "hermes_cli/main_desktop.py::_desktop_linux_userns_sandbox_available::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1167
+  },
+  "hermes_cli/main_desktop.py::_desktop_macos_has_valid_real_signature::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 685
+  },
+  "hermes_cli/main_desktop.py::_desktop_macos_local_codesign.sign_path::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 725
+  },
+  "hermes_cli/main_desktop.py::_desktop_macos_relaunchable_fixup::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 828
+  },
+  "hermes_cli/main_desktop.py::_detect_linux_password_store::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1283
+  },
+  "hermes_cli/main_desktop.py::_macos_legacy_adhoc_resign::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 768
+  },
+  "hermes_cli/main_desktop.py::_macos_signature_summary::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 623
+  },
+  "hermes_cli/main_desktop.py::_stage_macos_bundle_copy::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 951
+  },
+  "hermes_cli/main_desktop.py::cmd_gui::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1826
+  },
+  "hermes_cli/main_desktop.py::cmd_gui::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1835
+  },
+  "hermes_cli/main_desktop.py::cmd_gui::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1846
+  },
+  "hermes_cli/main_desktop_tcc.py::_macos_codesigning_identity_valid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 19
+  },
+  "hermes_cli/main_desktop_tcc.py::_macos_create_signing_identity._export_p12::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 54
+  },
+  "hermes_cli/main_desktop_tcc.py::_macos_create_signing_identity._import_p12::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 63
+  },
+  "hermes_cli/main_desktop_tcc.py::_macos_create_signing_identity::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 36
+  },
+  "hermes_cli/main_desktop_tcc.py::_macos_create_signing_identity::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 86
+  },
+  "hermes_cli/main_platform_setup.py::_whatsapp_install_bridge::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 114
+  },
+  "hermes_cli/main_platform_setup.py::cmd_whatsapp::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 201
+  },
+  "hermes_cli/main_tui_launch.py::_launch_tui::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 451
+  },
+  "hermes_cli/main_tui_launch.py::_make_tui_argv::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 213
+  },
+  "hermes_cli/main_tui_launch.py::_restore_tui_workspace::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 110
+  },
+  "hermes_cli/mcp_catalog.py::_run_bootstrap::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 422
+  },
+  "hermes_cli/memory_setup.py::_install_dependencies::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 111
+  },
+  "hermes_cli/model_setup_flows.py::_external_process_login_gate::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1099
+  },
+  "hermes_cli/onepassword_secrets_cli.py::_op_whoami::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 387
+  },
+  "hermes_cli/plugin_host.py::PluginHost.ensure_started::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 121
+  },
+  "hermes_cli/plugin_host_profiles.py::_extract::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 92
+  },
+  "hermes_cli/plugin_validate.py::_run_capability_probe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 343
+  },
+  "hermes_cli/plugins_provenance.py::_git_origin_url::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 69
+  },
+  "hermes_cli/plugins_updates.py::default_ls_remote::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 393
+  },
+  "hermes_cli/portal_cli.py::_cmd_open::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 95
+  },
+  "hermes_cli/profiles.py::_cleanup_gateway_service._run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 2008
+  },
+  "hermes_cli/profiles.py::check_alias_collision::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 518
+  },
+  "hermes_cli/profiles.py::seed_profile_skills::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1562
+  },
+  "hermes_cli/profiles_service_cleanup.py::remove_system_systemd_unit::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 29
+  },
+  "hermes_cli/profiles_service_cleanup.py::remove_system_systemd_unit::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 30
+  },
+  "hermes_cli/profiles_service_cleanup.py::remove_system_systemd_unit::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 32
+  },
+  "hermes_cli/pty_bridge.py::PtyBridge.spawn::ptyprocess.PtyProcess#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 151
+  },
+  "hermes_cli/quiet_single_query.py::run_reported_turn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 119
+  },
+  "hermes_cli/relaunch.py::relaunch::os.execvp#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 145
+  },
+  "hermes_cli/relaunch.py::relaunch::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 127
+  },
+  "hermes_cli/secrets_cli.py::_list_projects::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 448
+  },
+  "hermes_cli/service_manager.py::_s6_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 302
+  },
+  "hermes_cli/session_lost_and_found.py::_cli_recover_attempts::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 226
+  },
+  "hermes_cli/session_lost_and_found.py::_cli_recover_attempts::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 229
+  },
+  "hermes_cli/session_lost_and_found.py::_cli_supports_recover::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 175
+  },
+  "hermes_cli/session_lost_and_found.py::_parse_sqlite3_cli_version::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 106
+  },
+  "hermes_cli/setup_terminal.py::_setup_backend_ssh::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 246
+  },
+  "hermes_cli/setup_tts.py::_install_neutts_deps::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 52
+  },
+  "hermes_cli/source_build.py::source_product_current::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 19
+  },
+  "hermes_cli/source_check.py::_git_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 66
+  },
+  "hermes_cli/source_completion.py::main::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 212
+  },
+  "hermes_cli/source_releases.py::_refuse_retirement_downgrade::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 132
+  },
+  "hermes_cli/source_releases.py::_refuse_retirement_downgrade::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 148
+  },
+  "hermes_cli/source_releases.py::resolve_source_release::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 274
+  },
+  "hermes_cli/source_releases.py::source_repository::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 30
+  },
+  "hermes_cli/sqlite_runtime.py::probe_sqlite_runtime::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 78
+  },
+  "hermes_cli/ssh_workspace_fs.py::SshWorkspaceFs.stream_file::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 193
+  },
+  "hermes_cli/stderr_timestamp.py::main::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 176
+  },
+  "hermes_cli/tools_config_cua.py::_cua_driver_autostart_registered_windows::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 181
+  },
+  "hermes_cli/tools_config_cua.py::_run_text::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 20
+  },
+  "hermes_cli/uninstall.py::_remove_launchd_gateway::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 330
+  },
+  "hermes_cli/uninstall.py::_remove_launchd_gateway::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 331
+  },
+  "hermes_cli/uninstall.py::_remove_systemd_gateway::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 287
+  },
+  "hermes_cli/uninstall.py::_remove_systemd_gateway::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 289
+  },
+  "hermes_cli/uninstall.py::_uninstall_profile::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 622
+  },
+  "hermes_cli/uninstall.py::remove_dashboard_launchd_jobs::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 989
+  },
+  "hermes_cli/update_abort_recovery.py::_run_fresh_recovery_process::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 128
+  },
+  "hermes_cli/update_cmd.py::_run_logged_subprocess::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 585
+  },
+  "hermes_cli/update_cmd_commit.py::_run_python::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 422
+  },
+  "hermes_cli/update_cmd_fleet.py::_restart_macos_launchd_gateways::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 920
+  },
+  "hermes_cli/update_cmd_fleet.py::_sudo_noninteractive_ok::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1161
+  },
+  "hermes_cli/update_cmd_fleet.py::_sudo_noninteractive_ok::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1164
+  },
+  "hermes_cli/update_cmd_fleet.py::_systemctl::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 694
+  },
+  "hermes_cli/update_cmd_maint.py::_ensure_fhs_path_guard::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 565
+  },
+  "hermes_cli/update_cmd_validation.py::_critical_module_import_failures::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 53
+  },
+  "hermes_cli/update_cmd_windows.py::_sc_exe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 675
+  },
+  "hermes_cli/update_cmd_windows.py::_stop_process_trees::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 618
+  },
+  "hermes_cli/update_completion.py::_prepare::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 364
+  },
+  "hermes_cli/update_completion.py::run_completion::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 92
+  },
+  "hermes_cli/update_completion.py::run_completion::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 71
+  },
+  "hermes_cli/update_completion.py::run_completion::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 119
+  },
+  "hermes_cli/update_custody.py::_owner_watch::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 362
+  },
+  "hermes_cli/update_custody.py::_run_owner_watched::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 389
+  },
+  "hermes_cli/update_custody.py::popen::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 244
+  },
+  "hermes_cli/update_custody.py::popen::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 252
+  },
+  "hermes_cli/update_custody.py::popen_post_commit::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 296
+  },
+  "hermes_cli/update_custody.py::popen_post_commit::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 300
+  },
+  "hermes_cli/update_custody.py::run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 261
+  },
+  "hermes_cli/update_lock.py::_stdlib_create_time::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 204
+  },
+  "hermes_cli/update_lock.py::_stdlib_parent_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 398
+  },
+  "hermes_cli/update_owning_install.py::retarget_to_owning_install::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 76
+  },
+  "hermes_cli/update_restart_recovery.py::restart_profiles::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 223
+  },
+  "hermes_cli/update_restart_recovery.py::restart_serve_units::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 353
+  },
+  "hermes_cli/update_stage.py::ensure_panel::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 131
+  },
+  "hermes_cli/version_info.py::_git_version_info::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 223
+  },
+  "hermes_cli/version_info.py::_run_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 63
+  },
+  "hermes_cli/web_git.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 39
+  },
+  "hermes_cli/web_routers/files.py::_fs_git_branch::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 256
+  },
+  "hermes_cli/web_routers/messaging.py::_ensure_whatsapp_bridge_dependencies::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 403
+  },
+  "hermes_cli/web_routers/messaging.py::_spawn_whatsapp_pairing_process::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 444
+  },
+  "hermes_cli/web_routers/profiles.py::open_profile_terminal_endpoint::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 942
+  },
+  "hermes_cli/web_routers/profiles.py::open_profile_terminal_endpoint::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 945
+  },
+  "hermes_cli/web_routers/profiles.py::open_profile_terminal_endpoint::subprocess.Popen#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 951
+  },
+  "hermes_cli/web_routers/profiles.py::open_profile_terminal_endpoint::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 949
+  },
+  "hermes_cli/web_server_gateway.py::_spawn_hermes_action::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 520
+  },
+  "hermes_cli/web_server_lifecycle.py::_maybe_open_browser._open::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 250
+  },
+  "hermes_cli/web_server_lifecycle.py::_process_start_marker::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 74
+  },
+  "hermes_cli/web_server_memory.py::_run_setup_command::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 107
+  },
+  "hermes_cli/win_pty_bridge.py::WinPtyBridge.spawn::winpty.PtyProcess#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 61
+  },
+  "hermes_cli/win_pty_bridge.py::WinPtyBridge.spawn::winpty.PtyProcess#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 71
+  },
+  "hermes_cli/windows_ssh_runtime.py::_resolve_direct_command::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 360
+  },
+  "hermes_cli/windows_ssh_runtime.py::inspect_hermes::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 415
+  },
+  "hermes_cli/windows_ssh_runtime.py::inspect_hermes::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 416
+  },
+  "hermes_cli/windows_ssh_runtime.py::spawn_backend::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 404
+  },
+  "hermes_cli/worktree_gc.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 55
+  },
+  "hermes_cli/worktree_ops.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 36
+  },
+  "hermes_cli/worktree_ops.py::_run_bounded_repack::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 171
+  },
+  "hermes_cli/worktree_ops.py::_worktree_branch_pr_merged::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 737
+  },
+  "hermes_constants.py::_run_version_probe::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: <tool> --version, the store entry read/exec only (hermes_constants.py:454)",
+   "line": 454
+  },
+  "hermes_constants_scratch.py::release_git_worktrees::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 234
+  },
+  "optional-skills/creative/ai-presenter-video/scripts/preflight.py::probe::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 15
+  },
+  "optional-skills/creative/comfyui/scripts/auto_fix_deps.py::run_cmd::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 55
+  },
+  "optional-skills/creative/comfyui/scripts/hardware_check.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 56
+  },
+  "optional-skills/creative/kanban-video-orchestrator/scripts/monitor.py::kanban_list::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 37
+  },
+  "optional-skills/creative/kanban-video-orchestrator/scripts/monitor.py::kanban_list::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 46
+  },
+  "optional-skills/creative/kanban-video-orchestrator/scripts/monitor.py::kanban_show::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 70
+  },
+  "optional-skills/creative/pixel-art/scripts/pixel_art_video.py::pixel_art_video::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 297
+  },
+  "optional-skills/creative/pixel-art/scripts/pixel_art_video.py::pixel_art_video::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 309
+  },
+  "optional-skills/finance/excel-author/scripts/recalc.py::recalc::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 45
+  },
+  "optional-skills/security/unbroker/scripts/cdp.py::launch::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 158
+  },
+  "optional-skills/security/unbroker/scripts/crypto.py::decrypt::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 96
+  },
+  "optional-skills/security/unbroker/scripts/crypto.py::encrypt::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 91
+  },
+  "optional-skills/security/unbroker/scripts/crypto.py::ensure_identity::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 61
+  },
+  "optional-skills/software-development/ast-grep/scripts/ast_grep_helper.py::cmd_install::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 609
+  },
+  "optional-skills/software-development/ast-grep/scripts/ast_grep_helper.py::run_sg::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 394
+  },
+  "optional-skills/software-development/ast-grep/scripts/ast_grep_helper.py::which_binary::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 177
+  },
+  "optional-skills/web-development/har-derived-api-client/scripts/har_capture.py::main::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 50
+  },
+  "optional-skills/web-development/har-derived-api-client/scripts/har_capture_cdp.py::main::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 95
+  },
+  "plugins/google_meet/audio_bridge.py::AudioBridge._setup_darwin::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 90
+  },
+  "plugins/google_meet/audio_bridge.py::_pactl::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 20
+  },
+  "plugins/google_meet/cli.py::_cmd_auth::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 207
+  },
+  "plugins/google_meet/cli.py::_cmd_install._install_pkgs::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 143
+  },
+  "plugins/google_meet/cli.py::_cmd_install::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 174
+  },
+  "plugins/google_meet/cli.py::_cmd_setup::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 108
+  },
+  "plugins/google_meet/meet_bot.py::_mac_audio_device_index::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 309
+  },
+  "plugins/google_meet/meet_bot.py::_start_pcm_pump::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 259
+  },
+  "plugins/google_meet/meet_bot.py::run_bot::playwright.sync_api.sync_playwright#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 489
+  },
+  "plugins/google_meet/process_manager.py::start::subprocess.Popen#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: -m plugins.google_meet.meet_bot (imports hermes_bootstrap first; its browser launch is then refused) (plugins/google_meet/process_manager.py:105)",
+   "line": 105
+  },
+  "plugins/iclone-confinement/providers.py::_run_version::subprocess.Popen#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: the container program's --version (plugins/iclone-confinement/providers.py:142)",
+   "line": 142
+  },
+  "plugins/iclone-confinement/seatbelt.py::_ConfinedPopen::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 24
+  },
+  "plugins/memory/byterover/__init__.py::_run_brv::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 114
+  },
+  "plugins/memory/openviking/__init__.py::_start_local_openviking_server::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 994
+  },
+  "plugins/platforms/a2a/adapter.py::A2AAdapter._forward_to_profile::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 599
+  },
+  "plugins/platforms/buzz/adapter.py::_exec_buzz::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 403
+  },
+  "plugins/platforms/discord/adapter.py::DiscordAdapter._probe_audio_duration_seconds::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 3704
+  },
+  "plugins/platforms/discord/adapter.py::VoiceReceiver.pcm_to_wav::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1188
+  },
+  "plugins/platforms/discord/voice_mixer.py::decode_to_pcm::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 183
+  },
+  "plugins/platforms/matrix/adapter.py::_run_media_tool::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 90
+  },
+  "plugins/platforms/photon/adapter.py::PhotonAdapter._apply_spectrum_patch::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 970
+  },
+  "plugins/platforms/photon/adapter.py::PhotonAdapter._quick_stdout::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 882
+  },
+  "plugins/platforms/photon/adapter.py::PhotonAdapter._start_sidecar::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1005
+  },
+  "plugins/platforms/photon/adapter.py::_reinstall_sidecar_deps._run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 296
+  },
+  "plugins/platforms/photon/auth.py::login_device_flow::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 468
+  },
+  "plugins/platforms/photon/cli.py::_install_sidecar._run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 316
+  },
+  "plugins/platforms/raft/adapter.py::RaftAdapter._spawn_bridge::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 383
+  },
+  "plugins/platforms/simplex/adapter.py::SimplexAdapter._prepare_image::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 540
+  },
+  "plugins/platforms/simplex/adapter.py::SimplexAdapter._prepare_image::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 544
+  },
+  "plugins/platforms/telegram/adapter.py::TelegramAdapter._handle_gmail_triage_callback::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 4936
+  },
+  "plugins/platforms/telegram/adapter.py::_probe_video_geometry::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 271
+  },
+  "plugins/platforms/telegram/adapter.py::_probe_voice_duration_seconds::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 249
+  },
+  "plugins/platforms/telegram/adapter.py::_video_thumbnail_jpeg::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 308
+  },
+  "plugins/platforms/whatsapp/adapter.py::WhatsAppAdapter._ensure_bridge_deps::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 436
+  },
+  "plugins/platforms/whatsapp/adapter.py::WhatsAppAdapter.connect::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 687
+  },
+  "plugins/platforms/whatsapp/adapter.py::_kill_port_process::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 109
+  },
+  "plugins/platforms/whatsapp/adapter.py::_listener_pids_on_port::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 42
+  },
+  "plugins/platforms/whatsapp/adapter.py::_listener_pids_on_port::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 46
+  },
+  "plugins/platforms/whatsapp/adapter.py::_terminate_bridge_process::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 190
+  },
+  "plugins/platforms/whatsapp/adapter.py::_windows_listener_pids::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 70
+  },
+  "plugins/platforms/whatsapp/adapter.py::check_whatsapp_requirements::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 262
+  },
+  "plugins/teams_pipeline/pipeline.py::TeamsMeetingPipeline._prepare_audio_path::asyncio.create_subprocess_exec#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 340
+  },
+  "plugins/web/ddgs/provider.py::_spawn_worker::subprocess.Popen#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: the bundled _search_worker.py (imports hermes_bootstrap first) (plugins/web/ddgs/provider.py:116)",
+   "line": 116
+  },
+  "pm/client.py::_request::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 116
+  },
+  "pm/environment.py::PythonEnvironment._run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 317
+  },
+  "pm/environment.py::_run_streaming::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 145
+  },
+  "pm/extras.py::_evaluate_in_runtime::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 171
+  },
+  "pm/features.py::installed_extras::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 127
+  },
+  "pm/libatomic.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 141
+  },
+  "pm/package.py::Runner.run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 377
+  },
+  "pm/packages.py::BinaryPackage.verify::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 103
+  },
+  "pm/packages.py::Git.unpack::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 701
+  },
+  "pm/packages.py::Npm.unpack::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 615
+  },
+  "pm/plugin_eviction.py::_interpreter_version::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 43
+  },
+  "pm/progress.py::run_contained::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 161
+  },
+  "pm/progress.py::run_contained::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 144
+  },
+  "pm/progress.py::run_contained::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 150
+  },
+  "pm/recovery.py::validate_environment::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 44
+  },
+  "pm/runtime.py::_validate::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 100
+  },
+  "pm/runtime.py::run_cli::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 272
+  },
+  "pm/runtime_stage.py::stage_runtime::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 44
+  },
+  "pm/security_packages.py::IronProxy.verify_provenance::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 123
+  },
+  "pm/security_packages.py::IronProxy.verify_provenance::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 128
+  },
+  "pm/shell.py::_bash_starts::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 96
+  },
+  "scripts/audit-old-updater-imports.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 729
+  },
+  "scripts/audit_pr_attribution.py::run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "scripts/build/launchers.py::write_launchers::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 79
+  },
+  "scripts/bundles/bytecode.py::bake_bytecode::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 87
+  },
+  "scripts/bundles/desktop.py::capture::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 24
+  },
+  "scripts/bundles/desktop.py::run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 20
+  },
+  "scripts/bundles/desktop_prepare.py::git::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 25
+  },
+  "scripts/bundles/desktop_toolchain.py::native_cache_path::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 168
+  },
+  "scripts/bundles/desktop_toolchain.py::run_preparation::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 80
+  },
+  "scripts/bundles/dmgbuild_diagnostics.py::report_detach_failure::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 11
+  },
+  "scripts/bundles/native.py::_prepare_native::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 172
+  },
+  "scripts/bundles/native.py::stage_native::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 129
+  },
+  "scripts/bundles/payload.py::snapshot::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 41
+  },
+  "scripts/bundles/release_artifacts.py::record::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 92
+  },
+  "scripts/bundles/release_artifacts.py::record::subprocess.check_output#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 121
+  },
+  "scripts/bundles/release_artifacts.py::record::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 105
+  },
+  "scripts/bundles/release_artifacts.py::record::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 106
+  },
+  "scripts/bundles/release_artifacts.py::record::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 129
+  },
+  "scripts/bundles/stage.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 53
+  },
+  "scripts/check-case-collisions.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 69
+  },
+  "scripts/check-windows-footguns.py::get_diff_files::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 845
+  },
+  "scripts/check-windows-footguns.py::get_staged_files::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 831
+  },
+  "scripts/check_bash_shebangs.py::check::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 19
+  },
+  "scripts/check_no_tmp_literals.py::_git_ignored::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 172
+  },
+  "scripts/check_profile_scope_patterns.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 81
+  },
+  "scripts/check_profile_scope_patterns.py::_read::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 111
+  },
+  "scripts/ci/check_agents_md_size.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 43
+  },
+  "scripts/ci/check_lazy_deps_imports.py::_tracked_python_files::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 50
+  },
+  "scripts/ci/check_lazy_deps_imports.py::_tracked_python_files::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 61
+  },
+  "scripts/ci/check_public_surface.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 39
+  },
+  "scripts/ci/check_public_surface.py::_show::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 48
+  },
+  "scripts/ci/check_public_surface.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 163
+  },
+  "scripts/ci/classify_changes.py::_gh_lines::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 614
+  },
+  "scripts/ci/lockfile_diff.py::_git_show::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 115
+  },
+  "scripts/ci/lockfile_diff.py::_tracked_lockfiles::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 125
+  },
+  "scripts/ci/python_packages.py::main::subprocess.call#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 33
+  },
+  "scripts/ci/setup_toolchain.py::install::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 174
+  },
+  "scripts/code_health/gitio.py::git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 15
+  },
+  "scripts/code_health/gitio.py::read_file::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 105
+  },
+  "scripts/code_health/replay.py::merged_prs::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 53
+  },
+  "scripts/code_health/ruff_runner.py::_version_of::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 42
+  },
+  "scripts/code_health/ruff_runner.py::run_ruff::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 78
+  },
+  "scripts/code_health/ts_measure.py::_install::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 47
+  },
+  "scripts/code_health/ts_measure.py::measure_ts::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 82
+  },
+  "scripts/contributor_audit.py::gh_pr_list::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 122
+  },
+  "scripts/contributor_audit.py::git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 103
+  },
+  "scripts/generate_conformance_vectors.py::_oracle_commit::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 194
+  },
+  "scripts/iso-certify.py::ScratchDashboard.__enter__::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 180
+  },
+  "scripts/probe_active_session_exclusivity.py::Gateway.__init__::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "scripts/profile-tui.py::loop_mode::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 572
+  },
+  "scripts/profile-tui.py::run_once::os.execvpe#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 439
+  },
+  "scripts/profile-tui.py::run_once::pty.fork#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 437
+  },
+  "scripts/release.py::_default_branch::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 110
+  },
+  "scripts/release.py::_resume_canary::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 432
+  },
+  "scripts/release.py::_resume_canary::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 445
+  },
+  "scripts/release.py::dispatch_desktop_build::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 92
+  },
+  "scripts/release.py::git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 36
+  },
+  "scripts/release.py::git_result::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "scripts/release.py::prune_old_canaries::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 597
+  },
+  "scripts/releases/channel_build.py::cmd_channel::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 182
+  },
+  "scripts/releases/channel_releases.py::product_identity::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 42
+  },
+  "scripts/releases/commit_build.py::cmd_build_commit::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 227
+  },
+  "scripts/releases/commit_build.py::output::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 23
+  },
+  "scripts/releases/distance.py::_git::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 16
+  },
+  "scripts/releases/docker.py::output::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 97
+  },
+  "scripts/releases/entrypoint.py::_changelog::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 168
+  },
+  "scripts/releases/entrypoint.py::_claim_collision::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 66
+  },
+  "scripts/releases/entrypoint.py::_execute::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 494
+  },
+  "scripts/releases/entrypoint.py::_git::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 34
+  },
+  "scripts/releases/entrypoint.py::_inspect::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 500
+  },
+  "scripts/releases/entrypoint.py::_require_ancestry::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 139
+  },
+  "scripts/releases/entrypoint.py::_require_remote_main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 57
+  },
+  "scripts/releases/entrypoint.py::cmd_release.execute::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 467
+  },
+  "scripts/releases/entrypoint.py::release::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 230
+  },
+  "scripts/releases/pick_tags.py::pick_tags::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 12
+  },
+  "scripts/releases/sequencer.py::output::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 82
+  },
+  "scripts/releases/stable.py::output::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 386
+  },
+  "scripts/releases/store.py::_cli_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 94
+  },
+  "scripts/releases/versioning.py::_gh::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 96
+  },
+  "scripts/render-builds-table.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 723
+  },
+  "scripts/render-builds-table.py::main::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 744
+  },
+  "scripts/run_tests_parallel.py::_kill_tree::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 357
+  },
+  "scripts/run_tests_parallel.py::_run_one_file_once::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 540
+  },
+  "scripts/sample_and_compress.py::sample_from_datasets::multiprocessing.Pool#1": {
+   "verdict": "b",
+   "why": "refused when confined: multiprocessing's spawn reaches _posixsubprocess.fork_exec (a dev script) (scripts/sample_and_compress.py:173)",
+   "line": 173
+  },
+  "scripts/smoke_nemo_relay_shared_metrics.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 745
+  },
+  "scripts/smoke_nemo_relay_shared_metrics.py::main::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 795
+  },
+  "scripts/termux/build.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 63
+  },
+  "scripts/termux/build_environment.py::assemble::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 47
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 151
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 173
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 178
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#4": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 190
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#5": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 198
+  },
+  "scripts/termux/build_wheels.py::build_wheels::subprocess.run#6": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 215
+  },
+  "scripts/termux/build_wheels.py::fetch_pure_wheels::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 295
+  },
+  "scripts/termux/build_wheels.py::retag_all::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 320
+  },
+  "scripts/termux/build_wheels.py::wheelhouse_gates::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 372
+  },
+  "scripts/termux/python_linkage.py::link_extension::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 23
+  },
+  "scripts/termux/python_linkage.py::link_extension::subprocess.check_output#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 31
+  },
+  "scripts/termux/python_linkage.py::link_extension::subprocess.check_output#3": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 34
+  },
+  "scripts/termux/python_linkage.py::link_extension::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 44
+  },
+  "scripts/termux/stage_apt_repo.py::_gpg_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 384
+  },
+  "scripts/termux/stage_apt_repo.py::deb_control_fields_and_bytes::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 98
+  },
+  "scripts/termux/validate_installed.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 145
+  },
+  "scripts/termux/validate_installed.py::run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 16
+  },
+  "scripts/termux/validate_installed.py::tui_smoke::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 48
+  },
+  "scripts/verify-bootstrap-version-stamp.py::_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 82
+  },
+  "scripts/write_install_stamp.py::_run_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 68
+  },
+  "skills/productivity/google-workspace/scripts/google_api.py::_run_gws::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 108
+  },
+  "skills/productivity/google-workspace/scripts/gws_bridge.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 113
+  },
+  "skills/productivity/pdf/scripts/_raster.py::_via_pdftoppm::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 69
+  },
+  "skills/productivity/powerpoint/scripts/pptx_render.py::render::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 49
+  },
+  "skills/productivity/powerpoint/scripts/pptx_render.py::render::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 59
+  },
+  "skills/productivity/xlsx/scripts/xlsx_recalc.py::main::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 81
+  },
+  "tools/async_delegation_recovery_hints.py::git_state_hint.run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 58
+  },
+  "tools/bot_desktop/install.py::_run::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 144
+  },
+  "tools/bot_desktop/install.py::_sudo_nopasswd::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 118
+  },
+  "tools/bot_desktop/runtime.py::_spawn_and_wait::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 746
+  },
+  "tools/bot_desktop/sandbox_host.py::marker_sandbox_alive::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 93
+  },
+  "tools/bot_mode_dm.py::_run_delivery::subprocess.run#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: the hermes CLI beside the interpreter (an entry point: hermes_bootstrap first) (tools/bot_mode_dm.py:639)",
+   "line": 639
+  },
+  "tools/bot_mode_dm.py::_run_local_turn._turn::subprocess.run#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: the hermes CLI beside the interpreter (an entry point: hermes_bootstrap first) (tools/bot_mode_dm.py:430)",
+   "line": 430
+  },
+  "tools/browser_lightpanda.py::_binary_supports_http_cache::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 118
+  },
+  "tools/browser_lightpanda.py::launch_lightpanda::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 216
+  },
+  "tools/browser_tool_lifecycle.py::_legacy_kill_process_tree::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 515
+  },
+  "tools/browser_tool_real_profile.py::_launch_real_profile_chrome::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 202
+  },
+  "tools/browser_tool_session.py::_popen_agent_browser::subprocess.Popen#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, browser: agent-browser and its browser (programs.py browser_widening) (tools/browser_tool_session.py:240)",
+   "line": 240
+  },
+  "tools/browser_use_cli.py::_kill_cli_process_group::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 582
+  },
+  "tools/browser_use_cli.py::_run_cli_killing_process_group::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 598
+  },
+  "tools/checkpoint_manager.py::_init_store::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 549
+  },
+  "tools/checkpoint_manager.py::_run_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 394
+  },
+  "tools/code_execution_env.py::_probe_python::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 210
+  },
+  "tools/code_kernel.py::_spawn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 639
+  },
+  "tools/computer_use/cua_backend.py::_run_quiet::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend.py:195)",
+   "line": 195
+  },
+  "tools/computer_use/cua_backend_capture.py::_linux_x11_active_window_id::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_capture.py:52)",
+   "line": 52
+  },
+  "tools/computer_use/cua_backend_daemon.py::_EmbeddedCuaDaemon.start::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_daemon.py:171)",
+   "line": 171
+  },
+  "tools/computer_use/cua_backend_session.py::_CuaDriverSession._lifecycle_coro::mcp.StdioServerParameters#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:235)",
+   "line": 235
+  },
+  "tools/computer_use/cua_backend_session.py::_CuaDriverSession._lifecycle_coro::mcp.client.stdio.stdio_client#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:236)",
+   "line": 236
+  },
+  "tools/computer_use/cua_backend_session.py::_cli_run_json::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:105)",
+   "line": 105
+  },
+  "tools/computer_use/doctor.py::_open_mcp::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:120)",
+   "line": 120
+  },
+  "tools/computer_use/doctor.py::_run_cli::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:47)",
+   "line": 47
+  },
+  "tools/computer_use/permissions.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/permissions.py:52)",
+   "line": 52
+  },
+  "tools/computer_use/permissions.py::request_permissions_grant::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/permissions.py:135)",
+   "line": 135
+  },
+  "tools/env_probe.py::_run::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: python/pip --version with cwd / (tools/env_probe.py:71)",
+   "line": 71
+  },
+  "tools/environments/base_output.py::_popen_bash::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 256
+  },
+  "tools/environments/docker.py::DockerEnvironment._docker_run::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 1023
+  },
+  "tools/environments/docker.py::DockerEnvironment._storage_opt_supported::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 1187
+  },
+  "tools/environments/docker.py::DockerEnvironment.cleanup._do_cleanup::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 1289
+  },
+  "tools/environments/host_lane.py::_guard_fork_exec::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "not a spawn: the guard reads Popen._execute_child's code object to recognise subprocess' own fork_exec (tools/environments/host_lane.py:312)",
+   "line": 312
+  },
+  "tools/environments/local.py::LocalEnvironment._run_bash::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 1088
+  },
+  "tools/environments/remote_common.py::run_capture::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 81
+  },
+  "tools/environments/ssh.py::SSHEnvironment._ssh_bulk_download::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 257
+  },
+  "tools/environments/ssh.py::SSHEnvironment._ssh_bulk_upload::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 212
+  },
+  "tools/environments/ssh.py::SSHEnvironment._ssh_bulk_upload::subprocess.Popen#2": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 215
+  },
+  "tools/environments/ssh.py::SSHEnvironment.cleanup::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 299
+  },
+  "tools/environments/streams.py::open_stream::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 95
+  },
+  "tools/environments/streams.py::run_in::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 105
+  },
+  "tools/file_operations_lint.py::LintMixin._run_managed_node_linter::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 211
+  },
+  "tools/file_operations_search.py::SearchMixin._run_rg_native::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 351
+  },
+  "tools/mcp_oauth.py::_announce_authorization_url::webbrowser.open#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): webbrowser -> osascript/open (NEVER_EXEC); the URL is still printed (tools/mcp_oauth.py:784)",
+   "line": 784
+  },
+  "tools/mcp_tool.py::_spawn_death_supervisor::subprocess.Popen#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: tools/mcp_death_supervisor.py (imports hermes_bootstrap first) (tools/mcp_tool.py:550)",
+   "line": 550
+  },
+  "tools/mcp_tool_transport.py::MCPServerTransportMixin._run_stdio::*.StdioServerParameters#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 390
+  },
+  "tools/mcp_tool_transport.py::MCPServerTransportMixin._run_stdio::*.stdio_client#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 422
+  },
+  "tools/process_registry.py::ProcessRegistry._spawn_local_pty::ptyprocess.PtyProcess#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1189
+  },
+  "tools/process_registry.py::ProcessRegistry.spawn_local::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1241
+  },
+  "tools/process_registry.py::_stop_systemd_unit::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 485
+  },
+  "tools/process_registry.py::_systemd_run_user_scope_available::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 283
+  },
+  "tools/process_registry_termination.py::ProcessTerminationMixin._terminate_host_pid::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 56
+  },
+  "tools/read_extract.py::_pdf_page_texts::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 262
+  },
+  "tools/self_repo_guard.py::_read_git_alias::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 447
+  },
+  "tools/skillevaluator_scan.py::run_tier1_scan::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 107
+  },
+  "tools/subagent_worktree.py::_run_git::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 32
+  },
+  "tools/terminal_tool_backends.py::_check_requirements::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 344
+  },
+  "tools/transcription_audio.py::_run_quiet::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, media when the caller names its files (ffmpeg/ffprobe/afconvert); a configured command names none and is refused (tools/transcription_audio.py:55)",
+   "line": 55
+  },
+  "tools/transcription_local.py::_sysctl_value::subprocess.check_output#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: /usr/sbin/sysctl -n <fixed key> (tools/transcription_local.py:139)",
+   "line": 139
+  },
+  "tools/tts_command_provider.py::run_command_provider::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 180
+  },
+  "tools/tts_command_provider.py::terminate_command_process_tree::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 107
+  },
+  "tools/tts_tool_delivery.py::_ffmpeg_run::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, media: ffmpeg on the files Hermes names (tools/tts_tool_delivery.py:219)",
+   "line": 219
+  },
+  "tools/tts_tool_local.py::_run_helper::subprocess.run#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: tools/neutts_synth.py (imports hermes_bootstrap first); piper's downloader is refused when confined (tools/tts_tool_local.py:63)",
+   "line": 63
+  },
+  "tools/vision_tools_image_prep.py::_rasterize_svg_to_png::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, media: rsvg-convert/inkscape, the one SVG in, the one PNG out (tools/vision_tools_image_prep.py:151)",
+   "line": 151
+  },
+  "tools/voice_mode.py::_run_quiet::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 166
+  },
+  "tools/voice_mode.py::_run_system_player::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused when confined (ruling 56): afplay/ffplay need the audio services the profile does not open; the app plays audio itself (tools/voice_mode.py:1105)",
+   "line": 1105
+  },
+  "tools/voice_mode.py::_wsl_powershell_player_cmd._out::subprocess.check_output#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 1064
+  },
+  "tools/working_diff.py::_run::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 44
+  },
+  "tui_gateway/compute_host.py::_rss_mb::subprocess.check_output#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: ps -o rss= on its own pid (tui_gateway/compute_host.py:533)",
+   "line": 533
+  },
+  "tui_gateway/host_supervisor.py::HostSupervisor._spawn_locked::subprocess.Popen#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: -m tui_gateway.compute_host (an entry point: hermes_bootstrap first) (tui_gateway/host_supervisor.py:341)",
+   "line": 341
+  },
+  "tui_gateway/host_supervisor.py::_check_output::subprocess.check_output#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: ps/lsof/git on Hermes' own child and tree (git: unknown when the profile cannot read the tree) (tui_gateway/host_supervisor.py:87)",
+   "line": 87
+  },
+  "tui_gateway/methods_complete_helpers.py::_git_repo_files::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (critic r4 m2): complete.path's git file listing; completion falls back to the folder walk (tui_gateway/methods_complete_helpers.py:34)",
+   "line": 34
+  },
+  "tui_gateway/methods_complete_helpers.py::_git_repo_files::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused when confined (critic r4 m2): complete.path's git file listing; completion falls back to the folder walk (tui_gateway/methods_complete_helpers.py:38)",
+   "line": 38
+  },
+  "tui_gateway/methods_prompt.py::_::subprocess.run#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, media: pdftoppm, the attached PDF in, pages into the fresh folder Hermes made (tui_gateway/methods_prompt.py:952)",
+   "line": 952
+  },
+  "tui_gateway/methods_tools.py::_captured_exec::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (critic r4 m2): RPC cli.exec / shell.exec run argv on the host; refused at runtime (error 5017/5003) (tui_gateway/methods_tools.py:206)",
+   "line": 206
+  },
+  "tui_gateway/methods_tools.py::_dispatch_quick::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused when confined (critic r4 m2): exec-type quick_commands (shell=True, config-chosen) (tui_gateway/methods_tools.py:579)",
+   "line": 579
+  },
+  "tui_gateway/server.py::_SlashWorker.__init__::subprocess.Popen#1": {
+   "verdict": "h",
+   "why": "the confined runtime itself: -P -m tui_gateway.slash_worker (hermes_bootstrap first) (tui_gateway/server.py:296)",
+   "line": 296
+  }
+ }
+}

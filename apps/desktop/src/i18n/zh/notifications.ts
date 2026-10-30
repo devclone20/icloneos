@@ -1,0 +1,71 @@
+import type { Translations } from '../types'
+
+export const notifications: Translations['notifications'] = {
+  region: '通知',
+  hide: '隐藏',
+  show: '显示',
+  more: count => `另外 ${count} 条通知`,
+  clearAll: '全部清除',
+  dismiss: '关闭通知',
+  details: '详情',
+  copyDetail: '复制详情',
+  copyDetailFailed: '无法复制通知详情',
+  backendOutOfDateTitle: '后端版本过旧',
+  backendOutOfDateMessage: '你的智能体后端早于当前桌面构建，可能无法正常工作。请更新以保持一致。',
+  installMethodUnsupportedTitle: '不受支持的安装方式',
+  updateHermes: '更新智能体',
+  updateReadyTitle: '有可用更新',
+  updateReadyMessage: count => `有 ${count} 项新更改可用。`,
+  updateReadyMessageUnknown: '有新更新可用。',
+  seeWhatsNew: '查看更新内容',
+  mcp: {
+    needsAuthTitle: 'MCP 服务器需要重新认证',
+    needsAuthMessage: name => `${name} MCP 需要重新认证。`,
+    errorTitle: 'MCP 服务器无法连接',
+    errorMessage: name => `${name} MCP 健康检查失败。`,
+    signIn: '登录',
+    view: '查看'
+  },
+  errors: {
+    elevenLabsNeedsKey: 'ElevenLabs STT 需要 ELEVENLABS_API_KEY。',
+    elevenLabsRejectedKey: 'ElevenLabs 拒绝了该 API key (401)。',
+    diskFull: '磁盘已满 — 请腾出一些空间后再试。',
+    gatewayAuthFailed: '网关认证失败 — 请检查你的 API_SERVER_KEY。',
+    methodNotAllowed: '桌面后端拒绝了该请求 (405 Method Not Allowed)。请尝试重启 iclone os。',
+    microphonePermission: '麦克风权限已被拒绝。',
+    openaiRejectedApiKey: 'OpenAI 拒绝了该 API key。',
+    openaiRejectedApiKeyWithStatus: status => `OpenAI 拒绝了该 API key (${status} invalid_api_key)。`,
+    openaiTtsNeedsKey: 'OpenAI TTS 需要 VOICE_TOOLS_OPENAI_KEY 或 OPENAI_API_KEY。'
+  },
+  voice: {
+    configureSpeechToText: '配置语音转文字后即可使用语音模式。',
+    couldNotStartSession: '无法启动语音会话',
+    microphoneAccessDenied: '麦克风访问被拒绝。',
+    microphoneConstraintsUnsupported: '此设备不支持当前麦克风约束。',
+    microphoneFailed: '麦克风出错',
+    microphoneInUse: '麦克风正被其他应用占用。',
+    microphonePermissionDenied: '麦克风权限被拒绝。',
+    microphoneStartFailed: '无法开始麦克风录音。',
+    microphoneUnsupported: '当前运行环境不支持麦克风录音。',
+    noMicrophone: '未找到麦克风。',
+    noSpeechDetected: '没有检测到语音',
+    playbackFailed: '语音播放失败',
+    recordingFailed: '语音录制失败',
+    sayStopToEnd: phrase => `说“${phrase}”即可结束语音对话。`,
+    transcriptionFailed: '语音转写失败',
+    transcriptionUnavailable: '语音转写暂不可用。',
+    tryRecordingAgain: '请再录一次。',
+    unavailable: '语音不可用'
+  },
+  native: {
+    approvalTitle: '需要批准',
+    inputTitle: '需要输入',
+    inputBody: '智能体正在等待你的回应。',
+    turnDoneTitle: '智能体已完成',
+    turnDoneBody: '',
+    turnErrorTitle: '本轮失败',
+    backgroundDoneTitle: '后台任务已完成',
+    backgroundFailedTitle: '后台任务失败',
+    creditsTitle: '额度'
+  }
+}

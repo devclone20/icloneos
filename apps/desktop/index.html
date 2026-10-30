@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en" style="background-color: #0b0a10; color-scheme: dark">
+  <!--
+    First paint = OUR night (--ic-ink-900 in src/app/home/ic-tokens.css; guarded
+    by src/app/shell/boot-paint.test.ts), set before any script runs so the
+    frame `ready-to-show` waits for is never the UA white nor an upstream colour.
+  -->
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      CSP (P7 M5). srcdoc/blob previews (generated artifacts, inline HTML) inherit
+      this policy, so inline scripts and the CDNs those previews load stay allowed;
+      eval never is. connect/img/media stay scheme-wide because the backend is a
+      user-chosen gateway (loopback, LAN http or remote https). Guarded by
+      electron/renderer-csp.test.ts.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com https://esm.sh https://cdn.tailwindcss.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://unpkg.com; font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; img-src 'self' data: blob: https: http: hermes-media:; media-src 'self' data: blob: https: http: hermes-media:; connect-src 'self' data: blob: hermes-media: https: wss: http: ws:; frame-src 'self' blob: data: https://hermes-agent.nousresearch.com https://www.youtube-nocookie.com https://open.spotify.com https://player.vimeo.com https://www.instagram.com https://www.tiktok.com https://maps.google.com https://www.openstreetmap.org https://assets.pinterest.com; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0b0a10" />
+    <link rel="icon" type="image/png" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="shortcut icon" href="/apple-touch-icon.png" />
+    <title>iclone os</title>
+    <!--
+      Boot void: until the renderer mounts anything into #root, the window is
+      pure black (--ic-black), the field the boot screen (GODS &amp; ROBOTS,
+      gateway-connecting-overlay.tsx) paints too, so there is no frame of
+      another colour between the first paint and the overlay. !important outranks
+      the night on <html>, which stays the app's base once #root has content.
+      Guarded by src/app/shell/boot-paint.test.ts.
+    -->
+    <style>
+      html:has(> body > #root:empty) {
+        background-color: #000000 !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="scrollbar-dt"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

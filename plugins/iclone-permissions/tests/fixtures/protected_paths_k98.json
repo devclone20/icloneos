@@ -1,0 +1,23 @@
+{
+  "_comment": "K98: protectedPaths() for this synthetic input, pinned by electron/iclone-permissions/protected-paths.k98.test.ts",
+  "input": {
+    "userDataDir": "/ud",
+    "hermesHome": "/home/u/.hermes",
+    "home": "/home/u",
+    "hermesRoot": null
+  },
+  "protectedPaths": [
+    "/ud/permissions",
+    "/ud/consent.json",
+    "/ud/run",
+    "/ud/confinement",
+    "/ud/payments",
+    "/home/u/.hermes/config.yaml",
+    "/home/u/.hermes/.env",
+    "/home/u/.hermes/plugins",
+    "/home/u/.hermes/iclone-perm-spool",
+    "/home/u/.hermes/iclone-perm-stats",
+    "/ud/acp-work",
+    "/home/u/Library/Caches/iclone-os-confinement/members"
+  ]
+}

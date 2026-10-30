@@ -1,0 +1,117 @@
+.ic-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ic-compact[data-variant='head'] {
+  display: inline-flex;
+}
+
+.ic-compact__bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ic-compact__action {
+  border-radius: var(--ic-radius-sm, 6px);
+  font-variant-numeric: tabular-nums;
+}
+
+.ic-compact__glyph {
+  width: 14px;
+  height: 14px;
+}
+
+.ic-compact__progress,
+.ic-compact__reason {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ic-compact__progress {
+  color: var(--ic-text-2, currentColor);
+  font-variant-numeric: tabular-nums;
+}
+
+.ic-compact__reason {
+  color: var(--ic-text-3, currentColor);
+}
+
+.ic-compact-result {
+  --ic-compact-tone: var(--ic-text-3, currentColor);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--ic-win-frame-line, transparent);
+  border-radius: var(--ic-radius-md, 8px);
+  color: var(--ic-text-2, currentColor);
+  font-size: 11px;
+  line-height: 16px;
+  animation: ic-compact-in var(--ic-dur-base, 180ms) var(--ic-ease-std, ease-out);
+}
+
+.ic-compact-result[data-tone='ok'] {
+  --ic-compact-tone: var(--ic-accent, currentColor);
+}
+
+.ic-compact-result[data-tone='warn'] {
+  --ic-compact-tone: var(--ic-warning, currentColor);
+}
+
+.ic-compact-result[data-tone='danger'] {
+  --ic-compact-tone: var(--ic-danger, currentColor);
+}
+
+.ic-compact-result__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ic-text-1, currentColor);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ic-compact-result__dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ic-radius-round, 50%);
+  background: var(--ic-compact-tone);
+}
+
+.ic-compact-result__delta {
+  margin-left: auto;
+  color: var(--ic-compact-tone);
+  font-variant-numeric: tabular-nums;
+}
+
+.ic-compact-result__metrics {
+  color: var(--ic-text-1, currentColor);
+  font-variant-numeric: tabular-nums;
+}
+
+.ic-compact-result__line {
+  overflow-wrap: anywhere;
+}
+
+@keyframes ic-compact-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-compact-result {
+    animation: none;
+  }
+}

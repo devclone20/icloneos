@@ -1,0 +1,65 @@
+/* home.css (which imports the ic tokens) is not loaded in this window: styles.css is, but the tokens
+   are not in it, so they are imported here (AD8). */
+@import '../home/ic-tokens.css';
+
+.wake-indicator-surface {
+  align-items: flex-start;
+  background: transparent;
+  display: flex;
+  height: 100vh;
+  justify-content: center;
+  padding-top: 5px;
+  pointer-events: none;
+  width: 100vw;
+}
+
+.wake-indicator-light {
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.2);
+  background: var(--ic-wake-fill);
+  border: 1px solid var(--ic-wake-edge);
+  border-radius: var(--ic-radius-pill);
+  box-shadow:
+    0 0 10px var(--ic-wake-glow),
+    0 0 24px var(--ic-wake-halo);
+  height: 28px;
+  opacity: 0;
+  transform: scale(0.96);
+  transition:
+    opacity 500ms ease-out,
+    transform 500ms ease-out;
+  width: 120px;
+}
+
+.wake-indicator-surface[data-state='detected'] .wake-indicator-light {
+  animation: wake-indicator-breathe 2.5s ease-in-out infinite;
+}
+
+.wake-indicator-surface[data-state='capturing'] .wake-indicator-light {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@keyframes wake-indicator-breathe {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: scale(0.96);
+  }
+
+  50% {
+    opacity: 0.94;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wake-indicator-light {
+    transition: opacity 200ms ease-out;
+  }
+
+  .wake-indicator-surface[data-state='detected'] .wake-indicator-light {
+    animation: none;
+    opacity: 0.72;
+    transform: scale(1);
+  }
+}

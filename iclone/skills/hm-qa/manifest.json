@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "name": "hm-qa",
+  "version": "1.0.0",
+  "author": "Rodrigo Lopes",
+  "license": "MIT",
+  "upstream": {
+    "name": "highermind-code-skills",
+    "url": "https://github.com/rodrigohighermind/highermind-code-skills",
+    "license_file": "LICENSE",
+    "copyright": [
+      "Copyright (c) 2026 Rodrigo Lopes"
+    ]
+  },
+  "source": {
+    "library": "claude-code-skills",
+    "path": "hm-qa",
+    "version": null,
+    "sha256": "d210d4fb8c4002d441cc49195ad47fcd1fab8c11868bfe1a8d926fb5696aff2b",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [],
+  "requires": {
+    "os": [],
+    "bins": [],
+    "mcp": [],
+    "paths": []
+  },
+  "touches": [
+    "X"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 0,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 1
+  }
+}

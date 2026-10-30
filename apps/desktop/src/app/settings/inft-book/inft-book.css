@@ -1,0 +1,185 @@
+/* iNFT Book — layout only (design freeze S24): every colour, line, radius and
+   type size comes from the Home card language in home/collections.css and the
+   `--ic-*` tokens; this file adds geometry and nothing else — except the card's
+   checkbox and status mark below, the owner's part request (ruling 46), scoped
+   to `.inft-book__*` so Home's cards and the shared Checkbox never change. */
+
+.inft-book {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 0 16px 16px;
+}
+
+.inft-book__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  /* The bars sit right under the page head, still beside the window's control column: their end keeps the same
+     clearance as the head (the book's own 16px is already in .inft-book). */
+  padding-inline-end: calc(var(--icpg-head-inset-end, 16px) - 16px);
+}
+
+.inft-book__bar-end {
+  margin-inline-start: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.inft-book__status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.inft-book__scroll {
+  position: relative;
+  flex: 1;
+  min-height: 240px;
+  overflow-y: auto;
+  contain: strict;
+}
+
+.inft-book__spacer {
+  position: relative;
+  width: 100%;
+}
+
+.inft-book__row {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.inft-book__card.inft-card {
+  height: 176px;
+  cursor: pointer;
+  transform: none;
+}
+
+.inft-book__card .inft-card__headmark {
+  width: 56px;
+  height: 56px;
+}
+
+.inft-book__check {
+  position: absolute;
+  top: 12px;
+  inset-inline-start: 12px;
+}
+
+/* Ruling 46 — the face carries no text: the checkbox and the status mark are
+   both small pieces of dark glass (translucent black + the house glass blur, a
+   light hairline, a whisper of elevation). Always dark, whatever the app
+   theme: they sit on the art, not on the app surface. Every radius, stroke,
+   blur and alpha is an `--ic-*` token (style ratchet, plan AD8). */
+
+/* The bottom legibility scrim protected the name and collection; the Book card
+   no longer writes them, so its art shows unshaded. */
+.inft-book__card .inft-card__art:has(.inft-card__img)::after {
+  content: none;
+}
+
+.inft-book__card .inft-book__check {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: var(--ic-radius-xs);
+  /* No saturate boost here: the box reads dark on any art, never tinted by it. */
+  background: color-mix(in srgb, var(--ic-black) var(--ic-a75), transparent);
+  backdrop-filter: blur(var(--ic-blur-glass));
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass));
+  box-shadow:
+    var(--ic-shadow-stroke-edge) color-mix(in srgb, var(--ic-white) var(--ic-a35), transparent),
+    var(--ic-shadow-e1) color-mix(in srgb, var(--ic-black) var(--ic-a25), transparent);
+  color: var(--ic-white);
+  transition: background-color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.inft-book__card .inft-book__check[data-state='checked'] {
+  background: color-mix(in srgb, var(--ic-black) var(--ic-a85), transparent);
+  box-shadow:
+    var(--ic-shadow-stroke-edge) color-mix(in srgb, var(--ic-white) var(--ic-a54), transparent),
+    var(--ic-shadow-stroke-glint) color-mix(in srgb, var(--ic-white) var(--ic-a25), transparent),
+    var(--ic-shadow-e1) color-mix(in srgb, var(--ic-black) var(--ic-a30), transparent);
+}
+
+/* The box-shadow above replaces the primitive's focus ring; the keyboard ring comes back as the card's own outline. */
+.inft-book__card .inft-book__check:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* The shared Checkbox sizes its glyph inline (0.875rem); the smaller box needs a smaller check. */
+.inft-book__check [data-slot='checkbox-indicator'] .codicon {
+  font-size: 11px !important;
+}
+
+/* The status mark: a 16px glass disc, 11px from the corner. Set up = the
+   success green (its dark-theme value: the disc is always dark) with a check
+   and a soft green halo; setup needed = a dim neutral ring. Static — no pulse,
+   so there is no motion to reduce. Glyph contrast on the disc over white art:
+   green 4.7:1, neutral 4.9:1. */
+.inft-book__mark {
+  --inft-book-mark-tone: color-mix(in srgb, var(--ic-white) var(--ic-a67), transparent);
+  --inft-book-mark-line: color-mix(in srgb, var(--ic-white) var(--ic-a25), transparent);
+  --inft-book-mark-halo: color-mix(in srgb, var(--ic-white) var(--ic-a10), transparent);
+
+  position: absolute;
+  inset-block-end: 11px;
+  inset-inline-end: 11px;
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--ic-radius-round);
+  pointer-events: none;
+  color: var(--inft-book-mark-tone);
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in srgb, var(--ic-white) var(--ic-a14), transparent) 0%,
+      transparent 58%
+    ),
+    color-mix(in srgb, var(--ic-black) var(--ic-a72), transparent);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.4);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.4);
+  box-shadow:
+    var(--ic-shadow-stroke-edge) var(--inft-book-mark-line),
+    var(--ic-shadow-stroke-glow) var(--inft-book-mark-halo);
+}
+
+.inft-book__mark[data-state='set'] {
+  --inft-book-mark-tone: var(--ic-green-400);
+  --inft-book-mark-line: color-mix(in srgb, var(--ic-green-400) var(--ic-a45), transparent);
+  --inft-book-mark-halo: color-mix(in srgb, var(--ic-green-400) var(--ic-a48), transparent);
+}
+
+.inft-book__mark-glyph {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.inft-book__mark[data-state='needed'] .inft-book__mark-glyph {
+  stroke-width: 1.2;
+}
+
+/* Forced colours (Windows high contrast) drop box-shadows and backgrounds: a
+   system-colour border keeps both the box and the mark visible. */
+@media (forced-colors: active) {
+  .inft-book__card .inft-book__check,
+  .inft-book__mark {
+    border: 1px solid CanvasText;
+  }
+}

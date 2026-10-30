@@ -1,0 +1,21 @@
+/* V3-I — ACP Market › Work. Layout only: colours, type and surfaces come from econ.css and market.css. */
+
+.mk-work .e-section {
+  margin-top: 18px;
+}
+
+.mk-work-levels {
+  padding: 4px 0 8px;
+}
+
+.mk-work-trace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+/* A missing hop stays visibly missing: never filled in, never hidden. */
+.mk-work-trace [data-gap] {
+  font-style: italic;
+  text-decoration: underline dotted;
+}

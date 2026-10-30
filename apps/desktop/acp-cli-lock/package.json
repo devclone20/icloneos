@@ -1,0 +1,9 @@
+{
+  "name": "iclone-acp-cli-stage",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The Virtuals ACP CLI tree that stage-acp-cli.mjs installs with npm ci and ships in Resources/acp-cli (REL-4, ruling 24). Pinned: bump only with ACP_CLI_VERSION.",
+  "dependencies": {
+    "@virtuals-protocol/acp-cli": "1.0.38"
+  }
+}

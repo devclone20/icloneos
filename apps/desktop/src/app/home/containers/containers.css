@@ -1,0 +1,95 @@
+/* V3-G — the Containers window. Layout only: every colour, radius and type size is a token (ic-tokens.css, and the
+   econ window's own --e-* variables), the rows, pills, notes and rails are EconomyOS parts (econ.css). */
+
+.iecon[data-kind='containers'] .icont__verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.icont__verdict-hint {
+  overflow: hidden;
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icont__tally {
+  margin-left: auto;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--e-faint);
+  white-space: nowrap;
+}
+
+.icont__live,
+.icont__agents,
+.icont__profiles,
+.icont__follow,
+.icont__hardlinks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* A confined tree reads as one block: the root, then its children under one hairline. */
+.icont__group + .icont__group {
+  border-top: 1px solid var(--e-line);
+}
+
+.icont__command {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.icont__command--child {
+  padding-inline-start: 14px;
+  border-inline-start: 1px solid var(--e-line-strong);
+}
+
+.icont__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icont__muted {
+  font-size: var(--ic-type-sm);
+  color: var(--e-faint);
+}
+
+.icont__explain {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+.icont__profile + .icont__profile,
+.icont__agent + .icont__agent {
+  padding-top: 12px;
+  border-top: 1px solid var(--e-line);
+}
+
+.icont__detail {
+  display: block;
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.icont__owner-step {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--e-mono);
+  color: var(--e-faint);
+  user-select: text;
+}

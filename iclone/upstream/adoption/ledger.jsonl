@@ -1,0 +1,5 @@
+{"v":1,"at":"2026-10-07T04:00:00Z","by":"policy@2","cs":"CS-0250c8bcae","upstream":["0250c8bcae","ebe8cda8ea","d9f817dd7b","98d11c95f4","8e7e9be217"],"patch_ids":[],"decision":"adopt","lane":"compat","ticket":"ADP-0001","root":"server-requests"}
+{"v":1,"at":"2026-10-07T04:00:00Z","by":"policy@2","cs":"CS-0250c8bcae","upstream":["0250c8bcae","60fd0893c1","99433742dc","beacf4e942"],"patch_ids":[],"decision":"adopt","lane":"compat","ticket":"ADP-0002","root":"results"}
+{"v":1,"at":"2026-10-07T04:00:00Z","by":"policy@2","cs":"CS-1212a7f18c","upstream":["1212a7f18c"],"patch_ids":[],"decision":"adopt","lane":"compat","ticket":"ADP-0003","root":"surfaces"}
+{"v":1,"at":"2026-10-07T04:00:00Z","by":"policy@2","cs":"CS-355ab82811","upstream":["355ab82811","0250c8bcae","104bbe564e","4876472bbd","46afe9ff44"],"patch_ids":[],"decision":"adopt","lane":"compat","ticket":"ADP-0004","root":"params"}
+{"v":1,"at":"2026-10-07T04:00:00Z","by":"policy@2","cs":"CS-ebe8cda8ea","upstream":["ebe8cda8ea","99433742dc","0a2fd94515"],"patch_ids":[],"decision":"adopt","lane":"compat","ticket":"ADP-0005","root":"methods"}

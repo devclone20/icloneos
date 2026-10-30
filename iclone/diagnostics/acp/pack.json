@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "id": "acp",
+  "title": "Agent commerce (ACP)",
+  "order": 3,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "acp.wrapper",
+      "title": "acp command",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "acpWrapper",
+      "fix": "acp.rewrite_wrapper"
+    },
+    {
+      "id": "acp.registry",
+      "title": "iNFT registry",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "acpRegistry",
+      "fix": "acp.rerender_registry"
+    },
+    {
+      "id": "acp.private_files",
+      "title": "Private key and registry modes",
+      "severity": "fail",
+      "timeoutMs": 3000,
+      "network": false,
+      "impl": "acpPrivateFiles",
+      "fix": "acp.chmod_private"
+    }
+  ],
+  "fixes": [
+    {
+      "id": "acp.rewrite_wrapper",
+      "title": "Reinstall the acp command",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous ~/.iclone-os/bin/acp is in the backup folder.",
+      "impl": "rewriteWrapper"
+    },
+    {
+      "id": "acp.rerender_registry",
+      "title": "Rebuild the iNFT registry",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous inft.tsv is in the backup folder.",
+      "impl": "rerenderRegistry"
+    },
+    {
+      "id": "acp.chmod_private",
+      "title": "Make private files owner-only",
+      "risk": "low",
+      "consent": null,
+      "dryRun": true,
+      "backup": true,
+      "undo": "The previous file modes are listed in the backup manifest.",
+      "impl": "chmodPrivate"
+    }
+  ]
+}

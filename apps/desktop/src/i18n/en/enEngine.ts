@@ -1,0 +1,48 @@
+// iCLONE OS — Settings → Engine and the engine fallback banner (front R12).
+// English-only block, read directly by those two surfaces.
+export const enEngine = {
+  otherTitle: (provider: string) => `Run your agent on ${provider}`,
+  title: 'Choose what answers your agent',
+  nousTitle: 'Run your agent on the standard engine',
+  nousDescription: 'The default every agent starts on, answered by Nous Portal models.',
+  otherDescription: (model: string) => `Uses the provider you chose under Model${model ? `, with ${model}` : ''}.`,
+  claudeTitle: 'Run your agent on your Claude Code plan',
+  claudeDescription: 'Runs on the Claude Code already signed in on this computer. No API key, no credits.',
+  active: 'Active',
+  use: 'Use',
+  model: 'Which Claude model your agent uses',
+  statusTitle: 'Check that Claude Code is ready',
+  checking: 'Checking Claude Code…',
+  notInstalled: 'Claude Code is not installed on this computer.',
+  notLoggedIn: 'Claude Code is installed but not signed in.',
+  loggedIn: (plan: string) => `Claude Code is signed in and ready${plan ? ` on your ${plan} plan` : ''}.`,
+  version: (version: string) => `Version ${version}`,
+  window: (five: string, resets: string, seven: string) =>
+    [five ? `5-hour window ${five}` : '', resets ? `resets ${resets}` : '', seven ? `7-day ${seven}` : '']
+      .filter(Boolean)
+      .join(' · '),
+  windowUnknown: 'Usage window appears after the first reply.',
+  start: 'Start a conversation',
+  startDescription: 'Opens a new chat answered by Claude Code on your plan.',
+  installHelp: 'Install Claude Code once from a terminal',
+  loginHelp: 'Sign in to Claude Code once from a terminal',
+  copy: 'Copy',
+  copied: 'Copied',
+  recheck: 'Check again',
+  rechecking: 'Checking…',
+  checkedAt: (time: string) => `checked ${time}`,
+  statusUnavailable: 'Claude Code status could not be read.',
+  notReadyHint: 'Install and sign in to Claude Code first; the check below shows what is missing.',
+  privacyTitle: 'Claude Code keeps its chat history on this computer',
+  privacy: 'If Claude Code is unavailable, the reply comes from the engine you used before it.',
+  switchFailed: 'Could not switch the engine.',
+  switchFailedReason: (reason: string) => `Could not switch the engine: ${reason}`,
+  noModel: 'no model is recorded for that engine',
+  confirmTitle: 'Confirm the switch',
+  confirmFallback: 'Confirm this model before the engine switches.',
+  confirm: 'Confirm',
+  cancel: 'Cancel',
+  fallback: 'Your agent answered with a different provider this time.',
+  fix: 'Why?',
+  dismiss: 'Dismiss'
+}

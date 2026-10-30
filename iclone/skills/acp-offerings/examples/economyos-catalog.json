@@ -1,0 +1,84 @@
+{
+  "version": 1,
+  "inft": "robinhood-0x4dfb27e4e6ade6afc8a21ab14751ee8b7ac75631-6",
+  "offerings": [
+    {
+      "id": null,
+      "name": "token_report",
+      "description": "A one-page research note on any token: price, on-chain metrics, catalysts, risks and sources. Delivered as Markdown within the hour.",
+      "price": { "type": "fixed", "value": 0.5 },
+      "slaMinutes": 60,
+      "requirements": {
+        "type": "object",
+        "required": ["token"],
+        "properties": {
+          "token": { "type": "string", "description": "Ticker (BTC, VIRTUAL) or contract address" },
+          "asset_symbol": { "type": "string", "description": "Alias of token — either is accepted" },
+          "depth": { "type": "string", "enum": ["quick", "full"], "description": "quick = 1 page (default), full = 3 pages" }
+        }
+      },
+      "deliverable": "Markdown report (≤ 6 000 chars): summary · price and 24h change · key on-chain metrics · catalysts · risks · sources with URLs",
+      "requiredFunds": false,
+      "hidden": false,
+      "subscriptionIds": []
+    },
+    {
+      "id": null,
+      "name": "code_review",
+      "description": "Senior code review of a public repository or a pasted diff: correctness, security, performance, structure — with concrete fixes.",
+      "price": { "type": "fixed", "value": 3 },
+      "slaMinutes": 120,
+      "requirements": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {
+          "source": { "type": "string", "description": "Public git URL, or the diff/code itself (≤ 20 000 chars)" },
+          "focus": { "type": "string", "description": "Optional: what to look at first (security, perf, tests…)" },
+          "language": { "type": "string", "description": "Optional: main language, if not obvious" }
+        }
+      },
+      "deliverable": {
+        "type": "object",
+        "required": ["summary", "findings"],
+        "properties": {
+          "summary": { "type": "string" },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["severity", "title", "fix"],
+              "properties": {
+                "severity": { "type": "string", "enum": ["critical", "high", "medium", "low"] },
+                "title": { "type": "string" },
+                "where": { "type": "string" },
+                "fix": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "requiredFunds": false,
+      "hidden": false,
+      "subscriptionIds": []
+    }
+  ],
+  "resources": [
+    {
+      "id": null,
+      "name": "iclone_docs",
+      "description": "Public documentation index of the iCLONE OS project (read-only).",
+      "url": "https://cloneframe.io/",
+      "params": { "type": "object", "required": [], "properties": {} },
+      "hidden": false
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": null,
+      "packageId": null,
+      "name": "Research Monthly",
+      "price": 25,
+      "durationDays": 30
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "sha": "1f32d01287eb536ed074e05efe2098f988df73cb",
+  "date": "2026-10-28",
+  "python": "3.14.7",
+  "pycs": 2302,
+  "python_build": {
+    "version": "3.14.7 (main, Sep  1 2026, 14:05:28) [Clang 22.1.3 ]",
+    "build": [
+      "main",
+      "Sep  1 2026 14:05:28"
+    ],
+    "executable_sha256": "e10c4aa36d1774fb13d1a00a99354f844322199243be54f0b050d221d1d887d8"
+  },
+  "gzip": "zlib 1.3.2.1-motley-8002e91 level 9",
+  "node": "v26.8.1",
+  "source": "repo",
+  "upstream": "1ac3f97fbe0958aa2743c0c26202b20b3b4e760e",
+  "tarball_sha256": "bbf9178fb1cfe4f731b65cc8fb0f9473382d359e07ff3257724c3acd5cd160ba",
+  "tarball_bytes": 46209523,
+  "install_sh_sha256": "14b4c89518cf0e4e71841708dd5d8a28f1f494d22cd20e12f4d5eeb29c7d2fdb",
+  "manifest_sha256": "6e7e3e95b3c528a0bae2c61f94869d2763b1b17d98ba72a80711896fa3c60ba7",
+  "files": 6434,
+  "bytes": 128300966,
+  "min_app": "1.1.0",
+  "verified": "amber:3-roots"
+}

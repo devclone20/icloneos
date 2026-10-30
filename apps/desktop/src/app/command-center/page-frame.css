@@ -1,0 +1,255 @@
+/* The page frame shared by OUR workspace pages (cron, agents) and by the
+   Command Center pane inside Settings (front K5 — see .icpage-embed below).
+   It is the AD2 window language — one plate, one head, one control corner —
+   expressed for a page that floats over the home stage instead of docking:
+   only --ic-* tokens, no upstream (--ui-/--dt-/--theme-) reference, so the
+   pages survive the removal of the Hermes design layer (E3, owner #8).
+   Geometry mirrors .ic-win (home/window/ic-window.css): same frame radius,
+   same gilt hairline, same control pill, same durations. */
+
+.icpage {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  padding: 40px 22px 22px;
+  background: var(--ic-overlay-scrim);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.2);
+}
+
+/* front K5: the same head, rail and main with NO window of its own — the
+   Settings body already drew the card, so there is no scrim, no plate and no
+   control corner. The geometry is the plate's (flex column, both mins zero,
+   clipped) because the children below assume exactly that; the head's right
+   inset drops to the left one, there being no control corner left to clear. */
+.icpage-embed {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.icpage-embed .icpage__head {
+  padding: 14px 26px;
+}
+
+.icpage__frame {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: var(--ic-frame-radius);
+  border: 1px solid var(--ic-win-frame-line);
+  background: var(--ic-surface);
+  box-shadow: var(--ic-shadow-frame);
+  outline: none;
+}
+
+/* macOS drag strip, CUT AROUND the control corner instead of carved out of it:
+   a carve-out on a transformed child is the one macOS is known to drop, and
+   when it does the close button becomes a window drag (overlay-view.tsx paid
+   for that lesson). */
+.icpage__drag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 128px;
+  height: 46px;
+  pointer-events: none;
+  -webkit-app-region: drag;
+}
+
+.icpage__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  box-sizing: border-box;
+  padding: 18px 76px 14px 26px;
+  border-bottom: 1px solid var(--ic-border-subtle);
+}
+
+.icpage__ident {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.icpage__title {
+  margin: 0;
+  font-size: var(--ic-type-xl);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ic-text-1);
+}
+
+.icpage__hint {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  color: var(--ic-text-3);
+}
+
+.icpage__tools {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* The control corner: one pill, same recipe as the Dock windows' column. */
+.icpage__controls {
+  position: absolute;
+  top: 13px;
+  right: 16px;
+  z-index: 2;
+  display: flex;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.icpage__close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-ctl-line);
+  background: var(--ic-ctl-fill);
+  color: var(--ic-chrome-ink);
+  box-shadow: var(--ic-ctl-shadow);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpage__close:hover {
+  border-color: var(--ic-ctl-hover-line);
+  background: var(--ic-ctl-hover-fill);
+  color: var(--ic-ctl-hover-ink);
+}
+
+.icpage__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.icpage__rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 196px;
+  flex-shrink: 0;
+  padding: 16px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--ic-border-subtle);
+  background: var(--ic-surface-sunken);
+}
+
+.icpage__railitem {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--ic-radius-sm);
+  background: none;
+  color: var(--ic-text-2);
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icpage__railitem:hover {
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
+}
+
+.icpage__railitem[aria-current='page'] {
+  background: var(--ic-fill-selected);
+  border-color: var(--ic-border-strong);
+  color: var(--ic-text-1);
+}
+
+.icpage__railitem > svg {
+  flex-shrink: 0;
+  color: var(--ic-text-3);
+}
+
+.icpage__railitem[aria-current='page'] > svg {
+  color: var(--ic-accent-strong);
+}
+
+.icpage__main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 20px;
+  overflow: hidden;
+}
+
+/* One focus ring for everything inside a page. */
+.icpage :focus-visible,
+.icpage-embed :focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icpage *,
+  .icpage *::before,
+  .icpage *::after {
+    transition-duration: 1ms !important;
+  }
+}
+
+/* Narrow windows: the rail becomes a single scrolling row above the content. */
+@media (max-width: 47.5rem) {
+  .icpage {
+    padding: 36px 10px 10px;
+  }
+
+  .icpage__body {
+    flex-direction: column;
+  }
+
+  .icpage__rail {
+    width: auto;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    border-right: none;
+    border-bottom: 1px solid var(--ic-border-subtle);
+    padding: 10px 12px;
+  }
+
+  .icpage__head {
+    padding: 14px 70px 12px 18px;
+  }
+
+  .icpage__main {
+    padding: 14px 14px 16px;
+  }
+}

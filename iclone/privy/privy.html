@@ -1,0 +1,201 @@
+<!doctype html>
+<!--
+  iCLONE OS — Privy login page.
+
+  Served ONLY by electron/iclone-privy.ts's loopback HTTP server
+  (http://127.0.0.1:47831/privy.html), loaded into its own BrowserWindow on
+  the 'persist:iclone-privy' partition — never inside the app's own renderer.
+  Privy needs a real secure-context origin + an isolated cookie jar; file://
+  and the app's own window give it neither.
+
+  Electron cannot complete an OAuth popup/redirect flow for social login
+  providers, so this surface offers exactly two paths: email OTP and wallet
+  connect — wallet is the recommended one (an embedded wallet is
+  auto-provisioned on first sign-in either way, per login-island/src/island.jsx).
+
+  Talks to the window's preload (iclone/privy/privy-preload.cjs) purely by
+  window.postMessage on this same origin; the preload forwards those messages
+  to the main process over IPC. This page never imports Electron itself.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<!-- CSP (P7 M5): Privy + WalletConnect/Reown origins only (base, mainnet); the sha256 pins the inline
+     bootstrap below, so editing it means updating the hash (electron/renderer-csp.test.ts checks it). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-sSgFQba5gW0jpV3PYAmU7+cRW+wRJMVEk7K0IyvA7UQ=' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com https://fonts.reown.com; img-src 'self' data: blob: https:; connect-src 'self' https://auth.privy.io https://*.rpc.privy.systems https://mainnet.base.org https://eth.merkle.io https://cloudflare-eth.com wss://relay.walletconnect.com wss://relay.walletconnect.org https://rpc.walletconnect.com https://rpc.walletconnect.org https://pulse.walletconnect.org https://explorer-api.walletconnect.com https://api.web3modal.org wss://www.walletlink.org https://www.walletlink.org https://keys.coinbase.com https://rpc.wallet.coinbase.com; frame-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.org https://challenges.cloudflare.com; child-src https://auth.privy.io https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.org; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'" />
+<meta http-equiv="X-Content-Type-Options" content="nosniff" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>iCLONE OS — Sign in</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #0b0a10;
+    --ink-raised: #131119;
+    --gold: #d7c9a6;
+    --gold-dim: #8f846a;
+    --text: #f4f1ea;
+    --text-dim: #9a94a6;
+    --line: rgba(215, 201, 166, 0.16);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--ink);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    /* No native scroll chrome on a small chromeless-feeling login window. */
+    overflow: hidden;
+  }
+  .card {
+    width: 100%;
+    max-width: 360px;
+    background: linear-gradient(180deg, var(--ink-raised), var(--ink));
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 28px 26px 24px;
+    text-align: center;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+  }
+  .mark {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  p.sub {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    margin: 0 0 22px;
+  }
+  button.primary {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 10px;
+    border: 1px solid var(--gold);
+    background: var(--gold);
+    color: #171310;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 120ms ease;
+  }
+  button.primary:hover { opacity: 0.9; }
+  button.primary:active { opacity: 0.75; }
+  button.primary:disabled { opacity: 0.5; cursor: default; }
+  .pill {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-dim);
+  }
+  .status {
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+    min-height: 16px;
+  }
+  .status[data-tone="error"] { color: #e2836f; }
+  .status[data-tone="ok"] { color: var(--gold); }
+  .foot {
+    margin-top: 18px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.7;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <p class="mark">iCLONE OS</p>
+    <h1>Connect your agent</h1>
+    <p class="sub">Sign in with your wallet — recommended — or an email code. Either path provisions an embedded wallet automatically on first sign-in.</p>
+    <button id="go" class="primary" type="button" disabled>Preparing sign-in…</button>
+    <p class="pill">Wallet · recommended</p>
+    <p class="status" id="status" data-tone="idle"></p>
+    <p class="foot">Never enter a seed phrase or private key here.</p>
+  </div>
+
+  <script src="privy-login.js"></script>
+  <script>
+    (function () {
+      var APP_ID = 'cmrje191z000a0ckzdzc0a9ki';
+      var goBtn = document.getElementById('go');
+      var statusEl = document.getElementById('status');
+
+      function setStatus(text, tone) {
+        statusEl.textContent = text || '';
+        statusEl.setAttribute('data-tone', tone || 'idle');
+      }
+
+      // Same-origin only — this page's own origin, so the message can't be
+      // spoofed by anything the loopback server doesn't itself serve.
+      function post(payload) {
+        window.postMessage(Object.assign({ __iclonePrivySession: true }, payload), window.location.origin);
+      }
+
+      function labelFor(user, walletName) {
+        var email = user && user.email && user.email.address;
+        if (email) return email;
+        if (walletName) return walletName + ' wallet';
+        return 'Privy account';
+      }
+
+      function onAuth(state) {
+        setStatus('Signed in — you can close this window.', 'ok');
+        goBtn.textContent = 'Signed in';
+        goBtn.disabled = true;
+        post({
+          type: 'auth',
+          status: 'in',
+          address: state && state.address ? state.address : null,
+          userId: state && state.user && state.user.id ? state.user.id : null,
+          label: labelFor(state && state.user, state && state.walletName)
+        });
+      }
+
+      function onLogout() {
+        setStatus('', 'idle');
+        goBtn.textContent = 'Continue';
+        goBtn.disabled = false;
+        post({ type: 'logout', status: 'out', address: null, userId: null, label: null });
+      }
+
+      if (!window.PrivyIsland) {
+        setStatus('privy-login.js failed to load — run the login-island build (see iclone/privy/README.md).', 'error');
+        return;
+      }
+
+      window.PrivyIsland.init({ appId: APP_ID, accent: '#d7c9a6', onAuth: onAuth, onLogout: onLogout });
+      goBtn.disabled = false;
+      goBtn.textContent = 'Continue';
+      goBtn.addEventListener('click', function () {
+        setStatus('Opening sign-in…', 'idle');
+        window.PrivyIsland.open();
+      });
+
+      // The window exists to get the user signed in — open the modal right
+      // away. The button stays as the never-a-silent-no-op fallback (a click
+      // that arrived before the SDK was ready, or a modal the user dismissed).
+      window.PrivyIsland.open();
+    })();
+  </script>
+</body>
+</html>

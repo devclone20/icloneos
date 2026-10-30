@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "name": "spec-driven",
+  "version": "1.0.0",
+  "author": "the owner (ported from his Claude Code skills library)",
+  "license": "MIT",
+  "source": {
+    "library": "claude-code-skills",
+    "path": "spec-driven",
+    "version": null,
+    "sha256": "8e43a81e0ef62617ab3bd647ecb89db114840b6e82f31705592e812009cd5ea3",
+    "ported_at": "2026-10-21"
+  },
+  "excluded": [
+    "memory/agent-patterns.md",
+    "memory/global-learnings.md",
+    "memory/stack-patterns.md",
+    "specs/highermind-agents-package/plan.md",
+    "specs/highermind-agents-package/spec.md"
+  ],
+  "requires": {
+    "os": [],
+    "bins": [
+      "git"
+    ],
+    "mcp": [],
+    "paths": []
+  },
+  "touches": [
+    "Wp"
+  ],
+  "touches_from_text": {},
+  "scrubbed": true,
+  "scrub": {
+    "homePaths": 0,
+    "codePaths": 0,
+    "claudeRefs": 4,
+    "emails": 0,
+    "addresses": 0,
+    "users": 0,
+    "places": 0,
+    "layoutNames": 0,
+    "ownerPaths": 0,
+    "privateNames": 0,
+    "identity": 0,
+    "machinePaths": 0,
+    "voiceProfile": 0,
+    "redacted": 0
+  }
+}

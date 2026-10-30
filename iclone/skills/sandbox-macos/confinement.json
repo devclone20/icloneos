@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "os": "macos",
+  "available": true,
+  "backends": {
+    "seatbelt": { "status": "live", "binary": "/usr/bin/sandbox-exec", "note": "deprecated by Apple since 2016; kept behind a two-backend seam" },
+    "container": { "status": "owner-step", "pinned": "1.5.0", "note": "Apple container micro-VMs after the owner installs them (doc 12 spike C1)" }
+  },
+  "classes": {
+    "research": { "writes": ["scratch"], "network": "grant" },
+    "project": { "writes": ["project", "scratch"], "network": "grant" },
+    "build": { "writes": ["project", "scratch", "package-caches"], "network": "grant" },
+    "offline": { "writes": ["project", "scratch"], "network": "never" },
+    "media": { "writes": ["output", "scratch"], "network": "never" }
+  },
+  "confines": ["terminal", "execute_code"],
+  "notConfined": ["file tools", "MCP servers", "browser"]
+}

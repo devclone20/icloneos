@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Help installing or opening the app
+    url: https://github.com/devclone20/icloneos/blob/main/docs/INSTALL.md
+    about: Download, first launch, checking the download, and uninstalling.
+  - name: Report a security vulnerability
+    url: https://github.com/devclone20/icloneos/security/advisories/new
+    about: Please report security problems privately here, never in a public issue.

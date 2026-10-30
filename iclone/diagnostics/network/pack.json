@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "id": "network",
+  "title": "Network (live probes)",
+  "order": 8,
+  "platforms": [
+    "darwin",
+    "linux"
+  ],
+  "checks": [
+    {
+      "id": "network.online",
+      "title": "Online",
+      "severity": "warn",
+      "timeoutMs": 3000,
+      "network": true,
+      "impl": "netOnline"
+    },
+    {
+      "id": "network.dns",
+      "title": "Name resolution",
+      "severity": "warn",
+      "timeoutMs": 4000,
+      "network": true,
+      "impl": "dnsLookup"
+    },
+    {
+      "id": "network.time",
+      "title": "Clock offset",
+      "severity": "warn",
+      "timeoutMs": 5000,
+      "network": true,
+      "impl": "timeOffset",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "network.quality",
+      "title": "Connection quality",
+      "severity": "warn",
+      "timeoutMs": 25000,
+      "network": true,
+      "impl": "networkQuality",
+      "platforms": [
+        "darwin"
+      ]
+    },
+    {
+      "id": "network.hermes_doctor",
+      "title": "Hermes self-check (contacts your providers)",
+      "severity": "warn",
+      "timeoutMs": 50000,
+      "network": true,
+      "impl": "hermesDoctor"
+    }
+  ],
+  "fixes": []
+}

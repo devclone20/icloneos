@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="203" height="22" viewBox="0 0 203 22" role="img" aria-labelledby="t">
+  <title id="t">Developer ID: notarised by Apple</title>
+  <rect x="0.5" y="0.5" width="202" height="21" rx="6" fill="#0B0F0D" stroke="#24312B" />
+  <path d="M84 1h112.5a5.5 5.5 0 0 1 5.5 5.5v9a5.5 5.5 0 0 1-5.5 5.5H84z" fill="#0B2A1E" />
+  <g font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Inter, Helvetica, Arial, sans-serif" font-size="11">
+    <text x="8" y="15" fill="#A3B2AB" font-weight="500" textLength="68" lengthAdjust="spacingAndGlyphs">Developer ID</text>
+    <text x="92" y="15" fill="#7DF1C5" font-weight="600" textLength="102" lengthAdjust="spacingAndGlyphs">notarised by Apple</text>
+  </g>
+</svg>

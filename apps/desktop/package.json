@@ -1,0 +1,552 @@
+{
+  "name": "iclone-os",
+  "productName": "iclone os",
+  "private": true,
+  "version": "0.0.3",
+  "description": "iclone os — the iNFT desktop by CLONE FRAME, built on the Hermes desktop app by Nous Research (MIT).",
+  "author": {
+    "name": "CLONE FRAME",
+    "url": "https://cloneframe.io"
+  },
+  "homepage": "https://cloneframe.io",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devclone20/icloneos.git"
+  },
+  "type": "module",
+  "main": "dist/electron-main.mjs",
+  "engines": {
+    "node": ">=22.22.0"
+  },
+  "scripts": {
+    "clean": "npm run clean:e2e && npm run clean:renderer && npm run clean:electron",
+    "clean:e2e": "tsc --build tsconfig.e2e.json --clean",
+    "clean:renderer": "tsc --build tsconfig.json --clean ",
+    "clean:electron": "tsc --build tsconfig.electron.json --clean",
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:fake-boot": "cross-env HERMES_DESKTOP_BOOT_FAKE=1 HERMES_DESKTOP_BOOT_FAKE_STEP_MS=650 npm run dev",
+    "dev:mock": "node scripts/dev-mock.mjs",
+    "dev:renderer": "node scripts/assert-root-install.mjs && npm run clean:renderer && vite --host 127.0.0.1 --port 5174",
+    "dev:electron": "wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
+    "profile:main": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron --inspect=9229 .",
+    "profile:main:cpu": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
+    "start": "npm run build && electron .",
+    "prebuild": "npm run clean && npm run skills:catalog:check && npm run version:check && npm run notices:check",
+    "version:check": "node scripts/check-version.mjs",
+    "notices:check": "node scripts/third-party-closure.mjs --check",
+    "skills:catalog": "node ../../iclone/skills/tools/build-catalog.mjs",
+    "skills:catalog:check": "node ../../iclone/skills/tools/build-catalog.mjs --check",
+    "build": "node scripts/assert-root-install.mjs && node scripts/write-build-stamp.mjs && vite build && node scripts/bundle-electron-main.mjs && node scripts/stage-native-deps.mjs && node scripts/stage-acp-native.mjs && node scripts/fetch-runtime-pin.mjs",
+    "postbuild": "node scripts/assert-dist-built.mjs",
+    "prebuilder": "node scripts/patch-electron-builder-mac-binary.mjs",
+    "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/run-electron-builder.mjs",
+    "pack": "npm run build && npm run builder -- --dir --publish never -c.mac.identity=- -c.mac.hardenedRuntime=false \"-c.directories.output=$HOME/Library/Caches/iclone-os/build\" && node scripts/verify-packaged-acp.mjs",
+    "pack:hardened": "npm run build && npm run builder -- --mac zip --arm64 --publish never -c.mac.identity=-",
+    "verify:pack": "node scripts/verify-packaged-acp.mjs",
+    "dist": "npm run build && npm run builder",
+    "dist:mac": "npm run build && npm run builder -- --mac",
+    "dist:mac:dmg": "npm run build && npm run builder -- --mac dmg",
+    "dist:mac:zip": "npm run build && npm run builder -- --mac zip",
+    "install:mac": "node scripts/install-macos.mjs",
+    "release:mac": "node scripts/release-mac.mjs",
+    "dist:win": "npm run build && npm run builder -- --win",
+    "dist:win:msi": "npm run build && npm run builder -- --win msi",
+    "dist:win:nsis": "npm run build && npm run builder -- --win nsis",
+    "dist:linux": "npm run build && npm run builder -- --linux deb AppImage",
+    "perf": "node scripts/perf/run.mjs",
+    "test:perf": "node scripts/test-perf.mjs",
+    "update:shim": "bash ../../scripts/desktop-update/repro.sh shim",
+    "update:shim:fail": "bash ../../scripts/desktop-update/repro.sh shim-fail",
+    "update:repro:fresh": "bash ../../scripts/desktop-update/repro.sh fresh",
+    "update:repro:behind": "bash ../../scripts/desktop-update/repro.sh behind",
+    "update:repro:error": "bash ../../scripts/desktop-update/repro.sh error",
+    "update:repro:gate": "bash ../../scripts/desktop-update/repro.sh gate",
+    "update:repro:launch": "bash ../../scripts/desktop-update/repro.sh launch",
+    "perf:serve": "node scripts/perf/serve.mjs",
+    "test:desktop": "node scripts/test-desktop.mjs",
+    "test:desktop:all": "node scripts/test-desktop.mjs all",
+    "test:desktop:dmg": "node scripts/test-desktop.mjs dmg",
+    "test:desktop:nsis": "node scripts/test-desktop.mjs nsis",
+    "test:desktop:existing": "node scripts/test-desktop.mjs existing",
+    "test:desktop:fresh": "node scripts/test-desktop.mjs fresh",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.electron.json --noEmit && tsc -p tsconfig.e2e.json --noEmit",
+    "lint": "eslint src/ electron/ && node scripts/ic-style-ratchet.mjs",
+    "lint:fix": "eslint src/ electron/ --fix",
+    "fmt": "prettier --write 'src/**/*.{ts,tsx}' 'electron/**/*.ts' 'vite.config.ts'",
+    "fix": "npm run lint:fix && npm run fmt",
+    "test:ui": "vitest run --project ui",
+    "test:desktop:platforms": "vitest run --project electron",
+    "test:find-in-page-native": "electron electron/find-in-page-native-fixture",
+    "test": "vitest run",
+    "preview": "node scripts/assert-root-install.mjs && vite preview --host 127.0.0.1 --port 4174",
+    "check:test:ui": "npm run test:ui",
+    "check:test:desktop:platforms": "npm run test:desktop:platforms",
+    "check:test:desktop:all": "npm run test:desktop:all",
+    "check:test:plugins": "node --test src/plugins/*/tests/*.test.mjs",
+    "check:lint": "npm run typecheck && npm run lint",
+    "check": "npm run check:lint && npm run test:ui && npm run test:desktop:platforms && npm run test:desktop:all && npm run check:test:plugins",
+    "test:e2e": "npm run build && playwright test e2e/",
+    "test:e2e:visual": "npm run build && WLR_BACKENDS=headless WLR_NO_HARDWARE_CURSORS=1 cage -- npx playwright test e2e/ --reporter=list",
+    "test:e2e:update-snapshots": "npm run build && WLR_BACKENDS=headless WLR_NO_HARDWARE_CURSORS=1 cage -- npx playwright test e2e/ --reporter=list --update-snapshots",
+    "repro:short-session-hang": "node scripts/run-short-session-hang-repro.mjs",
+    "repro:short-session-hang:test": "node --test scripts/run-short-session-hang-repro.test.mjs",
+    "release:linux": "node scripts/release-linux.mjs",
+    "build:web": "node scripts/web-build.mjs",
+    "fetch:runtime": "node scripts/fetch-runtime-pin.mjs",
+    "hygiene": "node scripts/artifact-hygiene.mjs",
+    "distribution": "node scripts/make-distribution.mjs"
+  },
+  "dependencies": {
+    "@assistant-ui/core": "0.2.23",
+    "@assistant-ui/react": "0.14.24",
+    "@assistant-ui/react-streamdown": "0.3.5",
+    "@audiowave/react": "0.6.2",
+    "@chenglou/pretext": "0.0.6",
+    "@codemirror/commands": "6.10.4",
+    "@codemirror/language": "6.12.4",
+    "@codemirror/language-data": "6.5.2",
+    "@codemirror/state": "6.7.1",
+    "@codemirror/view": "6.43.6",
+    "@dnd-kit/core": "6.3.1",
+    "@dnd-kit/sortable": "10.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "@hermes/shared": "file:../shared",
+    "@icons-pack/react-simple-icons": "13.11.1",
+    "@lezer/highlight": "1.2.3",
+    "@nanostores/react": "1.1.0",
+    "@nous-research/ui": "0.18.2",
+    "@streamdown/code": "1.1.1",
+    "@streamdown/math": "1.0.2",
+    "@tabler/icons-react": "3.44.0",
+    "@tailwindcss/typography": "0.5.20",
+    "@tailwindcss/vite": "4.3.3",
+    "@tanstack/react-query": "5.101.2",
+    "@tanstack/react-virtual": "3.14.6",
+    "@vscode/codicons": "0.0.45",
+    "@xterm/addon-fit": "0.12.0-beta.301",
+    "@xterm/addon-serialize": "0.15.0-beta.301",
+    "@xterm/addon-unicode11": "0.10.0-beta.301",
+    "@xterm/addon-web-links": "0.13.0-beta.301",
+    "@xterm/addon-webgl": "0.20.0-beta.300",
+    "@xterm/xterm": "6.1.0-beta.304",
+    "blobatar": "2.0.0",
+    "class-variance-authority": "0.7.1",
+    "clsx": "2.1.1",
+    "cmdk": "1.1.1",
+    "d3-force": "3.0.0",
+    "dnd-core": "14.0.1",
+    "dompurify": "3.4.13",
+    "driver.js": "1.8.0",
+    "electron-updater": "6.8.9",
+    "emojibase-data": "16.0.3",
+    "fflate": "0.8.3",
+    "frimousse": "0.3.0",
+    "hast-util-from-html-isomorphic": "2.0.0",
+    "hast-util-to-text": "4.0.2",
+    "ignore": "7.0.6",
+    "katex": "0.16.47",
+    "lucide-react": "0.577.0",
+    "mermaid": "11.16.1",
+    "motion": "12.42.2",
+    "nanostores": "1.4.2",
+    "node-pty": "1.1.0",
+    "qrcode": "1.5.4",
+    "radix-ui": "1.6.7",
+    "react": "19.2.7",
+    "react-arborist": "3.13.2",
+    "react-dnd-html5-backend": "14.1.0",
+    "react-dom": "19.2.7",
+    "react-router": "8.3.0",
+    "react-shiki": "0.9.3",
+    "remark-math": "6.0.0",
+    "remend": "1.3.0",
+    "shiki": "4.3.1",
+    "simple-git": "3.36.0",
+    "streamdown": "2.5.0",
+    "tailwind-merge": "3.6.0",
+    "tailwindcss": "4.3.3",
+    "three": "^0.180.0",
+    "tw-shimmer": "0.4.12",
+    "unicode-animations": "1.0.3",
+    "unified": "11.0.5",
+    "unist-util-visit-parents": "6.0.2",
+    "use-stick-to-bottom": "1.1.6",
+    "vfile": "6.0.3",
+    "viem": "2.57.7",
+    "web-haptics": "0.0.6"
+  },
+  "optionalDependencies": {
+    "get-windows": "9.3.0"
+  },
+  "devDependencies": {
+    "@babel/core": "8.0.1",
+    "@electron/rebuild": "4.2.0",
+    "@playwright/test": "1.62.1",
+    "@rolldown/plugin-babel": "0.2.3",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.2",
+    "@types/babel__core": "7.20.5",
+    "@types/d3-force": "3.0.10",
+    "@types/hast": "3.0.5",
+    "@types/node": "22.20.1",
+    "@types/qrcode": "1.5.6",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-react": "6.0.3",
+    "babel-plugin-react-compiler": "1.0.0",
+    "bippy": "0.5.43",
+    "concurrently": "10.0.4",
+    "cross-env": "10.1.0",
+    "electron": "40.10.2",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.1",
+    "jsdom": "29.1.1",
+    "prettier": "3.9.5",
+    "rcedit": "5.0.2",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "vite": "8.2.0",
+    "vitest": "4.1.10",
+    "wait-on": "9.0.10"
+  },
+  "build": {
+    "electronVersion": "40.10.2",
+    "appId": "io.cloneframe.icloneos",
+    "productName": "iclone os",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "devclone20",
+        "repo": "icloneos",
+        "releaseType": "release"
+      }
+    ],
+    "executableName": "iclone os",
+    "protocols": [
+      {
+        "name": "iclone os Protocol",
+        "schemes": [
+          "iclone"
+        ]
+      }
+    ],
+    "artifactName": "iclone-os-${version}-${os}-${arch}.${ext}",
+    "icon": "assets/icon",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "assets/**",
+      "package.json",
+      {
+        "from": "../../iclone/privy",
+        "to": "iclone-privy",
+        "filter": [
+          "privy.html",
+          "privy-login.js",
+          "privy-preload.cjs"
+        ]
+      }
+    ],
+    "beforeBuild": "scripts/before-build.mjs",
+    "beforePack": "scripts/before-pack.mjs",
+    "afterPack": "scripts/after-pack.mjs",
+    "extraResources": [
+      {
+        "from": "build/install-stamp.json",
+        "to": "install-stamp.json"
+      },
+      {
+        "from": "assets/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "../../iclone/skills",
+        "to": "hermes-skill",
+        "filter": [
+          "**/*",
+          "!**/.*"
+        ]
+      },
+      {
+        "from": "../../scripts/desktop-update/iclone-agent-update.sh",
+        "to": "desktop-update/iclone-agent-update.sh"
+      },
+      {
+        "from": "../../LICENSE",
+        "to": "LICENSE"
+      },
+      {
+        "from": "../../NOTICE",
+        "to": "NOTICE"
+      },
+      {
+        "from": "../../THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
+      },
+      {
+        "from": "node_modules/electron/dist/LICENSES.chromium.html",
+        "to": "LICENSES.chromium.html"
+      },
+      {
+        "from": "../../iclone/legal",
+        "to": "legal",
+        "filter": [
+          "**/*",
+          "!**/.*"
+        ]
+      },
+      {
+        "from": "../../iclone/hermes-plugins",
+        "to": "hermes-plugins",
+        "filter": [
+          "**/*",
+          "!**/.*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      },
+      {
+        "from": "build/iclone-hermes-plugins",
+        "to": "hermes-plugins"
+      },
+      {
+        "from": "../../iclone/diagnostics",
+        "to": "diagnostics",
+        "filter": [
+          "**/*",
+          "!**/.*"
+        ]
+      }
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/*.node",
+      "**/prebuilds/**",
+      "**/node-pty/build/Release/spawn-helper",
+      "**/get-windows/main"
+    ],
+    "mac": {
+      "bundleShortVersion": "0.0.3",
+      "bundleVersion": "0.0.3",
+      "category": "public.app-category.developer-tools",
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
+      "extendInfo": {
+        "CFBundleDisplayName": "iclone os",
+        "CFBundleExecutable": "iclone os",
+        "CFBundleName": "iclone os",
+        "NSAudioCaptureUsageDescription": "iclone os uses audio capture for voice conversations.",
+        "NSMicrophoneUsageDescription": "iclone os uses the microphone for voice input and voice conversations.",
+        "NSScreenCaptureUsageDescription": "iclone os captures the screen when you ask the agent to screenshot or record it.",
+        "NSLocalNetworkUsageDescription": "iclone os connects to a Hermes gateway on your local network when you configure a remote gateway.",
+        "NSAppleEventsUsageDescription": "iclone os sends Apple Events when you ask the agent or the terminal to automate another app, such as Calendar or Finder.",
+        "NSBluetoothAlwaysUsageDescription": "iclone os does not use Bluetooth. Its built-in web engine may check whether Bluetooth is available; declining changes nothing in the app.",
+        "NSBluetoothPeripheralUsageDescription": "iclone os does not use Bluetooth. Its built-in web engine may check whether Bluetooth is available; declining changes nothing in the app."
+      },
+      "gatekeeperAssess": false,
+      "hardenedRuntime": true,
+      "type": "distribution",
+      "minimumSystemVersion": "12.0",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "sign": "scripts/sign-hook.mjs",
+      "notarize": true,
+      "extraResources": [
+        {
+          "from": "acp-cli-lock",
+          "to": "acp-pin",
+          "filter": [
+            "package.json",
+            "package-lock.json"
+          ]
+        },
+        {
+          "from": "scripts/acp-launch.cjs",
+          "to": "acp-pin/launch.cjs"
+        },
+        {
+          "from": "build/acp-native",
+          "to": "acp-native",
+          "filter": [
+            "*/ADDONS.json",
+            "*/*.node",
+            "*/licences/*"
+          ]
+        },
+        {
+          "from": "build/hermes-runtime",
+          "to": "hermes-runtime",
+          "filter": [
+            "hermes-agent-*.tar.gz",
+            "install.sh",
+            "BUNDLE.json",
+            "RUNTIME_MANIFEST.json"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "Install iclone os",
+      "artifactName": "iclone-os-mac-arm64.dmg",
+      "sign": true,
+      "writeUpdateInfo": false,
+      "backgroundColor": "#f5f5f7",
+      "iconSize": 96,
+      "window": {
+        "width": 560,
+        "height": 360
+      },
+      "contents": [
+        {
+          "x": 160,
+          "y": 170,
+          "type": "file"
+        },
+        {
+          "x": 400,
+          "y": 170,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
+    "win": {
+      "legalTrademarks": "iclone os",
+      "target": [
+        "nsis",
+        "msi"
+      ],
+      "signAndEditExecutable": false,
+      "extraResources": [
+        {
+          "from": "acp-cli-lock",
+          "to": "acp-pin",
+          "filter": [
+            "package.json",
+            "package-lock.json"
+          ]
+        },
+        {
+          "from": "scripts/acp-launch.cjs",
+          "to": "acp-pin/launch.cjs"
+        }
+      ]
+    },
+    "linux": {
+      "category": "Development",
+      "maintainer": "CLONE FRAME <https://cloneframe.io>",
+      "vendor": "CLONE FRAME <https://cloneframe.io>",
+      "synopsis": "iclone os — the iNFT desktop by CLONE FRAME, built on Hermes by Nous Research.",
+      "description": "iclone os is the desktop for iNFT agents by CLONE FRAME, built on the Hermes agent runtime by Nous Research.",
+      "executableName": "iclone-os",
+      "icon": "assets/icon.png",
+      "artifactName": "iclone-os-${version}-linux-${arch}.${ext}",
+      "desktop": {
+        "entry": {
+          "Name": "iclone os",
+          "Comment": "iclone os — the iNFT desktop by CLONE FRAME, built on Hermes by Nous Research.",
+          "StartupWMClass": "iclone-os",
+          "MimeType": "x-scheme-handler/iclone;",
+          "Categories": "Development;"
+        }
+      },
+      "target": [
+        {
+          "target": "deb",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "acp-cli-lock",
+          "to": "acp-pin",
+          "filter": [
+            "package.json",
+            "package-lock.json"
+          ]
+        },
+        {
+          "from": "scripts/acp-launch.cjs",
+          "to": "acp-pin/launch.cjs"
+        },
+        {
+          "from": "build/hermes-runtime",
+          "to": "hermes-runtime",
+          "filter": [
+            "hermes-agent-*.tar.gz",
+            "install.sh",
+            "BUNDLE.json",
+            "RUNTIME_MANIFEST.json"
+          ]
+        }
+      ]
+    },
+    "deb": {
+      "packageName": "iclone-os",
+      "priority": "optional",
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libuuid1",
+        "libasound2t64 | libasound2",
+        "libgbm1",
+        "libsecret-1-0",
+        "libsecret-tools",
+        "gnome-keyring | kwalletmanager",
+        "git",
+        "curl",
+        "tar",
+        "ca-certificates",
+        "python3",
+        "libatomic1"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "iclone os",
+      "uninstallDisplayName": "iclone os",
+      "warningsAsErrors": false
+    },
+    "copyright": "Copyright © 2026 CLONE FRAME · built on Hermes by Nous Research",
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true,
+      "enableCookieEncryption": true
+    }
+  }
+}

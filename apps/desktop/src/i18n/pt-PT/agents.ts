@@ -1,0 +1,32 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const agents: TranslationOverrides['agents'] = {
+  close: 'Fechar agentes',
+  title: 'Árvore de agentes',
+  subtitle: 'Atividade dos subagentes em tempo real no turno atual.',
+  emptyTitle: 'Nenhum subagente ativo',
+  emptyDesc: 'Quando um turno delega trabalho, os agentes filhos transmitem aqui o seu progresso.',
+  running: 'Em execução',
+  failed: 'Falhou',
+  done: 'Concluído',
+  streaming: 'A transmitir',
+  files: 'Ficheiros',
+  moreFiles: count => `+${count} outros ficheiros`,
+  delegation: index => `Delegação ${index}`,
+  workers: count => `${count} trabalhadores`,
+  workersActive: count => `${count} ativos`,
+  agentsCount: count => `${count} ${count === 1 ? 'agente' : 'agentes'}`,
+  activeCount: count => `${count} ativos`,
+  failedCount: count => `${count} falhados`,
+  toolsCount: count => `${count} ferramentas`,
+  filesCount: count => `${count} ficheiros`,
+  updatedAgo: age => `atualizado ${age}`,
+  ageNow: 'agora',
+  ageSeconds: seconds => `há ${seconds}s`,
+  ageMinutes: minutes => `há ${minutes}m`,
+  ageHours: hours => `há ${hours}h`,
+  ageDays: days => `há ${days}d`,
+  durationSeconds: seconds => `${seconds}s`,
+  durationMinutes: (minutes, seconds) => `${minutes}m ${seconds}s`,
+  tokens: value => `${value} tokens`
+}

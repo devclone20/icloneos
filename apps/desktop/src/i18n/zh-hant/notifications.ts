@@ -1,0 +1,71 @@
+import type { TranslationOverrides } from '../define-locale'
+
+export const notifications: TranslationOverrides['notifications'] = {
+  region: '通知',
+  hide: '隱藏',
+  show: '顯示',
+  more: count => `另外 ${count} 則通知`,
+  clearAll: '全部清除',
+  dismiss: '關閉通知',
+  details: '詳細資訊',
+  copyDetail: '複製詳情',
+  copyDetailFailed: '無法複製通知詳情',
+  backendOutOfDateTitle: '後端版本過舊',
+  backendOutOfDateMessage: '您的智慧代理後端早於目前的桌面版本，可能無法正常運作。請更新以保持一致。',
+  installMethodUnsupportedTitle: '不受支援的安裝方式',
+  updateHermes: '更新智慧代理',
+  updateReadyTitle: '有可用更新',
+  updateReadyMessage: count => `有 ${count} 項新變更可用。`,
+  updateReadyMessageUnknown: '有新更新可用。',
+  seeWhatsNew: '查看新增內容',
+  mcp: {
+    needsAuthTitle: 'MCP 伺服器需要重新驗證',
+    needsAuthMessage: name => `${name} MCP 需要重新驗證。`,
+    errorTitle: 'MCP 伺服器無法連線',
+    errorMessage: name => `${name} MCP 健康檢查失敗。`,
+    signIn: '登入',
+    view: '檢視'
+  },
+  errors: {
+    elevenLabsNeedsKey: 'ElevenLabs STT 需要 ELEVENLABS_API_KEY。',
+    elevenLabsRejectedKey: 'ElevenLabs 拒絕了該 API 金鑰 (401)。',
+    diskFull: '磁碟已滿 — 請騰出一些空間後再試。',
+    gatewayAuthFailed: '閘道認證失敗 — 請檢查你的 API_SERVER_KEY。',
+    methodNotAllowed: '桌面後端拒絕了該請求 (405 Method Not Allowed)。請嘗試重新啟動 iclone os。',
+    microphonePermission: '麥克風權限已被拒絕。',
+    openaiRejectedApiKey: 'OpenAI 拒絕了該 API 金鑰。',
+    openaiRejectedApiKeyWithStatus: status => `OpenAI 拒絕了該 API 金鑰 (${status} invalid_api_key)。`,
+    openaiTtsNeedsKey: 'OpenAI TTS 需要 VOICE_TOOLS_OPENAI_KEY 或 OPENAI_API_KEY。'
+  },
+  voice: {
+    configureSpeechToText: '設定語音轉文字後即可使用語音模式。',
+    couldNotStartSession: '無法啟動語音工作階段',
+    microphoneAccessDenied: '麥克風存取被拒絕。',
+    microphoneConstraintsUnsupported: '此裝置不支援目前的麥克風限制條件。',
+    microphoneFailed: '麥克風發生錯誤',
+    microphoneInUse: '麥克風正被其他應用程式使用中。',
+    microphonePermissionDenied: '麥克風權限被拒絕。',
+    microphoneStartFailed: '無法開始麥克風錄音。',
+    microphoneUnsupported: '目前執行環境不支援麥克風錄音。',
+    noMicrophone: '找不到麥克風。',
+    noSpeechDetected: '未偵測到語音',
+    playbackFailed: '語音播放失敗',
+    recordingFailed: '語音錄製失敗',
+    sayStopToEnd: phrase => `說「${phrase}」即可結束語音對話。`,
+    transcriptionFailed: '語音轉寫失敗',
+    transcriptionUnavailable: '語音轉寫暫不可用。',
+    tryRecordingAgain: '請再錄製一次。',
+    unavailable: '語音不可用'
+  },
+  native: {
+    approvalTitle: '需要核准',
+    inputTitle: '需要輸入',
+    inputBody: '智慧代理正在等待你的回應。',
+    turnDoneTitle: '智慧代理已完成',
+    turnDoneBody: '',
+    turnErrorTitle: '本輪失敗',
+    backgroundDoneTitle: '背景工作已完成',
+    backgroundFailedTitle: '背景工作失敗',
+    creditsTitle: '額度'
+  }
+}
