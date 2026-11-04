@@ -125,6 +125,7 @@ import {
   windowConnectionRoutes
 } from './main/backend-state'
 import { registerBootstrapIpc } from './main/bootstrap-ipc'
+import { refuseClientCertificates } from './main/client-certificates'
 import {
   installRemoteHeaderRules,
   managedConnectionRecoveries,
@@ -161,6 +162,22 @@ import { onSecretStoragePolicyWrite, secretStoragePolicy } from './main/secrets'
 import { registerSetupIpc } from './main/setup-ipc'
 import { registerShellIpc } from './main/shell-ipc'
 import { ensureWslWindowsFonts } from './main/shell-open'
+import {
+  capQuitForInstall,
+  capQuitForRemoteUpdates,
+  holdQuitForChoice,
+  installAppShutdownSignals,
+  quitRemoteUpdatesJoined,
+  quitTeardownSealed,
+  quitTrace,
+  relaunchOnForcedQuit,
+  requitAfter,
+  sealQuitTeardown,
+  SSH_QUIT_TEARDOWN_HOLD_MS,
+  type SshQuitTeardown,
+  sshQuitTeardownStep,
+  trackQuitStep
+} from './main/shutdown-signals-wiring'
 import { startHermes } from './main/start-hermes'
 import {
   bootState,
@@ -182,6 +199,7 @@ import { registerPetOverlay } from './pet-overlay'
 import { mergeActiveWork, quitPromptFor } from './quit-guard'
 import { ensureLoginShellPath } from './shell-path'
 import { configureSpellChecker } from './spellchecker'
+import { registerTeardown } from './teardown-registry'
 import { registerTerminalIpc } from './terminal-ipc'
 import { readLiveUpdateMarker } from './update-marker'
 import { markerAfterSuccessfulBoot, writeSandboxMarker } from './windows-sandbox-fallback'
@@ -197,7 +215,7 @@ let quitConfirmedWithActiveWork = false
 let managedUpdateQuitWait: Promise<void> | null = null
 let managedUpdateQuitWaitDone = false
 
-let sshQuitTeardownDone = false
+const sshQuitTeardown: SshQuitTeardown = { done: false, started: false }
 let backendQuitTeardownDone = false
 
 registerDeepLinkIpc({ deepLinkState, windowsState })
@@ -227,6 +245,7 @@ registerAppearanceIpc({
   windowsState
 })
 registerUpdatesIpc({ quitState, releaseBackendLock })
+installAppShutdownSignals()
 
 // --- HUD mode (chrome-free floating chat) — see hud-ipc.ts. ---------------
 lateBound.hudIpc = registerHudIpc({
@@ -253,11 +272,9 @@ app.on('before-quit', () => {
 
 // Close the pooled keep-alive sockets on quit so lingering connections can't
 // hold the event loop open or leak FDs past app teardown.
-app.on('will-quit', () => {
-  destroyKeepaliveAgents()
-  // V3-G: the refusal stream is a `log stream` child; it must not outlive the app.
-  stopConfinement()
-})
+registerTeardown('keepalive agents', () => destroyKeepaliveAgents())
+// V3-G: the refusal stream is a `log stream` child; it must not outlive the app (will-quit or a forced exit).
+registerTeardown('confinement', () => stopConfinement())
 
 // Local filesystem + plugin-root IPC (readDir/reveal/rename/trash/…) — see fs-ipc.ts.
 registerFsIpc({
@@ -345,6 +362,10 @@ app.on('open-url', (event, url) => {
   event.preventDefault()
   handleDeepLink({ deepLinkState, windowsState }, url)
 })
+
+// Since Electron 44 a server's client-certificate request on a main-process net fetch would otherwise be answered
+// with the first matching certificate from the OS store: every request, a window's or the main process's, gets none.
+refuseClientCertificates(app, rememberLog)
 
 app.whenReady().then(() => {
   // iclone-seam: p7-selftest — the self-test owns this launch
@@ -610,7 +631,7 @@ app.whenReady().then(() => {
     hermesRoot: ACTIVE_HERMES_ROOT
   })
 
-  app.on('will-quit', () => payments.close())
+  registerTeardown('payments', () => payments.close())
 
   // V3-FX M1: the Keychain setting changed — payments re-read their keys and the ACP tools check again, live.
   keychain.subscribe(() => {
@@ -644,7 +665,8 @@ app.whenReady().then(() => {
   onPrivySession((status, address) => acpWork.session(status, address))
   ownershipWatch?.onChange((slug, state) => acpWork.ownership(slug, state))
   void acpWork.resume()
-  app.on('will-quit', () => acpWork.stopAll())
+  // The listeners run under the owner's consent and must never outlive the app (will-quit or a forced exit).
+  registerTeardown('acp work', () => acpWork.stopAll())
 
   // V3-G — confinement (electron/iclone-confinement/): Seatbelt profiles now, Apple container behind the same seam.
   registerConfinement({
@@ -872,6 +894,8 @@ function scheduleLegacyUpdateCleanup() {
 
 // V3-FX r4: "Restart now" relaunches only when the quit goes through (iclone-relaunch.ts).
 const relaunchOnQuit = createRelaunchOnQuit(app)
+// A quit cap's forced exit skips will-quit: an armed relaunch runs there instead.
+relaunchOnForcedQuit(() => relaunchOnQuit.runIfArmed())
 
 // Ask before a quit kills a turn in flight. True when the quit was intercepted
 // and the confirmation is on screen; "Quit Anyway" re-enters before-quit with
@@ -879,6 +903,12 @@ const relaunchOnQuit = createRelaunchOnQuit(app)
 function heldQuitForActiveWork(event: Electron.Event): boolean {
   // "Restart to update" already asked in the window; the quit it starts passes through.
   if (quitState.icloneAppUpdate?.consumeInstallLatch()) {
+    quitConfirmedWithActiveWork = true
+    capQuitForInstall()
+  }
+
+  // Once the teardown is sealed the backends are being stopped: "Keep Running" could no longer give the app back.
+  if (quitTeardownSealed()) {
     quitConfirmedWithActiveWork = true
   }
 
@@ -895,6 +925,7 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
 
   event.preventDefault()
   quitPromptOpen = true
+  holdQuitForChoice()
 
   void dialog
     .showMessageBox(parent, {
@@ -910,7 +941,7 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
 
       if (response === 1) {
         quitConfirmedWithActiveWork = true
-        app.quit()
+        requitAfter('quit confirmation')
       } else {
         // r4: "Keep Running" — a quit asked for by "Restart now" is cancelled with it.
         relaunchOnQuit.disarm()
@@ -920,7 +951,7 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
       // A dialog we can't show must not become a quit we can't perform.
       quitPromptOpen = false
       quitConfirmedWithActiveWork = true
-      app.quit()
+      requitAfter('quit confirmation (no dialog)')
     })
 
   return true
@@ -930,14 +961,17 @@ app.on('before-quit', event => {
   // Runs ahead of every teardown below, so "Keep Running" leaves the app
   // exactly as it was.
   if (heldQuitForActiveWork(event)) {
+    quitTrace('before-quit: held for the active-work choice')
+
     return
   }
 
   // A detached remote updater can outlive this Electron process. Do not tear
   // down its SSH observer/restore transaction at the generic SSH shutdown
-  // deadline: join it first (BEFORE sealing the bootstrap coordinator, whose
-  // shutdown would refuse the restore dials), then re-enter before-quit for
-  // normal teardown. A crash still fails closed on next launch via the remote
+  // deadline: join it first (BEFORE sealQuitTeardown, which marks the quit and
+  // seals the bootstrap coordinator: both would refuse the restore dials, so
+  // nothing marks the quit while this wait runs), then re-enter before-quit
+  // for normal teardown. A crash still fails closed on next launch via the remote
   // install-marker preflight in both POSIX and Windows lifecycle
   // implementations.
   if (
@@ -945,15 +979,23 @@ app.on('before-quit', event => {
     (managedUpdateQuitWait || managedConnectionUpdates.size > 0 || managedConnectionRecoveries.size > 0)
   ) {
     event.preventDefault()
+    quitTrace('before-quit: prevented, waiting for remote updates')
+    // Not the 12 s cap: that would cut the join and orphan the remote serve. A long, bounded cap instead; the 12 s cap
+    // starts again once the wait has ended, before the SSH teardown.
+    capQuitForRemoteUpdates()
 
     if (!managedUpdateQuitWait) {
-      managedUpdateQuitWait = waitForManagedUpdateOperations(() => [
-        ...managedConnectionUpdates.values(),
-        ...managedConnectionRecoveries.values()
-      ]).finally(() => {
-        managedUpdateQuitWaitDone = true
-        app.quit()
-      })
+      managedUpdateQuitWait = trackQuitStep(
+        'remote updates',
+        waitForManagedUpdateOperations(() => [
+          ...managedConnectionUpdates.values(),
+          ...managedConnectionRecoveries.values()
+        ]).finally(() => {
+          managedUpdateQuitWaitDone = true
+          quitRemoteUpdatesJoined()
+          requitAfter('remote updates')
+        })
+      )
     }
 
     return
@@ -962,19 +1004,34 @@ app.on('before-quit', event => {
   // A prevented first quit leaves the renderer alive while teardown runs.
   // Seal the SSH coordinator before touching connections so reconnect
   // callbacks cannot recreate a backend for a registration whose app is
-  // already quitting (#91668).
-  sshBootstrapCoordinator.shutdown()
+  // already quitting (#91668). From here on no boot, dial or `ssh -G` starts.
+  sealQuitTeardown()
 
   if (!backendQuitTeardownDone) {
     event.preventDefault()
+    quitTrace('before-quit: prevented, stopping the backends')
     void backendShutdown.run().finally(() => {
       backendQuitTeardownDone = true
-      app.quit()
+      requitAfter('backends')
     })
   }
 
-  if ((sshConnections.size > 0 || sshBootstrapCoordinator.promises().length > 0) && !sshQuitTeardownDone) {
+  const sshStep = sshQuitTeardownStep(sshQuitTeardown, {
+    bootstraps: sshBootstrapCoordinator.promises().length,
+    connections: sshConnections.size
+  })
+
+  if (sshStep === 'wait') {
+    // Another step's re-quit came first: the teardown already took the connections out of the map, but the remote
+    // serve and the master are not gone yet.
     event.preventDefault()
+    quitTrace('before-quit: prevented, ssh teardown still under way')
+  }
+
+  if (sshStep === 'start') {
+    sshQuitTeardown.started = true
+    event.preventDefault()
+    quitTrace('before-quit: prevented, tearing down ssh')
     const scopes = [...sshConnections.keys()]
 
     const pending = Promise.allSettled([
@@ -985,11 +1042,19 @@ app.on('before-quit', event => {
     // cleanupStale waits up to 5s for the owned pid to exit (50 * 100ms).
     // The previous 4s race could close SSH first and leave serve --isolated
     // reparented to pid 1.
-    void Promise.race([pending, new Promise(resolve => setTimeout(resolve, 6_000))]).then(async () => {
-      await sshBootstrapCoordinator.forceCleanupAll()
-      sshQuitTeardownDone = true
-      app.quit()
-    })
+    void trackQuitStep(
+      'ssh',
+      Promise.race([pending, new Promise(resolve => setTimeout(resolve, 6_000))]).then(async () => {
+        // A cleanup that throws must not leave every later pass waiting on a teardown that is over.
+        try {
+          await sshBootstrapCoordinator.forceCleanupAll()
+        } finally {
+          sshQuitTeardown.done = true
+          requitAfter('ssh')
+        }
+      }),
+      SSH_QUIT_TEARDOWN_HOLD_MS
+    )
   }
 
   // Clean quit mid-boot should not trip next-launch --no-sandbox (#38216).
@@ -1048,6 +1113,7 @@ app.on('before-quit', event => {
   terminalIpc.disposeAllTerminalSessions()
 
   void backendShutdown.run()
+  quitTrace(`before-quit: ${event.defaultPrevented ? 'teardown under way' : 'passes'}`)
 })
 
 app.on('window-all-closed', () => {

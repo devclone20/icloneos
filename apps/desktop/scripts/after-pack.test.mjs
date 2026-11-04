@@ -11,6 +11,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { beforeAll, test } from 'vitest'
 
 import afterPack, { removeDefaultApp } from './after-pack.mjs'
+import { electronDistDir } from './electron-dist.mjs'
+import { CHROMIUM_LICENSES_FILE } from './electron-licenses.mjs'
 
 const PLATFORMS = ['darwin', 'linux', 'win32']
 
@@ -82,6 +84,11 @@ async function packed(platform, { withPlugins = false } = {}) {
     fs.cpSync(runtime, path.join(resources, 'hermes-runtime'), { recursive: true })
   }
 
+  // afterPack also refuses a pack without the exact Chromium licence file of the dist it packed (every platform).
+  if (withPlugins) {
+    fs.copyFileSync(path.join(electronDistDir(), CHROMIUM_LICENSES_FILE), path.join(resources, CHROMIUM_LICENSES_FILE))
+  }
+
   return {
     resources,
     context: { appOutDir, electronPlatformName: platform, packager: { appInfo: { productFilename: 'iclone os' } } }
@@ -120,4 +127,33 @@ test('K146: a pack without the default app is left alone', async () => {
   fs.rmSync(path.join(resources, 'default_app.asar'))
 
   assert.deepEqual(await quiet(() => removeDefaultApp(context)), [])
+})
+
+test("afterPack refuses a pack without Chromium's licence file, on every platform", async () => {
+  for (const platform of PLATFORMS) {
+    const { context, resources } = await packed(platform, { withPlugins: true })
+    fs.rmSync(path.join(resources, CHROMIUM_LICENSES_FILE))
+
+    await assert.rejects(
+      quiet(() => afterPack(context)),
+      error =>
+        error.message.includes(
+          `[after-pack] Chromium licences not packed correctly: ${CHROMIUM_LICENSES_FILE} is not in the packed Resources`
+        ),
+      platform
+    )
+  }
+})
+
+test("afterPack refuses a pack whose Chromium licence file is not the packed dist's, byte for byte", async () => {
+  const { context, resources } = await packed('darwin', { withPlugins: true })
+  fs.appendFileSync(path.join(resources, CHROMIUM_LICENSES_FILE), '<!-- -->')
+
+  await assert.rejects(
+    quiet(() => afterPack(context)),
+    error =>
+      /Chromium licences not packed correctly: LICENSES\.chromium\.html in the pack \(sha256 [0-9a-f]{64}\) is not the Electron dist's/.test(
+        error.message
+      )
+  )
 })

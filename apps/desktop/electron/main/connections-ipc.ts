@@ -38,6 +38,7 @@ import { fetchConnectionStatus } from './remote'
 import { applySecretStorageEncryption } from './secret-storage'
 import { decryptDesktopSecret, decryptRemoteHeaders, secretStoragePolicy } from './secrets'
 import { startHermes } from './start-hermes'
+import { refuseWhileQuitting } from './state'
 
 interface ConnectionsIpcDeps {
   saveRegistryConnection: typeof saveRegistryConnection
@@ -55,6 +56,9 @@ export function registerConnectionsIpc({
     if (!value) {
       throw new Error('SSH host is required.')
     }
+
+    // No `ssh -G` once a quit is under way.
+    refuseWhileQuitting('ssh -G')
 
     const ssh =
       process.platform === 'win32'

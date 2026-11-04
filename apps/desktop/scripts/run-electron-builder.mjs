@@ -17,16 +17,9 @@ import {
   nonReleaseBuildConfig,
   planIdentity,
 } from "./build-identity.mjs"
+import { electronDistDir } from "./electron-dist.mjs"
 
 const require = createRequire(import.meta.url)
-
-function electronDistDir() {
-  try {
-    return path.join(path.dirname(require.resolve("electron/package.json")), "dist")
-  } catch {
-    return null
-  }
-}
 
 function distBinary(dist) {
   if (process.platform === "darwin") {

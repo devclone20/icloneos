@@ -31,7 +31,7 @@ import type { RegistryEntry, SshConnectionEntry } from './connection-config'
 import { fetchJson } from './http'
 import { rememberLog } from './log'
 import { DESKTOP_MANAGED_SSH_RECOVERY_PATH } from './paths'
-import { lateBound } from './state'
+import { lateBound, refuseWhileQuitting } from './state'
 
 // Managed SSH update lifecycle (#93042): while an update owns a registered
 // SSH connection, the gate pauses new dials and dial-material mutations for
@@ -282,7 +282,8 @@ export async function teardownSshConnection(profile: string | null) {
               // mysterious no-op on Windows remotes.
               sshRememberLog('[ssh] skip remote serve teardown on Windows remotes; POSIX disconnect does not apply')
             }
-          : remoteLifecycle.disconnect
+          : remoteLifecycle.disconnect,
+      log: sshRememberLog
     }
   )
 }
@@ -317,6 +318,9 @@ export async function effectiveSshConfigFingerprint(sshConfig: {
   port?: number | null
   keyPath?: string | null
 }) {
+  // No `ssh -G` once a quit is under way: it only precedes a dial the quit would refuse.
+  refuseWhileQuitting('ssh -G')
+
   const ssh =
     process.platform === 'win32'
       ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe')

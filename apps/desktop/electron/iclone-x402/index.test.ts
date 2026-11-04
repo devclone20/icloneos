@@ -1032,7 +1032,9 @@ describe('wire-init: the registration lines in main', () => {
     expect(call).toContain('audit: entry => recordPayment(entry)')
     expect(call).toContain('isTrustedSender: consentSenderGuard')
     expect(call).toContain("socketDir: path.join(app.getPath('userData'), 'run')")
-    expect(main).toContain("app.on('will-quit', () => payments.close())")
+    // The pay socket closes on every way out (will-quit and every forced exit) through the one teardown registry.
+    expect(main).toContain("registerTeardown('payments', () => payments.close())")
+    expect(main).not.toContain("app.on('will-quit', () => payments.close())")
   })
 
   it('wire-init: start-hermes gives each spawn its pay env and retires the token with the child', () => {

@@ -1,0 +1,618 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@aa-sdk/core": {
+      "name": "@aa-sdk/core",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "abitype",
+        "zod"
+      ],
+      "effects": [
+        "@account-kit/infra",
+        "@account-kit/smart-contracts",
+        "@virtuals-protocol/acp-node"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@aa-sdk/core"
+      ],
+      "fixAvailable": false
+    },
+    "@account-kit/infra": {
+      "name": "@account-kit/infra",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@aa-sdk/core",
+        "alchemy-sdk",
+        "zod"
+      ],
+      "effects": [
+        "@account-kit/smart-contracts",
+        "@virtuals-protocol/acp-node",
+        "@virtuals-protocol/acp-node-v2"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@account-kit/infra"
+      ],
+      "fixAvailable": false
+    },
+    "@account-kit/smart-contracts": {
+      "name": "@account-kit/smart-contracts",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@aa-sdk/core",
+        "@account-kit/infra"
+      ],
+      "effects": [
+        "@virtuals-protocol/acp-node"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@account-kit/smart-contracts"
+      ],
+      "fixAvailable": false
+    },
+    "@alchemy/common": {
+      "name": "@alchemy/common",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@alchemy/wallet-apis"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@alchemy/common"
+      ],
+      "fixAvailable": false
+    },
+    "@alchemy/wallet-apis": {
+      "name": "@alchemy/wallet-apis",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@alchemy/common"
+      ],
+      "effects": [
+        "@virtuals-protocol/acp-node-v2"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@alchemy/wallet-apis"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/abi": {
+      "name": "@ethersproject/abi",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/hash"
+      ],
+      "effects": [
+        "@ethersproject/contracts",
+        "alchemy-sdk"
+      ],
+      "range": "5.0.10 - 5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/abi"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/abstract-provider": {
+      "name": "@ethersproject/abstract-provider",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/transactions"
+      ],
+      "effects": [
+        "@ethersproject/abstract-signer",
+        "@ethersproject/contracts",
+        "@ethersproject/providers",
+        "@ethersproject/wallet",
+        "alchemy-sdk"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@ethersproject/abstract-provider"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/abstract-signer": {
+      "name": "@ethersproject/abstract-signer",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-provider"
+      ],
+      "effects": [
+        "@ethersproject/contracts",
+        "@ethersproject/hash",
+        "@ethersproject/hdnode",
+        "@ethersproject/json-wallets",
+        "@ethersproject/providers",
+        "@ethersproject/wallet"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@ethersproject/abstract-signer"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/contracts": {
+      "name": "@ethersproject/contracts",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abi",
+        "@ethersproject/abstract-provider",
+        "@ethersproject/abstract-signer",
+        "@ethersproject/transactions"
+      ],
+      "effects": [
+        "alchemy-sdk"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@ethersproject/contracts"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/hash": {
+      "name": "@ethersproject/hash",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-signer"
+      ],
+      "effects": [
+        "@ethersproject/abi",
+        "@ethersproject/providers",
+        "@ethersproject/wallet",
+        "@ethersproject/wordlists",
+        "alchemy-sdk"
+      ],
+      "range": "5.0.6 - 5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/hash"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/hdnode": {
+      "name": "@ethersproject/hdnode",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-signer",
+        "@ethersproject/signing-key",
+        "@ethersproject/transactions",
+        "@ethersproject/wordlists"
+      ],
+      "effects": [
+        "@ethersproject/json-wallets",
+        "@ethersproject/wallet"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@ethersproject/hdnode"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/json-wallets": {
+      "name": "@ethersproject/json-wallets",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-signer",
+        "@ethersproject/hdnode",
+        "@ethersproject/transactions"
+      ],
+      "effects": [
+        "@ethersproject/wallet"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@ethersproject/json-wallets"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/providers": {
+      "name": "@ethersproject/providers",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-provider",
+        "@ethersproject/abstract-signer",
+        "@ethersproject/hash",
+        "@ethersproject/transactions"
+      ],
+      "effects": [
+        "alchemy-sdk"
+      ],
+      "range": "<=5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/providers"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/signing-key": {
+      "name": "@ethersproject/signing-key",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "elliptic"
+      ],
+      "effects": [
+        "@ethersproject/hdnode",
+        "@ethersproject/transactions",
+        "@ethersproject/wallet"
+      ],
+      "range": "<=5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/signing-key"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/transactions": {
+      "name": "@ethersproject/transactions",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/signing-key"
+      ],
+      "effects": [
+        "@ethersproject/abstract-provider",
+        "@ethersproject/contracts",
+        "@ethersproject/hdnode",
+        "@ethersproject/json-wallets",
+        "@ethersproject/providers",
+        "@ethersproject/wallet"
+      ],
+      "range": "<=5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/transactions"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/wallet": {
+      "name": "@ethersproject/wallet",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abstract-provider",
+        "@ethersproject/abstract-signer",
+        "@ethersproject/hash",
+        "@ethersproject/hdnode",
+        "@ethersproject/json-wallets",
+        "@ethersproject/signing-key",
+        "@ethersproject/transactions",
+        "@ethersproject/wordlists"
+      ],
+      "effects": [
+        "alchemy-sdk"
+      ],
+      "range": "<=5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/wallet"
+      ],
+      "fixAvailable": false
+    },
+    "@ethersproject/wordlists": {
+      "name": "@ethersproject/wordlists",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/hash"
+      ],
+      "effects": [
+        "@ethersproject/hdnode",
+        "@ethersproject/wallet"
+      ],
+      "range": "5.0.8 - 5.8.0",
+      "nodes": [
+        "node_modules/@ethersproject/wordlists"
+      ],
+      "fixAvailable": false
+    },
+    "@solana/web3.js": {
+      "name": "@solana/web3.js",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "jayson"
+      ],
+      "effects": [],
+      "range": "1.99.0-beta.0 - 1.99.0",
+      "nodes": [
+        "node_modules/@solana/web3.js"
+      ],
+      "fixAvailable": true
+    },
+    "@virtuals-protocol/acp-cli": {
+      "name": "@virtuals-protocol/acp-cli",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@virtuals-protocol/acp-node",
+        "@virtuals-protocol/acp-node-v2"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/@virtuals-protocol/acp-cli"
+      ],
+      "fixAvailable": false
+    },
+    "@virtuals-protocol/acp-node": {
+      "name": "@virtuals-protocol/acp-node",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@aa-sdk/core",
+        "@account-kit/infra",
+        "@account-kit/smart-contracts",
+        {
+          "source": "1txMmhaogPxbj7reguNwwkMchCH+SRUpDXCtKakoRl5f4mKoKdab1Hvm+oz6p3pLhTTHkLAOr+YLrf/ylFhtIA==",
+          "name": "@virtuals-protocol/acp-node",
+          "dependency": "@virtuals-protocol/acp-node",
+          "title": "Depends on vulnerable versions of @account-kit/infra",
+          "url": null,
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "*"
+        }
+      ],
+      "effects": [
+        "@virtuals-protocol/acp-cli"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@virtuals-protocol/acp-node"
+      ],
+      "fixAvailable": false
+    },
+    "@virtuals-protocol/acp-node-v2": {
+      "name": "@virtuals-protocol/acp-node-v2",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@account-kit/infra",
+        "@alchemy/wallet-apis"
+      ],
+      "effects": [
+        "@virtuals-protocol/acp-cli"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@virtuals-protocol/acp-node-v2"
+      ],
+      "fixAvailable": false
+    },
+    "abitype": {
+      "name": "abitype",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "zod"
+      ],
+      "effects": [
+        "@aa-sdk/core"
+      ],
+      "range": "<=0.0.0-main-20230430000127 || 0.7.0-canary.20230307T162852 - 1.0.9",
+      "nodes": [
+        "node_modules/abitype"
+      ],
+      "fixAvailable": false
+    },
+    "alchemy-sdk": {
+      "name": "alchemy-sdk",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        "@ethersproject/abi",
+        "@ethersproject/abstract-provider",
+        "@ethersproject/contracts",
+        "@ethersproject/hash",
+        "@ethersproject/providers",
+        "@ethersproject/wallet"
+      ],
+      "effects": [
+        "@account-kit/infra"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/alchemy-sdk"
+      ],
+      "fixAvailable": false
+    },
+    "elliptic": {
+      "name": "elliptic",
+      "severity": "low",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1112030,
+          "name": "elliptic",
+          "dependency": "elliptic",
+          "title": "Elliptic Uses a Cryptographic Primitive with a Risky Implementation",
+          "url": "https://github.com/advisories/GHSA-848j-6mx2-7j84",
+          "severity": "low",
+          "cwe": [
+            "CWE-1240"
+          ],
+          "cvss": {
+            "score": 5.6,
+            "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:L/A:L"
+          },
+          "range": "<=6.6.1"
+        }
+      ],
+      "effects": [
+        "@ethersproject/signing-key"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/elliptic"
+      ],
+      "fixAvailable": false
+    },
+    "jayson": {
+      "name": "jayson",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        "stream-json"
+      ],
+      "effects": [
+        "@solana/web3.js"
+      ],
+      "range": "4.2.0 - 4.3.0",
+      "nodes": [
+        "node_modules/jayson"
+      ],
+      "fixAvailable": true
+    },
+    "stream-json": {
+      "name": "stream-json",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1164823,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json: pick/ignore/filter/replace filters are O(depth²) on nested input — small crafted JSON blocks the event loop for seconds→minutes (DoS)",
+          "url": "https://github.com/advisories/GHSA-528h-pc64-c93x",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=3.4.0"
+        },
+        {
+          "source": 1241262,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json: JSONC parser and verifier re-scan the whole accumulated comment on every input chunk",
+          "url": "https://github.com/advisories/GHSA-hqr4-qq8f-hg3x",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-407"
+          ],
+          "cvss": {
+            "score": 6.2,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=3.5.0"
+        },
+        {
+          "source": 1241263,
+          "name": "stream-json",
+          "dependency": "stream-json",
+          "title": "stream-json has a prototype pollution issue: Assembler writes this.current[this.key] on plain objects",
+          "url": "https://github.com/advisories/GHSA-mjw6-4jj6-33hc",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-1321"
+          ],
+          "cvss": {
+            "score": 5.1,
+            "vectorString": "CVSS:3.1/AV:L/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L"
+          },
+          "range": "<3.6.0"
+        }
+      ],
+      "effects": [
+        "jayson"
+      ],
+      "range": "<=3.5.0",
+      "nodes": [
+        "node_modules/stream-json"
+      ],
+      "fixAvailable": true
+    },
+    "zod": {
+      "name": "zod",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1243066,
+          "name": "zod",
+          "dependency": "zod",
+          "title": "Zod can exhaust memory while validating oversized constrained collections",
+          "url": "https://github.com/advisories/GHSA-mrhx-c7xc-m3w5",
+          "severity": "high",
+          "cwe": [
+            "CWE-770"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<4.6.6"
+        }
+      ],
+      "effects": [
+        "@aa-sdk/core",
+        "@account-kit/infra",
+        "@alchemy/common",
+        "abitype"
+      ],
+      "range": "<4.6.6",
+      "nodes": [
+        "node_modules/zod"
+      ],
+      "fixAvailable": false
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 14,
+      "moderate": 3,
+      "high": 10,
+      "critical": 0,
+      "total": 27
+    },
+    "dependencies": {
+      "prod": 289,
+      "dev": 0,
+      "optional": 168,
+      "peer": 1,
+      "peerOptional": 0,
+      "total": 457
+    }
+  },
+  "audited": {
+    "args": [
+      "audit",
+      "--json",
+      "--offline=false",
+      "--loglevel=http",
+      "--include=dev",
+      "--include=optional",
+      "--include=peer",
+      "--package-lock-only",
+      "--registry=https://registry.npmjs.org/"
+    ]
+  }
+}

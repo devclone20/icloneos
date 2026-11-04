@@ -596,14 +596,17 @@ export async function saveImageFromUrl(rawUrl: string) {
     // Downloads directory to offer.
   }
 
-  const result = await showSaveDialogForMainWindow({
-    title: 'Save Image',
-    defaultPath: downloadsDir ? path.join(downloadsDir, fallbackName) : fallbackName,
-    filters: [
-      { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  })
+  const result = await showSaveDialogForMainWindow(
+    {
+      title: 'Save Image',
+      defaultPath: downloadsDir ? path.join(downloadsDir, fallbackName) : fallbackName,
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    },
+    'save-download'
+  )
 
   if (result.canceled || !result.filePath) {
     return false

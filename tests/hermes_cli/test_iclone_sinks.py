@@ -419,12 +419,15 @@ def _load_langfuse_plugin(managed):
 @pytest.mark.parametrize(
     ("extras", "refused"),
     [
-        (["otlp"], ["opentelemetry-exporter-otlp-proto-common", "opentelemetry-exporter-otlp-proto-http",
+        (["otlp"], ["opentelemetry-exporter-http-transport", "opentelemetry-exporter-otlp-common",
+                    "opentelemetry-exporter-otlp-proto-common", "opentelemetry-exporter-otlp-proto-http",
                     "opentelemetry-proto"]),
-        (["daytona"], ["opentelemetry-exporter-otlp-proto-common", "opentelemetry-exporter-otlp-proto-http",
+        (["daytona"], ["opentelemetry-exporter-http-transport", "opentelemetry-exporter-otlp-common",
+                       "opentelemetry-exporter-otlp-proto-common", "opentelemetry-exporter-otlp-proto-http",
                        "opentelemetry-proto"]),  # pulled in as a DEPENDENCY of daytona
-        (["langfuse"], ["langfuse", "opentelemetry-exporter-otlp-proto-common",
-                        "opentelemetry-exporter-otlp-proto-http", "opentelemetry-proto"]),
+        (["langfuse"], ["langfuse", "opentelemetry-exporter-http-transport", "opentelemetry-exporter-otlp-common",
+                        "opentelemetry-exporter-otlp-proto-common", "opentelemetry-exporter-otlp-proto-http",
+                        "opentelemetry-proto"]),
         (["ddgs", "web"], []),
         (["no-such-extra"], ["(the requested extras could not be resolved from uv.lock to check them)"]),
     ],

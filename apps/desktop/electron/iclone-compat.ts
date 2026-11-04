@@ -37,6 +37,7 @@ import { verify } from './iclone-compat/verify'
 import { createWatch } from './iclone-compat/watch'
 import { appRuntimeRoot } from './iclone-runtime-location'
 import { readJsonFileSync } from './lib/fs-json'
+import { registerTeardown } from './teardown-registry'
 
 export { compatGate }
 
@@ -698,7 +699,7 @@ export function initIcloneCompat(): void {
     'iclone:compat:summarise',
     guarded(arg => compat.summarise(arg))
   )
-  app.once('will-quit', () => compat.close())
+  registerTeardown('compat', () => compat.close())
 }
 
 // main.ts `p4a-gate` seam, right before compatGate in applyUpdates. Without an instance it only refreshes the target.

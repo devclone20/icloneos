@@ -16,13 +16,13 @@ import {
   writeFileSync
 } from 'node:fs'
 import http from 'node:http'
-import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { finished } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 
+import { findElectronBinary } from './electron-dist.mjs'
 import { CDP, discoverTarget, sleep } from './lib/cdp.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -71,7 +71,6 @@ const HEX_OBJECT_RE = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/
 const PULL_REF_RE = /^refs\/pull\/[1-9][0-9]*\/(?:head|merge)$/
 const HEAD_REF_RE = /^refs\/heads\/[A-Za-z0-9][A-Za-z0-9._/-]*$/
 const HEAD_COMPONENT_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$/
-const require = createRequire(import.meta.url)
 
 class ReproductionError extends Error {
   name = 'ReproductionError'
@@ -1266,7 +1265,9 @@ async function executeRunInSandboxAttempt(target, index, warmup, mock, output, s
   mkdirSync(userData, { recursive: true })
   writeSandboxConfig(hermesHome, mock.url)
 
-  const electron = require('electron')
+  // The installed binary by its path.txt, never require('electron'): since Electron 42 the package's index downloads
+  // the binary when dist/ is missing, and a repro run must never download anything.
+  const electron = findElectronBinary()
   const stdoutLog = createWriteStream(stdoutPath)
   const stderrLog = createWriteStream(stderrPath)
   const stdoutFlushed = finished(stdoutLog).then(

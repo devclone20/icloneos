@@ -74,6 +74,14 @@ export function getOauthSession() {
 // shared partition; see oauth-partition.ts for the full rules.
 const oauthSessionsByPartition = new Map()
 
+/**
+ * Every OAuth cookie jar this run has opened: the legacy shared one (if opened) and each per-connection jar. A signal
+ * quit flushes exactly these, and never opens one that was not.
+ */
+export function createdOauthSessions(): Electron.Session[] {
+  return [...(oauthSession ? [oauthSession] : []), ...(oauthSessionsByPartition.values() as Iterable<Electron.Session>)]
+}
+
 function resolveOauthPartitionForUrl(url: unknown) {
   try {
     return resolveOauthPartition(url, {

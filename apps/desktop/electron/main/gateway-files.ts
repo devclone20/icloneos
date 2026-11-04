@@ -182,10 +182,13 @@ async function finalizeGatewayDownload(
   const disposition = headers['content-disposition'] || headers['Content-Disposition']
   const filename = filenameFromContentDisposition(disposition) || ctx.suggested || ctx.fallbackName
 
-  const result = await showSaveDialogForMainWindow({
-    defaultPath: filename,
-    title: 'Save File'
-  })
+  const result = await showSaveDialogForMainWindow(
+    {
+      defaultPath: filename,
+      title: 'Save File'
+    },
+    'save-download'
+  )
 
   if (result.canceled || !result.filePath) {
     ctx.abort?.()
@@ -286,10 +289,13 @@ export async function saveGatewayFileViaDataUrl(
   const buffer = parseDataUrlToBuffer(dataUrl)
   const filename = ctx.suggested || ctx.fallbackName
 
-  const result = await showSaveDialogForMainWindow({
-    defaultPath: filename,
-    title: 'Save File'
-  })
+  const result = await showSaveDialogForMainWindow(
+    {
+      defaultPath: filename,
+      title: 'Save File'
+    },
+    'save-download'
+  )
 
   if (result.canceled || !result.filePath) {
     return { canceled: true, saved: false }

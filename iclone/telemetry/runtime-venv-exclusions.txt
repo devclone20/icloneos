@@ -8,6 +8,8 @@
 # under icloneOS — hermes_cli/iclone_sinks.py extras_refusal).
 langfuse
 nemo-relay
+opentelemetry-exporter-http-transport
+opentelemetry-exporter-otlp-common
 opentelemetry-exporter-otlp-proto-common
 opentelemetry-exporter-otlp-proto-http
 opentelemetry-proto

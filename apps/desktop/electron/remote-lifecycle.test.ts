@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import { test } from 'vitest'
 
+import { isUserActionRemoteBootFailure } from './backend-start-failure'
 import { profileSshOverride } from './connection-config'
 import {
   assertRemoteInstallUpdateClear,
@@ -1049,6 +1050,75 @@ test('connect() spawns fresh when there is no lockfile, adopts the served token'
   assert.equal(result.tokenFingerprint, fingerprintToken('the-served-token'))
 })
 
+// A quit (SIGTERM, Cmd+Q) that lands while the bootstrap waits for the spawned serve aborts the bootstrap; the
+// spawned serve is reaped by connect()'s own rollback, never by the teardown (the connection was not published yet).
+// That reap's outcome must reach the desktop log exactly like the teardown's: the packaged E2E saw the serve killed
+// and no reap line at all.
+function quitDuringBootstrap(ownershipAnswer: string) {
+  const lines: string[] = []
+  const controller = new AbortController()
+
+  const ssh = fakeSsh([
+    [/print\("OWNED"/, ownershipAnswer],
+    [/uname/, 'Linux\nx86_64'],
+    [/\[ -x/, 'OK'],
+    [/cat .*lock\.json/, ''], // no lockfile: a fresh spawn
+    [/grep -q ssh-session-token-file/, 'YES\n'],
+    [/python3 -c/, ''],
+    [/printf '%s\\n'/, ''],
+    [/setsid/, '777\n'],
+    [/kill -0 777/, 'ALIVE'],
+    [/cat .*\.log/, 'HERMES_DASHBOARD_READY port=51999\n']
+  ])
+
+  const run = connect(
+    connectDeps(ssh, {
+      rememberLog: (line: string) => lines.push(line),
+      signal: controller.signal,
+      waitForHermes: async () => {
+        controller.abort()
+
+        throw Object.assign(new Error('bootstrap aborted by the quit'), { name: 'AbortError' })
+      }
+    })
+  )
+
+  return { lines, ssh, run }
+}
+
+const reapLines = (lines: string[]) => lines.filter(line => line.startsWith('[ssh] remote serve reap:'))
+
+test("a quit during the bootstrap reaps the spawned serve and logs '[ssh] remote serve reap: killed'", async () => {
+  const { lines, ssh, run } = quitDuringBootstrap('OWNED\n')
+
+  await assert.rejects(run, (error: any) => error.name === 'AbortError')
+  assert.ok(
+    ssh.calls.some(call => call.startsWith('kill 777 && ')),
+    'the spawned serve is signalled'
+  )
+  assert.deepEqual(reapLines(lines), ['[ssh] remote serve reap: killed'])
+})
+
+test("a quit during the bootstrap on a host that cannot verify ownership logs 'ownership-unverifiable' the same way", async () => {
+  const { lines, ssh, run } = quitDuringBootstrap('UNVERIFIABLE\n')
+
+  await assert.rejects(run, (error: any) => error.kind === 'ownership-unverifiable')
+  assert.ok(!ssh.calls.some(call => /(^|[;&] *)kill (-9 )?\d/.test(call)), 'nothing is signalled')
+  assert.deepEqual(reapLines(lines), ['[ssh] remote serve reap: error (Error, ownership-unverifiable)'])
+  // Error class and kind only: never the message, which may name a host, a path or a command.
+  assert.ok(!lines.join('\n').includes("doesn't let the app"))
+})
+
+test('the bootstrap hands the desktop log (sshRememberLog) to connect(), so its reap line reaches desktop.log', async () => {
+  const source = await readFile(path.join(__dirname, 'main/remote.ts'), 'utf8')
+  const start = source.indexOf('result = await lifecycle({')
+  const call = source.slice(start, source.indexOf('signal: lease.signal', start))
+
+  assert.ok(start > 0)
+
+  assert.match(call, /\n\s+rememberLog: sshRememberLog,\n/)
+})
+
 test('managed SSH maps a local scope to a different non-default remote profile', async () => {
   const localScope = 'work'
 
@@ -1896,4 +1966,43 @@ test('cleanupStale keeps the lockfile when even SIGKILL cannot confirm the pid d
 
   // The record must survive so the next connect's reap pass retries.
   assert.ok(!ssh.calls.some(c => /rm -f .*backend\.lock\.json/.test(c)))
+})
+
+test("connect() over a live serve the host cannot verify ('ownership-unverifiable'): refuses, spawns no second serve, signals nothing, keeps the lockfile, and tells the user in plain English", async () => {
+  const reuseToken = 'stored-token'
+  const lock = ownedLock({ tokenFingerprint: fingerprintToken(reuseToken) })
+
+  const ssh = fakeSsh([
+    [/uname/, 'Linux\nx86_64'],
+    [/\[ -x/, 'OK'],
+    [/cat .*lock\.json/, JSON.stringify(lock)],
+    [/kill -0 333/, 'ALIVE'],
+    [/print\("OWNED"/, 'UNVERIFIABLE\n'],
+    [/--version/, 'Hermes Agent v0.18.2\n'],
+    [/grep -q ssh-session-token-file/, 'YES\n'],
+    [/setsid/, '890\n'],
+    [/kill -0 890/, 'ALIVE'],
+    [/cat .*\.log/, 'HERMES_DASHBOARD_READY port=52050\n']
+  ])
+
+  await assert.rejects(
+    connect(connectDeps(ssh, { reuseToken, adoptServedToken: async (_b: string, t: string) => t })),
+    (error: any) => {
+      assert.equal(error.kind, 'ownership-unverifiable')
+      // Shown to the user as is (the boot error surface): English, what happened and what to do, no internal terms.
+      assert.match(error.message, /did not start a second one/)
+      assert.match(error.message, /then connect again\.$/)
+      assert.doesNotMatch(error.message, /\bserve\b|lockfile|\bpid\b|argv|UNVERIFIABLE|\bps\b|ownership/i)
+      assert.equal(isUserActionRemoteBootFailure(error), true)
+      assert.equal(isUserActionRemoteBootFailure(new Error(error.message)), true)
+
+      return true
+    }
+  )
+  assert.ok(!ssh.calls.some(c => /setsid|nohup/.test(c)), 'no second serve on top of the unverified one')
+  assert.ok(
+    !ssh.calls.some(c => /\bkill (-9 )?333\b|pidfd_send_signal|os\.kill\(pid,signal/.test(c)),
+    'nothing signalled'
+  )
+  assert.ok(!ssh.calls.some(c => /rm -f [^;]*lock\.json/.test(c)), 'the lockfile is kept')
 })

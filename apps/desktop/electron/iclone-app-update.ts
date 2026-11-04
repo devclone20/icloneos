@@ -40,6 +40,7 @@ import type {
   AppUpdateRestartResult,
   AppUpdateState
 } from './app-update-ipc'
+import { notificationErrorLine } from './notification-failure'
 
 /** String literals survive bundling (comments do not); the release gate looks for this tag. */
 export const APP_UPDATE_LOG_TAG = '[iclone-app-update]'
@@ -147,10 +148,11 @@ export interface AppUpdateController {
 interface NotificationLike {
   // Two call signatures, not one union parameter: Electron's Notification.on is a set of overloads whose FIRST is
   // 'action', and a single-signature target is checked against that one — so the union form rejects the real
-  // Notification under strict. Overloads describe exactly the two events we subscribe to.
+  // Notification under strict. Overloads describe exactly the three events we subscribe to.
   on: {
     (event: 'click', listener: () => void): unknown
     (event: 'close', listener: () => void): unknown
+    (event: 'failed', listener: (event: unknown, error: string) => void): unknown
   }
   show: () => void
 }
@@ -192,6 +194,11 @@ export function createAppUpdateNotifier(deps: AppUpdateNotifierDeps) {
       deps.reveal()
     })
     notification.on('close', release)
+    // An unsigned macOS build shows nothing and emits `failed`, never `close`: release it and say so once.
+    notification.on('failed', (_event, error) => {
+      release()
+      deps.log(`${APP_UPDATE_LOG_TAG} notification ${notice} ${version} not shown: ${notificationErrorLine(error)}`)
+    })
     notification.show()
   }
 

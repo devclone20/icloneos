@@ -2,13 +2,15 @@
 
 <h1 align="center">icloneOS</h1>
 
+<p align="center"><sub>beta version</sub></p>
+
 <p align="center"><b>The desktop for iNFT agents.</b></p>
 
 <p align="center">An AI agent on your own Mac, with the iNFT you hold at the centre of it.<br>Signed with Developer ID and notarised by Apple.</p>
 
 <p align="center">
-  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.4"></a>
-  <a href="docs/INSTALL.md"><img src="docs/media/brand/badge-macos.svg" height="22" alt="macOS 12 or later, Apple silicon"></a>
+  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.5"></a>
+  <a href="docs/INSTALL.md"><img src="docs/media/brand/badge-macos.svg" height="22" alt="macOS 13 (Ventura) or later, Apple silicon"></a>
   <a href="docs/INSTALL.md#release-integrity"><img src="docs/media/brand/badge-notarised.svg" height="22" alt="Signed with Developer ID, notarised by Apple"></a>
   <a href="docs/PRIVACY.md#no-telemetry"><img src="docs/media/brand/badge-telemetry.svg" height="22" alt="No telemetry"></a>
   <a href="LICENSE"><img src="docs/media/brand/badge-licence.svg" height="22" alt="MIT licence"></a>
@@ -16,7 +18,7 @@
 
 <p align="center"><a href="https://github.com/devclone20/icloneos/releases/latest/download/iclone-os-mac-arm64.dmg"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/media/brand/download-dark.svg"><img src="docs/media/brand/download-light.svg" width="320" height="64" alt="Download iclone os for macOS (Apple silicon, .dmg)"></picture></a></p>
 
-<p align="center"><sub>Latest release · about 180 MB · Mac with Apple silicon (M1 or later) · macOS 12 Monterey or later</sub></p>
+<p align="center"><sub>Latest release · about 200 MB · Mac with Apple silicon (M1 or later) · macOS 13 (Ventura) or later</sub></p>
 
 <p align="center"><a href="#install-in-three-steps">Install</a> · <a href="CHANGELOG.md">What's new</a> · <a href="ARCHITECTURE.md">How it works</a> · <a href="SECURITY.md">Security</a> · <a href="docs/PRIVACY.md">Privacy</a> · <a href="docs/INSTALL.md">Verify and uninstall</a></p>
 
@@ -24,7 +26,7 @@
 
 ## Install in three steps
 
-1. **Download.** Click **Download for macOS** above. Your Mac saves `iclone-os-mac-arm64.dmg` (about 180 MB) in Downloads.
+1. **Download.** Click **Download for macOS** above. Your Mac saves `iclone-os-mac-arm64.dmg` (about 200 MB) in Downloads.
 2. **Drag to Applications.** Open the file. In the window that appears, drag **iclone os** onto the **Applications** folder, then close the window.
 3. **Open it.** Open **iclone os** from Applications, or press ⌘ Space and type *iclone*. The first time, macOS asks whether to open an app downloaded from the internet: choose **Open**. The app is signed with Developer ID and notarised by Apple, so macOS lets it open, and it does not ask again.
 

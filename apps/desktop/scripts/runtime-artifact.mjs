@@ -333,15 +333,22 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   // undici 7.30.1 in the Photon sidecar (GHSA-xjj6-f33q-929c, GHSA-qrxm-fqhp-jwvm), body-parser 1.20.9 in the
   // WhatsApp bridge (GHSA-27r3-jxmh-p828); v0.0.4 (review M2): @grpc/grpc-js 1.14.5 (GHSA-m9gg-hp2v-232j,
   // GHSA-f596-whhp-79r4) and zod 4.6.6 (GHSA-mrhx-c7xc-m3w5) in the sidecar, sharp 0.35.5 (GHSA-wq5f-xc86-pv6w) in the
-  // bridge. Each manifest and its lock move together; audit-gate.mjs SUB_LOCKS judges both locks (G-45).
+  // bridge; music-metadata 11.16.0 (GHSA-f94x-6692-553q, GHSA-5gfj-9q3v-qfp3) and qs 6.16.1 (GHSA-6pq8-jhm2-2vcw) in
+  // the bridge. Each manifest and its lock move together; audit-gate.mjs SUB_LOCKS judges both locks.
   'plugins/platforms/photon/sidecar/package-lock.json': 'deps',
   'plugins/platforms/photon/sidecar/package.json': 'deps',
   'scripts/whatsapp-bridge/package-lock.json': 'deps',
   'scripts/whatsapp-bridge/package.json': 'deps',
   // Runtime security pins (v0.0.4): fixed releases above the upstream pin's (Pillow 13.0.0 by an exact uv override,
-  // PyJWT 2.15.0, aiohttp 3.14.4, urllib3 2.8.0, certifi, brotlicffi). The project and its lock move together.
+  // PyJWT 2.15.0, aiohttp 3.14.4, urllib3 2.8.0, certifi, brotlicffi); then mcp 2.2.0, the OpenTelemetry [otlp] stack
+  // 1.45.1 (semantic-conventions 0.66b1 by an exact uv override past the mistralai 2.4.8 cap), pyasn1 0.6.5,
+  // multidict 6.9.1 and tornado 6.6. The project and its lock move together; tests/test_runtime_deps_delta.py names
+  // every package of the delta.
   'pyproject.toml': 'deps',
   'uv.lock': 'deps',
+  // The Google Chat installer's exact pins double as its staleness probe, so they follow the [google] extra
+  // (pyasn1 0.6.5); a pin left behind would report the synced interpreter stale forever.
+  'plugins/platforms/google_chat/oauth.py': 'deps',
   // The Settings › Updates › Agent hand-off script (the door is disabled in 0.0.3, K-RT3; the script stays inert).
   'scripts/desktop-update/iclone-agent-update.sh': 'script',
   // Licence and notices of the fork.

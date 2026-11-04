@@ -29,6 +29,7 @@ import crypto from 'node:crypto'
 
 import { isRecord } from '../src/iclone-shared/guards'
 
+import { remoteReapLogLine } from './connection-apply'
 import { parseRemoteProfileListing } from './connection-registry'
 import { assertBootstrapNotSuperseded, kindError, type SshExec } from './ssh-connection'
 
@@ -635,6 +636,8 @@ async function pidIsOurDashboard(
     return false
   }
 
+  let verdict: string
+
   try {
     const script =
       'import os,shlex,subprocess,sys\n' +
@@ -660,6 +663,9 @@ async function pidIsOurDashboard(
       ' except subprocess.CalledProcessError:\n' +
       '  # pid already gone — a dead process is FOREIGN, not a transport error\n' +
       '  print("FOREIGN");sys.exit(0)\n' +
+      ' except OSError:\n' +
+      '  # no usable ps (EPERM/ENOENT): ownership cannot be proven, so never kill and never call it a transport error\n' +
+      '  print("UNVERIFIABLE");sys.exit(0)\n' +
       ' args=shlex.split(line)\n' +
       'ok=False\n' +
       'try:\n' +
@@ -684,11 +690,24 @@ async function pidIsOurDashboard(
       'print("OWNED" if ok else "FOREIGN")'
 
     const out = await ssh.exec(`python3 -c ${shq(script)}`)
-
-    return String(out || '').trim() === 'OWNED'
+    verdict = String(out || '').trim()
   } catch (cause) {
     throw kindError('transient-transport-error', 'Could not verify SSH backend process ownership.', { cause })
   }
+
+  if (verdict === 'UNVERIFIABLE') {
+    // The transport worked; the host cannot list process arguments. Nothing is signalled and the lockfile stays,
+    // so the next connect's reap pass retries.
+    throw kindError(
+      'ownership-unverifiable',
+      "This remote host doesn't let the app check which programs are running, so the app can't confirm that the " +
+        'Hermes server already running there is its own. To avoid running two at once, it did not start a second ' +
+        'one and left the running one alone. Stop the old Hermes server on that host (or restart the host), then ' +
+        'connect again.'
+    )
+  }
+
+  return verdict === 'OWNED'
 }
 
 /** pidIsOurDashboard for the process a lockfile record names. */
@@ -697,14 +716,26 @@ function lockIsOurDashboard(ssh: SshExec, lock: RemoteLockRecord, ownershipId: s
 }
 
 // Kill the stale dashboard ONLY if provably ours, then drop the lockfile.
-async function cleanupStale(ssh: SshExec, ownershipId: string, lock: RemoteLockRecord | LockfileSkew, pidAlive = true) {
+/** What a reap did, for the log line: only 'killed' ended a serve; the others say why nothing was signalled. */
+type RemoteReapOutcome = 'killed' | 'not-ours' | 'not-running' | 'no-lock' | 'skew' | 'no-transport'
+
+async function cleanupStale(
+  ssh: SshExec,
+  ownershipId: string,
+  lock: RemoteLockRecord | LockfileSkew,
+  pidAlive = true
+): Promise<RemoteReapOutcome> {
   // Defense in depth (#95532): a skew sentinel is foreign/corrupt state, not
   // an ownership record — never reap or remove anything based on it.
   if (isLockfileSkew(lock)) {
-    return
+    return 'skew'
   }
 
+  let outcome: RemoteReapOutcome = pidAlive ? 'not-ours' : 'not-running'
+
   if (pidAlive && lock && (await lockIsOurDashboard(ssh, lock, ownershipId))) {
+    outcome = 'killed'
+
     try {
       const result = (
         await ssh.exec(
@@ -747,6 +778,8 @@ async function cleanupStale(ssh: SshExec, ownershipId: string, lock: RemoteLockR
   }
 
   await removeLockfile(ssh, ownershipId)
+
+  return outcome
 }
 
 // Normal disconnect (quit, connection switch): reuse cleanupStale so we
@@ -754,9 +787,12 @@ async function cleanupStale(ssh: SshExec, ownershipId: string, lock: RemoteLockR
 // Closing the SSH transport first is not enough — spawn detaches with
 // setsid/nohup, so the backend reparents to pid 1 and keeps state.db
 // open (#91668).
-async function disconnect(ssh: SshExec | null | undefined, ownershipId: string | null | undefined) {
+async function disconnect(
+  ssh: SshExec | null | undefined,
+  ownershipId: string | null | undefined
+): Promise<RemoteReapOutcome> {
   if (!ssh || !ownershipId) {
-    return
+    return 'no-transport'
   }
 
   const lock = await readLockfile(ssh, ownershipId)
@@ -764,11 +800,12 @@ async function disconnect(ssh: SshExec | null | undefined, ownershipId: string |
   if (!lock || isLockfileSkew(lock)) {
     // Skew (#95532): fail closed — this is not our record, so there is
     // nothing we may safely reap or remove here.
-    return
+    return lock ? 'skew' : 'no-lock'
   }
 
   const pidAlive = await remotePidAlive(ssh, lock.pid)
-  await cleanupStale(ssh, ownershipId, lock, pidAlive)
+
+  return cleanupStale(ssh, ownershipId, lock, pidAlive)
 }
 
 function lockMatchesManagedUpdateScope(lock?: RemoteLockRecord | null, expected?: RemoteLockRecord | null) {
@@ -1610,7 +1647,16 @@ async function connect(deps: RemoteConnectDeps) {
       void 0
     }
 
-    await cleanupStale(ssh, ownershipId, ownedSpawn)
+    // A quit that aborts the bootstrap after its spawn reaps here, not in the teardown: its outcome reaches the
+    // desktop log the same way (the token, or the failure's class and kind only), and the reap's own failure still
+    // replaces the abort, as before.
+    try {
+      rememberLog(remoteReapLogLine({ outcome: await cleanupStale(ssh, ownershipId, ownedSpawn) }))
+    } catch (reapError) {
+      rememberLog(remoteReapLogLine({ error: reapError }))
+      throw reapError
+    }
+
     throw error
   }
 }

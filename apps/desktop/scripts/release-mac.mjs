@@ -5,7 +5,8 @@
 //
 // Runs in the owner's Terminal, from a fresh clone outside iCloud. Third-party code (npm ci, vite, tsc) runs while the
 // release keychain is LOCKED; the keychain is unlocked (the owner types its password at the `security` prompt) only for
-// electron-builder's sign + notarize and the DMG notarization, and is locked again in `finally`. Credentials reach only
+// electron-builder's sign + notarize, the DMG notarization and, with --sign-sums, the SHA256SUMS.txt signature, and is
+// locked again in `finally`: one password per release. Credentials reach only
 // child processes, through a copied env: this process's env is never mutated, and argv holding the keychain path is
 // never logged. No credential is ever read by this script.
 
@@ -36,7 +37,11 @@ export const SUMS_SIGNATURE_NAME = 'SHA256SUMS.txt.sig'
 // The launchers' own verifier (packages/icloneos-cli): a signature they would refuse is never listed for upload.
 export const VERIFY_SUMS_SCRIPT = join('packages', 'icloneos-cli', 'scripts', 'verify-sums-signature.js')
 
-/** Set in the parent env = refuse: builder would pick them up and bypass the keychain-profile path. */
+/**
+ * Set in the parent env = refuse: builder would pick up the credentials and bypass the keychain-profile path, and the
+ * electron_use_remote_checksums names would stop install.js checking the binary against the package's checksums.json.
+ * ELECTRON_OVERRIDE_DIST_PATH would make the release's Electron lookups read another binary than the one it packs.
+ */
 export const FORBIDDEN_ENV = [
   'APPLE_ID',
   'APPLE_APP_SPECIFIC_PASSWORD',
@@ -47,11 +52,18 @@ export const FORBIDDEN_ENV = [
   'CSC_LINK',
   'CSC_KEY_PASSWORD',
   'GH_TOKEN',
-  'GITHUB_TOKEN'
+  'GITHUB_TOKEN',
+  'electron_use_remote_checksums',
+  'npm_config_electron_use_remote_checksums',
+  'ELECTRON_OVERRIDE_DIST_PATH'
 ]
 
 /** The only packages whose install scripts run (after `npm ci --ignore-scripts`). Reviewed by the lead. */
-export const REBUILD_ALLOWLIST = ['electron', 'esbuild', 'node-pty']
+export const REBUILD_ALLOWLIST = ['esbuild', 'node-pty']
+
+// Electron 44's package has no install script, so `npm rebuild` leaves it without its binary. This command unpacks the
+// binary, checked against the package's own checksums.json (FORBIDDEN_ENV keeps that check on). Run from the repo root.
+export const INSTALL_ELECTRON_ARGS = ['node_modules/electron/install.js']
 
 const ICLOUD_MARKERS = ['/Desktop/', '/Documents/', 'Mobile Documents']
 
@@ -122,6 +134,33 @@ export function selectIdentityName(findIdentityOutput, team) {
   }
 
   return names[0]
+}
+
+/**
+ * The argv of `security cms` that signs SHA256SUMS.txt: a detached (-T), SHA-256, time-stamped (-G) CMS signature.
+ * `-u 6` is required: the usage text of `security cms` lists cert usage 6 as certUsageObjectSigner, and its default is
+ * certUsageEmailSigner (S/MIME). A Developer ID Application certificate is a code-signing certificate, so without -u
+ * the lookup by -N finds nothing: "could not find signing identity", exit 1, and an empty signature file.
+ */
+export function sumsSignArgs({ identityName, keychain, sumsPath, sigPath }) {
+  return [
+    'cms',
+    '-S',
+    '-N',
+    identityName,
+    '-k',
+    keychain,
+    '-u',
+    '6',
+    '-H',
+    'SHA256',
+    '-G',
+    '-T',
+    '-i',
+    sumsPath,
+    '-o',
+    sigPath
+  ]
 }
 
 /** A copy of `base` without the forbidden names, plus the signing/notary handles. `base` is not touched. */
@@ -207,6 +246,96 @@ export function runtimePin(pinJsonText, generatedSource, lockJsonText) {
   }
 }
 
+export const FEED_NAME = 'latest-mac.yml'
+
+/**
+ * macOS major → the Darwin kernel major it ships. electron-updater (6.8.9, the updater v0.0.4 ships) refuses an update
+ * only through `minimumSystemVersion` in latest-mac.yml, compared with semver against os.release(): a KERNEL version.
+ * electron-builder writes build.mac.minimumSystemVersion to Info.plist only, never to the feed, so this script stamps
+ * it. Explicit table, no arithmetic: a macOS it does not list is refused, never guessed.
+ */
+export const MACOS_TO_DARWIN = Object.freeze({ 13: 22, 14: 23, 15: 24, 26: 25, 27: 26 })
+
+/**
+ * The feed's minimumSystemVersion for a build.mac.minimumSystemVersion ('13.0' → '22.0.0'). Only an x, x.0 or x.0.0
+ * macOS value maps: a minor (13.1) has no Darwin x.0.0 equivalent that would refuse 13.0. Never returns a macOS
+ * number: '13.0' makes the gate throw and fail OPEN, '13.0.0' is below every supported kernel (21 > 13).
+ */
+export function feedMinimumSystemVersion(macosMinimum) {
+  const match = /^(\d+)(?:\.0(?:\.0)?)?$/.exec(String(macosMinimum ?? '').trim())
+  const darwin = match ? MACOS_TO_DARWIN[Number(match[1])] : undefined
+
+  if (!darwin) {
+    throw new Error(
+      `refusing build.mac.minimumSystemVersion ${JSON.stringify(macosMinimum ?? null)}: no Darwin mapping (add it to MACOS_TO_DARWIN)`
+    )
+  }
+
+  return `${darwin}.0.0`
+}
+
+const FEED_MIN_LINE = /^minimumSystemVersion:[^\n]*$/gm
+
+/** The top-level minimumSystemVersion of a latest-mac.yml (quotes stripped), null when absent; refuses a duplicate. */
+export function readFeedMinimum(ymlText) {
+  const lines = String(ymlText).match(FEED_MIN_LINE) ?? []
+
+  if (lines.length > 1) {
+    throw new Error(`${FEED_NAME} has ${lines.length} minimumSystemVersion lines`)
+  }
+
+  if (!lines.length) {
+    return null
+  }
+
+  return lines[0]
+    .slice('minimumSystemVersion:'.length)
+    .replace(/\s+#.*$/, '')
+    .trim()
+    .replace(/^(['"])(.*)\1$/, '$2')
+}
+
+/**
+ * Stamps `minimumSystemVersion: <darwin>` at the top level of latest-mac.yml: replaces an existing top-level line, else
+ * appends one (column 0 also closes any block scalar above it). Every other byte is kept. Idempotent.
+ */
+export function stampFeedMinimum(ymlText, darwin) {
+  const text = String(ymlText)
+  const line = `minimumSystemVersion: ${darwin}`
+
+  if (readFeedMinimum(text) !== null) {
+    return text.replace(FEED_MIN_LINE, line)
+  }
+
+  return `${text}${text === '' || text.endsWith('\n') ? '' : '\n'}${line}\n`
+}
+
+/** Throws unless the feed carries exactly the expected Darwin minimum. */
+export function assertFeedMinimum(ymlText, expected) {
+  const actual = readFeedMinimum(ymlText)
+
+  if (actual !== expected) {
+    throw new Error(`${FEED_NAME} minimumSystemVersion is ${JSON.stringify(actual)}, expected ${expected}`)
+  }
+}
+
+/**
+ * The pre-upload gate: the feed to be published carries the Darwin minimum, and SHA256SUMS lists the sha256 of the
+ * feed's bytes as they are now (the stamp happened before the list was hashed and signed).
+ */
+export function assertFeedPublishable({ ymlText, ymlSha256, sumsText, expected }) {
+  assertFeedMinimum(ymlText, expected)
+
+  const listed = String(sumsText)
+    .split('\n')
+    .filter(row => row.endsWith(`  ${FEED_NAME}`))
+    .map(row => row.split('  ')[0])
+
+  if (listed.length !== 1 || listed[0] !== ymlSha256) {
+    throw new Error(`${SUMS_NAME} does not cover the stamped ${FEED_NAME} (listed ${listed.join(',') || 'none'})`)
+  }
+}
+
 export function sha256SumsText(entries) {
   return entries.map(({ name, sha256 }) => `${sha256}  ${name}`).join('\n') + '\n'
 }
@@ -216,7 +345,7 @@ export function uploadNames(version, { signedSums = false } = {}) {
 
   const signature = signedSums ? [SUMS_SIGNATURE_NAME] : []
 
-  return [DMG_NAME, zip, `${zip}.blockmap`, 'latest-mac.yml', 'runtime.json', SUMS_NAME, ...signature]
+  return [DMG_NAME, zip, `${zip}.blockmap`, FEED_NAME, 'runtime.json', SUMS_NAME, ...signature]
 }
 
 /** Ids of the failing items in the gate's RESULT_JSON line; ['P7.gates.output'] when the line is missing or bad. */
@@ -291,7 +420,9 @@ export async function releaseMac(opts, deps = {}) {
   const forbidden = forbiddenEnvSet(env)
 
   if (forbidden.length) {
-    throw new Error(`refusing to run with ${forbidden.join(', ')} set — unset them (credentials live in the keychain)`)
+    throw new Error(
+      `refusing to run with ${forbidden.join(', ')} set — unset them (credentials live in the keychain; Electron is checked against its pinned checksums)`
+    )
   }
 
   if (!opts.gates || !exists(opts.gates)) {
@@ -317,7 +448,10 @@ export async function releaseMac(opts, deps = {}) {
     return result
   }
 
-  const version = JSON.parse(readText(join(desktopDir, 'package.json'))).version
+  const desktopPackage = JSON.parse(readText(join(desktopDir, 'package.json')))
+  const version = desktopPackage.version
+  // Mapped before anything is built: an unmapped macOS minimum fails in seconds.
+  const feedMinimum = feedMinimumSystemVersion(desktopPackage.build?.mac?.minimumSystemVersion)
   // The published runtime.json is checked before anything is built or sent to Apple, so a pin whose `verified` is not
   // the lock's computed verdict fails in seconds, not after notarization.
   const readPin = () =>
@@ -330,6 +464,67 @@ export async function releaseMac(opts, deps = {}) {
   const appPath = join(releaseDir, 'mac-arm64', APP_BUNDLE)
   const dmgPath = join(releaseDir, DMG_NAME)
   const started = now()
+  const runtimeJson = join(releaseDir, 'runtime.json')
+  const names = uploadNames(version, { signedSums: opts.signSums })
+  const sumsPath = join(releaseDir, SUMS_NAME)
+  const sigPath = join(releaseDir, SUMS_SIGNATURE_NAME)
+  // A full release signs the list inside its one signing window; --staple-only has no window and opens a short one.
+  const signsInWindow = opts.signSums && !opts.stapleOnly
+  const feedPath = join(releaseDir, FEED_NAME)
+  // latest-mac.yml is final once stamped: electron-builder wrote it; the stamp adds the Darwin minimum the updater
+  // reads, then the stamp is re-read and checked. It runs first in writeSums, so the list hashes the stamped bytes.
+  const stampFeed = () => {
+    if (!exists(feedPath)) {
+      throw new Error(`missing release asset: ${FEED_NAME}`)
+    }
+
+    const before = readText(feedPath)
+    const stamped = stampFeedMinimum(before, feedMinimum)
+
+    if (stamped !== before) {
+      writeText(feedPath, stamped)
+    }
+
+    assertFeedMinimum(readText(feedPath), feedMinimum)
+  }
+
+  // Every hashed asset is final once the DMG is stapled: electron-builder wrote the zip, its blockmap and
+  // latest-mac.yml (stamped first, below); stapling is the last write to the DMG; runtime.json is the pin read before
+  // anything was built. Nothing after that point writes any of them.
+  const writeSums = () => {
+    stampFeed()
+
+    if (!exists(runtimeJson)) {
+      writeText(runtimeJson, `${JSON.stringify(publishedPin)}\n`)
+    }
+
+    const hashed = names
+      .filter(name => name !== SUMS_NAME && name !== SUMS_SIGNATURE_NAME)
+      .map(name => {
+        const path = join(releaseDir, name)
+
+        if (!exists(path)) {
+          throw new Error(`missing release asset: ${name}`)
+        }
+
+        return { name, sha256: hashFile(path) }
+      })
+
+    writeText(sumsPath, sha256SumsText(hashed))
+  }
+  const signSums = identityName =>
+    step(
+      'sign SHA256SUMS.txt (detached CMS, Developer ID Application)',
+      'security',
+      sumsSignArgs({ identityName, keychain, sumsPath, sigPath }),
+      { interactive: true }
+    )
+  // Apple's own read-only check of both staples. With --sign-sums a full release runs it inside the signing window,
+  // before the list is hashed, so nothing is signed for a staple that does not validate.
+  const validateStaples = () => {
+    step('stapler validate app', 'xcrun', ['stapler', 'validate', appPath])
+    step('stapler validate DMG', 'xcrun', ['stapler', 'validate', dmgPath])
+  }
 
   if (!opts.stapleOnly) {
     if (step('git status', 'git', ['status', '--porcelain'], { cwd: repoRoot }).stdout.trim()) {
@@ -340,6 +535,7 @@ export async function releaseMac(opts, deps = {}) {
     step('lock the release keychain', 'security', ['lock-keychain', keychain])
     step('npm ci --ignore-scripts', 'npm', ['ci', '--ignore-scripts'], { cwd: repoRoot })
     step(`npm rebuild ${REBUILD_ALLOWLIST.join(' ')}`, 'npm', ['rebuild', ...REBUILD_ALLOWLIST], { cwd: repoRoot })
+    step('install the Electron binary', 'node', INSTALL_ELECTRON_ARGS, { cwd: repoRoot })
     step('npm run build', 'npm', ['run', 'build'])
     // PLANO_R §6 R7/R11: an unsigned --dir pack is scanned before anything is signed or uploaded to Apple's notary, so
     // a dirty app never leaves the machine. The signed app is scanned again below, and the DMG by make-distribution.
@@ -368,6 +564,8 @@ export async function releaseMac(opts, deps = {}) {
       keychain
     ])
     const sha1 = selectIdentity(identities.stdout, opts.team)
+    // Resolved before the password is asked for, so a missing or ambiguous name never costs an unlock.
+    const sumsIdentityName = signsInWindow ? selectIdentityName(identities.stdout, opts.team) : null
     const signingEnv = childEnv(env, { sha1, keychain })
 
     try {
@@ -470,6 +668,10 @@ export async function releaseMac(opts, deps = {}) {
 
       step('staple the DMG', 'xcrun', ['stapler', 'staple', dmgPath])
 
+      if (signsInWindow) {
+        validateStaples()
+      }
+
       const history = step(
         'notary history',
         'xcrun',
@@ -492,6 +694,13 @@ export async function releaseMac(opts, deps = {}) {
       }
 
       writeText(join(releaseDir, 'notary-app.json'), notaryLog(appSubmission))
+
+      if (signsInWindow) {
+        // Still inside the window, so the release asks for the keychain password once. A failure here locks in
+        // `finally` and stops the release before anything is listed for upload.
+        writeSums()
+        signSums(sumsIdentityName)
+      }
     } finally {
       run('security', ['set-keychain-settings', '-l', '-u', '-t', '300', keychain], { cwd: desktopDir, env })
       run('security', ['lock-keychain', keychain], { cwd: desktopDir, env })
@@ -502,35 +711,13 @@ export async function releaseMac(opts, deps = {}) {
     step('staple the DMG', 'xcrun', ['stapler', 'staple', dmgPath])
   }
 
-  step('stapler validate app', 'xcrun', ['stapler', 'validate', appPath])
-  step('stapler validate DMG', 'xcrun', ['stapler', 'validate', dmgPath])
-
-  const runtimeJson = join(releaseDir, 'runtime.json')
-
-  if (!exists(runtimeJson)) {
-    writeText(runtimeJson, `${JSON.stringify(publishedPin)}\n`)
+  if (!signsInWindow) {
+    validateStaples()
+    writeSums()
   }
 
-  const names = uploadNames(version, { signedSums: opts.signSums })
-  const hashed = names
-    .filter(name => name !== SUMS_NAME && name !== SUMS_SIGNATURE_NAME)
-    .map(name => {
-      const path = join(releaseDir, name)
-
-      if (!exists(path)) {
-        throw new Error(`missing release asset: ${name}`)
-      }
-
-      return { name, sha256: hashFile(path) }
-    })
-
-  const sumsPath = join(releaseDir, SUMS_NAME)
-
-  writeText(sumsPath, sha256SumsText(hashed))
-
-  if (opts.signSums) {
-    // A second, short unlock: the list only exists once the DMG is stapled, after the signing window has closed.
-    const sigPath = join(releaseDir, SUMS_SIGNATURE_NAME)
+  if (opts.signSums && opts.stapleOnly) {
+    // --staple-only opened no signing window, so the list gets its own short one: still one password for the run.
     const identities = step('find the Developer ID identity (SHA256SUMS)', 'security', [
       'find-identity',
       '-v',
@@ -547,17 +734,15 @@ export async function releaseMac(opts, deps = {}) {
         ['unlock-keychain', keychain],
         { interactive: true }
       )
-      step(
-        'sign SHA256SUMS.txt (detached CMS, Developer ID Application)',
-        'security',
-        ['cms', '-S', '-N', identityName, '-k', keychain, '-H', 'SHA256', '-G', '-T', '-i', sumsPath, '-o', sigPath],
-        { interactive: true }
-      )
+      signSums(identityName)
     } finally {
       run('security', ['lock-keychain', keychain], { cwd: desktopDir, env })
       log('release keychain locked')
     }
+  }
 
+  if (opts.signSums) {
+    // The verifier needs no keychain: it runs after the lock, exactly as the launchers will run it.
     step('verify SHA256SUMS.txt.sig exactly as the launchers will', 'node', [
       join(repoRoot, VERIFY_SUMS_SCRIPT),
       sumsPath,
@@ -566,6 +751,13 @@ export async function releaseMac(opts, deps = {}) {
     ])
   }
 
+  // The gate before upload: the feed carries the Darwin minimum and the (signed) list covers its stamped bytes.
+  assertFeedPublishable({
+    ymlText: readText(feedPath),
+    ymlSha256: hashFile(feedPath),
+    sumsText: readText(sumsPath),
+    expected: feedMinimum
+  })
   writeText(join(releaseDir, 'UPLOAD.txt'), `${names.join('\n')}\n`)
 
   const live = await fetchText(FEED_LATEST).catch(() => null)

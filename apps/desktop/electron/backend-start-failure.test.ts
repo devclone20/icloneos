@@ -147,3 +147,32 @@ test('every remote failure picks exactly one path: retry, reauth latch, or host-
     }
   }
 })
+
+test("'ownership-unverifiable' needs the user: never retried automatically, latched like a host-key change", async () => {
+  const { isOwnershipUnverifiableBootFailure, isUserActionRemoteBootFailure, shouldLatchHostKeyChangedFailure } =
+    await import('./backend-start-failure')
+
+  const tagged = Object.assign(new Error('anything'), { kind: 'ownership-unverifiable' })
+
+  // The same refusal after a stringifying boundary (the kind is lost, the user-facing text is not).
+  const crossed = new Error(
+    "This remote host doesn't let the app check which programs are running, so the app can't confirm that the " +
+      'Hermes server already running there is its own.'
+  )
+
+  for (const error of [tagged, crossed]) {
+    assert.equal(isOwnershipUnverifiableBootFailure(error), true)
+    assert.equal(isUserActionRemoteBootFailure(error), true)
+    const isHostKeyChanged = isUserActionRemoteBootFailure(error)
+
+    assert.equal(isRetryableRemoteBootFailure({ attemptedRemote: true, isReauth: false, isHostKeyChanged }), false)
+    assert.equal(shouldLatchHostKeyChangedFailure({ attemptedRemote: true, isReauth: false, isHostKeyChanged }), true)
+  }
+
+  // A plain transport failure stays retryable.
+  const transient = Object.assign(new Error('Could not verify the existing SSH backend.'), {
+    kind: 'transient-transport-error'
+  })
+
+  assert.equal(isUserActionRemoteBootFailure(transient), false)
+})

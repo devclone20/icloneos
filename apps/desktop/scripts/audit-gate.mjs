@@ -3,29 +3,37 @@
 //
 //   node scripts/audit-gate.mjs                     run `npm audit --json` at the repo root (network) and judge it
 //                                                   only if npm's http log shows the registry answered (see runAudit)
-//   node scripts/audit-gate.mjs --report <file>     judge a saved `npm audit --json` report instead (offline)
+//   node scripts/audit-gate.mjs [--save <file>]     ... and save the repo lock's report, stamped with how it was
+//                                                   audited, for a later --report
+//   node scripts/audit-gate.mjs --report <file>     judge a saved report instead (offline): one this gate saved, or an
+//                                                   `npm audit --json` report given an `audited.args` stamp by hand
 //       [--lock <package-lock.json>]               the lockfile whose shipped set is judged (default: the repo's;
-//                                                   a SUB_LOCKS lock is judged by its own rules and waivers)
+//                                                   a SUB_LOCKS, APP_LOCKS or ACP_LOCKS lock: its own rules and waivers)
 //
 // The runtime's other npm locks (SUB_LOCKS: the WhatsApp bridge and the Photon sidecar, v0.0.4 review M2) are judged
 // too, each on its own: `npm audit --json --package-lock-only` in its folder (the lock is what `npm ci` installs on
 // the user's machine), every non-dev package of the lock ships, the same severities fail, and each lock has its own
-// waiver list under the same rules (tied, stale, expired).
+// waiver list under the same rules (tied, stale, expired). The app's bundled locks (APP_LOCKS: the Privy sign-in page,
+// iclone/privy/login-island, bundled into privy-login.js and shipped as an extraResources entry; v0.0.5) are judged
+// the same way. So is the optional ACP CLI's lock (ACP_LOCKS: apps/desktop/acp-cli-lock, shipped as Resources/acp-pin
+// and installed from it at first use, only when the user adds the ACP CLI; v0.0.5).
 //
 // What ships is the set THIRD_PARTY_NOTICES.md lists: the closure third-party-closure.mjs computes from the lockfile
 // (desktopRoots + computeClosure), the desktop workspace's runtime dependencies plus Electron. Electron is a
 // devDependency of the workspace (electron-builder wants it there) but its frameworks are what the app runs in, so
-// `npm audit --omit=dev` never sees it: the gate reads the FULL report (a saved one must be `npm audit --json` without
-// --omit) and keeps only the lock nodes of that closure. Build tools, test runners and the other workspaces (vite,
+// `npm audit --omit=dev` never sees it: the gate reads the FULL report and keeps only the lock nodes of that closure.
+// npm's report cannot show what it covered (it lists only the vulnerable packages, and metadata.dependencies counts
+// the whole tree whatever --omit says; measured on npm 11), so every report the gate judges carries an `audited.args`
+// stamp (runAudit writes it) and a stamp that omits a class a shipped package belongs to is refused (assertReportScope). Build tools, test runners and the other workspaces (vite,
 // ui-tui, web, node-gyp) are outside it and are reported, never judged.
 //
 // A finding is one advisory (a `via` object of the report) of severity high or critical on a shipped node. Every
 // finding fails unless WAIVED names that exact name@version and advisory id; a waiver that matches no finding fails
 // too (stale: drop it), so the list can only shrink to what is still true, a waiver that does not name what removes
-// it and by which version (`until`, e.g. "G-44 (v0.0.5)") is refused (untied), and a waiver whose `until` version the
+// it and by which version (`until`, e.g. "fixed by the next Electron (v0.0.5)") is refused (untied), and a waiver whose `until` version the
 // app has reached is refused (expired). Exit 0 green, 1 red, 2 cannot judge.
 import { spawnSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -51,23 +59,8 @@ export const FAILING_SEVERITIES = Object.freeze(['critical', 'high'])
  * an entry whose version the app has reached (EXPIRED, red: v0.0.4 review R2-4).
  */
 export const WAIVED = Object.freeze({
-  'electron@40.10.2': {
-    until: 'G-44 (v0.0.5)',
-    reason:
-      'no Electron 40 release fixes these (the 40 line ends at 40.10.6); the fix is an Electron major upgrade, ' +
-      'which moves the notices frameworks section, the native add-ons and the packaging (G-42 report, global plan). ' +
-      'Their preconditions exist in the app: webviewTag (session-windows.ts), sandboxed iframes ' +
-      '(preview-artifact.tsx), a window-open handler (main/windows.ts), a privileged protocol (media-protocol.ts); ' +
-      'the certificate one applies to all TLS traffic; removed by G-44 (Electron >= 42.11.16, v0.0.5)',
-    advisories: {
-      'GHSA-9f4c-93c8-jc8g': 'sandboxed iframe can bypass allow-popups (fixed in 41.10.3)',
-      'GHSA-hq2x-r82h-9wj4': 'popups from sandboxed iframes drop the inherited sandbox (fixed in 41.10.4)',
-      'GHSA-gr2m-v5gq-v685': 'windows opened from a sandboxed top-level document do not inherit it (fixed in 41.10.6)',
-      'GHSA-j84w-jfhq-vhvj': 'file and http protocol handlers allow cross-origin reads (fixed in 41.10.6)',
-      'GHSA-9qh4-3jw8-366w': '<webview> can enable Node.js integration in Web Workers (fixed in 41.10.6)',
-      'GHSA-jr5w-w6x2-84p9': 'mitigation for compromised eMudhra intermediate certificates (fixed in 42.11.16)'
-    }
-  }
+  // Empty: no shipped package has a critical or high advisory. Electron 44.10.1 has none of the advisories that the
+  // Electron 40.10.2 entry here used to waive (audit-gate.fixtures/npm-audit-2026-11-01.json).
 })
 
 /**
@@ -78,6 +71,110 @@ export const WAIVED = Object.freeze({
 export const SUB_LOCKS = Object.freeze({
   'scripts/whatsapp-bridge': Object.freeze({}),
   'plugins/platforms/photon/sidecar': Object.freeze({})
+})
+
+// The accepted risks of the Privy sign-in page's lock (owner decision 2026-11-03/04): one entry per finding, each with
+// its own advisory. The `until` version forces the next release to re-decide them (the gate refuses an expired waiver).
+const SIGN_IN_UNTIL =
+  'v0.0.6: re-decided each release; removed when a compatible fix exists (backlog: SECURITY.md §3.3)'
+const SIGN_IN_ZOD_WHY =
+  'no compatible fix: GHSA-mrhx-c7xc-m3w5 is fixed only in zod 4.6.6, no 3.x release has it, and the consumers need ' +
+  'zod 3 (@privy-io/api-base ^3.25.76, @coinbase/cdp-sdk ^3.25.76, x402 ^3.24.2, @reown/appkit-wallet 3.22.4 exact); ' +
+  'worst case: the sign-in window runs out of memory (a DoS of the sign-in window only), no data or code is exposed; ' +
+  'accepted by the owner 2026-11-03/04, re-decided at v0.0.6; removed when a compatible fix exists'
+
+/**
+ * The app's own npm locks bundled into what electron-builder packages (G-42, v0.0.5): by folder from the repo root,
+ * each with its own waivers (same rules as WAIVED: tied, stale, expired). The Privy sign-in page is built from
+ * iclone/privy/login-island's lock by esbuild into iclone/privy/privy-login.js, which ships as an extraResources entry
+ * (apps/desktop/package.json, "iclone-privy"): every non-dev package of that lock is in the bundle the app serves.
+ */
+export const APP_LOCKS = Object.freeze({
+  'iclone/privy/login-island': Object.freeze({
+    'zod@3.25.76': Object.freeze({
+      until: SIGN_IN_UNTIL,
+      severity: 'high',
+      reason: SIGN_IN_ZOD_WHY,
+      advisories: Object.freeze({
+        'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
+      })
+    }),
+    // The two nested copies (@reown/appkit-wallet and @wagmi/connectors), both 3.22.4: one name@version, one entry.
+    'zod@3.22.4': Object.freeze({
+      until: SIGN_IN_UNTIL,
+      severity: 'high',
+      reason: SIGN_IN_ZOD_WHY,
+      advisories: Object.freeze({
+        'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
+      })
+    }),
+    'decode-uri-component@0.2.2': Object.freeze({
+      until: SIGN_IN_UNTIL,
+      severity: 'high',
+      reason:
+        'no compatible fix: GHSA-qr28-fpjm-wq7f is fixed only in 0.5.1, and the consumer is query-string 7 ' +
+        "(@wagmi/connectors > @walletconnect/utils > query-string 7.1.3 > decode-uri-component 0.2.2); npm's only " +
+        'fix is a semver-major @privy-io/react-auth; worst case: the sign-in window hangs on a malformed ' +
+        'percent-encoded input (a DoS of the sign-in window only), no data or code is exposed; accepted by the owner ' +
+        '2026-11-03/04, re-decided at v0.0.6; removed when a compatible fix exists',
+      advisories: Object.freeze({
+        'GHSA-qr28-fpjm-wq7f': 'HIGH, CWE-400/407: denial of service via quadratic replacement of percent-encoded runs'
+      })
+    })
+  })
+})
+
+// The accepted risks of the optional ACP CLI's lock (owner decision 2026-11-03/04): one entry per finding, each with
+// its own advisory, matched exactly (a GHSA id, or npm's own id when the advisory has no GHSA). The `until` version
+// forces the next release to re-decide them (the gate refuses an expired waiver).
+const ACP_CLI_UNTIL =
+  'v0.0.6: re-decided each release; removed when a compatible fix exists (backlog: move the ACP CLI to acp-node-v2)'
+const ACP_CLI_WORST =
+  'only the optional ACP CLI is affected (installed from this lock only when the user adds it); worst case: the ACP ' +
+  'CLI process runs out of memory or stalls, no data or code is exposed; accepted by the owner 2026-11-03/04, ' +
+  're-decided at v0.0.6; removed when a compatible fix exists'
+// npm's own id for the meta-advisory it writes on acp-node (no GHSA: no acp-node release is outside the vulnerable
+// range). npm derives that id from whichever vulnerable dependency it resolves first (@aa-sdk/core or
+// @account-kit/infra, both only through zod), so the same lock gives one of two ids from run to run (v0.0.5,
+// work/v005rel-acpgate/today/REKEY_CHECK.md). ACP_LOCKS therefore judge with `matchSynthetic` (see judge()): a
+// re-keyed npm id on this same name@version is waived only when its whole chain bottoms out in waived GHSAs.
+export const ACP_NODE_NPM_ADVISORY =
+  'npm-1txMmhaogPxbj7reguNwwkMchCH+SRUpDXCtKakoRl5f4mKoKdab1Hvm+oz6p3pLhTTHkLAOr+YLrf/ylFhtIA=='
+
+/**
+ * The optional ACP CLI's npm lock (G-42, v0.0.5): by folder from the repo root, with its own waivers (same rules as
+ * WAIVED: tied, stale, expired, severity). apps/desktop/acp-cli-lock ships as the acp-pin extraResources entry
+ * (apps/desktop/package.json), and the app installs the CLI from it at first use (electron/iclone-acp-tools/), only
+ * when the user adds the ACP CLI: every non-dev package of that lock is what the app installs.
+ */
+export const ACP_LOCKS = Object.freeze({
+  'apps/desktop/acp-cli-lock': Object.freeze({
+    'zod@3.25.76': Object.freeze({
+      until: ACP_CLI_UNTIL,
+      severity: 'high',
+      reason:
+        'no compatible fix: GHSA-mrhx-c7xc-m3w5 is fixed only in zod 4.6.6, no 3.x release has it, and the ACP ' +
+        "CLI's dependencies require zod ^3 (@aa-sdk/core, @account-kit/infra, @alchemy/common, abitype); " +
+        ACP_CLI_WORST,
+      advisories: Object.freeze({
+        'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
+      })
+    }),
+    '@virtuals-protocol/acp-node@0.3.0-beta-subscription.2': Object.freeze({
+      until: ACP_CLI_UNTIL,
+      severity: 'high',
+      reason:
+        'no compatible fix: an effect of zod 3 (GHSA-mrhx-c7xc-m3w5) through @account-kit/infra and @aa-sdk/core; ' +
+        'npm writes its own advisory on acp-node because no acp-node release is outside the vulnerable range ' +
+        '(the package is deprecated for acp-node-v2); ' +
+        ACP_CLI_WORST,
+      advisories: Object.freeze({
+        [ACP_NODE_NPM_ADVISORY]:
+          'HIGH, CWE-770 (npm meta-advisory, no GHSA): depends on vulnerable versions of @account-kit/infra or ' +
+          '@aa-sdk/core (npm names whichever it resolves first; both only through zod GHSA-mrhx-c7xc-m3w5)'
+      })
+    })
+  })
 })
 
 /** Extra `npm audit` arguments for a sub-lock: judge the lock itself (its folder has no node_modules in the repo). */
@@ -100,11 +197,85 @@ export function lockNodes(lock) {
   return nodes
 }
 
+const GHSA_RE = /GHSA(-[23456789cfghjmpqrvwx]{4}){3}/
+
 /** The advisory's stable id: the GHSA id of its URL, else npm's numeric source. */
 export function advisoryId(via) {
-  const ghsa = String(via.url ?? '').match(/GHSA(-[23456789cfghjmpqrvwx]{4}){3}/)
+  const ghsa = String(via.url ?? '').match(GHSA_RE)
 
   return ghsa ? ghsa[0] : `npm-${via.source}`
+}
+
+const SYNTHETIC_TITLE = 'Depends on vulnerable versions of '
+
+/**
+ * True only for the shape npm gives its OWN "depends on vulnerable versions" entry: a string (hash) source, no url,
+ * and that title. A real advisory has an integer source (and usually a GHSA url), so it is never synthetic here.
+ */
+export function isNpmSyntheticVia(via) {
+  return (
+    typeof via?.source === 'string' &&
+    !via.url &&
+    typeof via.title === 'string' &&
+    via.title.startsWith(SYNTHETIC_TITLE)
+  )
+}
+
+/** True for a waiver key that names an npm synthetic id: `npm-<hash>` (never a GHSA, never `npm-<integer>`). */
+export function isSyntheticAdvisory(advisory) {
+  return advisory.startsWith('npm-') && !GHSA_RE.test(advisory) && !/^npm-\d+$/.test(advisory)
+}
+
+/**
+ * Every advisory id of a FAILING severity (high/critical: the only ones the gate judges anywhere) reachable through a
+ * vulnerability's `via` chain (package-name strings followed into report.vulnerabilities; objects give their id),
+ * excluding npm's own synthetic entries. Lower-severity advisories in the chain are ignored exactly as the gate ignores
+ * them on every node. Returns null, so the caller refuses the match, when the chain cannot be followed (a named package
+ * missing from the report) or reaches a high/critical advisory that is neither a GHSA nor npm-synthetic.
+ */
+export function chainAdvisories(report, name, seen = new Set()) {
+  if (seen.has(name)) {
+    return new Set()
+  }
+
+  seen.add(name)
+
+  const all = report.vulnerabilities ?? {}
+  const vuln = Object.hasOwn(all, name) ? all[name] : null
+
+  if (!vuln || typeof vuln !== 'object') {
+    return null
+  }
+
+  const out = new Set()
+
+  for (const via of vuln.via ?? []) {
+    if (typeof via === 'string') {
+      const sub = chainAdvisories(report, via, seen)
+
+      if (sub === null) {
+        return null
+      }
+
+      for (const advisory of sub) {
+        out.add(advisory)
+      }
+    } else if (typeof via === 'object' && via && FAILING_SEVERITIES.includes(via.severity)) {
+      if (isNpmSyntheticVia(via)) {
+        continue
+      }
+
+      const advisory = advisoryId(via)
+
+      if (!GHSA_RE.test(advisory)) {
+        return null
+      }
+
+      out.add(advisory)
+    }
+  }
+
+  return out
 }
 
 /** Lock node path -> name@version, for every node of the shipped closure. */
@@ -139,6 +310,65 @@ export function assertReport(report) {
   }
 }
 
+/** The report with the record of how npm audited it: the `npm` arguments, under `audited`. */
+export function stampAudited(report, args) {
+  return { ...report, audited: { args: [...args] } }
+}
+
+/** The dependency classes `--omit` leaves out of an audit (`--omit=dev`, `--omit dev`, `--omit=dev,optional`). */
+export function omittedClasses(args) {
+  const omitted = new Set()
+
+  for (const [index, arg] of args.entries()) {
+    const value = arg.startsWith('--omit=') ? arg.slice('--omit='.length) : arg === '--omit' ? args[index + 1] : null
+
+    for (const name of String(value ?? '').split(',')) {
+      if (name.trim()) {
+        omitted.add(name.trim())
+      }
+    }
+  }
+
+  return omitted
+}
+
+// The lock row flags that put a package in each `--omit` class (`devOptional`: reachable only through dev or optional).
+const CLASS_FLAGS = Object.freeze({
+  dev: ['dev', 'devOptional'],
+  optional: ['optional', 'devOptional'],
+  peer: ['peer']
+})
+
+/**
+ * Throws unless the report says it audited every shipped node: one without an `audited.args` stamp cannot say what
+ * it covered, and one audited with `--omit=<class>` never saw the shipped packages of that class (electron is a
+ * devDependency the app ships: an `--omit=dev` report is silent about it whatever its advisories).
+ */
+export function assertReportScope(report, lock, nodes) {
+  const args = report?.audited?.args
+
+  if (!Array.isArray(args) || !args.every(arg => typeof arg === 'string')) {
+    throw new Error(
+      'cannot judge: the report does not say how npm audited it (no "audited.args"): npm lists only the vulnerable ' +
+        'packages, so a full report and an --omit=dev one look alike; save one with node scripts/audit-gate.mjs --save <file>'
+    )
+  }
+
+  const omitted = [...omittedClasses(args)]
+  const packages = lock?.packages ?? {}
+  const unseen = [...nodes]
+    .filter(([path]) => omitted.some(name => (CLASS_FLAGS[name] ?? [name]).some(flag => packages[path]?.[flag])))
+    .map(([, id]) => id)
+  const ids = [...new Set(unseen)].sort()
+
+  if (ids.length > 0) {
+    throw new Error(
+      `cannot judge: the report was audited with --omit=${omitted.join(',')}, which leaves out ${ids.length} shipped ` +
+        `package(s) (${ids.slice(0, 5).join(', ')}${ids.length > 5 ? ', …' : ''}): run npm audit --json without --omit`
+    )
+  }
+}
+
 /**
  * Judge a report against the lock's shipped set. Returns
  *   failing  [{ id, advisory, severity, title, node }]  high/critical on a shipped node, not waived
@@ -146,10 +376,20 @@ export function assertReport(report) {
  *   stale    [{ id, advisory }]                          waivers that match no finding
  *   untied   [id]                                        waivers with no versioned `until` (refused: findings fail)
  *   expired  [{ id, until }]                             waivers whose `until` version <= appVersion (refused too)
+ *   mismatched [{ id, advisory, accepted, severity }]    a waived advisory whose severity is not the one the waiver
+ *                                                       accepted (`severity`, e.g. 'high'; re-rated, or none recorded):
+ *                                                       refused, red, never silently waived at another rating
  *   outside  [name]                                      packages with a high/critical advisory that do not ship
  *   shipped  number                                      packages in the shipped set
  */
-export function judge(report, lock, waived = WAIVED, appVersion = APP_VERSION, nodesOf = shippedNodes) {
+export function judge(
+  report,
+  lock,
+  waived = WAIVED,
+  appVersion = APP_VERSION,
+  nodesOf = shippedNodes,
+  { matchSynthetic = false } = {}
+) {
   const current = parseVersion(appVersion)
 
   if (!current) {
@@ -159,6 +399,9 @@ export function judge(report, lock, waived = WAIVED, appVersion = APP_VERSION, n
   assertReport(report)
 
   const nodes = nodesOf(lock)
+
+  assertReportScope(report, lock, nodes)
+
   const findings = []
   const outside = new Set()
 
@@ -186,7 +429,9 @@ export function judge(report, lock, waived = WAIVED, appVersion = APP_VERSION, n
           advisory: advisoryId(via),
           severity: via.severity,
           title: via.title,
-          node
+          node,
+          name,
+          synthetic: isNpmSyntheticVia(via)
         })
       }
     }
@@ -207,12 +452,72 @@ export function judge(report, lock, waived = WAIVED, appVersion = APP_VERSION, n
   const used = new Set()
   const failing = []
   const accepted = []
+  const mismatched = []
+
+  // The GHSAs this lock waives (tied entries only: an expired or untied waiver waives nothing, so it can tie nothing),
+  // for the synthetic-id match below.
+  const waivedGhsa = new Set(
+    Object.values(tied).flatMap(entry => Object.keys(entry.advisories ?? {}).filter(a => GHSA_RE.test(a)))
+  )
+
+  // matchSynthetic (ACP_LOCKS only): npm's synthetic id for a "depends on vulnerable versions" entry changes from run to
+  // run. Such a finding (npm's own shape: a hash source, no url, that title) is waived by the synthetic waiver of the
+  // SAME name@version when the severity is the same and every HIGH/CRITICAL advisory its via chain reaches is a GHSA
+  // this lock already waives (lower ones are ignored, as everywhere in the gate). An unfollowable chain, one reaching no
+  // GHSA, or one reaching a high/critical advisory that is not a GHSA is never matched. Each synthetic waiver ties at
+  // most ONE synthetic finding (npm writes one per package); the waiver it matches is used, not STALE.
+  const syntheticUsed = new Map()
+  const syntheticMatch = finding => {
+    if (!matchSynthetic || !finding.synthetic) {
+      return null
+    }
+
+    const entry = tied[finding.id]
+    const key = Object.keys(entry?.advisories ?? {}).find(isSyntheticAdvisory)
+
+    if (!key || entry.severity !== finding.severity) {
+      return null
+    }
+
+    const prior = syntheticUsed.get(`${finding.id} ${key}`)
+
+    if (prior !== undefined && prior !== finding.advisory) {
+      return null
+    }
+
+    const chain = chainAdvisories(report, finding.name)
+
+    if (!chain || chain.size === 0 || ![...chain].every(a => waivedGhsa.has(a))) {
+      return null
+    }
+
+    syntheticUsed.set(`${finding.id} ${key}`, finding.advisory)
+
+    return key
+  }
 
   for (const finding of findings) {
     const entry = tied[finding.id]
     const why = entry?.advisories?.[finding.advisory]
+    const synthetic = why ? null : syntheticMatch(finding)
 
-    if (why) {
+    if (synthetic) {
+      used.add(`${finding.id} ${synthetic}`)
+      accepted.push({
+        ...finding,
+        reason:
+          `${entry.advisories[synthetic]} (npm re-keyed its synthetic id; every high/critical advisory in its chain ` +
+          'is a GHSA waived in this lock)'
+      })
+    } else if (why && entry.severity !== finding.severity) {
+      used.add(`${finding.id} ${finding.advisory}`)
+      mismatched.push({
+        id: finding.id,
+        advisory: finding.advisory,
+        accepted: entry.severity ?? 'none',
+        severity: finding.severity
+      })
+    } else if (why) {
       used.add(`${finding.id} ${finding.advisory}`)
       accepted.push({ ...finding, reason: why })
     } else {
@@ -232,6 +537,7 @@ export function judge(report, lock, waived = WAIVED, appVersion = APP_VERSION, n
     stale,
     untied,
     expired,
+    mismatched,
     appVersion: current.join('.'),
     outside: [...outside].sort(),
     shipped: new Set(nodes.values()).size
@@ -250,7 +556,7 @@ export function compareVersions(a, b) {
   return a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
 }
 
-/** The version a waiver's `until` names, e.g. "G-44 (v0.0.5)" -> [0, 0, 5]; null when it names none or several. */
+/** The version a waiver's `until` names, e.g. "fixed by the next Electron (v0.0.5)" -> [0, 0, 5]; null when it names none or several. */
 export function untilVersion(until) {
   const found = [...String(until ?? '').matchAll(/\bv(\d+\.\d+\.\d+)\b/g)]
 
@@ -277,13 +583,23 @@ export function render(verdict, waived = WAIVED) {
   const untied = verdict.untied ?? []
 
   for (const id of untied) {
-    lines.push(`UNTIED waiver ${id}: names no versioned \`until\` (what removes it, e.g. "G-44 (v0.0.5)"); refused`)
+    lines.push(
+      `UNTIED waiver ${id}: names no versioned \`until\` (what removes it, e.g. "fixed by the next Electron (v0.0.5)"); refused`
+    )
   }
 
   const expired = verdict.expired ?? []
 
   for (const { id, until } of expired) {
     lines.push(`EXPIRED waiver ${id}: until ${until}, and this is v${verdict.appVersion ?? APP_VERSION}; refused`)
+  }
+
+  const mismatched = verdict.mismatched ?? []
+
+  for (const m of mismatched) {
+    lines.push(
+      `SEVERITY waiver ${m.id} ${m.advisory}: accepted at ${m.accepted}, the report rates it ${m.severity}; refused (re-decide it)`
+    )
   }
 
   const byPackage = new Map()
@@ -303,12 +619,17 @@ export function render(verdict, waived = WAIVED) {
     }
   }
 
-  const red = verdict.failing.length > 0 || verdict.stale.length > 0 || untied.length > 0 || expired.length > 0
+  const red =
+    verdict.failing.length > 0 ||
+    verdict.stale.length > 0 ||
+    untied.length > 0 ||
+    expired.length > 0 ||
+    mismatched.length > 0
 
   lines.push(
     `[audit-gate] ${red ? 'RED' : 'GREEN'}: ${verdict.shipped} shipped packages; critical/high on them: ` +
       `${verdict.failing.length} failing, ${verdict.waived.length} waived, ${verdict.stale.length} stale waiver(s), ${untied.length} untied waiver(s), ` +
-      `${expired.length} expired waiver(s); ` +
+      `${expired.length} expired waiver(s), ${mismatched.length} severity mismatch(es); ` +
       `not shipped, not judged: ${verdict.outside.length ? verdict.outside.join(', ') : 'none'}`
   )
 
@@ -319,7 +640,17 @@ export function render(verdict, waived = WAIVED) {
  * The command line wins over the environment and every .npmrc (measured): with offline=true anywhere, a plain
  * `npm audit --json` asks nobody and prints a well-formed report with 0 vulnerabilities and exit 0.
  */
-export const AUDIT_ARGS = Object.freeze(['audit', '--json', '--offline=false', '--loglevel=http'])
+// --include=<class> keeps every class in the audit whatever `omit` an .npmrc or the environment sets (the command line
+// wins; --include beats --omit in npm): the shipped set has dev (electron) and optional packages.
+export const AUDIT_ARGS = Object.freeze([
+  'audit',
+  '--json',
+  '--offline=false',
+  '--loglevel=http',
+  '--include=dev',
+  '--include=optional',
+  '--include=peer'
+])
 
 // npm's own http log line for the audit request: the bulk advisory endpoint, or the quick-audit one npm falls back to.
 const REGISTRY_ANSWERED = /^npm http fetch POST 200 (\S+\/-\/npm\/v1\/security\/(?:advisories\/bulk|audits\/quick)) /gm
@@ -376,7 +707,8 @@ export function registryEvidence(httpLog, registry = DEFAULT_REGISTRY) {
  * the command line names it (it beats the environment and every .npmrc), and an answer from any other host is refused.
  */
 export function runAudit(cwd, spawn = spawnSync, registry = expectedRegistry(cwd), extra = []) {
-  const run = spawn('npm', [...AUDIT_ARGS, ...extra, `--registry=${registry}`], {
+  const args = [...AUDIT_ARGS, ...extra, `--registry=${registry}`]
+  const run = spawn('npm', args, {
     cwd,
     encoding: 'utf8',
     maxBuffer: 1 << 28
@@ -417,22 +749,24 @@ export function runAudit(cwd, spawn = spawnSync, registry = expectedRegistry(cwd
     )
   }
 
-  return { report, endpoint }
+  return { report: stampAudited(report, args), endpoint }
 }
 
 /**
- * Every lock the gate judges: the repo's (the desktop closure, WAIVED) first, then each SUB_LOCKS folder (every
- * non-dev package of its own lock, its own waivers, audited from the lock with the repo's expected registry).
+ * Every lock the gate judges: the repo's (the desktop closure, WAIVED) first, then each SUB_LOCKS folder, then each
+ * APP_LOCKS folder, then each ACP_LOCKS folder (every non-dev package of its own lock, its own waivers, audited from
+ * the lock with the repo's expected registry).
  */
 export function gateTargets(repo = REPO) {
   return [
     { label: null, dir: repo, waived: WAIVED, nodesOf: shippedNodes, extra: [] },
-    ...Object.entries(SUB_LOCKS).map(([dir, waived]) => ({
+    ...Object.entries({ ...SUB_LOCKS, ...APP_LOCKS, ...ACP_LOCKS }).map(([dir, waived]) => ({
       label: dir,
       dir: join(repo, dir),
       waived,
       nodesOf: lockNodes,
-      extra: SUB_LOCK_AUDIT_ARGS
+      extra: SUB_LOCK_AUDIT_ARGS,
+      matchSynthetic: Object.hasOwn(ACP_LOCKS, dir)
     }))
   ]
 }
@@ -441,14 +775,19 @@ export function gateTargets(repo = REPO) {
 export function judgeTarget(target, { spawn = spawnSync, registry = expectedRegistry(REPO) } = {}) {
   const lock = JSON.parse(readFileSync(join(target.dir, 'package-lock.json'), 'utf8'))
   const online = runAudit(target.dir, spawn, registry, target.extra)
-  const { lines, code } = render(judge(online.report, lock, target.waived, APP_VERSION, target.nodesOf), target.waived)
+  const { lines, code } = render(
+    judge(online.report, lock, target.waived, APP_VERSION, target.nodesOf, { matchSynthetic: target.matchSynthetic }),
+    target.waived
+  )
   const head = target.label ? [`[audit-gate] lock ${target.label}:`] : []
 
-  return { lines: [...head, `registry: ${online.endpoint} answered 200`, ...lines], code }
+  return { lines: [...head, `registry: ${online.endpoint} answered 200`, ...lines], code, report: online.report }
 }
 
 if (isMain(import.meta.url)) {
-  const { values } = parseArgs({ options: { report: { type: 'string' }, lock: { type: 'string' } } })
+  const { values } = parseArgs({
+    options: { report: { type: 'string' }, lock: { type: 'string' }, save: { type: 'string' } }
+  })
 
   try {
     if (values.report) {
@@ -456,13 +795,22 @@ if (isMain(import.meta.url)) {
       const target = gateTargets().find(t => resolve(t.dir) === dirname(lockFile)) ?? gateTargets()[0]
       const lock = JSON.parse(readFileSync(lockFile, 'utf8'))
       const report = JSON.parse(readFileSync(resolve(values.report), 'utf8'))
-      const { lines, code } = render(judge(report, lock, target.waived, APP_VERSION, target.nodesOf), target.waived)
+      const { lines, code } = render(
+        judge(report, lock, target.waived, APP_VERSION, target.nodesOf, { matchSynthetic: target.matchSynthetic }),
+        target.waived
+      )
 
       console.log([`report: ${values.report} (saved)`, ...lines].join('\n'))
       process.exitCode = code
     } else {
       // Every lock is judged even after a red one, so one run names every finding; any red makes the gate red.
       const verdicts = gateTargets().map(target => judgeTarget(target))
+
+      if (values.save) {
+        // The repo lock's report, stamped with how it was audited, for a later --report.
+        writeFileSync(resolve(values.save), `${JSON.stringify(verdicts[0].report, null, 2)}\n`)
+        verdicts[0].lines.push(`[audit-gate] report saved: ${values.save}`)
+      }
 
       console.log(verdicts.flatMap(v => v.lines).join('\n'))
       process.exitCode = Math.max(...verdicts.map(v => v.code))

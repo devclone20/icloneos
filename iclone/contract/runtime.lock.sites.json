@@ -55,7 +55,7 @@
     ],
     "client.capabilities": [
       "src\/lib\/server-requests\/index.ts:218",
-      "electron\/iclone-compat.ts:383"
+      "electron\/iclone-compat.ts:384"
     ],
     "command.dispatch": [
       "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:473"
@@ -128,7 +128,7 @@
     "llm.oneshot": [
       "src\/store\/projects.ts:836",
       "src\/lib\/oneshot.ts:46",
-      "electron\/iclone-compat.ts:565"
+      "electron\/iclone-compat.ts:566"
     ],
     "mcp.catalog": [
       "src\/plugins\/hermes-bots\/plugin.js:9416",
@@ -635,26 +635,26 @@
       "src\/lib\/gateway-events.ts:28"
     ],
     "stream.down": [
-      "electron\/iclone-acp-watch.ts:290",
-      "electron\/iclone-acp-watch.ts:529",
+      "electron\/iclone-acp-watch.ts:291",
+      "electron\/iclone-acp-watch.ts:530",
       "electron\/iclone-acp-work\/supervisor.ts:87"
     ],
     "stream.live": [
       "src\/app\/home\/econ\/events.ts:73",
       "src\/app\/home\/econ\/events.ts:96",
       "src\/app\/home\/econ\/events.ts:117",
-      "electron\/iclone-acp-watch.ts:485",
+      "electron\/iclone-acp-watch.ts:486",
       "electron\/iclone-acp-work\/supervisor.ts:79"
     ],
     "stream.stopped": [
-      "electron\/iclone-acp-watch.ts:429",
-      "electron\/iclone-acp-watch.ts:524",
+      "electron\/iclone-acp-watch.ts:430",
+      "electron\/iclone-acp-watch.ts:525",
       "electron\/iclone-acp-work\/supervisor.ts:84"
     ],
     "stream.up": [
       "src\/app\/home\/econ\/events.ts:96",
       "src\/app\/home\/econ\/events.ts:117",
-      "electron\/iclone-acp-watch.ts:561",
+      "electron\/iclone-acp-watch.ts:562",
       "electron\/iclone-acp-work\/supervisor.ts:79"
     ],
     "subagent.complete": [

@@ -173,6 +173,10 @@ Desktop applies these headers only to matching remote gateway requests, treats
 transport- or Hermes-managed header names such as `Authorization`, `Cookie`,
 `Host`, `Origin`, `Referer`, and `X-Hermes-Session-Token`.
 
+Desktop never presents a client certificate, so a gateway behind a proxy that
+requires mutual TLS (client certificates) cannot be reached from Desktop; mutual
+TLS is not a supported way to authenticate to a gateway.
+
 Projects are the workspace abstraction. A project may own multiple folders,
 repositories, worktrees, and sessions; a bare new chat remains detached unless
 the user enters a project or configures a default project directory. Use the

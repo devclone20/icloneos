@@ -19,6 +19,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { CDP, requireDriver, sleep } from '../../lib/cdp.mjs'
+import { findElectronBinary } from '../../electron-dist.mjs'
 
 const require = createRequire(import.meta.url)
 const DESKTOP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
@@ -230,7 +231,9 @@ export async function startIsolatedInstance({
 
     // Isolated Electron: own --user-data-dir (single-instance lock scope) + own
     // HERMES_HOME (backend + sessions). No DEV_SERVER env in prod → dist load.
-    const electronBin = require('electron')
+    // The installed binary by its path.txt, never require('electron'): since Electron 42 the package's index
+    // downloads the binary when dist/ is missing, and a measurement must never download anything.
+    const electronBin = findElectronBinary()
     // NB: do NOT set HERMES_DESKTOP_BOOT_FAKE here — it injects artificial
     // per-phase sleeps into the boot overlay, which inflates cold-start timing
     // (and adds pointless startup latency to the steady-state runs). We want the

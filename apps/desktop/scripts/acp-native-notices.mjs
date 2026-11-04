@@ -197,7 +197,7 @@ export function renderNativeSection(
     '',
     '## ACP native add-ons (Resources/acp-native)',
     '',
-    `Ruling 33: the app ships its own copies of the native add-ons the Virtuals ACP CLI loads, in \`${where}/\` (the CLI`,
+    `The app ships its own copies of the native add-ons the Virtuals ACP CLI loads, in \`${where}/\` (the CLI`,
     'itself is not shipped: the app installs it from npm at first use). Each copy is made from the exact npm version below',
     `and signed by the app's developer; the licence files ship beside them in \`${where}/licences/\`. The keyring binding`,
     'also contains Rust crates and the Rust standard library, statically linked; they are listed after the packages, each',

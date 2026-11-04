@@ -596,8 +596,12 @@ describe('createAppUpdate — failures in plain copy', () => {
 
 describe('createAppUpdateNotifier', () => {
   function notifier(allowed = true) {
-    const created: { listeners: Map<string, () => void>; options: { body: string; title: string }; shown: number }[] =
-      []
+    // Listeners by event name; `failed` takes (event, error), the others take nothing.
+    const created: {
+      listeners: Map<string, (...args: any[]) => void>
+      options: { body: string; title: string }
+      shown: number
+    }[] = []
 
     const lines: string[] = []
     const reveal = vi.fn()
@@ -605,7 +609,7 @@ describe('createAppUpdateNotifier', () => {
     const ctl = createAppUpdateNotifier({
       allowed: () => allowed,
       create: options => {
-        const made = { listeners: new Map<string, () => void>(), options, shown: 0 }
+        const made = { listeners: new Map<string, (...args: any[]) => void>(), options, shown: 0 }
         created.push(made)
 
         return {
@@ -641,6 +645,21 @@ describe('createAppUpdateNotifier', () => {
     expect(lines).toEqual([
       `${APP_UPDATE_LOG_TAG} notification available 0.0.3 (shown)`,
       `${APP_UPDATE_LOG_TAG} notification restart 0.0.3 (shown)`
+    ])
+  })
+
+  it('a notification that fails to show (unsigned macOS build) is released and logged once, without throwing', () => {
+    const { created, ctl, lines } = notifier()
+    ctl.notify('restart', '0.0.3')
+    expect(ctl.held()).toBe(1)
+
+    expect(() =>
+      created[0]?.listeners.get('failed')?.({}, 'Notifications are not allowed\nfor this application')
+    ).not.toThrow()
+    expect(ctl.held()).toBe(0)
+    expect(lines).toEqual([
+      `${APP_UPDATE_LOG_TAG} notification restart 0.0.3 (shown)`,
+      `${APP_UPDATE_LOG_TAG} notification restart 0.0.3 not shown: Notifications are not allowed for this application`
     ])
   })
 

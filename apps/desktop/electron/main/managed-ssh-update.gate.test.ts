@@ -6,6 +6,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as stateModule from './state'
+
 const h = vi.hoisted(() => ({
   attach: vi.fn(),
   backendEnv: {} as Record<string, string>,
@@ -13,7 +15,9 @@ const h = vi.hoisted(() => ({
   consent: {} as Record<string, string>,
   gate: vi.fn(),
   paySpawn: vi.fn(),
-  spawn: vi.fn()
+  pool: new Map<string, unknown>(),
+  spawn: vi.fn(),
+  updateClearance: vi.fn(async () => undefined)
 }))
 
 vi.mock('node:child_process', () => ({ spawn: h.spawn }))
@@ -32,27 +36,32 @@ vi.mock('../parent-process-identity', () => ({ parentWatchdogEnv: () => ({}) }))
 vi.mock('../profile-delete-routing', () => ({ assertLocalProfileCanStart: vi.fn() }))
 vi.mock('../remote-lifecycle', () => ({}))
 vi.mock('../ssh-connection', () => ({ createSshProbeConnection: vi.fn() }))
-vi.mock('../update-gate', () => ({ waitForUpdateClearance: async () => undefined }))
+vi.mock('../update-gate', () => ({ waitForUpdateClearance: h.updateClearance }))
 vi.mock('../windows-child-options', () => ({ hiddenWindowsChildOptions: (options: unknown) => options }))
 vi.mock('../windows-remote-lifecycle', () => ({
   detectRemotePlatform: vi.fn(),
   probeWindowsRemote: vi.fn(),
   terminateOwnedWindowsDashboardForUpdate: vi.fn()
 }))
-vi.mock('./backend', () => ({ claimBackendChild: h.claim, primaryProfileKey: () => 'default' }))
+vi.mock('./backend', () => ({
+  claimBackendChild: h.claim,
+  primaryProfileKey: () => 'default',
+  stopBackendChild: vi.fn(),
+  waitForBackendExit: vi.fn(async () => undefined)
+}))
 vi.mock('./backend-ownership', () => ({
-  desktopParentStartMarker: async () => null,
-  reapOrphanedBackendsOnce: async () => undefined,
+  desktopParentStartMarker: vi.fn(async () => null),
+  reapOrphanedBackendsOnce: vi.fn(async () => undefined),
   releaseBackendChild: vi.fn()
 }))
 vi.mock('./backend-pool', () => ({
-  ensureRuntime: async (backend: unknown) => backend,
+  ensureRuntime: vi.fn(async (backend: unknown) => backend),
   startPoolIdleReaper: vi.fn()
 }))
 vi.mock('./backend-readiness', () => ({ waitForHermes: vi.fn() }))
 vi.mock('./backend-state', () => ({
   backendConnectionState: {},
-  backendPool: new Map(),
+  backendPool: h.pool,
   profileDeletionGate: { assertCanStart: vi.fn() }
 }))
 vi.mock('./connection-config', () => ({
@@ -78,9 +87,10 @@ vi.mock('./runtime', () => ({
   resolveWebDist: () => '/web'
 }))
 vi.mock('./secrets', () => ({ decryptDesktopSecret: vi.fn() }))
-vi.mock('./state', () => ({ lateBound: {} }))
+// The real quitState and refusal (state.ts has no runtime imports).
+vi.mock('./state', async () => ({ ...(await vi.importActual<typeof stateModule>('./state')), lateBound: {} }))
 vi.mock('./updates', () => ({
-  ensureRuntimeUpdateCheckOff: async () => undefined,
+  ensureRuntimeUpdateCheckOff: vi.fn(async () => undefined),
   resolveHermesBackend: (args: string[]) => ({
     args: ['-m', 'hermes_cli.main', ...args],
     command: '/managed/venv/bin/python',
@@ -98,6 +108,12 @@ vi.mock('./updates', () => ({
 vi.mock('./window-events', () => ({ getWindowState: () => ({}) }))
 
 const { spawnPoolBackend } = await import('./managed-ssh-update')
+const { beginQuitTeardown, quitState, QuitInProgressError } = await import('./state')
+const backendModule = await import('./backend')
+const ownershipModule = await import('./backend-ownership')
+const poolModule = await import('./backend-pool')
+const updatesModule = await import('./updates')
+const routeModule = await import('../desktop-remote-route')
 const { PYTHON_ISOLATION_FLAGS, sealHermesSpawnEnv } = await import('../iclone-spawn-env')
 
 const GATE_ENV = {
@@ -138,7 +154,11 @@ beforeEach(() => {
 
   h.backendEnv = {}
   h.consent = {}
+  h.pool.clear()
+  h.updateClearance.mockClear()
+  vi.clearAllMocks()
   vi.unstubAllEnvs()
+  quitState.quitting = false
 })
 
 describe.each([
@@ -200,5 +220,128 @@ describe.each([
     expect(env).not.toHaveProperty('PYTHONSTARTUP')
     // A pool backend never mints a payment token (V3-J: the pay socket is the primary's).
     expect(h.paySpawn).not.toHaveBeenCalled()
+  })
+})
+
+describe('spawnPoolBackend — no pool backend while the app is quitting', () => {
+  const child = () => ({ once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null })
+
+  const quitDuring = (mock: { mockImplementationOnce(fn: never): unknown }, value?: unknown) =>
+    mock.mockImplementationOnce((async (arg: unknown) => {
+      beginQuitTeardown()
+
+      return value === undefined ? arg : value
+    }) as never)
+
+  beforeEach(() => {
+    h.gate.mockResolvedValue(gatedPool())
+    h.spawn.mockReturnValue(child())
+  })
+
+  it('a quit already under way is refused at the entry: no reap, nothing started', async () => {
+    beginQuitTeardown()
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(ownershipModule.reapOrphanedBackendsOnce).not.toHaveBeenCalled()
+    expect(h.spawn).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the orphan reap is refused right after it: no remote resolution', async () => {
+    quitDuring(vi.mocked(ownershipModule.reapOrphanedBackendsOnce))
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: false })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(routeModule.resolveDesktopRemoteRoute).not.toHaveBeenCalled()
+    expect(h.updateClearance).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the remote resolution is refused right after it: no update wait', async () => {
+    vi.mocked(routeModule.resolveDesktopRemoteRoute).mockImplementation((() => {
+      beginQuitTeardown()
+
+      return null
+    }) as never)
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: false })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(routeModule.resolveDesktopRemoteRoute).toHaveBeenCalled()
+    expect(h.updateClearance).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the update clearance is refused right after it: no runtime', async () => {
+    quitDuring(h.updateClearance as never, null)
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(poolModule.ensureRuntime).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the runtime check is refused right after it: no update-check config', async () => {
+    quitDuring(vi.mocked(poolModule.ensureRuntime))
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(updatesModule.ensureRuntimeUpdateCheckOff).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the update-check config is refused right after it: no gate', async () => {
+    quitDuring(vi.mocked(updatesModule.ensureRuntimeUpdateCheckOff), null)
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(h.gate).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the gate is refused right after it: no parent marker, no spawn', async () => {
+    quitDuring(h.gate as never, gatedPool())
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(ownershipModule.desktopParentStartMarker).not.toHaveBeenCalled()
+    expect(h.spawn).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins during the last await (the parent marker) is refused right before the spawn', async () => {
+    quitDuring(vi.mocked(ownershipModule.desktopParentStartMarker), null)
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(ownershipModule.desktopParentStartMarker).toHaveBeenCalledTimes(1)
+    expect(h.spawn).not.toHaveBeenCalled()
+  })
+
+  it('a quit that begins while the child is claimed: stopped, waited for, released and out of the pool, then refused', async () => {
+    const spawned = child()
+    const pool = entry()
+
+    h.spawn.mockReturnValue(spawned)
+    h.pool.set('work', pool)
+    h.claim.mockImplementationOnce(async () => {
+      beginQuitTeardown()
+    })
+
+    await expect(spawnPoolBackend('work', pool as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(backendModule.stopBackendChild).toHaveBeenCalledWith(spawned)
+    expect(backendModule.waitForBackendExit).toHaveBeenCalledWith(spawned)
+    expect(ownershipModule.releaseBackendChild).toHaveBeenCalledWith(spawned)
+
+    const order = [
+      vi.mocked(backendModule.stopBackendChild).mock.invocationCallOrder[0]!,
+      vi.mocked(backendModule.waitForBackendExit).mock.invocationCallOrder[0]!,
+      vi.mocked(ownershipModule.releaseBackendChild).mock.invocationCallOrder[0]!
+    ]
+
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+    expect(h.pool.has('work')).toBe(false)
+    expect(pool.process).toBeNull()
+  })
+
+  it('control: with no quit the same pool boot spawns once', async () => {
+    h.claim.mockRejectedValue(new Error('stop after claim'))
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toThrow(/stop after claim/)
+    expect(h.spawn).toHaveBeenCalledTimes(1)
   })
 })

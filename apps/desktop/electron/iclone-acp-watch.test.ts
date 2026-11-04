@@ -44,6 +44,7 @@ import {
   WATCH_ARGV,
   type WatchChild
 } from './iclone-acp-watch'
+import { appTeardown } from './teardown-registry'
 
 interface FakeChild extends WatchChild {
   out: PassThrough
@@ -159,7 +160,13 @@ function emitQuit(name: 'before-quit' | 'will-quit', prevented = false) {
 }
 
 const beforeQuit = (prevented = false) => emitQuit('before-quit', prevented)
-const willQuit = () => emitQuit('will-quit')
+
+// The quit goes through: will-quit (where shutdown-signals.ts runs the ONE teardown registry; a forced exit runs the
+// same registry without any will-quit).
+const willQuit = () => {
+  emitQuit('will-quit')
+  appTeardown.run()
+}
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -792,10 +799,8 @@ describe('initAcpWatch', () => {
     const { children, watcher, ask } = lifecycle()
     const market = sender()
 
-    expect(electron.quit.slice(before)).toEqual([
-      expect.objectContaining({ name: 'before-quit', once: false }),
-      expect.objectContaining({ name: 'will-quit', once: false })
-    ])
+    expect(electron.quit.slice(before)).toEqual([expect.objectContaining({ name: 'before-quit', once: false })])
+    expect(appTeardown.names()).toContain('acp market watch')
 
     await ask(market, 'inft-6')
     await flush()
@@ -840,6 +845,23 @@ describe('initAcpWatch', () => {
     expect(children[0].killed).toBe(false)
 
     willQuit()
+    await flush()
+    expect(children[0].killed).toBe(true)
+    expect(children[0].signals).toEqual(['SIGKILL'])
+    expect(watcher.current()).toBeNull()
+  })
+
+  it('N1: a forced exit (the teardown registry, no before-quit and no will-quit) kills the open Market listener', async () => {
+    const { children, watcher, ask } = lifecycle()
+    const market = sender()
+
+    await ask(market, 'inft-6')
+    await flush()
+    // Every before-quit pass main saw was prevented (a hung teardown), then the cap or a signal forced the exit.
+    beforeQuit(true)
+    await flush()
+    expect(children[0].killed).toBe(false)
+    expect(appTeardown.run()).toContain('acp market watch')
     await flush()
     expect(children[0].killed).toBe(true)
     expect(children[0].signals).toEqual(['SIGKILL'])

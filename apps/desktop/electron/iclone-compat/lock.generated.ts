@@ -4,7 +4,7 @@ export const RUNTIME_LOCK = {
   generator: 'iclone/contract/extract.mjs@1',
   app: { upstreamReference: '10b388300a63d83857fac3ca4f8b05b64e01bc50' },
   verifiedAgainst: {
-    rev: '3e244dc233dfc4263b51c1c04cc7fd5c920d4010',
+    rev: 'fb0f640ea3bd67e6c99f87b12e96b7669b608348',
     openrpcSha256: 'dc0ed79ab77d3998ccf05856daa437c4a175978acb95dd2ea5d7996251074b82',
     specTier: 'openrpc',
     result: 'amber:3-roots'

@@ -111,6 +111,7 @@ import { economyRefusal } from './iclone-ownership-gate'
 import { sealTelemetryEnv } from './iclone-telemetry-seal'
 import type { IpcSenderEventLike } from './ipc-sender-guard'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import { registerTeardown } from './teardown-registry'
 
 export { slugForInft }
 export { validateArgv } from './iclone-acp-argv'
@@ -1590,7 +1591,7 @@ async function startAgentDoor(): Promise<void> {
       log: line => console.info(line)
     })
 
-    app.once('will-quit', () => server.close())
+    registerTeardown('acp agent door', () => server.close())
     installAcpWrapper(server.socketPath, path.join(dir, 'acp.token'))
   } catch (error) {
     console.warn('[iclone-acp-ipc] the agent door did not open:', error)

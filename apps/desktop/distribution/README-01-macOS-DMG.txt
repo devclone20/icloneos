@@ -1,6 +1,6 @@
 iclone os {{version}} for macOS
 
-Requirements: macOS 12 or later on Apple silicon.
+Requirements: macOS 13 (Ventura) or later on Apple silicon.
 
 Install
 1. Open iclone-os-mac-arm64.dmg.

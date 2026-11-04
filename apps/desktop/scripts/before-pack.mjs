@@ -60,6 +60,7 @@
 import { existsSync, readFileSync, rmSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { Arch } from 'electron-builder'
+import { packedElectronDist, stageChromiumLicenses } from './electron-licenses.mjs'
 import { stageNodePty, stageGetWindows } from './stage-native-deps.mjs'
 import { BUNDLE_DIR, PIN_PATH, readPin, verifyRuntimeBundle } from './fetch-runtime-pin.mjs'
 import { findRuntimePython, runtimeEqualsRepo } from './runtime-artifact.mjs'
@@ -189,6 +190,10 @@ export default async function beforePack(context) {
       // V3-S (K139): the iclone Hermes plugins + their content manifest, for extraResources → hermes-plugins/.
       const plugins = stageIclonePlugins()
       console.log(`[before-pack] staged iclone Hermes plugins: ${plugins.names.join(', ')} (${plugins.files} files)`)
+      // Chromium's licence file, from the dist this pack uses, for extraResources → LICENSES.chromium.html
+      // (electron is hoisted wherever npm likes; afterPack refuses a pack without the exact file).
+      const licences = stageChromiumLicenses({ dist: packedElectronDist(context) })
+      console.log(`[before-pack] staged Chromium licences from the Electron dist: ${licences}`)
       if (platform === 'darwin' || platform === 'linux') {
         await assertRuntimeBundle()
         console.log(

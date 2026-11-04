@@ -1,4 +1,11 @@
 {
+  "audited": {
+    "args": [
+      "audit",
+      "--json",
+      "--package-lock-only"
+    ]
+  },
   "auditReportVersion": 2,
   "vulnerabilities": {
     "music-metadata": {

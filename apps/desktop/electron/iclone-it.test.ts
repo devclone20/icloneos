@@ -80,8 +80,9 @@ test('it.json holds the endpoint as compact JSON, 0600 in a 0700 dir; the CLI is
   expect(await post(state.port)).toBe(401)
   expect(await post(state.port, { authorization: `Bearer ${'0'.repeat(48)}` })).toBe(401)
 
-  const { app } = await import('electron')
-  const onQuit = vi.mocked(app.on).mock.calls.find(([name]) => (name as string) === 'will-quit')?.[1] as () => void
-  onQuit()
+  // Quit: the app's one teardown registry (run on will-quit and on every forced exit) removes the token file.
+  const { appTeardown } = await import('./teardown-registry')
+  expect(statSync(stateFile()).isFile()).toBe(true)
+  expect(appTeardown.run()).toContain('it server')
   expect(() => statSync(stateFile())).toThrow()
 })

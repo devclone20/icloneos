@@ -872,8 +872,8 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
   ],
   pty: [
     'iclone-acp.ts selftestPty e59b2bd7e440',
-    'iclone-pane-bus/ipc.ts initPaneBus 1e22bc64c61c',
-    'iclone-pane-bus/ipc.ts initPaneBus 5a47108ee47b',
+    'iclone-pane-bus/ipc.ts initPaneBus 627c94081b48',
+    'iclone-pane-bus/ipc.ts initPaneBus 1a9aa7099107',
     'terminal-ipc.ts registerTerminalIpc 06fa48d7bd1b',
     'terminal-ipc.ts registerTerminalIpc 9fd62ffc6ffb',
     'terminal-ipc.ts registerTerminalIpc e56f2dcc77f2'

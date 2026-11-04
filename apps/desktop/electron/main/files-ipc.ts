@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-import { app, clipboard, webContents as electronWebContents, ipcMain } from 'electron'
+import { app, clipboard, webContents as electronWebContents, ipcMain, nativeImage } from 'electron'
 
 import { errorMessage } from '../../src/iclone-shared/errors'
 import {
@@ -19,6 +19,7 @@ import { readWslWindowsClipboardImage } from '../wsl-clipboard-image'
 import { resolvePickerDefaultPath } from '../wsl-path-bridge'
 
 import { saveGatewayFile } from './backend-routing'
+import { readClipboardImagePng } from './clipboard-image'
 import { showOpenDialogForMainWindow, showSaveDialogForMainWindow } from './dialogs'
 import { IS_WINDOWS, IS_WSL } from './env'
 import { mimeTypeForPath, saveImageFromUrl } from './link-metadata'
@@ -178,12 +179,15 @@ export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
       }
     }
 
-    const result = await showOpenDialogForMainWindow({
-      title: options?.title || 'Add context',
-      defaultPath: resolvedDefaultPath,
-      properties: properties as any,
-      filters: Array.isArray(options?.filters) ? options.filters : undefined
-    })
+    const result = await showOpenDialogForMainWindow(
+      {
+        title: options?.title || 'Add context',
+        defaultPath: resolvedDefaultPath,
+        properties: properties as any,
+        filters: Array.isArray(options?.filters) ? options.filters : undefined
+      },
+      'add-context'
+    )
 
     if (result.canceled) {
       return []
@@ -192,8 +196,8 @@ export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
     return result.filePaths
   })
 
-  ipcMain.handle('hermes:writeClipboard', (_event, text) => {
-    clipboard.writeText(String(text || ''))
+  ipcMain.handle('hermes:writeClipboard', async (_event, text) => {
+    await clipboard.writeText(String(text || ''))
 
     return true
   })
@@ -201,11 +205,14 @@ export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
   // Native save-location picker (profile export etc.) — the write itself happens
   // elsewhere (the backend, for profile archives); this only picks the path.
   ipcMain.handle('hermes:selectSavePath', async (_event, options: any = {}) => {
-    const result = await showSaveDialogForMainWindow({
-      title: options?.title || 'Save',
-      defaultPath: options?.defaultPath ? String(options.defaultPath) : undefined,
-      filters: Array.isArray(options?.filters) ? options.filters : undefined
-    })
+    const result = await showSaveDialogForMainWindow(
+      {
+        title: options?.title || 'Save',
+        defaultPath: options?.defaultPath ? String(options.defaultPath) : undefined,
+        filters: Array.isArray(options?.filters) ? options.filters : undefined
+      },
+      'save-path'
+    )
 
     if (result.canceled || !result.filePath) {
       return null
@@ -218,7 +225,7 @@ export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
   // navigator.clipboard.readText() throws "Document is not focused" whenever a
   // portaled overlay has focus, and there's no way to route a read through the
   // canvas. The main process has no such gate.
-  ipcMain.handle('hermes:readClipboard', () => clipboard.readText())
+  ipcMain.handle('hermes:readClipboard', async () => clipboard.readText())
 
   ipcMain.handle('hermes:saveGatewayFile', (_event, payload) => saveGatewayFile(payload))
 
@@ -289,10 +296,14 @@ export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
   })
 
   ipcMain.handle('hermes:saveClipboardImage', async () => {
-    const image = clipboard.readImage()
+    const png = await readClipboardImagePng(clipboard, bytes => {
+      const image = nativeImage.createFromBuffer(bytes)
 
-    if (image && !image.isEmpty()) {
-      return writeComposerImage(image.toPNG(), '.png')
+      return image.isEmpty() ? null : image.toPNG()
+    })
+
+    if (png) {
+      return writeComposerImage(png, '.png')
     }
 
     // WSL2/WSLg doesn't bridge clipboard *images* from the Windows host to the

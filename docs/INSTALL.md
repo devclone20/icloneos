@@ -1,11 +1,11 @@
 # Installing iclone os
 
-iclone os is a signed, notarised macOS app for Apple silicon (macOS 12 or later). Each release publishes it as a
+iclone os is a signed, notarised macOS app for Apple silicon (macOS 13 Ventura or later). Each release publishes it as a
 DMG to download, a zip that in-app updates fetch, and `SHA256SUMS.txt`, the SHA-256 of the DMG, the zip and the update files.
 
 ## Requirements
 
-You need a Mac with Apple silicon (M1 or later) and macOS 12 Monterey or later.
+You need a Mac with Apple silicon (M1 or later) and macOS 13 (Ventura) or later.
 
 ## From the DMG
 

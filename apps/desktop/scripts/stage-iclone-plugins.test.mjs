@@ -12,6 +12,8 @@ import {
 } from '../electron/iclone-plugin-tree.ts'
 
 import afterPack from './after-pack.mjs'
+import { electronDistDir } from './electron-dist.mjs'
+import { CHROMIUM_LICENSES_FILE } from './electron-licenses.mjs'
 import { bundleRepoRuntime, PIN_PATH, readPin } from './fetch-runtime-pin.mjs'
 import { tryRuntimePython } from './runtime-artifact.mjs'
 import {
@@ -189,6 +191,8 @@ test('m5: afterPack accepts a pack fixture staged with stagePackedIclonePlugins,
       platform
     )
     stagePackedIclonePlugins(resources)
+    // afterPack refuses a pack without the dist's exact Chromium licence file before it looks at the runtime.
+    fs.copyFileSync(path.join(electronDistDir(), CHROMIUM_LICENSES_FILE), path.join(resources, CHROMIUM_LICENSES_FILE))
     // V3-RT: afterPack also verifies the packed runtime folder; a fixture pack carries the real pinned bundle.
     await assert.rejects(
       quiet(() => afterPack(context)),

@@ -82,7 +82,9 @@ below it.
 - Exposing a gateway or API to the internet without authentication or a firewall.
 - Reports that need prior write access to your own configuration or credential files.
 
-## Known limitation
+## Known Limitations
+
+### Saved desktop secrets
 
 Saved desktop secrets (remote gateway tokens, access headers, OAuth token sets) are stored as plain text in the
 app's data folder by default, protected by your macOS account and its file permissions. Turn on
@@ -90,6 +92,34 @@ app's data folder by default, protected by your macOS account and its file permi
 Keychain. This follows the upstream default: on a Mac with a missing or locked keychain, encryption would
 otherwise block every launch with a prompt. While the setting is off the app also has no key to seal the permission
 log and payment keys with, so it stays in Manual, and payments and the ACP tools stay off, until you turn it on.
+
+### Accepted high-severity advisories with no compatible fix
+
+These ship in v0.0.5. Our release checks accept each one explicitly, by name, version and advisory (for `acp-node`, whose
+npm advisory id can change between runs, by name, version and the accepted GHSA advisories it depends on), and stop accepting
+it at v0.0.6: it must then be decided again or, as soon as a compatible fix exists, removed. `npm audit` shows more
+packages as high than the ones named here, because it also counts every package that depends on them.
+
+**The bundled sign-in page** (the sign-in window only):
+
+- `zod` 3.25.76 and two nested copies of 3.22.4 (GHSA-mrhx-c7xc-m3w5, high: memory exhaustion validating oversized
+  constrained collections). It is fixed only in zod 4.6.6, and the Privy SDK's packages require zod 3.
+- `decode-uri-component` 0.2.2 (GHSA-qr28-fpjm-wq7f, high: denial of service on percent-encoded input; also the
+  moderate GHSA-vcc3-ghjq-m6fr). It is fixed only in 0.5.1, and it comes in through `query-string` 7 in the WalletConnect
+  packages of the same page.
+
+The worst case is that the sign-in window runs out of memory or hangs. No data or code is exposed. These parsers see
+responses from Privy's servers and the wallet RPC endpoints, and URLs such as WalletConnect pairing links.
+
+**The optional ACP CLI**, which the app installs only when you click to add it:
+
+- `zod` 3.25.76 (the same advisory), required by its account-kit packages.
+- `@virtuals-protocol/acp-node` 0.3.0-beta-subscription.2 (high; an npm advisory with no GHSA number: it depends on
+  vulnerable versions of the same zod chain, and has no fixed release).
+
+The plausible worst case is that the ACP CLI process runs out of memory or stalls. The app restarts it, waiting longer
+each time up to about once a minute, with no cap on restarts yet, so a slow restart loop is possible until you stop the
+agent. These are known; a report that only restates them is out of scope, but ideas to fix them are welcome as issues.
 
 ## Verifying a release
 

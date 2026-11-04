@@ -190,6 +190,8 @@ def _fake_response(status, url, body):
     resp = MagicMock()
     resp.status_code = status
     resp.request = SimpleNamespace(url=url)
+    # Not a redirect: httpx2 builds no next request (mcp 2.2 follows same-origin redirects in the auth flow).
+    resp.next_request = None
 
     async def _aread():
         return body

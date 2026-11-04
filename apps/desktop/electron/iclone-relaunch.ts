@@ -12,12 +12,14 @@ export interface RelaunchApp {
 export function createRelaunchOnQuit(app: RelaunchApp) {
   let armed = false
 
-  app.on('will-quit', () => {
+  const runIfArmed = () => {
     if (armed) {
       armed = false
       app.relaunch()
     }
-  })
+  }
+
+  app.on('will-quit', runIfArmed)
 
   return {
     /** Quit now and start again once the quit goes through. */
@@ -29,6 +31,8 @@ export function createRelaunchOnQuit(app: RelaunchApp) {
     disarm(): void {
       armed = false
     },
+    /** A forced exit skips will-quit: it runs the armed relaunch itself, once, right before app.exit. */
+    runIfArmed,
     armed: (): boolean => armed
   }
 }

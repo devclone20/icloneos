@@ -2,7 +2,17 @@
 // check re-renders the generated section and requires a byte-for-byte match (negative controls included).
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { copyFileSync, cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,6 +31,7 @@ import {
   desktopRoots,
   END,
   FONT_FAMILIES,
+  KATEX_VERSION,
   fontLicenceText,
   FONTS_BEGIN,
   FONTS_END,
@@ -49,6 +60,7 @@ import {
   unlistedFontFiles,
   unreviewedLicences
 } from './third-party-closure.mjs'
+import { renderNativeSection } from './acp-native-notices.mjs'
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 
@@ -548,6 +560,37 @@ describe('third-party closure (K103, REL-2)', () => {
       'frameworks: ELECTRON_FRAMEWORKS lists ReactiveObjC.framework, but Electron no longer carries it'
     ])
     assert.deepEqual(frameworkListProblems(temp()), [])
+
+    // A stale copy nested in the workspace does not hide the hoisted one: the root's node_modules is read first.
+    const nested = join(
+      fake,
+      'apps',
+      'desktop',
+      'node_modules',
+      'electron',
+      'dist',
+      'Electron.app',
+      'Contents',
+      'Frameworks'
+    )
+
+    for (const name of ELECTRON_FRAMEWORKS.map(f => f.framework)) {
+      mkdirSync(join(nested, name), { recursive: true })
+    }
+
+    assert.equal(frameworkListProblems(fake).length, 2)
+
+    // This repo: electron is hoisted to the root (no workspace copy), and its frameworks are exactly the listed ones.
+    const hoisted = join(REPO, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'Frameworks')
+
+    assert.ok(existsSync(hoisted), hoisted)
+    assert.equal(existsSync(join(REPO, 'apps', 'desktop', 'node_modules', 'electron')), false)
+    assert.deepEqual(
+      readdirSync(hoisted)
+        .filter(n => n.endsWith('.framework'))
+        .sort(),
+      ELECTRON_FRAMEWORKS.map(f => f.framework).sort()
+    )
     assert.deepEqual(frameworkListProblems(REPO), [])
   })
 
@@ -597,7 +640,9 @@ describe('third-party closure (K103, REL-2)', () => {
     writeFileSync(join(repo, 'THIRD_PARTY_NOTICES.md'), notices)
     const { problems } = checkNotices({ repo, modules: REPO, acpTree: join(repo, 'none') })
     assert.ok(
-      problems.some(p => /the Fonts section describes katex@0\.16\.47, the desktop ships katex@0\.99\.0/.test(p))
+      problems.some(p =>
+        p.includes(`the Fonts section describes katex@${KATEX_VERSION}, the desktop ships katex@0.99.0`)
+      )
     )
   })
 
@@ -611,6 +656,25 @@ describe('third-party closure (K103, REL-2)', () => {
     // The bundle really carries it: a base64 WOFF2 data URI.
     const bundle = readFileSync(join(REPO, 'iclone', 'privy', 'privy-login.js'), 'utf8')
     assert.match(bundle, /data:font\/woff2;charset=utf-8;base64,d09GMg/)
+  })
+
+  // The notices ship to every user: each sentence must explain itself, never point at a decision log readers cannot see.
+  const DECISION_LOG_NAME = /\b(?:lead\s+)?rulings?\s+\d|\bREL-\d|\bcritic\b|\bG-\d|\bround\s+\d/i
+
+  test('the shipped notices, every generated section and the shipped launcher name no internal decision', () => {
+    const sources = {
+      'THIRD_PARTY_NOTICES.md': readFileSync(join(REPO, 'THIRD_PARTY_NOTICES.md'), 'utf8'),
+      renderFontsSection: renderFontsSection(),
+      renderNativeSection: renderNativeSection(),
+      PRIVY_BUNDLE_FONT: PRIVY_BUNDLE_FONT.join('\n'),
+      // copied verbatim into the app's Resources/acp-pin/launch.cjs, comments included
+      'acp-launch.cjs': readFileSync(join(REPO, 'apps', 'desktop', 'scripts', 'acp-launch.cjs'), 'utf8')
+    }
+
+    for (const [name, text] of Object.entries(sources)) {
+      const hits = text.split('\n').filter(line => DECISION_LOG_NAME.test(line))
+      assert.deepEqual(hits, [], name)
+    }
   })
 
   test('R5-2: a native executable needs a NATIVE_BINARIES entry, and the binary must carry every listed module', () => {
@@ -646,4 +710,36 @@ describe('third-party closure (K103, REL-2)', () => {
     writeFileSync(join(bin, 'helper'), Buffer.from('7f454c46', 'hex'))
     assert.match(nativeBinaryProblems(tree, closure).join(), /native executable bin\/helper with no notice entry/)
   })
+})
+
+test('frameworkListProblems: a lock that ships electron with no Electron dist installed is a problem, not a pass', () => {
+  const root = mkdtempSync(join(tmpdir(), 'closure-no-dist-'))
+
+  try {
+    // No lock: nothing to say (an empty folder is not a repo).
+    assert.deepEqual(frameworkListProblems(root), [])
+
+    writeFileSync(
+      join(root, 'package-lock.json'),
+      JSON.stringify({ packages: { '': {}, 'node_modules/electron': { version: '44.10.1', dev: true } } })
+    )
+    assert.deepEqual(frameworkListProblems(root), [
+      `frameworks: the lock ships electron, but no Electron dist is installed under ${root} ` +
+        '(run node node_modules/electron/install.js from the repo root); its frameworks cannot be checked'
+    ])
+
+    // A lock without electron: nothing to check.
+    writeFileSync(join(root, 'package-lock.json'), JSON.stringify({ packages: { '': {}, 'node_modules/vite': {} } }))
+    assert.deepEqual(frameworkListProblems(root), [])
+
+    // A dist without a macOS app (a Linux or Windows install): the packed gate checks the real pack.
+    writeFileSync(
+      join(root, 'package-lock.json'),
+      JSON.stringify({ packages: { '': {}, 'node_modules/electron': { version: '44.10.1', dev: true } } })
+    )
+    mkdirSync(join(root, 'node_modules', 'electron', 'dist'), { recursive: true })
+    assert.deepEqual(frameworkListProblems(root), [])
+  } finally {
+    rmSync(root, { force: true, recursive: true })
+  }
 })

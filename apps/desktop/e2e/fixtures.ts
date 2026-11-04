@@ -268,29 +268,39 @@ function assertDistBuilt(): void {
 }
 
 /**
- * Find the Electron binary. In the nix devshell, `electron` is on PATH.
- * As a fallback, use the node_modules/.bin/electron from the desktop package.
+ * Find the Electron binary: the one the `electron` package installed (its `path.txt` names the executable inside
+ * `dist/`), else a real `electron` on PATH (the nix devshell). The package's own `.bin/electron` shim is never used:
+ * since Electron 42 it downloads the binary on its first run, and a test must not download anything.
  */
 export function findElectron(): string {
-  // In dev mode, we use the `electron` binary directly (not the packaged app).
-  // The dev:electron script in package.json does exactly this: `electron .`
-  // after building. We replicate that here.
-  const localElectron = path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
+  const electronPackage = path.join(REPO_ROOT, 'node_modules', 'electron')
+  const pathFile = path.join(electronPackage, 'path.txt')
 
-  if (fs.existsSync(localElectron)) {
-    return localElectron
+  if (fs.existsSync(pathFile)) {
+    const installed = path.join(electronPackage, 'dist', fs.readFileSync(pathFile, 'utf8').trim())
+
+    if (fs.existsSync(installed)) {
+      return installed
+    }
   }
 
-  // Fall back to PATH
   const result = spawnSync('which', ['electron'], {
     encoding: 'utf8'
   })
 
   if (result.status === 0 && result.stdout.trim()) {
-    return result.stdout.trim()
+    const onPath = fs.realpathSync(result.stdout.trim())
+    const packageRoot = fs.existsSync(electronPackage) ? fs.realpathSync(electronPackage) : electronPackage
+
+    if (!onPath.startsWith(packageRoot + path.sep)) {
+      return onPath
+    }
   }
 
-  throw new Error('Electron binary not found. Run "npm install" from the repo root to install devDependencies.')
+  throw new Error(
+    `Electron binary not found under ${path.join(electronPackage, 'dist')}. ` +
+      'Run "node node_modules/electron/install.js" from the repo root to install it (tests never download it).'
+  )
 }
 
 /**

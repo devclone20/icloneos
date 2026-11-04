@@ -50,6 +50,19 @@ describe('r4: relaunch on quit', () => {
     expect(app.relaunch).not.toHaveBeenCalled()
   })
 
+  it('runIfArmed (a forced exit skips will-quit): relaunches once when armed, never when not', () => {
+    const app = fakeApp()
+    const relaunch = createRelaunchOnQuit(app)
+
+    relaunch.runIfArmed()
+    expect(app.relaunch).not.toHaveBeenCalled()
+    relaunch.request()
+    relaunch.runIfArmed()
+    relaunch.runIfArmed()
+    app.willQuit()
+    expect(app.relaunch).toHaveBeenCalledTimes(1)
+  })
+
   it('main wires it: the keychain restart requests it; "Keep Running" disarms it', () => {
     const main = fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8')
 

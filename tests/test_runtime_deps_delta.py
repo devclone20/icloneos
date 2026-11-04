@@ -7,7 +7,7 @@ row. Changing either file on purpose means changing the tables below in the same
 
 What is pinned is the dependency delta (package versions, requirement entries, overrides). The 14-day age-window
 exclusions (``tool.uv.exclude-newer-package``) are resolution policy, not a delta: they are added and dropped on their
-own dates (S4: ``filelock = false`` goes on 2026-10-31), so they are left out and dropping one is a one-line change.
+own dates, so they are left out and dropping one is a one-line change.
 
 A clone without the upstream pin commit (shallow, or the public release clone fetched by tag) cannot read the pin's
 files: the tests skip and say which commit to fetch, rather than error (v0.0.4 review R2-5).
@@ -32,19 +32,38 @@ LOCK_DELTA = {
     "httpcore2": ({"2.7.0"}, {"2.12.0"}),
     "httpx2": ({"2.7.0"}, {"2.12.0"}),
     "httpx2-jsfetch": (set(), {"1.0"}),  # new in httpx2 2.12's own dependencies
+    # opentelemetry-api 1.45 no longer depends on importlib-metadata, the only path to it and to zipp
+    "importlib-metadata": ({"8.7.1"}, set()),
+    "mcp": ({"2.0.0"}, {"2.2.0"}),  # GHSA-w4fh-qvv9-3v23, GHSA-5h93-6whr-6q8j, GHSA-rwrf-2pqf-9j8j, GHSA-84m7-p3x7-pcfv
+    "mcp-types": ({"2.0.0"}, {"2.2.0"}),  # released with mcp, pinned exactly by it
     "msgpack": ({"1.2.1"}, {"1.2.3"}),
+    "multidict": ({"6.7.1"}, {"6.9.1"}),  # GHSA-54p9-h82j-f925
     "oauthlib": ({"3.3.1"}, {"4.0.0"}),
+    # GHSA-xcq7-p3pf-p88h (opentelemetry-api); the [otlp] pins move the whole stack in lockstep
+    "opentelemetry-api": ({"1.39.1"}, {"1.45.1"}),
+    "opentelemetry-exporter-http-transport": (set(), {"0.66b1"}),  # new in the 1.45 exporter's dependencies
+    "opentelemetry-exporter-otlp-common": (set(), {"0.66b1"}),  # new in the 1.45 exporter's dependencies
+    "opentelemetry-exporter-otlp-proto-common": ({"1.39.1"}, {"1.45.1"}),
+    "opentelemetry-exporter-otlp-proto-http": ({"1.39.1"}, {"1.45.1"}),
+    "opentelemetry-proto": ({"1.39.1"}, {"1.45.1"}),
+    "opentelemetry-sdk": ({"1.39.1"}, {"1.45.1"}),
+    "opentelemetry-semantic-conventions": ({"0.60b1"}, {"0.66b1"}),  # see the override below
     "pillow": ({"12.3.0"}, {"13.0.0"}),
+    "pyasn1": ({"0.6.4"}, {"0.6.5"}),  # GHSA-2qm8-x737-gmw5, GHSA-mm57-4v3p-rchx, GHSA-9m75-vc3g-4x39, GHSA-fm9c-5rcf-2q5p
     "pyjwt": ({"2.13.0"}, {"2.15.0"}),
-    "tornado": ({"6.5.8"}, {"6.5.10"}),
+    "tornado": ({"6.5.8"}, {"6.6"}),  # GHSA-r4j5-9xpp-3985, GHSA-pcg2-g6cj-q92c, GHSA-pw9p-v7r6-gx4p
     "urllib3": ({"2.7.0"}, {"2.8.0"}),
     "yarl": ({"1.24.5"}, {"1.25.1"}),
+    "zipp": ({"4.1.0"}, set()),  # see importlib-metadata
 }
 
 _PY314 = "; python_version >= '3.14'"
 # pyproject.toml key -> (entries removed, entries added); a scalar key -> (before, after).
 PYPROJECT_DELTA = {
-    "dependency-groups.dev": ({"httpx2==2.7.0"}, {"httpx2==2.12.0"}),
+    "dependency-groups.dev": (
+        {"httpx2==2.7.0", "mcp==2.0.0"},
+        {"httpx2==2.12.0", "mcp==2.2.0"},
+    ),
     "project.dependencies": (
         {
             f"Pillow==12.3.0{_PY314}",
@@ -60,22 +79,43 @@ PYPROJECT_DELTA = {
         },
     ),
     "project.optional-dependencies.computer-use": (
-        {"httpx2==2.7.0"},
-        {"httpx2==2.12.0"},
+        {"httpx2==2.7.0", "mcp==2.0.0"},
+        {"httpx2==2.12.0", "mcp==2.2.0"},
     ),
+    "project.optional-dependencies.google": ({"pyasn1==0.6.4"}, {"pyasn1==0.6.5"}),
     "project.optional-dependencies.matrix": (
         {"aiohttp==3.14.3; sys_platform == 'linux'"},
         {"aiohttp==3.14.4; sys_platform == 'linux'"},
     ),
-    "project.optional-dependencies.mcp": ({"httpx2==2.7.0"}, {"httpx2==2.12.0"}),
+    "project.optional-dependencies.mcp": (
+        {"httpx2==2.7.0", "mcp==2.0.0"},
+        {"httpx2==2.12.0", "mcp==2.2.0"},
+    ),
     "project.optional-dependencies.messaging": (
         {"aiohttp==3.14.3", "brotlicffi==1.2.0.2"},
         {"aiohttp==3.14.4", "brotlicffi==1.2.1.0"},
     ),
+    "project.optional-dependencies.otlp": (
+        {
+            "opentelemetry-sdk==1.39.1",
+            "opentelemetry-exporter-otlp-proto-http==1.39.1",
+        },
+        {
+            "opentelemetry-sdk==1.45.1",
+            "opentelemetry-exporter-otlp-proto-http==1.45.1",
+        },
+    ),
     "project.optional-dependencies.slack": ({"aiohttp==3.14.3"}, {"aiohttp==3.14.4"}),
     "project.optional-dependencies.sms": ({"aiohttp==3.14.3"}, {"aiohttp==3.14.4"}),
     "project.optional-dependencies.teams": ({"aiohttp==3.14.3"}, {"aiohttp==3.14.4"}),
-    "tool.uv.override-dependencies": (set(), {f"pillow==13.0.0{_PY314}"}),
+    # mistralai 2.4.8 caps semantic-conventions below 0.61, the OpenTelemetry 1.45.1 fix needs 0.66b1
+    "tool.uv.override-dependencies": (
+        set(),
+        {
+            f"pillow==13.0.0{_PY314}",
+            "opentelemetry-semantic-conventions==0.66b1",
+        },
+    ),
 }
 
 
@@ -149,7 +189,7 @@ def test_uv_lock_differs_from_the_upstream_pin_only_in_the_named_packages():
     assert delta == LOCK_DELTA
 
 
-def test_uv_lock_manifest_adds_only_the_pillow_override():
+def test_uv_lock_manifest_adds_only_the_pillow_and_semconv_overrides():
     before, after = _at_pin("uv.lock")["manifest"], _now("uv.lock")["manifest"]
     assert {
         key for key in before.keys() | after.keys() if before.get(key) != after.get(key)
@@ -159,10 +199,14 @@ def test_uv_lock_manifest_adds_only_the_pillow_override():
     assert removed == []
     assert added == [
         {
+            "name": "opentelemetry-semantic-conventions",
+            "specifier": "==0.66b1",
+        },
+        {
             "name": "pillow",
             "marker": "python_full_version >= '3.14'",
             "specifier": "==13.0.0",
-        }
+        },
     ]
 
 
@@ -189,23 +233,22 @@ def test_pyproject_differs_from_the_upstream_pin_only_in_the_named_entries():
 
 
 def test_dropping_an_age_window_exclusion_leaves_the_delta_unchanged():
-    """R2-6: S4 removes ``filelock = false`` on 2026-10-31; that must not touch this test."""
+    """Removing an age-window exclusion on its date must not change the pinned dependency delta."""
     before, after = _at_pin("pyproject.toml"), _now("pyproject.toml")
     window = after["tool"]["uv"]["exclude-newer-package"]
-    assert "filelock" in window  # until S4's date; drop this line with the exclusion
-    trimmed = {
-        **after,
-        "tool": {
-            **after["tool"],
-            "uv": {
-                **after["tool"]["uv"],
-                "exclude-newer-package": {
-                    k: v for k, v in window.items() if k != "filelock"
+    assert window, "the age window has no exclusion to drop"
+    for name in window:
+        trimmed = {
+            **after,
+            "tool": {
+                **after["tool"],
+                "uv": {
+                    **after["tool"]["uv"],
+                    "exclude-newer-package": {k: v for k, v in window.items() if k != name},
                 },
             },
-        },
-    }
-    assert _pyproject_delta(before, trimmed) == PYPROJECT_DELTA
+        }
+        assert _pyproject_delta(before, trimmed) == PYPROJECT_DELTA, name
     assert _pyproject_delta(before, after) == PYPROJECT_DELTA
 
 
@@ -251,9 +294,12 @@ def test_a_clone_with_the_upstream_pin_reads_its_files(monkeypatch):
 
 # v0.0.4 review m4: the age window is left out of PYPROJECT_DELTA, so its own changes are pinned here. Each entry is
 # (value at the upstream pin, value now), None meaning absent. A new `X = false` (a package let in before 14 days) or a
-# changed date turns this test red until the lead adds it. S4 drops `filelock` on 2026-10-31: its entry here goes
-# with the `"filelock" in window` line of test_dropping_an_age_window_exclusion_leaves_the_delta_unchanged.
-AGE_WINDOW_DELTA = {"filelock": (None, False)}
+# changed date turns this test red until it is added here.
+AGE_WINDOW_DELTA = {
+    # tornado 6.6 (GHSA-r4j5-9xpp-3985, GHSA-pcg2-g6cj-q92c, GHSA-pw9p-v7r6-gx4p), admitted up to its own upload
+    # time and nothing newer; the pyproject line goes after 2026-11-04T15:32Z, and this entry with it.
+    "tornado": (None, "2026-10-21T15:32:00Z"),
+}
 
 
 def _age_window(project: dict) -> dict:

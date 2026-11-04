@@ -55,6 +55,8 @@ import {
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { INSTALL_ELECTRON_COMMAND } from './electron-dist.mjs'
+
 import {
   checkNativeNotices,
   loadNativeNotices,
@@ -409,7 +411,7 @@ export const oflBody = text => {
  * shipped a Noto OFL text cut at four line ends, and its marker-phrase check passed it).
  */
 /** The katex version whose fonts the Fonts section describes; --check refuses a lockfile that moved it. */
-export const KATEX_VERSION = '0.16.47'
+export const KATEX_VERSION = '0.18.2'
 
 export const FONT_FAMILIES = [
   {
@@ -473,7 +475,7 @@ export const PRIVY_BUNDLE_FONT = [
   "top of this file for its packages and their licences, Privy's own code under Apache-2.0) also carries one font, as a",
   'base64 WOFF2 data URI: "Base Sans" Regular, from `@base-org/account` 1.1.1, whose name table reads "Under License',
   'AllCaps © 2025 AllCaps". The embedded "Base Sans" font is part of Privy\'s bundle: it is redistributed with the',
-  "Privy SDK under Privy's terms and its licensors' (lead ruling 30), it is not under the OFL or MIT, and iclone os does",
+  "Privy SDK under Privy's terms and its licensors', it is not under the OFL or MIT, and iclone os does",
   'not use it outside that bundle or license it to anyone.'
 ]
 
@@ -530,11 +532,11 @@ export function renderFontsSection(families = FONT_FAMILIES, desktopDir = DESKTO
     '`varLib.instancer` by `apps/desktop/scripts/fonts/build-noto-display.py` (which rebuilds them byte for byte from the',
     'npm tarball above); the name table now reads "Noto Serif Display ExtraCondensed" / "Bold" and states the licence.',
     'No outline was edited. The family declares no Reserved Font Name. The display face replaced Collapse Bold (Blaze',
-    "Type, all rights reserved, sold under the foundry's EULA; no redistribution right) in v0.0.3 (REL-4, ruling 21).",
+    "Type, all rights reserved, sold under the foundry's EULA; no redistribution right) in v0.0.3.",
     '',
     'The Codicons icon font ships inside `@vscode/codicons` and is covered by its entry above (CC BY 4.0, with its',
     "attribution). KaTeX's math fonts ship inside `katex` too, but they are not under katex's MIT licence: they are under",
-    'the OFL 1.1 with Reserved Font Names, and their text follows (lead ruling 31).',
+    'the OFL 1.1 with Reserved Font Names, and their text follows.',
     '',
     ...PRIVY_BUNDLE_FONT,
     ''
@@ -564,7 +566,7 @@ export const FRAMEWORKS_END =
   '<!-- END GENERATED (Electron frameworks) by apps/desktop/scripts/third-party-closure.mjs -->'
 
 /** The Electron whose frameworks ELECTRON_FRAMEWORKS describes; --check refuses a lockfile that moved it. */
-export const FRAMEWORKS_ELECTRON_VERSION = '40.10.2'
+export const FRAMEWORKS_ELECTRON_VERSION = '44.10.1'
 
 /**
  * N-a (REL-8, lead ruling 39): the macOS app carries Electron's frameworks in Contents/Frameworks, copied unchanged by
@@ -572,7 +574,7 @@ export const FRAMEWORKS_ELECTRON_VERSION = '40.10.2'
  * ReactiveObjC: Electron's built-in updater stack) are MIT and were shipped with no notice (not in
  * LICENSES.chromium.html, not inside the frameworks). Every framework gets a row and its licence text, committed
  * verbatim and pinned by sha256; the commits are the ones electron/electron's DEPS pins at the version above
- * (fetched 2026-10-22). `--check` compares this list with the Electron distribution's Contents/Frameworks (a framework
+ * (fetched 2026-11-01). `--check` compares this list with the Electron distribution's Contents/Frameworks (a framework
  * there with no entry, or an entry with no framework, is a problem) and the packed gate maps every `.framework` of the
  * pack to a row of the rendered section.
  */
@@ -587,19 +589,19 @@ export const ELECTRON_FRAMEWORKS = [
   },
   {
     framework: 'Squirrel.framework',
-    what: 'Squirrel.Mac 1.0, the updater',
-    licence: 'MIT',
-    source: 'github.com/Squirrel/Squirrel.Mac @ 0e5d146ba13101a1302d59ea6e6e0b3cace4ae38 (`LICENSE`)',
+    what: "Squirrel.Mac 1.0, the updater (with Sparkle's BinaryDelta, bsdiff 4.3 and sais-lite compiled in)",
+    licence: 'MIT; bsdiff: BSD-2-Clause (all in its text)',
+    source: 'github.com/Squirrel/Squirrel.Mac @ fffea30e4a339a7f7d69a3391314b72548d209bd (`LICENSE`)',
     file: 'frameworks/Squirrel.Mac.txt',
-    sha256: '6f240e244a105d6366bc898ac9c67460624c9052839d4b988c6dbe4c571008b3'
+    sha256: 'f58f48614330755c5dde8672ed8fc49b1c2261718e7c1429112b5f00923d8ae4'
   },
   {
     framework: 'Mantle.framework',
     what: "Mantle 1.0, Squirrel's model layer",
     licence: 'MIT; portions from Proton, BSD-3-Clause (both in its text)',
-    source: 'github.com/Mantle/Mantle @ 78d3966b3c331292ea29ec38661b25df0a245948 (`LICENSE.md`)',
+    source: 'github.com/Mantle/Mantle @ 2a8e2123a3931038179ee06105c9e6ec336b12ea (`LICENSE.md`)',
     file: 'frameworks/Mantle.txt',
-    sha256: '2087272d067a18e72803b6db94eba49564b023e6356d5950a4ea121a85cb72e4'
+    sha256: '285eede6f638adc9c352be7d66134611e5ea95044095a84de9867fb864e66eab'
   },
   {
     framework: 'ReactiveObjC.framework',
@@ -664,17 +666,25 @@ export function renderFrameworksSection(frameworks = ELECTRON_FRAMEWORKS, dir = 
 /**
  * The frameworks the Electron distribution carries that ELECTRON_FRAMEWORKS does not list, and the listed ones it does
  * not carry. Empty when the distribution has no macOS app (Linux, Windows installs of electron): the packed gate
- * checks the real pack.
+ * checks the real pack. A lock that ships electron with no distribution installed at all is a problem: the list
+ * cannot be checked until `node node_modules/electron/install.js` unpacks it.
  */
 export function frameworkListProblems(modules, frameworks = ELECTRON_FRAMEWORKS) {
-  const candidates = [
-    join(modules, 'apps', 'desktop', 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'Frameworks'),
-    join(modules, 'node_modules', 'electron', 'dist', 'Electron.app', 'Contents', 'Frameworks')
+  // npm hoists electron to the repo root's node_modules (where electron-builder and the build find it); a copy nested
+  // in the workspace exists only when the workspace pins another version, so the hoisted one is read first.
+  const dists = [
+    join(modules, 'node_modules', 'electron', 'dist'),
+    join(modules, 'apps', 'desktop', 'node_modules', 'electron', 'dist')
   ]
-  const dir = candidates.find(d => existsSync(d))
+  const dir = dists.map(d => join(d, 'Electron.app', 'Contents', 'Frameworks')).find(d => existsSync(d))
 
   if (!dir) {
-    return []
+    return dists.some(d => existsSync(d)) || !lockShipsElectron(modules)
+      ? []
+      : [
+          `frameworks: the lock ships electron, but no Electron dist is installed under ${modules} ` +
+            `(run ${INSTALL_ELECTRON_COMMAND} from the repo root); its frameworks cannot be checked`
+        ]
   }
 
   const present = readdirSync(dir).filter(n => n.endsWith('.framework'))
@@ -691,6 +701,19 @@ export function frameworkListProblems(modules, frameworks = ELECTRON_FRAMEWORKS)
       .filter(n => !present.includes(n))
       .map(n => `frameworks: ELECTRON_FRAMEWORKS lists ${n}, but Electron no longer carries it`)
   ]
+}
+
+/** Whether the lock under `root` (when there is one) installs the electron package, hoisted or in the workspace. */
+function lockShipsElectron(root) {
+  const lockFile = join(root, 'package-lock.json')
+
+  if (!existsSync(lockFile)) {
+    return false
+  }
+
+  const packages = JSON.parse(readFileSync(lockFile, 'utf8')).packages ?? {}
+
+  return Boolean(packages['node_modules/electron'] || packages['apps/desktop/node_modules/electron'])
 }
 
 /** Non-SPDX spellings seen in package.json files, read as the SPDX id they mean. */

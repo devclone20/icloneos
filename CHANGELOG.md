@@ -3,6 +3,94 @@
 All notable changes to iclone os. Each release lists its assets — the DMG, the zip and `SHA256SUMS.txt` — on the
 [Releases](https://github.com/devclone20/icloneos/releases) page.
 
+## v0.0.5 — beta version (2026-11-05)
+
+icloneOS v0.0.5 is a beta version.
+
+It updates the app to Electron 44, which fixes all 15 published security advisories that affected v0.0.4, including
+the six rated high. Two third-party packages inside the bundled sign-in page still carry high-severity advisories that
+cannot be fixed yet; we explain why and what it means under Security.
+
+### Improved
+
+- **Electron 44.** The app runs on Electron 44.10.1 (Chromium 152), up from 40.10.2. It needs macOS 13 (Ventura) or
+  later; Electron 44 no longer runs on macOS 12. On macOS 12 the app keeps v0.0.4: the in-app updater reports it as up
+  to date instead of offering v0.0.5, and the v0.0.4 download stays available. v0.0.4 keeps those 15 advisories and gets
+  no further fixes, so move to macOS 13 or later when you can.
+- **File dialogs.** Electron 44 opens a file dialog with no folder set in Downloads, every time. The file pickers and
+  save dialogs for attachments, downloads and saved files now remember the last folder you used for each kind of pick
+  while the app is open.
+- **Notifications.** A notification that macOS refuses to show, as it does for an unsigned build since Electron 42, is
+  now handled: the update notifier releases the notification it holds, and each source of notifications logs its first
+  failure once, with the platform error only.
+  A notification is also kept in memory until it closes, fails or is clicked, up to the 64 most recent, so a click or a
+  failure can no longer be lost to cleanup.
+- **Quitting.** Logging out, shutting down, closing the terminal or a `kill` (SIGTERM, SIGINT or SIGHUP) now quit the
+  app through its normal path, without the quit confirmation: the background services stop and an open remote (SSH)
+  connection is closed. A quit also asks Chromium to write the storage and cookies of every browsing profile the app
+  opened to disk, and waits for that for at most 2 seconds. A quit that stalls on the app's own work now moves on: after
+  a signal the app exits within about 15 seconds (about 11 unless a remote connection is still closing), and any other
+  quit reaches Chromium's own shutdown within 24 seconds (12, plus up to 12 more while a remote connection is closing),
+  plus the storage write above. Chromium's own shutdown has no limit of ours on a normal quit and can take longer, and
+  so can a quit that installs an app update or waits for a remote update to finish. On the remote machine the app stops only the background service it can confirm belongs to it; otherwise, or
+  when stopping it takes longer than the quit allows, it leaves that service alone and the next launch tidies up.
+- **Licences.** The app now includes Chromium's licence file, `LICENSES.chromium.html`, in its `Resources` folder. The
+  third-party notices list Electron 44.10.1 and KaTeX 0.18.2.
+- **Known issue.** If you quit the app while a remote (SSH) connection is still being set up, the SSH control
+  connection it opened can stay open in the background for up to 5 minutes before it closes on its own; no remote
+  service, port forward or data is affected, and a fix is planned for a later release.
+
+### Security
+
+- **Electron advisories closed.** Electron 40.10.2 had 15 published advisories; as of the release, Electron 44.10.1
+  has none of them.
+  - High (the six v0.0.4 listed as known): GHSA-9f4c-93c8-jc8g, GHSA-hq2x-r82h-9wj4, GHSA-gr2m-v5gq-v685,
+    GHSA-j84w-jfhq-vhvj, GHSA-9qh4-3jw8-366w and GHSA-jr5w-w6x2-84p9 (compromised eMudhra intermediate certificates).
+  - Moderate: GHSA-r4w5-6pfg-jxp5, GHSA-vv43-5jgx-7qv8, GHSA-fw47-9c62-h3vw, GHSA-2p8c-gr87-2676, GHSA-x562-297c-g43g
+    and GHSA-997q-gvvc-jwmx.
+  - Low: GHSA-98mx-cjp9-gchm, GHSA-3qxv-5xgr-q7w9 and GHSA-h3v5-h239-pg29.
+
+  The exception v0.0.4 carried for Electron is gone.
+- **Client certificates are never sent.** A server that asks for a client certificate could get the first matching one
+  from your keychain: a window's request already could, and since Electron 44 the app's own background requests could
+  too. The app now answers every such request with no certificate, and logs only the host that asked, once. If your
+  gateway sits behind a proxy that requires client certificates (mutual TLS), the app can no longer reach it; mutual
+  TLS is not a supported way to sign in to a gateway.
+- **Dependency updates.**
+  - App: KaTeX 0.18.2 and sanitize-html 2.18.1.
+  - Runtime (bundled components): mcp 2.2.0, OpenTelemetry 1.45.1, pyasn1 0.6.5, multidict 6.9.1 and tornado 6.6.
+  - WhatsApp bridge: music-metadata 11.16.0 and qs 6.16.1, which fix the moderate advisories v0.0.4 kept.
+  - ACP CLI: ws 8.21.3 and js-cookie 3.0.7, two of the three packages v0.0.4 listed with high advisories (the third,
+    zod, is below), plus follow-redirects 1.16.2 and uuid 11.1.1 (for one of its dependencies).
+  - Website: tinypool 2.1.2; the documentation site has no critical or high advisories.
+- **Two packages with no fix inside their consumers' major versions.** Each is fixed only in a newer major than the
+  one its consumer requires, and forcing the new major under the consumer would break it:
+  - zod (GHSA-mrhx-c7xc-m3w5, high: memory exhaustion on oversized input), in version 3.25.76 and in two nested 3.22.4
+    copies, fixed only in zod 4.6.6. The Privy SDK inside the bundled sign-in page requires zod 3, and so does the
+    optional ACP CLI, which the app installs only when you click to add it. The optional ACP CLI carries the same zod
+    3.25.76 and the same advisory, and also @virtuals-protocol/acp-node 0.3.0-beta-subscription.2 (high; an npm
+    advisory with no GHSA number: it depends on vulnerable versions of @account-kit/infra, the same zod chain, and has
+    no fixed release); both are covered by our release checks with an explicit accepted risk each, and for both the
+    plausible worst case is that the ACP CLI process runs out of memory or stalls. If a network payload repeatedly
+    exhausted the optional ACP CLI's memory, the app would keep restarting it, waiting longer each time up to about
+    once a minute, with no cap on restarts, so a slow restart loop is possible until you stop the agent; a restart cap
+    is planned for a later release. Both are decided again at v0.0.6; acp-node-v2 is being looked at, though today it
+    carries the same chain, so moving to it does not close this by itself.
+  - decode-uri-component 0.2.2 (GHSA-qr28-fpjm-wq7f, high; also the moderate GHSA-vcc3-ghjq-m6fr, which our release
+    checks do not block on), fixed only in 0.5.1, through query-string 7 in the same sign-in page.
+
+  **Accepted risk.** For the three entries accepted for the sign-in page (zod 3.25.76, zod 3.22.4 and
+  decode-uri-component 0.2.2), the worst case is that the sign-in window runs out of memory or stalls; no data or code
+  is exposed. None can be fixed now: no compatible fix exists inside the major versions the sign-in SDK requires. Our
+  release checks cover the sign-in page's dependencies, and exactly three package versions are accepted explicitly,
+  each by name, version and advisory. The checks stop accepting each one at v0.0.6: it must then be decided again or,
+  as soon as a compatible fix exists, removed. `npm audit` shows more packages as high than these, because it also
+  counts every package that depends on them. All three, and the two of the optional ACP CLI, are listed under Known
+  Limitations in `SECURITY.md`.
+- **Signed checksums.** The release procedure signs `SHA256SUMS.txt` with the app's Developer ID
+  (`SHA256SUMS.txt.sig`) once the app and DMG are notarized, and verifies the signature before upload, so you can
+  check your download against a signed list.
+
 ## v0.0.4 — 2026-10-31
 
 The first launch installs faster, every package's row in the install screen now tells the truth about that package,

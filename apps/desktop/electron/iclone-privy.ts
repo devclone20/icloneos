@@ -18,6 +18,7 @@ import {
 } from './iclone-inft-book'
 import { type ResolvedInftProfile, resolveInftProfile } from './iclone-profile'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import { registerTeardown } from './teardown-registry'
 
 /**
  * iCLONE OS — Privy wallet login + iNFT wallet scan (main process).
@@ -1563,7 +1564,8 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
 
   const server = privyDir ? startLoopbackServer(privyDir) : null
 
-  app.once('before-quit', () => {
+  // Closed when the quit goes through or is forced; a quit the owner cancels keeps the sign-in server.
+  registerTeardown('privy server', () => {
     server?.close()
   })
 

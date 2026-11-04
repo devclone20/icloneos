@@ -22,10 +22,11 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 
-import { app, type BrowserWindow, ipcMain } from 'electron'
+import { type BrowserWindow, ipcMain } from 'electron'
 
 import { BUS_CLI_FRAGMENT } from './iclone-pane-bus/cli'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import { registerTeardown } from './teardown-registry'
 
 const REPLY_TIMEOUT_MS = 5_000
 const BODY_CAP = 8 * 1024
@@ -205,7 +206,8 @@ export function initIcloneIt({ getMainWindow, port: requestedPort = 0 }: InitOpt
     }
   })
 
-  app.on('will-quit', () => {
+  // it.json holds the CLI token: removed on every way out (will-quit and a forced exit), with the server closed.
+  registerTeardown('it server', () => {
     try {
       rmSync(path.join(stateDir(), 'it.json'), { force: true })
     } catch {

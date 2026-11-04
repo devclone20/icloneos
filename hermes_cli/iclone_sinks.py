@@ -254,6 +254,8 @@ def locked_closure(extras: Iterable[str], lock_path: Optional[Path] = None) -> O
 RUNTIME_VENV_EXCLUSIONS: tuple = (
     "langfuse",
     "nemo-relay",
+    "opentelemetry-exporter-http-transport",
+    "opentelemetry-exporter-otlp-common",
     "opentelemetry-exporter-otlp-proto-common",
     "opentelemetry-exporter-otlp-proto-http",
     "opentelemetry-proto",

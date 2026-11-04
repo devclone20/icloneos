@@ -25,6 +25,7 @@ import { app, ipcMain, type WebContents } from 'electron'
 
 import { lineRedactor } from './iclone-acp-ipc'
 import type { IpcSenderEventLike } from './ipc-sender-guard'
+import { registerTeardown } from './teardown-registry'
 
 export const WATCH_ARGV: readonly string[] = ['events', 'listen', '--json']
 const BACKOFF_MIN_MS = 1000
@@ -713,13 +714,14 @@ export function initAcpWatch(
   // Not once: a cancelled quit (the quit confirmation) must leave the kill armed for the real one. stopAll is idempotent.
   // Main's own quit handlers run first and preventDefault() the passes that do not quit ("Keep Running", the deferred
   // teardown), so only an unprevented pass kills the open Market's listener. 'will-quit' fires only when the quit goes
-  // through: the backstop that keeps a listener from outliving the app.
+  // through. The backstop that keeps a listener from outliving the app is the teardown registry: will-quit and every
+  // forced exit (which skips will-quit and runs no unprevented before-quit) stop it.
   app.on('before-quit', event => {
     if (!event.defaultPrevented) {
       watcher.stopAll()
     }
   })
-  app.on('will-quit', () => watcher.stopAll())
+  registerTeardown('acp market watch', () => watcher.stopAll())
 
   return watcher
 }

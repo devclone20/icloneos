@@ -390,7 +390,7 @@ pty = []
 # extra that exposes a Starlette-backed server surface so pip/uv can't resolve
 # a vulnerable pre-1.0.1 transitive. Bump in lockstep with uv.lock.
 #
-# mcp 2.0.0 implements MCP revision 2026-07-28 and moved its own HTTP stack
+# mcp 2.x (MCP revision 2026-07-28 onward) moved its own HTTP stack
 # from `httpx` to `httpx2`. httpx2 arrives transitively, but tools/mcp_tool.py
 # and tools/mcp_oauth_manager.py import it by name to build the client objects
 # they hand to the SDK, so it is pinned here explicitly rather than left to
@@ -398,7 +398,7 @@ pty = []
 # unaffected — the two distributions install side by side under different
 # module names.
 mcp = [
-  "mcp==2.0.0",
+  "mcp==2.2.0",
   "httpx2==2.12.0",
   "starlette==1.3.1",
 ] # starlette: CVE-2026-48710
@@ -413,7 +413,7 @@ teams = [
 # Computer use talks to PM's pinned cua-driver over MCP stdio. This extra
 # provides the MCP client, independently of the native driver package.
 computer-use = [
-  "mcp==2.0.0",
+  "mcp==2.2.0",
   "httpx2==2.12.0",
   "starlette==1.3.1",
 ] # starlette: CVE-2026-48710
@@ -432,9 +432,9 @@ mistral = ["mistralai==2.4.8"]
 # PM on first use; never a core dependency and deliberately
 # NOT in [all].
 otlp = [
-  "opentelemetry-sdk==1.39.1",
-  "opentelemetry-exporter-otlp-proto-http==1.39.1",
-]
+  "opentelemetry-sdk==1.45.1",
+  "opentelemetry-exporter-otlp-proto-http==1.45.1",
+] # 1.45.1: GHSA-xcq7-p3pf-p88h (opentelemetry-api, held in lockstep by the SDK)
 langfuse = ["langfuse==4.15.2"]
 bedrock = ["boto3==1.42.89"]
 vertex = ["google-auth==2.55.1"]
@@ -474,9 +474,10 @@ google = [
   # The Google SDKs permit older vulnerable transitives, so unlocked installs
   # must carry the same fixed floors as uv.lock and the runtime installers:
   # httplib2 0.32.0 (GHSA-j5g9-f88f-gfj3 decompression bomb DoS),
-  # pyasn1 0.6.4, google-auth 2.55.1.
+  # pyasn1 0.6.5 (GHSA-2qm8-x737-gmw5, GHSA-mm57-4v3p-rchx, GHSA-9m75-vc3g-4x39,
+  # GHSA-fm9c-5rcf-2q5p), google-auth 2.55.1.
   "httplib2==0.32.0",
-  "pyasn1==0.6.4",
+  "pyasn1==0.6.5",
 ]
 youtube = [
   # Required by skills/media/youtube-content and
@@ -536,7 +537,7 @@ dev = [
   "debugpy==1.8.20",
   "pytest==9.1.1",
   "pytest-asyncio==1.3.0",
-  "mcp==2.0.0",
+  "mcp==2.2.0",
   "httpx2==2.12.0",
   "starlette==1.3.1",
   "ty==0.0.82",
@@ -632,6 +633,13 @@ override-dependencies = [
   # holds Pillow below the 13.0.0 fixes. Keep this exact version equal to the
   # direct dependency. Remove this line when browser-harness lifts the pin.
   "pillow==13.0.0; python_version >= '3.14'",
+  # mistralai 2.4.8 (the [mistral] pin) caps opentelemetry-semantic-conventions
+  # below 0.61, which holds the OpenTelemetry stack at 1.39.1 and its
+  # opentelemetry-api advisory (GHSA-xcq7-p3pf-p88h); the [otlp] fix, SDK
+  # 1.45.1, requires 0.66b1 exactly. mistralai lifted that cap itself in 2.9.4.
+  # Keep this exact version equal to what the opentelemetry-sdk pin requires.
+  # Remove this line when the mistralai pin moves to 2.9.4 or later.
+  "opentelemetry-semantic-conventions==0.66b1",
 ]
 exclude-newer = "14 days"
 # h2: temporary exclude-newer exception for the CVE-2026-71554 (GHSA-6hr6-w5qg-qmwg,
@@ -714,11 +722,6 @@ exa-py = false
 fal-client = false
 fastapi = false
 faster-whisper = false
-# filelock: 4.2.1 (released 2026-10-17) fixes the filelock advisories published 2026-10-23/28
-# (GHSA-6627-m3xw-93mp, GHSA-69hj-f68j-2879, GHSA-fq56-3cx3-fjxp, ...). Not a direct dependency (huggingface-hub,
-# torch: opt-in extras), so no exact pin here; uv.lock holds 4.2.1. Remove this line on 2026-10-31, when 4.2.1
-# is 14 days old (v0.0.4 deps r4, S4).
-filelock = false
 fire = false
 firecrawl-anydoc = false
 firecrawl-py = false
@@ -785,6 +788,11 @@ sounddevice = false
 soundfile = "2026-06-06T08:58:48Z"
 starlette = false
 tenacity = false
+# tornado: 6.6 (released 2026-10-21T15:30Z) fixes GHSA-r4j5-9xpp-3985, GHSA-pcg2-g6cj-q92c and
+# GHSA-pw9p-v7r6-gx4p. Not a direct dependency (python-telegram-bot[webhooks]), so no exact pin here;
+# the dated cutoff admits the 6.6 wheels and nothing newer. Remove this line after 2026-11-04T15:32Z, when the
+# last 6.6 wheel (uploaded 2026-10-21T15:31Z) is 14 days old; earlier, the window would hide 6.6 again.
+tornado = "2026-10-21T15:32:00Z"
 ty = false
 tzdata = false
 unpaddedbase64 = false

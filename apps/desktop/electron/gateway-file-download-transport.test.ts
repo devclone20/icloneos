@@ -56,3 +56,15 @@ test('finalizeGatewayDownload prompts a save dialog then streams the response', 
   // HTTP errors carry their status so a 404 can trigger the fallback.
   assert.match(fn, /error\.statusCode = statusCode/)
 })
+
+test('every gateway and image save dialog names its purpose (the folder it remembers)', () => {
+  const sites = [
+    extract('async function finalizeGatewayDownload', '\nfunction readGatewayErrorText'),
+    extract('export async function saveGatewayFileViaDataUrl', '\n}\n'),
+    extract('export async function saveImageFromUrl', '\n}\n')
+  ]
+
+  for (const site of sites) {
+    assert.match(site, /showSaveDialogForMainWindow\(\s*\{[^]*?\},\s*'save-download'\s*\)/)
+  }
+})

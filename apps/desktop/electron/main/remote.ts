@@ -49,6 +49,7 @@ import {
 } from './managed-ssh'
 import { ensureNativeAccessToken, fetchJsonViaOauthSession, hasLiveOauthSession, hasNativeSession } from './oauth'
 import { decryptRemoteHeaders, encryptDesktopSecret, rememberRemoteWsHeaders } from './secrets'
+import { refuseWhileQuitting } from './state'
 
 // Best-effort read of a gateway's advertised auth providers, cached per base
 // URL for the life of the process. Used by the oauth pre-flight guard to tell
@@ -223,6 +224,8 @@ export async function bootstrapSshConnection(
   resolvedEffectiveFingerprint?: string | undefined,
   metadata: SshBootstrapMetadata = {}
 ) {
+  // No new SSH dial once a quit is under way: the quit's SSH teardown has already counted what it must close.
+  refuseWhileQuitting('ssh dial')
   const scope = sshScopeKey(profile)
   const effectiveConfigFingerprint = resolvedEffectiveFingerprint || (await effectiveSshConfigFingerprint(sshConfig))
   const resolvedConfig = { ...sshConfig, effectiveConfigFingerprint }

@@ -7,6 +7,7 @@ import { app, dialog, ipcMain, Notification, shell } from 'electron'
 import { errorMessage } from '../../src/iclone-shared/errors'
 import { createEventDeduper } from '../event-dedupe'
 import { consentAllows } from '../iclone-consent'
+import { createNotificationFailureWatch } from '../notification-failure'
 import { formatRendererBoundaryReport } from '../renderer-log'
 
 import { fileExists } from './env'
@@ -24,6 +25,9 @@ interface ShellIpcDeps {
 // handles IPC serially, so the first window to claim a key wins with no race.
 const isDuplicateNotification = createEventDeduper()
 const claimedAmbientCue = createEventDeduper()
+
+// An unsigned macOS build shows no banner: the failure is logged once, and the IPC still reports the request taken.
+const watchNotificationFailure = createNotificationFailureWatch(rememberLog)
 
 export function registerShellIpc({ windowsState }: ShellIpcDeps): void {
   // A window asks "do I own this ambient cue (turn-end sound / spoken reply)?".
@@ -109,6 +113,7 @@ export function registerShellIpc({ windowsState }: ShellIpcDeps): void {
         tag: payload?.tag
       })
     })
+    watchNotificationFailure(notification, 'app')
     notification.show()
 
     return true

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { clearOauthSession } from './oauth'
+import { clearOauthSession, createdOauthSessions, getOauthSessionForUrl } from './oauth'
 
 const jar = vi.hoisted(() => ({
   cookies: [] as Array<{ domain?: string; name: string; path?: string; secure?: boolean }>,
@@ -46,5 +46,15 @@ describe('clearOauthSession', () => {
       ['https://gw.test/app', 'sid'],
       ['http://gw.test/', 'plain']
     ])
+  })
+})
+
+describe('createdOauthSessions (what a signal quit flushes)', () => {
+  it('lists the OAuth jar this run opened, the very session getOauthSessionForUrl handed out, once', () => {
+    const opened = getOauthSessionForUrl('https://gw.test')
+
+    expect(opened).not.toBeNull()
+    expect(createdOauthSessions()).toContain(opened)
+    expect(createdOauthSessions().filter(current => current === opened)).toHaveLength(1)
   })
 })

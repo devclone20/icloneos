@@ -59,10 +59,10 @@ describe('parsePin — the committed pin', () => {
     expect(pin.rows.size).toBeGreaterThan(400)
   })
 
-  it('on darwin-arm64 the closure is exactly the 346 package dirs REL-4 staged with npm ci + prune', () => {
+  it('on darwin-arm64 the closure is exactly the 343 package dirs staged with npm ci + prune', () => {
     const rows = runtimeClosure(parsePin(PKG, LOCK), { platform: 'darwin', arch: 'arm64' })
 
-    expect(rows).toHaveLength(346)
+    expect(rows).toHaveLength(343)
     expect(rows.some(r => r.name === 'tsup' || r.name === 'typescript' || r.name.startsWith('@types/'))).toBe(false)
     expect(rows.some(r => r.name === '@napi-rs/keyring-darwin-arm64')).toBe(true)
     expect(rows.some(r => r.name === '@napi-rs/keyring-linux-x64-gnu')).toBe(false)

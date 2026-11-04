@@ -26,7 +26,7 @@ import {
   terminateOwnedWindowsDashboardForUpdate
 } from '../windows-remote-lifecycle'
 
-import { claimBackendChild, primaryProfileKey } from './backend'
+import { claimBackendChild, primaryProfileKey, stopBackendChild, waitForBackendExit } from './backend'
 import { desktopParentStartMarker, reapOrphanedBackendsOnce, releaseBackendChild } from './backend-ownership'
 import { ensureRuntime, startPoolIdleReaper } from './backend-pool'
 import { type ProbeWebSocketImpl, waitForHermes } from './backend-readiness'
@@ -54,7 +54,7 @@ import type { RemoteSshConfig } from './remote'
 import { bootstrapSshConnection, buildRemoteConnection } from './remote'
 import { makeDashboardReadyFile, resolveHermesCwd, resolveWebDist } from './runtime'
 import { decryptDesktopSecret } from './secrets'
-import { lateBound } from './state'
+import { lateBound, QuitInProgressError, quitState, refuseWhileQuitting } from './state'
 import {
   ensureRuntimeUpdateCheckOff,
   resolveHermesBackend,
@@ -634,7 +634,11 @@ export async function spawnPoolBackend(
 ): Promise<BackendConnection> {
   const poolKey = opts.poolKey || profile
 
+  // A quit never starts a backend its teardown has already passed: refused at the entry, after every await and right
+  // before the spawn; a child claimed while the quit began is stopped at once (as the primary's start-hermes does).
+  refuseWhileQuitting('pool boot')
   await reapOrphanedBackendsOnce()
+  refuseWhileQuitting('pool boot') // after the orphan reap
   profileDeletionGate.assertCanStart(profile)
 
   // A profile may point at its OWN remote backend (connection.json
@@ -644,6 +648,7 @@ export async function spawnPoolBackend(
   // entry keeps `entry.process === null`, which stopPoolBackend/evict already
   // tolerate.
   const remote = opts.forceLocal ? null : await resolveRemoteBackend(profile, { poolKey })
+  refuseWhileQuitting('pool boot') // after the remote resolution
   profileDeletionGate.assertCanStart(profile)
 
   if (remote) {
@@ -683,6 +688,7 @@ export async function spawnPoolBackend(
     })
   }
 
+  refuseWhileQuitting('pool boot') // after the update clearance
   profileDeletionGate.assertCanStart(profile)
 
   // --profile wins over the inherited HERMES_HOME env (see _apply_profile_override
@@ -690,7 +696,9 @@ export async function spawnPoolBackend(
   // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
   const backendArgs = ['--profile', profile, 'serve', '--host', '127.0.0.1', '--port', '0']
   const backend = await ensureRuntime(resolveHermesBackend(backendArgs))
+  refuseWhileQuitting('pool boot') // after the runtime
   await ensureRuntimeUpdateCheckOff(profile) // iclone-seam: r1-config — updates.check off → spawn
+  refuseWhileQuitting('pool boot') // after the update-check config
   // Route old runtimes (no `serve`) through the legacy `dashboard --no-open`.
   backend.args = getBackendArgsForRuntime(backend)
   const hermesCwd = resolveHermesCwd()
@@ -710,12 +718,15 @@ export async function spawnPoolBackend(
   // runtime for THIS profile, then this spawn's key (fd 3), lock and confinement env. This backend runs the cron ticker
   // too, so without a key it is refused (`[iclone-gate]`) and nothing is spawned.
   const gated = await prepareHermesSpawn({ backend, cwd: hermesCwd, profile, role: 'pool' })
+  refuseWhileQuitting('pool boot') // after the gate
 
   rememberLog(`Starting Hermes backend for profile "${profile}" via ${backend.label}`)
 
   const parentStartMarker = await desktopParentStartMarker()
   const backendNonce = crypto.randomBytes(16).toString('hex')
   const parentIdentityEnv = parentWatchdogEnv(process.pid, parentStartMarker, backendNonce)
+
+  refuseWhileQuitting('pool boot') // right before the spawn
 
   const child = spawn(
     backend.command,
@@ -760,6 +771,22 @@ export async function spawnPoolBackend(
   const outputTail = createBackendOutputTail()
   outputTail.attach(child)
   await claimBackendChild(child, `${backend.command} ${backend.args.join(' ')}`, profile, backendNonce, outputTail)
+
+  // The quit's backend stop ran while this child was claimed and could not see it: stop it now, start nothing.
+  if (quitState.quitting) {
+    stopBackendChild(child)
+    await waitForBackendExit(child)
+    releaseBackendChild(child)
+
+    if (backendPool.get(poolKey) === entry) {
+      backendPool.delete(poolKey)
+    }
+
+    entry.process = null
+    rememberLog('[boot] quitting: pool backend stopped after its claim')
+
+    throw new QuitInProgressError('pool boot')
+  }
 
   child.stdout?.on('data', rememberLog)
   child.stderr?.on('data', rememberLog)

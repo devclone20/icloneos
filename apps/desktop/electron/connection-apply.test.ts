@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   applyConnectionChange,
   commitConnectionFailure,
+  REMOTE_REAP_CAP_MS,
   resolveTerminalConnection,
   teardownSshState,
   type TerminalSshTarget
@@ -123,6 +124,68 @@ describe('teardownSshState', () => {
     )
 
     expect(close).toHaveBeenCalledOnce()
+  })
+
+  it('m3: a failing cancel-forward or close is logged by its class only, never silent', async () => {
+    const lines: string[] = []
+
+    await teardownSshState(
+      {
+        ssh: {
+          exec: async () => '',
+          cancelForward: async () => {
+            throw new RangeError('ssh -O cancel user@secret-host failed')
+          },
+          close: async () => {
+            throw new TypeError('ssh -O exit /Users/someone/.ssh/cm failed')
+          }
+        },
+        ownershipId: 'owner',
+        localPort: 1234,
+        remotePort: 5678
+      },
+      { cleanupRemote: async () => 'killed', log: line => lines.push(line) }
+    )
+
+    expect(lines).toEqual([
+      '[ssh] remote serve reap: killed',
+      '[ssh] cancel forward failed: RangeError',
+      '[ssh] closing the connection failed: TypeError'
+    ])
+  })
+
+  it('m5: a reap past its own cap (5.5 s) is cut, so the forward and the transport close inside the 6 s quit race', async () => {
+    vi.useFakeTimers()
+
+    try {
+      const events: string[] = []
+      const lines: string[] = []
+
+      const done = teardownSshState(
+        {
+          ssh: {
+            exec: async () => '',
+            cancelForward: async () => events.push('forward'),
+            close: async () => events.push('ssh')
+          },
+          ownershipId: 'owner',
+          localPort: 1234,
+          remotePort: 5678
+        },
+        // A serve that rides out SIGTERM: TERM wait, SIGKILL wait and the probe never settle inside the race.
+        { cleanupRemote: () => new Promise(() => undefined), log: line => lines.push(line) }
+      )
+
+      await vi.advanceTimersByTimeAsync(REMOTE_REAP_CAP_MS - 1)
+      expect(events).toEqual([])
+      await vi.advanceTimersByTimeAsync(1)
+      await done
+      expect(REMOTE_REAP_CAP_MS).toBeLessThan(6_000)
+      expect(events).toEqual(['forward', 'ssh'])
+      expect(lines).toEqual(['[ssh] remote serve reap: timed out'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

@@ -3,6 +3,8 @@
 # uv sync --no-install-package <name> by pm/environment.py. Telemetry is denied by a closed inventory (ruling 54).
 langfuse
 nemo-relay
+opentelemetry-exporter-http-transport
+opentelemetry-exporter-otlp-common
 opentelemetry-exporter-otlp-proto-common
 opentelemetry-exporter-otlp-proto-http
 opentelemetry-proto

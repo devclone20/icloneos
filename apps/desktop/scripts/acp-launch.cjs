@@ -17,7 +17,7 @@
  * loads the CLI's native keychain binding and exits WITHOUT any keychain
  * call: the packaged proof that the signed, hardened app can load it.
  *
- * CONFINEMENT (REL-6 round 2, critic M1). The CLI is installed at first use
+ * CONFINEMENT. The CLI is installed at first use
  * into userData/acp-cli/<lock>/, and main verifies that tree before every
  * spawn — but Node's resolver would walk UP out of it (<lock>/node_modules,
  * userData/acp-cli/node_modules, ~/node_modules, NODE_PATH, the global
@@ -36,10 +36,10 @@
  *     reported to main, which audits it);
  *   - every file loaded (source as compiled, JSON, native add-on at dlopen,
  *     an executable of the tree at spawn) must hash to its manifest entry,
- *     which closes the check-to-load window (critic m1): a mismatch exits 78.
+ *     which closes the check-to-load window: a mismatch exits 78.
  * Without the two variables the launcher refuses to start (exit 78).
  *
- * RESIDUE (critic r2 m1; recorded, none of the 346 packages does any of it). Confinement is about what Node RESOLVES
+ * RESIDUE (recorded; none of the 346 packages does any of it). Confinement is about what Node RESOLVES
  * and LOADS from disk. Code that deliberately evaluates content it read itself is outside it: `vm.runInThisContext`,
  * `new Module()._compile(source)`, or a child Node started on another script. In the signed app the RunAsNode and
  * NODE_OPTIONS fuses are off, so `process.execPath` cannot become Node; the tree greps no vm / _compile module use.

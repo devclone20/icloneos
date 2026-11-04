@@ -29,6 +29,7 @@ import {
   tmuxListArgs,
   tmuxSessionFor
 } from '../iclone-pane-remote/tmux-cmd'
+import { registerTeardown } from '../teardown-registry'
 
 import { type BusLogEntry, createPaneBroker, type PaneBroker, type PaneSummary, type SignalSource } from './broker'
 import { isPaneName } from './envelope'
@@ -573,7 +574,8 @@ export function initPaneBus({ getMainWindow, isTrustedSender, findOnPath }: Init
     return ended.ok
   })
 
-  app.on('will-quit', () => {
+  // The socket file goes on every way out (will-quit and a forced exit).
+  registerTeardown('pane bus', () => {
     server.close()
     fs.rmSync(file, { force: true })
   })

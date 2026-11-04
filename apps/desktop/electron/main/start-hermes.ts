@@ -7,8 +7,8 @@ import { createBackendOutputTail } from '../backend-claim'
 import { isReauthRequiredError } from '../backend-health'
 import { waitForDashboardPortAnnouncement } from '../backend-ready'
 import {
-  isHostKeyChangedBootFailure,
   isRetryableRemoteBootFailure,
+  isUserActionRemoteBootFailure,
   shouldLatchBackendStartFailure,
   shouldLatchHostKeyChangedFailure,
   shouldLatchRemoteReauthFailure
@@ -59,7 +59,7 @@ import { DESKTOP_LOG_PATH, hermesLog, recentHermesLog, rememberLog } from './log
 import { managedPrimaryRestoreOwners } from './managed-ssh'
 import { resolveRemoteBackend } from './managed-ssh-update'
 import { makeDashboardReadyFile, resolveHermesCwd, resolveWebDist } from './runtime'
-import { bootState, lateBound } from './state'
+import { bootState, lateBound, QuitInProgressError, quitState, refuseWhileQuitting } from './state'
 import {
   ensureRuntimeUpdateCheckOff,
   resolveHermesBackend,
@@ -67,6 +67,16 @@ import {
   waitForUpdateToFinish
 } from './updates'
 import { getWindowState, sendBackendExit } from './window-events'
+
+function refuseBootWhileQuitting(): void {
+  try {
+    refuseWhileQuitting('boot')
+  } catch (error) {
+    rememberLog('[boot] quitting: boot refused')
+
+    throw error
+  }
+}
 
 export async function startHermes() {
   // Only the single-instance lock holder may reap/spawn/claim the desktop
@@ -78,7 +88,11 @@ export async function startHermes() {
     throw new Error('Hermes Desktop is already running in another window.')
   }
 
+  // A quit is under way (a renderer boot retry that fires after before-quit): start nothing the quit would have to
+  // tear down. Checked again after the first await, for a boot that began just before the quit.
+  refuseBootWhileQuitting()
   await reapOrphanedBackendsOnce()
+  refuseBootWhileQuitting()
 
   // Latched-failure short-circuit: once bootstrap has failed in this
   // process, every subsequent startHermes() call re-throws the same error
@@ -258,6 +272,9 @@ export async function startHermes() {
 
     rememberLog(`[iclone-x402] backend runs as ${runsAs.slug ?? 'an unknown profile (no pay env)'} (${runsAs.why})`)
 
+    // A quit whose teardown began during any await above (runtime, gate, start marker): spawn nothing it would miss.
+    refuseBootWhileQuitting()
+
     const hermesProcess = spawn(
       backend.command,
       // V3-S r3 (m-b): `-s -P` before the backend's args (no user site, no cwd on sys.path).
@@ -328,6 +345,19 @@ export async function startHermes() {
       backendNonce,
       primaryOutputTail
     )
+
+    // The quit's backend stop ran while the child was claimed and could not see it: stop it now, start nothing.
+    if (quitState.quitting) {
+      bootWatch.stop()
+      stopBackendChild(hermesProcess)
+      // As the superseded branch below: SIGKILL after the grace, then the claim released (nothing else waits for it).
+      await waitForBackendExit(hermesProcess)
+      releaseBackendChild(hermesProcess)
+      rememberLog('[boot] quitting: backend stopped after its claim')
+
+      throw new QuitInProgressError('boot')
+    }
+
     const processOwner = backendConnectionState.attachProcess(connectionAttempt, hermesProcess)
 
     if (!processOwner) {
@@ -496,12 +526,14 @@ export async function startHermes() {
     stopBackendChild(failedProcess)
     await waitForBackendExit(failedProcess)
 
-    if (error instanceof FirstRunSetupResetError) {
+    // A refusal while quitting is not a boot failure: nothing is latched.
+    if (error instanceof FirstRunSetupResetError || error instanceof QuitInProgressError) {
       throw error
     }
 
     const message = error instanceof Error ? error.message : String(error)
-    const hostKeyChanged = isHostKeyChangedBootFailure(error)
+    // A host-key change, or a running server whose ownership the host cannot prove: shown, latched, never auto-retried.
+    const hostKeyChanged = isUserActionRemoteBootFailure(error)
 
     // Ruling 42 r2 (critic M2): an install-class verdict while the agent was still starting after its install (the
     // first-launch budget ran out, or a dependency sync stopped progressing) is shown where every install failure is:

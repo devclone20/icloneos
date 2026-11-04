@@ -136,8 +136,35 @@ export const quitState = {
   // set, window-all-closed calls app.quit() on every platform so the process
   // actually dies and the hand-off script can proceed immediately.
   isQuittingForHandoff: false,
+  // True once a quit's teardown has begun: main's before-quit, past any wait for remote updates (whose restore dials
+  // must still go through), right where it seals the SSH bootstrap coordinator (sealQuitTeardown). The active-work
+  // confirmation clears it ("Keep Running"). While true, nothing new is started: no boot attempt, no SSH dial, no
+  // `ssh -G` (see refuseWhileQuitting).
+  quitting: false,
   // iclone-seam: p7-app-update
   icloneAppUpdate: null as AppUpdateController | null
+}
+
+/** The error a boot, dial or `ssh -G` throws when it is asked for while the app is quitting. */
+export class QuitInProgressError extends Error {
+  readonly quitting = true
+
+  constructor(what: string) {
+    super(`quitting: ${what} refused`)
+    this.name = 'QuitInProgressError'
+  }
+}
+
+/** The quit's teardown has begun: from now on no boot, dial or `ssh -G` starts. */
+export function beginQuitTeardown(): void {
+  quitState.quitting = true
+}
+
+/** Throws QuitInProgressError while a quit is under way: a quit never starts new work it would have to tear down. */
+export function refuseWhileQuitting(what: string): void {
+  if (quitState.quitting) {
+    throw new QuitInProgressError(what)
+  }
 }
 
 export const deepLinkState = {

@@ -2,7 +2,7 @@
 
 > **Not yet published.** `@icloneos/cli` (npm) and `icloneos` (PyPI) are not published yet. Do not install them from npm or PyPI until this line is removed. Any package under those names today is not ours. Install from https://github.com/devclone20/icloneos/releases only.
 
-iclone os is a signed, notarised macOS app (Apple silicon, macOS 12+). Package managers install
+iclone os is a signed, notarised macOS app (Apple silicon, macOS 13+). Package managers install
 command-line tools, not app bundles, so every terminal channel publishes the same small **launcher**
 (or, for Homebrew, a cask pointing at the DMG). Every launcher fetches the **same** artefact from
 [`devclone20/icloneos`](https://github.com/devclone20/icloneos) and verifies it
@@ -148,18 +148,29 @@ never in CI:
 npm run release:mac -- --team HJSLQL98D8 --gates <abs path>/P7_gates.sh --sign-sums
 ```
 
-After the DMG is notarised and stapled and `SHA256SUMS.txt` is written, the script:
+You type the keychain password **once** per release. The signature is made inside the same signing window as
+the app and DMG notarization, so there is no second unlock. The script:
 
 1. reads the single `Developer ID Application: … (HJSLQL98D8)` identity from
-   `~/Library/Keychains/iclone-release.keychain-db`;
-2. runs `security unlock-keychain ~/Library/Keychains/iclone-release.keychain-db`, where **you type the
-   keychain password**; nothing stores or passes it;
-3. runs `security cms -S -N "Developer ID Application: … (HJSLQL98D8)" -k ~/Library/Keychains/iclone-release.keychain-db -H SHA256 -G -T -i release/SHA256SUMS.txt -o release/SHA256SUMS.txt.sig`.
+   `~/Library/Keychains/iclone-release.keychain-db`, before anything is unlocked;
+2. runs `security unlock-keychain ~/Library/Keychains/iclone-release.keychain-db` once, at the start of the signing
+   window, where **you type the keychain password**; nothing stores or passes it;
+3. signs and notarizes the app, then notarizes and staples the DMG. At that point every listed asset is final: the
+   zip, its blockmap and `latest-mac.yml` come from electron-builder, the DMG has just been stapled, and
+   `runtime.json` is the pin read before the build. Still inside the window, it writes `runtime.json`, hashes the
+   assets into `SHA256SUMS.txt` and runs
+   `security cms -S -N "Developer ID Application: … (HJSLQL98D8)" -k ~/Library/Keychains/iclone-release.keychain-db -u 6 -H SHA256 -G -T -i release/SHA256SUMS.txt -o release/SHA256SUMS.txt.sig`.
+   `-u 6` is cert usage 6, certUsageObjectSigner: without it `security cms` looks for an e-mail signing certificate and
+   refuses a Developer ID Application certificate ("could not find signing identity"). Copy it if you ever sign by hand.
    If macOS asks whether `security` may use the key, choose **Allow** (once), not *Always Allow*;
-4. runs `security lock-keychain …` in a `finally`, so the keychain is locked even if signing fails;
-5. verifies the new `.sig` with the launchers' own code
+4. in a `finally`, sets the keychain's idle lock back to 5 minutes and runs `security lock-keychain …`, so the keychain
+   is locked even if signing fails; a failed signature stops the release before `release/UPLOAD.txt` is written;
+5. verifies the new `.sig` with the launchers' own code, which needs no keychain
    (`node packages/icloneos-cli/scripts/verify-sums-signature.js release/SHA256SUMS.txt release/SHA256SUMS.txt.sig HJSLQL98D8`).
    Only then is `SHA256SUMS.txt.sig` added to `release/UPLOAD.txt`. Upload it with the other assets.
+
+With `--staple-only` there is no signing window, so `--sign-sums` opens one short unlock just for the signature,
+again one password, and locks in a `finally`.
 
 If step 5 refuses with "does not chain to Apple's root certificate", the CMS was written without the
 intermediate certificate. Import Apple's "Developer ID - G2" intermediate

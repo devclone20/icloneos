@@ -5,6 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as stateModule from './state'
+
 const h = vi.hoisted(() => ({
   attach: vi.fn(),
   backendEnv: {} as Record<string, string>,
@@ -13,7 +15,9 @@ const h = vi.hoisted(() => ({
   gate: vi.fn(),
   paySpawn: vi.fn(),
   progress: vi.fn(),
-  spawn: vi.fn()
+  remote: false,
+  spawn: vi.fn(),
+  startupError: null as Error | null
 }))
 
 vi.mock('node:child_process', () => ({ spawn: h.spawn }))
@@ -36,31 +40,37 @@ vi.mock('../parent-process-identity', () => ({ parentWatchdogEnv: () => ({}) }))
 vi.mock('../primary-backend-startup', () => ({
   createPrimaryRemoteConnection: vi.fn(),
   FirstRunSetupResetError: class FirstRunSetupResetError extends Error {},
-  runPrimaryBackendStartup: async () => ({
-    kind: 'local',
-    backend: {
-      args: ['-m', 'hermes_cli.main', 'serve'],
-      command: '/managed/venv/bin/python',
-      env: h.backendEnv,
-      kind: 'python',
-      label: 'Hermes at /managed',
-      root: '/managed',
-      shell: false
+  runPrimaryBackendStartup: async () => {
+    if (h.startupError) {
+      throw h.startupError
     }
-  })
+
+    return {
+      kind: 'local',
+      backend: {
+        args: ['-m', 'hermes_cli.main', 'serve'],
+        command: '/managed/venv/bin/python',
+        env: h.backendEnv,
+        kind: 'python',
+        label: 'Hermes at /managed',
+        root: '/managed',
+        shell: false
+      }
+    }
+  }
 }))
 vi.mock('../shell-path', () => ({ ensureLoginShellPath: async () => ({ applied: false, reason: 'unchanged' }) }))
 vi.mock('../wsl-path-bridge', () => ({ setActiveGatewayProfile: vi.fn(), setWslBridgeProfileState: vi.fn() }))
 vi.mock('./backend', () => ({
   claimBackendChild: vi.fn(),
-  primaryBackendIsRemote: () => false,
+  primaryBackendIsRemote: () => h.remote,
   primaryProfileKey: () => 'default',
   stopBackendChild: vi.fn(),
-  waitForBackendExit: async () => undefined
+  waitForBackendExit: vi.fn(async () => undefined)
 }))
 vi.mock('./backend-ownership', () => ({
   desktopParentStartMarker: async () => null,
-  reapOrphanedBackendsOnce: async () => undefined,
+  reapOrphanedBackendsOnce: vi.fn(async () => undefined),
   releaseBackendChild: vi.fn()
 }))
 vi.mock('./backend-pool', () => ({ ensureRuntime: vi.fn() }))
@@ -110,7 +120,12 @@ vi.mock('./runtime', () => ({
   resolveHermesCwd: () => '/work',
   resolveWebDist: () => '/web'
 }))
-vi.mock('./state', () => ({ bootState: h.bootState, lateBound: { isPrimaryInstance: true } }))
+// The real quitState and refusal (state.ts has no runtime imports); the boot state stays a stub.
+vi.mock('./state', async () => ({
+  ...(await vi.importActual<typeof stateModule>('./state')),
+  bootState: h.bootState,
+  lateBound: { isPrimaryInstance: true }
+}))
 vi.mock('./updates', () => ({
   ensureRuntimeUpdateCheckOff: async () => undefined,
   resolveHermesBackend: vi.fn(),
@@ -120,6 +135,9 @@ vi.mock('./updates', () => ({
 vi.mock('./window-events', () => ({ getWindowState: () => ({}), sendBackendExit: vi.fn() }))
 
 const { startHermes } = await import('./start-hermes')
+const { beginQuitTeardown, quitState, QuitInProgressError } = await import('./state')
+const backendModule = await import('./backend')
+const ownershipModule = await import('./backend-ownership')
 const { PYTHON_ISOLATION_FLAGS, sealHermesSpawnEnv } = await import('../iclone-spawn-env')
 
 const GATE_ENV = {
@@ -156,7 +174,10 @@ beforeEach(() => {
   h.paySpawn.mockReset()
   vi.unstubAllEnvs()
   h.progress.mockReset()
+  h.remote = false
   h.spawn.mockReset()
+  h.startupError = null
+  quitState.quitting = false
 })
 
 describe('start-hermes — the iclone gate before the spawn', () => {
@@ -238,5 +259,163 @@ describe('start-hermes — the iclone gate before the spawn', () => {
     })
     expect(env).not.toHaveProperty('PYTHONSTARTUP')
     expect(env).not.toHaveProperty('PYTHONHOME')
+  })
+})
+
+describe('start-hermes — no boot while the app is quitting', () => {
+  it('a boot retry scheduled before the quit and run after its before-quit is refused: no gate, no spawn, no latch', async () => {
+    vi.useFakeTimers()
+
+    try {
+      h.gate.mockResolvedValue(gatedPrimary())
+
+      // The renderer's retry, queued while the app still ran.
+      const retry = new Promise<unknown>((resolve, reject) => {
+        setTimeout(() => startHermes().then(resolve, reject), 500)
+      })
+
+      // The quit's teardown marks it (main's before-quit, past any remote-update wait).
+      beginQuitTeardown()
+      vi.advanceTimersByTime(500)
+
+      await expect(retry).rejects.toBeInstanceOf(QuitInProgressError)
+      await expect(retry).rejects.toThrow('quitting: boot refused')
+      expect(h.gate).not.toHaveBeenCalled()
+      expect(h.spawn).not.toHaveBeenCalled()
+      // A refusal is not a boot failure: nothing is latched for the next launch of the window.
+      expect(h.bootState.backendStartFailure).toBeUndefined()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('a quit whose teardown begins while orphans are reaped: refused right after that await, before the gate', async () => {
+    h.gate.mockResolvedValue(gatedPrimary())
+    vi.mocked(ownershipModule.reapOrphanedBackendsOnce).mockImplementationOnce(async () => {
+      beginQuitTeardown()
+    })
+
+    await expect(startHermes()).rejects.toBeInstanceOf(QuitInProgressError)
+    expect(h.gate).not.toHaveBeenCalled()
+    expect(h.spawn).not.toHaveBeenCalled()
+    expect(h.bootState.backendStartFailure).toBeUndefined()
+  })
+
+  it('a quit whose teardown begins during a later await (the gate) is refused right before the spawn: no spawn, no latch', async () => {
+    h.gate.mockImplementation(async () => {
+      beginQuitTeardown()
+
+      return gatedPrimary()
+    })
+
+    await expect(startHermes()).rejects.toBeInstanceOf(QuitInProgressError)
+    expect(h.gate).toHaveBeenCalledTimes(1)
+    expect(h.spawn).not.toHaveBeenCalled()
+    expect(h.bootState.backendStartFailure).toBeUndefined()
+  })
+
+  it('a quit whose teardown begins while the child is claimed: that child is stopped at once, nothing latched', async () => {
+    const child = { once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null }
+
+    h.gate.mockResolvedValue(gatedPrimary())
+    h.spawn.mockReturnValue(child)
+    vi.mocked(backendModule.claimBackendChild).mockImplementationOnce((async () => {
+      beginQuitTeardown()
+    }) as never)
+    vi.mocked(backendModule.stopBackendChild).mockClear()
+
+    await expect(startHermes()).rejects.toBeInstanceOf(QuitInProgressError)
+    expect(h.spawn).toHaveBeenCalledTimes(1)
+    expect(backendModule.stopBackendChild).toHaveBeenCalledWith(child)
+    expect(h.bootState.backendStartFailure).toBeUndefined()
+  })
+
+  it('the post-claim stop waits for the child to exit (SIGKILL after the grace) and releases it before it throws', async () => {
+    const child = { once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null }
+    let exited = () => undefined as void
+
+    h.gate.mockResolvedValue(gatedPrimary())
+    h.spawn.mockReturnValue(child)
+    vi.mocked(backendModule.claimBackendChild).mockImplementationOnce((async () => {
+      beginQuitTeardown()
+    }) as never)
+    vi.mocked(backendModule.waitForBackendExit).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          exited = resolve
+        }) as never
+    )
+    vi.mocked(ownershipModule.releaseBackendChild).mockClear()
+    let settled = false
+
+    const boot = startHermes().finally(() => {
+      settled = true
+    })
+
+    boot.catch(() => undefined)
+
+    for (let tick = 0; tick < 50; tick += 1) {
+      await Promise.resolve()
+    }
+
+    expect(backendModule.waitForBackendExit).toHaveBeenCalledWith(child)
+    // Still waiting for the exit: not released, not thrown.
+    expect(ownershipModule.releaseBackendChild).not.toHaveBeenCalled()
+    expect(settled).toBe(false)
+    exited()
+    await expect(boot).rejects.toBeInstanceOf(QuitInProgressError)
+    expect(ownershipModule.releaseBackendChild).toHaveBeenCalledWith(child)
+  })
+
+  it('control: the same boot with no quit under way reaches the gate', async () => {
+    h.gate.mockRejectedValue(new Error('[iclone-gate] stop here'))
+    await expect(startHermes()).rejects.toThrow(/\[iclone-gate\]/)
+    expect(h.gate).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('start-hermes — a remote boot failure only the user can resolve', () => {
+  const bootErrorCalls = () =>
+    h.progress.mock.calls.map(([update]) => update as { error?: null | string; retryable?: boolean; running?: boolean })
+
+  it("'ownership-unverifiable' is latched as needing the user: the error is shown, no automatic retry, the next attempt re-throws without booting", async () => {
+    h.remote = true
+    h.startupError = Object.assign(
+      new Error("Can't confirm that the Hermes server already running there is its own."),
+      {
+        kind: 'ownership-unverifiable'
+      }
+    )
+
+    await expect(startHermes()).rejects.toThrow(/already running there/)
+
+    expect(h.progress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        error: expect.stringContaining('already running there'),
+        phase: 'backend.error',
+        retryable: false,
+        running: false
+      }),
+      expect.anything()
+    )
+    expect(h.bootState.backendStartFailure).toBe(h.startupError)
+
+    const callsBefore = h.progress.mock.calls.length
+
+    await expect(startHermes()).rejects.toBe(h.startupError)
+    expect(h.progress.mock.calls.length).toBe(callsBefore)
+  })
+
+  it('control: a transient remote failure stays retryable and is not latched', async () => {
+    h.remote = true
+    h.startupError = new Error('Remote host briefly unreachable')
+
+    await expect(startHermes()).rejects.toThrow(/briefly unreachable/)
+
+    const failure = bootErrorCalls().find(update => update.error)
+
+    expect(failure?.retryable).toBe(true)
+    expect(failure?.running).toBe(false)
+    expect(h.bootState.backendStartFailure ?? null).toBeNull()
   })
 })

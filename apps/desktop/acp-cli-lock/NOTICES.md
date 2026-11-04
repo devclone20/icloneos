@@ -9,7 +9,7 @@ against the sha512 in `package-lock.json`, and installs it into its own folder
 releases it on npm; the app shows the installed packages' own licence texts after the install. Nothing below is
 redistributed by iclone os.
 
-Pin: `package-lock.json` sha256 `40d57d6a1787c7841c03e2cb8958643b7d2de1da607cc70587f8c7145629ed55`. 357 packages in the CLI's runtime closure across
+Pin: `package-lock.json` sha256 `dc5a9c6b743c059c4d65b3f8fc2ee4a16fe39e9adad9ad6ad4238481c2cf64da`. 354 packages in the CLI's runtime closure across
 platforms (each install takes only its own platform's rows; build tooling and type stubs are never fetched).
 
 Declaring no licence (5): `@alchemy/wallet-api-types@0.1.0-alpha.26`, `eyes@0.1.8`, `qrcode-terminal@0.12.0`, `text-encoding-utf-8@1.0.2`, `xmlhttprequest-ssl@2.1.2`. These are fetched from npm under their publishers' terms.
@@ -222,7 +222,6 @@ built by its publisher, not from iclone os source), and the N-API addons `@napi-
 | `elliptic/node_modules/bn.js`                                               | 4.12.5                    | MIT                    | all           |
 | `emoji-regex`                                                               | 8.0.0                     | MIT                    | all           |
 | `engine.io-client`                                                          | 6.6.7                     | MIT                    | all           |
-| `engine.io-client/node_modules/ws`                                          | 8.21.3                    | MIT                    | all           |
 | `engine.io-parser`                                                          | 5.2.3                     | MIT                    | all           |
 | `es-define-property`                                                        | 1.0.1                     | MIT                    | all           |
 | `es-errors`                                                                 | 1.3.0                     | MIT                    | all           |
@@ -245,7 +244,7 @@ built by its publisher, not from iclone os source), and the N-API addons `@napi-
 | `fast-sha256`                                                               | 1.3.0                     | Unlicense              | all           |
 | `fast-stable-stringify`                                                     | 1.0.0                     | MIT                    | all           |
 | `fast-uri`                                                                  | 3.1.9                     | BSD-3-Clause           | all           |
-| `follow-redirects`                                                          | 1.16.1                    | MIT                    | all           |
+| `follow-redirects`                                                          | 1.16.2                    | MIT                    | all           |
 | `for-each`                                                                  | 0.3.5                     | MIT                    | all           |
 | `form-data`                                                                 | 4.0.6                     | MIT                    | all           |
 | `function-bind`                                                             | 1.1.2                     | MIT                    | all           |
@@ -288,10 +287,9 @@ built by its publisher, not from iclone os source), and the N-API addons `@napi-
 | `isows`                                                                     | 1.0.7                     | MIT                    | all           |
 | `jayson`                                                                    | 4.3.0                     | MIT                    | all           |
 | `jayson/node_modules/commander`                                             | 2.20.3                    | MIT                    | all           |
-| `jayson/node_modules/uuid`                                                  | 8.3.2                     | MIT                    | all           |
 | `jayson/node_modules/ws`                                                    | 7.5.13                    | MIT                    | all           |
 | `jose`                                                                      | 6.2.13                    | MIT                    | all           |
-| `js-cookie`                                                                 | 3.0.1                     | MIT                    | all           |
+| `js-cookie`                                                                 | 3.0.7                     | MIT                    | all           |
 | `js-sha3`                                                                   | 0.8.0                     | MIT                    | all           |
 | `json-schema-traverse`                                                      | 1.0.0                     | MIT                    | all           |
 | `json-stringify-safe`                                                       | 5.0.1                     | ISC                    | all           |
@@ -363,7 +361,6 @@ built by its publisher, not from iclone os source), and the N-API addons `@napi-
 | `viem/node_modules/abitype`                                                 | 1.2.3                     | MIT                    | all           |
 | `viem/node_modules/eventemitter3`                                           | 5.0.1                     | MIT                    | all           |
 | `viem/node_modules/ox`                                                      | 0.14.56                   | MIT                    | all           |
-| `viem/node_modules/ws`                                                      | 8.21.0                    | MIT                    | all           |
 | `webauthn-p256`                                                             | 0.0.10                    | MIT                    | all           |
 | `webidl-conversions`                                                        | 3.0.1                     | BSD-2-Clause           | all           |
 | `websocket`                                                                 | 1.0.35                    | Apache-2.0             | all           |
@@ -375,7 +372,7 @@ built by its publisher, not from iclone os source), and the N-API addons `@napi-
 | `which-collection`                                                          | 1.0.2                     | MIT                    | all           |
 | `which-typed-array`                                                         | 1.1.24                    | MIT                    | all           |
 | `wrap-ansi`                                                                 | 6.2.0                     | MIT                    | all           |
-| `ws`                                                                        | 8.18.0                    | MIT                    | all           |
+| `ws`                                                                        | 8.21.3                    | MIT                    | all           |
 | `xmlhttprequest-ssl`                                                        | 2.1.2                     | none declared          | all           |
 | `yaeti`                                                                     | 0.0.6                     | MIT                    | all           |
 | `yoctocolors-cjs`                                                           | 2.1.3                     | MIT                    | all           |

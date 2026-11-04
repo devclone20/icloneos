@@ -24,6 +24,7 @@ import path from 'node:path'
 
 import { readFileSync } from 'node:fs'
 
+import { packedElectronDist, verifyPackedChromiumLicenses } from './electron-licenses.mjs'
 import { PIN_PATH, readPin, verifyPackedRuntime } from './fetch-runtime-pin.mjs'
 import { stampExeIdentity } from './set-exe-identity.mjs'
 import { packedResourcesDir, verifyPackedIclonePlugins } from './stage-iclone-plugins.mjs'
@@ -61,6 +62,17 @@ export default async function afterPack(context) {
 
   if (problems.length > 0) {
     throw new Error(`[after-pack] iclone Hermes plugins not packed correctly: ${problems.join('; ')}`)
+  }
+
+  // THIRD_PARTY_NOTICES.md promises Chromium's licence file in Resources; electron-builder only warns when the
+  // extraResources source is missing, so the pack is checked against the dist it was built from.
+  const licenceProblems = verifyPackedChromiumLicenses(
+    packedResourcesDir(context.appOutDir, context.electronPlatformName, productName),
+    packedElectronDist(context)
+  )
+
+  if (licenceProblems.length > 0) {
+    throw new Error(`[after-pack] Chromium licences not packed correctly: ${licenceProblems.join('; ')}`)
   }
 
   // V3-RT: the packed runtime folder is exactly the pinned bundle, its manifest included (the spawn gate verifies the

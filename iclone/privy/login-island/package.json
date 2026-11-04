@@ -14,5 +14,10 @@
   },
   "devDependencies": {
     "esbuild": "0.25.5"
+  },
+  "overrides": {
+    "axios": "1.20.0",
+    "follow-redirects": "1.16.2",
+    "ws@^8": "8.21.3"
   }
 }

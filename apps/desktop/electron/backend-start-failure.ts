@@ -108,6 +108,29 @@ export function isHostKeyChangedBootFailure(error: unknown): boolean {
 }
 
 /**
+ * The remote host cannot show which process owns the running Hermes server (no usable `ps`), so the connect refused
+ * to start a second server on top of it (remote-lifecycle.ts, kind 'ownership-unverifiable'). Like a host-key change it
+ * cannot self-heal: retrying re-drives the same refusal, so it waits for the user (the message says what to do).
+ */
+export function isOwnershipUnverifiableBootFailure(error: unknown): boolean {
+  if ((error as { kind?: string } | null | undefined)?.kind === 'ownership-unverifiable') {
+    return true
+  }
+
+  const message = error instanceof Error ? error.message : String(error ?? '')
+
+  return /can't confirm that the Hermes server already running there is its own/.test(message)
+}
+
+/**
+ * A remote boot failure only the user can resolve (a host-key change, a running server whose ownership the host cannot
+ * prove): shown, latched until reset/repair/apply-config, and never retried automatically.
+ */
+export function isUserActionRemoteBootFailure(error: unknown): boolean {
+  return isHostKeyChangedBootFailure(error) || isOwnershipUnverifiableBootFailure(error)
+}
+
+/**
  * Whether a failed remote boot should latch (into `backendStartFailure`)
  * because the host key changed. Same rationale as the reauth latch: the
  * failure cannot self-heal, and an unlatched terminal failure makes every

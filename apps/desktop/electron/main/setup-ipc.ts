@@ -6,8 +6,13 @@ import { desktopCapturer, ipcMain, Notification, shell, systemPreferences } from
 
 import { consentAllows, type ConsentSenderGuard, type ConsentStore } from '../iclone-consent'
 import { registerIcloneSetup, type SetupSystemSeam } from '../iclone-setup'
+import { createNotificationFailureWatch } from '../notification-failure'
 
+import { rememberLog } from './log'
 import { requestMicrophoneAccess } from './window-ipc'
+
+// An unsigned macOS build shows no banner: the failure is logged once and the step still counts as notified.
+const watchNotificationFailure = createNotificationFailureWatch(rememberLog)
 
 function electronSetupSystemSeam(store: ConsentStore): SetupSystemSeam {
   // Without a record to write to (policy not accepted), this run still remembers its attempt.
@@ -37,7 +42,10 @@ function electronSetupSystemSeam(store: ConsentStore): SetupSystemSeam {
         return false
       }
 
-      new Notification({ title, body, silent: true }).show()
+      const notification = new Notification({ title, body, silent: true })
+
+      watchNotificationFailure(notification, 'setup')
+      notification.show()
 
       return true
     },
