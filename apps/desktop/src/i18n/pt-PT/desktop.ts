@@ -26,6 +26,13 @@ export const desktop: TranslationOverrides['desktop'] = {
   readOnlyTranscriptBody:
     'Nenhum backend ligado reclama ainda esta conversa antiga, por isso abriu como transcrição só de leitura. O histórico está intacto; o envio fica desativado até um backend a reclamar.',
   readOnlyTranscriptSendBlocked: 'Esta conversa está aberta como transcrição só de leitura — o envio está desativado.',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: 'Não foi possível carregar esta sessão',
   resumeStrandedBody:
     'A ligação a esta sessão falhou e as novas tentativas automáticas desistiram. Verifique se o gateway está a correr e tente novamente.',
@@ -177,10 +184,35 @@ export const desktop: TranslationOverrides['desktop'] = {
       browserOn: 'Navegador: visível — clique para o ocultar (reinicia o agente; um turno em curso perde-se)',
       browserUnknown: 'Visibilidade do navegador — não foi possível ler a definição; clique para tentar novamente',
       browserWorking: 'A mudar o modo do navegador e a reiniciar o agente…',
+      screenRecordIdle: 'AI record: gravar o ecrã. Capturas do que muda vão para a sua próxima mensagem.',
+      screenRecordActive: 'O AI record está a gravar o ecrã. Clique para parar e anexar as capturas.',
+      screenRecordWorking: 'O AI record está a iniciar…',
+      screenRecordFirstUse:
+        'Isto captura o ecrã inteiro, incluindo quaisquer segredos que lá estejam. As capturas só vão para o modelo quando as enviar.',
+      screenRecordConsentOff: 'A gravação de ecrã está desligada em Definições › Privacidade.',
+      screenRecordOpenPrivacy: 'Abrir Privacidade',
+      screenRecordOpenSetup: 'Abrir Configuração',
+      screenRecordNoGrant: 'O macOS não permitiu que o icloneOS grave o ecrã. Permita-o na linha da Configuração.',
+      screenRecordRestart:
+        'O macOS permitiu a gravação de ecrã e só a aplica quando a app reinicia. Reinicie o icloneOS e grave depois.',
+      screenRecordRestricted: 'Um perfil neste Mac não permite gravar o ecrã.',
+      screenRecordBlank:
+        'O ecrã veio em branco, por isso nada foi gravado. Verifique a gravação de ecrã na Configuração; o macOS pode precisar que a app reinicie.',
+      screenRecordFailed: 'Não foi possível capturar o ecrã, por isso a gravação parou.',
+      screenRecordWaiting: 'As capturas do ecrã estão guardadas. São anexadas quando abrir um chat.',
+      screenRecordNoImages: (model, frames) =>
+        `${model} não aceita imagens, por isso pode não ver estas ${frames} capturas. Continuam anexadas; escolha um modelo que aceite imagens antes de enviar.`,
+      screenRecordNoModel: frames =>
+        `Ainda não há modelo configurado, por isso estas ${frames} capturas não têm para onde ir. Continuam anexadas.`,
       recordOff:
-        'Gravação desligada — clique para pedir ao agente que grave a navegação (o navegador integrado guarda um vídeo de cada sessão na sua pasta de gravações; a CLI Browser-Use grava fotogramas no seu espaço de trabalho)',
-      recordOn: 'Gravação LIGADA — o agente grava o que faz no navegador. Clique para parar.',
+        'Gravação desligada. Clique para pedir ao agente que grave o que faz no navegador, como vídeo em Movies/icloneOS Recordings.',
+      recordOn: 'Gravação ligada, ainda sem captura — o agente grava o que faz no navegador a partir da próxima página que abrir. Clique para desligar.',
+      recordCapturing: 'A gravar o navegador agora — clique para parar e guardar o vídeo em Movies/icloneOS Recordings.',
+      recordShowFile: 'Mostrar no Finder',
+      recordStopRanOut:
+        'O vídeo do navegador não terminou de ser guardado antes de o runtime reiniciar. Não está confirmado: verifique Movies/icloneOS Recordings. O ficheiro pode estar incompleto.',
       recordUnknown: 'Gravação do navegador — não foi possível ler a definição; clique para tentar novamente',
+      recordSaving: 'A guardar o vídeo do navegador. Pode demorar cerca de meio minuto e, no máximo, um minuto.',
       recordWorking: 'A mudar a gravação…',
       themeCycle: (natural, dark, light) => `Tema — ${natural} · ${dark} · ${light}`,
       themeNatural: 'natural',

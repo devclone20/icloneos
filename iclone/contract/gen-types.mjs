@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Runtime-contract types (RESUME/contracts/P4_upstream.md §3.1): GatewayMethods, GatewayEventMap and ServerRequestMap
+// Runtime-contract types (the P4 upstream contract §3.1): GatewayMethods, GatewayEventMap and ServerRequestMap
 // from one provider spec (served.py spec@1), or from the union of several given oldest first (the N/N+1 dual path).
 // In a union, a name that some spec lacks carries `@since <rev>` (first spec that serves it) and/or `@until <rev>`
 // (first spec that no longer serves it); its type comes from the newest spec that serves it.
@@ -313,7 +313,7 @@ async function check(runtimeArg) {
 }
 
 // The runtime pin (Track A) is bundled: iclone/RUNTIME_PIN.json is hand-bumped monthly
-// (RESUME/guides/monthly-curated-update.md) and compiled into A/electron/runtime-pin.generated.ts.
+// (the monthly curated update guide) and compiled into A/electron/runtime-pin.generated.ts.
 export const RUNTIME_PIN_JSON = path.join(HERE, '..', 'RUNTIME_PIN.json')
 export const RUNTIME_PIN_TARGET = path.join(APP, 'electron', 'runtime-pin.generated.ts')
 

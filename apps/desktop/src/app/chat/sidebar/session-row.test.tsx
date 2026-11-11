@@ -439,3 +439,45 @@ describe('Inbox-style session card', () => {
     expect(screen.getByText('133 messages')).toBeTruthy()
   })
 })
+
+describe('session row doors while no pane renders tiles', () => {
+  const renderDoorRow = (onResume: () => void) =>
+    render(
+      <SidebarSessionRow
+        isPinned={false}
+        isSelected={false}
+        onArchive={noop}
+        onDelete={noop}
+        onPin={noop}
+        onResume={onResume}
+        onToggleUnread={noop}
+        session={makeSession({ title: 'Door row' })}
+        unread={false}
+      />
+    )
+
+  it('cmd-click opens the chat in place, then a plain click opens it again', async () => {
+    const { openSessionTile } = await import('@/store/session-states')
+    const onResume = vi.fn()
+    renderDoorRow(onResume)
+
+    fireEvent.click(screen.getByText('Door row'), { metaKey: true })
+    expect(onResume).toHaveBeenCalledTimes(1)
+    expect(openSessionTile).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByText('Door row'))
+    expect(onResume).toHaveBeenCalledTimes(2)
+  })
+
+  it('middle-click opens the chat in place', async () => {
+    const { openSessionTile } = await import('@/store/session-states')
+    const onResume = vi.fn()
+    renderDoorRow(onResume)
+    const target = screen.getByText('Door row')
+
+    fireEvent.pointerDown(target, { button: 1 })
+    fireEvent.pointerUp(target, { button: 1 })
+    expect(onResume).toHaveBeenCalledTimes(1)
+    expect(openSessionTile).not.toHaveBeenCalled()
+  })
+})

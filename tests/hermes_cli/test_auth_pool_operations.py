@@ -1,4 +1,5 @@
 """OAuth control commands against a loopback token endpoint."""
+import base64
 import json
 import threading
 import time
@@ -20,9 +21,16 @@ def isolated_external_auth_stores(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_SHARED_AUTH_DIR", str(tmp_path / "shared"))
 
 
+def _chatgpt_login_jwt(name: str) -> str:
+    """A login shaped as OpenAI issues it: refreshing it is what these tests play (R5 refuses anything else)."""
+    def part(claims: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+    return f'{part({"alg": "RS256"})}.{part({"iss": "https://auth.openai.com", "sub": name})}.sig'
+
+
 def _rows():
     return [dict(id=f"row{i}", label=f"account{i}", source="manual:device_code",
-                 auth_type="oauth", access_token=f"fixture-access-{i}",
+                 auth_type="oauth", access_token=_chatgpt_login_jwt(f"fixture-{i}"),
                  refresh_token=f"fixture-refresh-{i}", priority=i,
                  last_status="exhausted", last_status_at=time.time(),
                  last_error_code=429, last_error_reset_at=time.time()+3600)

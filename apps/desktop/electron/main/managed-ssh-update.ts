@@ -717,7 +717,9 @@ export async function spawnPoolBackend(
   // V3-S r2 (M1): the same preparation as the primary — the iclone gate installed, verified and proven armed in this
   // runtime for THIS profile, then this spawn's key (fd 3), lock and confinement env. This backend runs the cron ticker
   // too, so without a key it is refused (`[iclone-gate]`) and nothing is spawned.
-  const gated = await prepareHermesSpawn({ backend, cwd: hermesCwd, profile, role: 'pool' })
+  // With confinement on (macOS) it runs under the runtime profile exactly like the primary: never a backend that
+  // carries the confined flag while running outside the runtime's sandbox.
+  const gated = await prepareHermesSpawn({ backend, cwd: hermesCwd, profile, role: 'pool', webDist })
   refuseWhileQuitting('pool boot') // after the gate
 
   rememberLog(`Starting Hermes backend for profile "${profile}" via ${backend.label}`)
@@ -729,9 +731,10 @@ export async function spawnPoolBackend(
   refuseWhileQuitting('pool boot') // right before the spawn
 
   const child = spawn(
-    backend.command,
+    // Confinement on (macOS): sandbox-exec with the runtime profile, the interpreter after it; else the command.
+    gated.command(backend.command),
     // V3-S r3 (m-b): `-s -P` before the backend's args (no user site, no cwd on sys.path).
-    gated.argv(backend.args),
+    gated.argv(backend.args, backend.command),
     hiddenWindowsChildOptions({
       cwd: hermesCwd,
       // V3-S r3 (m-b, m-f): sealed — inherited Python settings and foreign ICLONE_* dropped, then the gate's env

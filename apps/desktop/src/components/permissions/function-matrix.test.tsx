@@ -295,7 +295,7 @@ describe('V3-F2 — strings in every shipped catalogue, and the native confirm',
       }
 
       // The never list no longer promises "every payment asks" (decision 10): spending is a row now.
-      expect(catalogue.floor.items).toHaveLength(6)
+      expect(catalogue.floor.items).toHaveLength(4)
     }
   })
 
@@ -388,5 +388,23 @@ describe('V3-F2 — strings in every shipped catalogue, and the native confirm',
     for (const file of files) {
       expect(readFileSync(path.join(__dirname, file), 'utf8').match(literal)).toBeNull()
     }
+  })
+})
+
+describe('fx19: the pane fits its column at 900x700', () => {
+  it('proof4 F5: the pane lays the matrix out to fit, so no level column hides in a sideways scroll', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const source = readFileSync(resolve(__dirname, 'permissions-pane.tsx'), 'utf8')
+
+    expect(source).toMatch(/<FunctionMatrix[^>]*layout="fit"/)
+  })
+
+  it('the pane grid track may shrink: a wide row scrolls in its own box, it never widens the pane', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { resolve } = await import('node:path')
+    const source = readFileSync(resolve(__dirname, 'permissions-pane.tsx'), 'utf8')
+
+    expect(source).toMatch(/grid grid-cols-\[minmax\(0,1fr\)\][^"]*" data-permissions-pane=""/)
   })
 })

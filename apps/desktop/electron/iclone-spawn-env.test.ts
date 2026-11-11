@@ -7,6 +7,7 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  CONFINEMENT_RUNTIME_ENV,
   HERMES_APP_ENV,
   interpreterEnvAllows,
   isolatePythonEnv,
@@ -312,5 +313,42 @@ describe('sealHermesSpawnEnv', () => {
     })
     expect(Object.keys(pool).filter(key => key.startsWith('ICLONE_PAY_'))).toEqual([])
     expect(pool).toMatchObject(gateEnv)
+  })
+})
+
+describe('sealHermesSpawnEnv — runtime confinement', () => {
+  const runtimeGate = {
+    ICLONE_CONFINEMENT: '1',
+    ICLONE_CONFINEMENT_LAUNCHER: '/ud/confinement/run/launcher.sock',
+    ICLONE_RUNTIME_CONFINED: '1'
+  }
+
+  it('keeps the launcher socket and the confined flag from the gate, for the primary and a pool backend', () => {
+    for (const role of ['primary', 'pool'] as const) {
+      const env = sealHermesSpawnEnv({ HOME: '/h' }, { gateEnv: runtimeGate, role, runtimeRoot: '/rt' })
+
+      for (const key of CONFINEMENT_RUNTIME_ENV) {
+        expect(env[key]).toBe(runtimeGate[key as keyof typeof runtimeGate])
+      }
+    }
+  })
+
+  it('the same names from the parent env or a call site never survive, and foreign ICLONE_* are still dropped', () => {
+    const composed = {
+      HOME: '/h',
+      ICLONE_CONFINEMENT_LAUNCHER: '/tmp/forged.sock',
+      ICLONE_RUNTIME_CONFINED: '1',
+      ICLONE_LAUNCHER_SOCKET: '/tmp/x.sock',
+      ICLONE_FOREIGN: 'x'
+    }
+
+    const off = sealHermesSpawnEnv(composed, { gateEnv: {}, role: 'primary', runtimeRoot: '/rt' })
+    const on = sealHermesSpawnEnv(composed, { gateEnv: runtimeGate, role: 'primary', runtimeRoot: '/rt' })
+
+    expect(Object.keys(off).filter(key => key.startsWith('ICLONE_'))).toEqual([])
+    expect(on.ICLONE_CONFINEMENT_LAUNCHER).toBe('/ud/confinement/run/launcher.sock')
+    expect(on).not.toHaveProperty('ICLONE_LAUNCHER_SOCKET')
+    expect(on).not.toHaveProperty('ICLONE_FOREIGN')
+    expect([...CONFINEMENT_RUNTIME_ENV].sort()).toEqual(['ICLONE_CONFINEMENT_LAUNCHER', 'ICLONE_RUNTIME_CONFINED'])
   })
 })

@@ -82,7 +82,7 @@
   .ic-sys-callout[data-tone='danger'] {
     background: var(--ic-danger-soft);
     box-shadow: var(--ic-shadow-stroke-edge) color-mix(in srgb, var(--ic-danger) var(--ic-a25), transparent);
-    color: var(--ic-danger);
+    color: var(--ic-danger-ink);
   }
 
   .ic-sys-callout[data-tone='warning'] {

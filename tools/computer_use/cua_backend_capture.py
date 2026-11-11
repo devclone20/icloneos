@@ -192,16 +192,22 @@ class _CaptureMixin:
             # so keep the title fallback below.
             logger.debug("computer_use list_apps fallback failed for %r: %s", app, exc)
             running_apps = []
-        exact_pids, partial_pids = set(), set()
+        exact_pids, partial_pids, tail_pids = set(), set(), set()
         for raw_app in running_apps:
             pid = _positive_int(raw_app.get("pid")) if isinstance(raw_app, dict) else None
             if pid is not None and raw_app.get("running") is not False:
                 aliases = {value.strip().lower() for key in ("bundle_id", "bundleId", "name", "app_name", "display_name")
                            if isinstance((value := raw_app.get(key)), str) and value.strip()}
+                bundle = str(raw_app.get("bundle_id") or raw_app.get("bundleId") or "").strip().lower()
+                if bundle and "." not in app_lower and bundle.rpartition(".")[2] == app_lower:
+                    tail_pids.add(pid)
                 if app_lower in aliases:
                     exact_pids.add(pid)
                 elif any(app_lower in alias for alias in aliases):
                     partial_pids.add(pid)
+        # com.apple.calculator answers to Calculator on a Mac that calls it Calculadora; two apps with that tail answer to neither.
+        if not exact_pids and len(tail_pids) == 1:
+            exact_pids = tail_pids
         # Some X11 backends expose a title but no app name. Restrict the final fallback to nameless rows so
         # a localized app name is not overridden merely because its title happens to be in the caller's language.
         tiers = ([w for w in windows if w.get("pid") in exact_pids],

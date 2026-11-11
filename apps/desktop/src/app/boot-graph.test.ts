@@ -2,7 +2,7 @@
  * K99–K101: what the renderer's boot path may not reach. Walks the STATIC import graph from `src/main.tsx` (value
  * imports and re-exports; `import type` and dynamic `import()` are not followed, exactly as the bundler splits), and
  * names every lazy-only module that a static import pulled back. The bundle measurement in
- * `RESUME/run/gates/V3K2_fix2_gates.sh` (boot_bytes.py) is the byte-level half of this gate.
+ * The release gate script (boot_bytes.py, kept outside this repository) is the byte-level half of this gate.
  */
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'

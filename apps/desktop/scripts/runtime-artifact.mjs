@@ -198,18 +198,37 @@ export function listTree(rev, { cwd = REPO_ROOT, shipped = true } = {}) {
  */
 export const ICLONE_RUNTIME_PATHS = Object.freeze({
   // iclone core: V3-F/V3-G gate hooks re-implemented on the pin (V3-UP), U2 auto-titles.
+  'agent/file_safety.py': 'core',
+  'agent/disk_name.py': 'core',
   'agent/agent_runtime_helpers.py': 'core',
   'agent/title_generator.py': 'core',
   'agent/tool_executor.py': 'core',
+  // G-102: a scheduled job's own script meets the gate (refused outside Ignore when it would ask).
+  'cron/scheduler_script.py': 'core',
+  // G13: under the Seatbelt a no-image model reads data URL images from a media cache root.
+  'agent/vision_message_prep.py': 'core',
   // (also critic r1 M1: an app-shipped tree goes after the standard library, before site-packages)
   'hermes_bootstrap.py': 'core',
   // Critic r1 M1: an app-shipped tree goes after the standard library on the fast startup path too.
   'hermes_cli/_startup_fast.py': 'core',
+  'hermes_cli/config_read_errors.py': 'core',
   'hermes_cli/env_loader.py': 'core',
   'hermes_cli/iclone_policy_env.py': 'core',
+  // Hermes' own backend calls (the TUI gateway's path-completion listing) say so at the call; the confinement
+  // plugin reads it there to label the run as housekeeping, never from the command's text.
+  'hermes_cli/observability/shared_metrics_loop.py': 'core',
   'hermes_cli/plugins.py': 'core',
   'hermes_cli/plugins_discovery.py': 'core',
   'hermes_cli/plugins_dispatch.py': 'core',
+  // The parent-death watchdog checks its parent without starting a program when the runtime is confined.
+  'hermes_cli/tools_config_cua.py': 'core',
+  'hermes_cli/web_server.py': 'core',
+  'hermes_cli/web_server_lifecycle.py': 'core',
+  // Confinement: an unconfined Hermes process the app starts on a home the runtime can write follows no planted link.
+  'hermes_cli/__init__.py': 'core',
+  'hermes_cli/no_follow.py': 'core',
+  'hermes_cli/update_cmd_windows.py': 'core',
+  'utils.py': 'core',
   // K-RT9 / K-RT14: git never looks above the runtime root, nor into the user's ~/.hermes/hermes-agent, for the
   // runtime's own identity.
   'hermes_cli/banner.py': 'core',
@@ -230,7 +249,15 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'plugins/iclone-confinement/spawn_sites.json': 'plugin',
   'plugins/web/ddgs/_search_worker.py': 'core',
   'tools/browser_tool.py': 'core',
+  'tui_gateway/contracts/tools_commands.py': 'core', // G20: the record button's two actions on browser.manage
+  'tui_gateway/methods_tools.py': 'core',
   'tools/browser_tool_session.py': 'core',
+  'hermes_cli/config_defaults.py': 'core',
+  'pm/lock.json': 'core',
+  'skills/autonomous-ai-agents/computer-use/SKILL.md': 'core',
+  'tools/bot_desktop/runtime.py': 'core',
+  'tools/browser_tool_install.py': 'core',
+  'tools/browser_tool_lifecycle.py': 'core',
   'tools/browser_use_cli.py': 'core',
   'tools/checkpoint_manager.py': 'core',
   'tools/env_probe.py': 'core',
@@ -241,8 +268,10 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'tools/mcp_oauth.py': 'core',
   'tools/mcp_tool_transport.py': 'core',
   'tools/neutts_synth.py': 'core',
+  'tools/process_registry.py': 'core',
   'tools/read_extract.py': 'core',
   'tools/subagent_worktree.py': 'core',
+  'tools/tool_search.py': 'core',
   'tools/transcription_audio.py': 'core',
   'tools/transcription_chunking.py': 'core',
   'tools/transcription_local.py': 'core',
@@ -258,6 +287,34 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   // V3-J (J6 m-r5-1, m-r6-1, ported onto 1ac3f97): every child env factory binds the pay env to the child's home.
   'hermes_cli/web_server_chat.py': 'core',
   'tools/environments/local.py': 'core',
+  // fx32f: host exit waits for a foreground spawn not yet published, or the child it forked is orphaned.
+  'tools/environments/base.py': 'core',
+  // fx34: a Codex credential reaches chatgpt.com only when it is ChatGPT's own; every sender passes one rule.
+  'agent/account_usage.py': 'core',
+  'agent/auxiliary_client.py': 'core',
+  'agent/client_lifecycle.py': 'core',
+  'agent/credential_pool.py': 'core',
+  'agent/model_metadata.py': 'core',
+  'hermes_cli/auth.py': 'core',
+  'hermes_cli/auth_codex.py': 'core',
+  'hermes_cli/inventory.py': 'core',
+  'hermes_cli/runtime_provider.py': 'core',
+  'plugins/image_gen/openai-codex/__init__.py': 'plugin',
+  // fx34b: a child's final key and URL pass the same rule; a parent's key stays on the parent's route.
+  // fx34c: the same rule at a model switch, in the list, and at the child-build handler.
+  'hermes_cli/auth_commands.py': 'core',
+  'hermes_cli/model_switch.py': 'core',
+  'tools/delegate_tool.py': 'core',
+  'tools/delegate_tool_child_run.py': 'core',
+  'tools/delegate_tool_config.py': 'core',
+  // fx34e: hermes model keeps a working gateway. fx34f: the lazy httpx proxy keeps no module from under a stand-in.
+  'hermes_cli/auth_constants.py': 'core',
+  'hermes_cli/model_setup_flows.py': 'core',
+  // fx34g: a refused send is terminal (classifier, turn seam, its copy); the catalog's urllib runs the same two checks.
+  'agent/error_classifier.py': 'core',
+  'agent/turn_api_error.py': 'core',
+  'agent/turn_recovery.py': 'core',
+  'hermes_cli/models.py': 'core',
   'tui_gateway/entry.py': 'core',
   'tui_gateway/slash_worker.py': 'core',
   'model_tools.py': 'core',
@@ -275,9 +332,25 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'pm/shell.py': 'core',
   'tools/approval.py': 'core',
   'tools/approval_context.py': 'core',
+  // F40: in the app's Ignore nobody is asked: the prompt, the gateway wait, the MCP consent, the staged writes, the ACP edit.
+  'tools/approval_gateway_wait.py': 'core',
+  'tools/approval_detection.py': 'core',
+  'tools/approval_floor.py': 'core',
+  'tools/terminal_tool_sudo.py': 'core',
+  'tools/approval_prompt.py': 'core',
+  'tools/write_approval.py': 'core',
+  'acp_adapter/edit_approval.py': 'core',
   // V3-UP r2 M3: the in-process file lane never serves a confining environment.
   'tools/file_operations.py': 'core',
+  'tools/file_operations_common.py': 'core',
+  'tools/iclone_own_app.py': 'core',
+  'tools/iclone_own_profile.py': 'core',
+  // fx22: a kernel refusal at exit 126 gets no chmod hint (proof5 F-b); no_follow.py routed through update CI.
+  'tools/terminal_hints.py': 'core',
+  'scripts/ci/classify_changes.py': 'core',
   'tui_gateway/methods_config_set.py': 'core',
+  // fx25: the backend completion lister never follows a link, so a link out of the project costs no refusal.
+  'tui_gateway/methods_complete.py': 'core',
   // V3-FX (rulings 47, 54, 57, 63): telemetry removed — no sink can be enabled, no upload, the denylist and the
   // exclusion list PM applies on every sync, refusals for plugins and extras that would pull a telemetry distribution.
   'agent/copilot_acp_client.py': 'core',
@@ -303,6 +376,16 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'pm/progress.py': 'core',
   'tools/bot_relay.py': 'core',
   'tools/computer_use/cua_backend.py': 'core',
+  'tools/computer_use/permissions.py': 'core',
+  'tools/computer_use/tool.py': 'core',
+  'tools/computer_use/cua_backend_capture.py': 'core',
+  'tools/computer_use/cua_backend_daemon.py': 'core',
+  'tools/computer_use/cua_backend_driver.py': 'core',
+  'tools/computer_use/cua_backend_session.py': 'core',
+  'tools/computer_use/schema.py': 'core',
+  'tools/computer_use_tool.py': 'core',
+  'tools/screen_record_tool.py': 'core',
+  'toolsets.py': 'core',
   'tools/mcp_tool_config.py': 'core',
   'plugins/iclone-consent/__init__.py': 'plugin',
   'plugins/iclone-consent/importgate.py': 'plugin',
@@ -311,10 +394,16 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'plugins/iclone-consent/plugin.yaml': 'plugin',
   // The iclone Hermes plugins (V3-F permissions, V3-G confinement); V3-S installs the same bytes from the app bundle.
   'plugins/iclone-confinement/__init__.py': 'plugin',
+  'plugins/computer_use/cua/__init__.py': 'plugin',
   'plugins/iclone-confinement/core.py': 'plugin',
+  'plugins/iclone-confinement/browser_door.py': 'plugin',
+  'plugins/iclone-confinement/driver_door.py': 'plugin',
+  'plugins/iclone-confinement/launcher.py': 'plugin',
   'plugins/iclone-confinement/plugin.yaml': 'plugin',
   'plugins/iclone-confinement/providers.py': 'plugin',
+  'plugins/iclone-confinement/screen_door.py': 'plugin',
   'plugins/iclone-confinement/seatbelt.py': 'plugin',
+  'plugins/iclone-confinement/stub.py': 'plugin',
   'plugins/iclone-permissions/__init__.py': 'plugin',
   'plugins/iclone-permissions/channel.py': 'plugin',
   'plugins/iclone-permissions/classify.py': 'plugin',
@@ -351,6 +440,26 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'plugins/platforms/google_chat/oauth.py': 'deps',
   // The Settings › Updates › Agent hand-off script (the door is disabled in 0.0.3, K-RT3; the script stays inert).
   'scripts/desktop-update/iclone-agent-update.sh': 'script',
+  // The update hand-off's file work on that same home goes through no_follow.pl.
+  'scripts/desktop-update/marker.sh': 'script',
+  'scripts/desktop-update/no_follow.pl': 'script',
+  'scripts/desktop-update/posix.sh': 'script',
+  'scripts/install.sh': 'script',
+  // fx32f: a process reaped between is_running and status no longer stops the verifier (NoSuchProcess).
+  'scripts/termux/validate_installed.py': 'script',
+  // fx35: under confinement the backend main set at exec survives these bridges, the per-turn scope and the tools' read.
+  'hermes_cli/cli_config_load.py': 'core',
+  // F41: installs/ left behind by a run with isolation off does not stop a confined runtime from starting.
+  'hermes_cli/runtime_state.py': 'core',
+  'hermes_cli/cli_process_dock.py': 'core',
+  'tools/terminal_scope.py': 'core',
+  'tools/terminal_tool.py': 'core',
+  'gateway/run.py': 'core',
+  // fx35b: a refused backend answers these two with the reason instead of falling back.
+  'tools/code_execution_tool.py': 'core',
+  'tools/bot_desktop/placement.py': 'core',
+  'tools/code_kernel_remote.py': 'core',
+  'tools/process_registry_termination.py': 'core',
   // Licence and notices of the fork.
   LICENSE: 'legal',
   NOTICE: 'legal',

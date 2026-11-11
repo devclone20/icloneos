@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 from agent.auxiliary_client import (
     _NOUS_MODEL,
@@ -499,14 +500,14 @@ class TestResolveCodexCredentialToken:
             "version": 1,
             "providers": {
                 "openai-codex": {
-                    "tokens": {"access_token": "tok-123", "refresh_token": "r-456"},
+                    "tokens": {"access_token": chatgpt_jwt("tok-123"), "refresh_token": "r-456"},
                 },
             },
         }))
         monkeypatch.setenv("HERMES_HOME", str(hermes_home))
         with patch("agent.auxiliary_client._select_pool_entry", return_value=(False, None)):
             result = _resolve_codex_credential_and_base()[0]
-        assert result == "tok-123"
+        assert result == chatgpt_jwt("tok-123")
 
     def test_expired_jwt_returns_none(self, tmp_path, monkeypatch):
         """Expired JWT tokens should be skipped so auto chain continues."""
@@ -540,7 +541,7 @@ class TestResolveCodexCredentialToken:
         import time as _time
 
         header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
-        payload_data = json.dumps({"exp": int(_time.time()) + 3600}).encode()
+        payload_data = json.dumps({"iss": "https://auth.openai.com", "exp": int(_time.time()) + 3600}).encode()
         payload = base64.urlsafe_b64encode(payload_data).rstrip(b"=").decode()
         valid_jwt = f"{header}.{payload}.fakesig"
 
@@ -691,7 +692,7 @@ class TestBuildCodexClient:
             patch("agent.auxiliary_client._select_pool_entry", return_value=(True, None)),
             # A present pool with no usable row reads auth.json directly (no re-selection that
             # could pair another row's key with the default host, #121486).
-            patch("agent.auxiliary_client._read_codex_singleton_token", return_value="codex-auth-token"),
+            patch("agent.auxiliary_client._read_codex_singleton_token", return_value=chatgpt_jwt("codex-auth-token")),
             patch("agent.auxiliary_client.OpenAI") as mock_openai,
         ):
             mock_openai.return_value = MagicMock()
@@ -701,7 +702,7 @@ class TestBuildCodexClient:
 
         assert client is not None
         assert model == "gpt-5.4"
-        assert mock_openai.call_args.kwargs["api_key"] == "codex-auth-token"
+        assert mock_openai.call_args.kwargs["api_key"] == chatgpt_jwt("codex-auth-token")
         assert mock_openai.call_args.kwargs["base_url"] == "https://chatgpt.com/backend-api/codex"
 
     def test_profile_codex_base_url_overrides_pool_endpoint(self, monkeypatch):
@@ -760,7 +761,7 @@ class TestBuildCodexClient:
 
         class _Pool:
             def __init__(self):
-                self.entry = _Entry("cred-a", "tok-a")
+                self.entry = _Entry("cred-a", chatgpt_jwt("tok-a"))
 
             def has_credentials(self):
                 return True
@@ -785,7 +786,7 @@ class TestBuildCodexClient:
             aux.shutdown_cached_clients()
             try:
                 first_client, first_model = aux._get_cached_client("openai-codex", "gpt-5.4")
-                pool.entry = _Entry("cred-b", "tok-b")
+                pool.entry = _Entry("cred-b", chatgpt_jwt("tok-b"))
                 second_client, second_model = aux._get_cached_client("openai-codex", "gpt-5.4")
             finally:
                 aux.shutdown_cached_clients()
@@ -1127,7 +1128,7 @@ class TestGetTextAuxiliaryClient:
 
     def test_codex_pool_entry_takes_priority_over_auth_store(self):
         class _Entry:
-            access_token = "pooled-codex-token"
+            access_token = chatgpt_jwt("pooled-codex-token")
             base_url = "https://chatgpt.com/backend-api/codex"
 
         class _Pool:
@@ -2041,12 +2042,12 @@ class TestAuxiliaryFallbackLayering:
 
         pool_entry = MagicMock()
         pool_entry.id = "codex-pool-1"
-        pool_entry.runtime_api_key = "codex-oauth-token"
-        pool_entry.access_token = "codex-oauth-token"
+        pool_entry.runtime_api_key = chatgpt_jwt("codex-oauth-token")
+        pool_entry.access_token = chatgpt_jwt("codex-oauth-token")
         pool_entry.runtime_base_url = "https://chatgpt.com/backend-api/codex"
 
         real_client = MagicMock()
-        real_client.api_key = "codex-oauth-token"
+        real_client.api_key = chatgpt_jwt("codex-oauth-token")
         real_client.base_url = "https://chatgpt.com/backend-api/codex"
 
         with patch("agent.auxiliary_client._select_pool_entry",
@@ -2062,7 +2063,7 @@ class TestAuxiliaryFallbackLayering:
         assert client is not None
         assert model == "gpt-5.4-mini"
         mock_openai.assert_called_once()
-        assert mock_openai.call_args.kwargs["api_key"] == "codex-oauth-token"
+        assert mock_openai.call_args.kwargs["api_key"] == chatgpt_jwt("codex-oauth-token")
 
 
 class TestTryMainAgentModelFallback:

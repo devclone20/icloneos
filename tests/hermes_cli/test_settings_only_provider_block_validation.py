@@ -13,6 +13,7 @@ Hermetic: credentials, aliasing, and (where noted) the network probe are
 mocked; no network, no credentials needed.
 """
 
+import base64
 from unittest.mock import patch
 
 from hermes_cli.model_switch import switch_model
@@ -20,8 +21,9 @@ from hermes_cli.model_switch import switch_model
 _SETTINGS_ONLY = {"request_timeout_seconds": 3600, "stale_timeout_seconds": 300}
 _WITH_ENDPOINT = {"base_url": "https://example.com/v1", "request_timeout_seconds": 3600}
 
+_CHATGPT_LOGIN = "h." + base64.urlsafe_b64encode(b'{"iss": "https://auth.openai.com"}').rstrip(b"=").decode() + ".s"
 _RUNTIME_CODEX = {
-    "api_key": "test-key",
+    "api_key": _CHATGPT_LOGIN,  # a login: the switch judges the final pair by the Codex host rule
     "base_url": "https://chatgpt.com/backend-api/codex",
     "api_mode": "codex_responses",
 }

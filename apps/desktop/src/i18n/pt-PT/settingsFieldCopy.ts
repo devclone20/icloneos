@@ -242,7 +242,7 @@ export const fieldDescriptions = defineFieldCopy({
   checkpoints: {
     maxSnapshots: 'A cópia mais antiga é removida quando é feita uma nova.',
     enabled:
-      'É guardada uma cópia de cada ficheiro antes de o seu agente o alterar, para poder voltar atrás. Desligado enquanto o agente está confinado: escolha Este Mac em Contentores para o usar.'
+      'É guardada uma cópia de cada ficheiro antes de o seu agente o alterar, para poder voltar atrás. Desligado enquanto o agente está confinado.'
   },
   memory: {
     provider: 'A memória integrada funciona sem configuração.',

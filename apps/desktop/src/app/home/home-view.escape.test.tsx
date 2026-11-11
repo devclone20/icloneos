@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { en } from '@/i18n/en'
 import { setDockWindowSize } from '@/store/dock-window-size'
 
+import { $containersOpen } from './containers/containers-dock'
 import { HomeView } from './home-view'
 import { $privySession } from './privy-session'
 
@@ -67,5 +68,23 @@ describe('HomeView — Escape on an expanded Dock window', () => {
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(bankWindow()).toBeNull()
+  })
+
+  it('Containers is in the router: Escape closes the pane and leaves the stage alone', () => {
+    const onClose = vi.fn()
+
+    $containersOpen.set(true)
+    render(
+      <MemoryRouter>
+        <HomeView mode="stage" onClose={onClose} />
+      </MemoryRouter>
+    )
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect($containersOpen.get()).toBe(false)
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

@@ -20,8 +20,9 @@
  * log sinks are.
  */
 
-import fs from 'fs'
 import path from 'path'
+
+import { readFileInRoot, unlinkInRoot, writeFileInRoot } from './lib/no-follow-fs'
 
 // Even with a live-looking PID, never treat a marker older than this as a live
 // update. A full update (git pull + pip + desktop rebuild) is minutes, not tens
@@ -79,7 +80,7 @@ export function readLiveUpdateMarker(
   let raw
 
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readFileInRoot(hermesHome, file).toString('utf8')
   } catch {
     return null // absent or unreadable => no live update
   }
@@ -92,7 +93,7 @@ export function readLiveUpdateMarker(
 
   if (!alive || ageMs > maxAgeMs) {
     try {
-      fs.unlinkSync(file)
+      unlinkInRoot(hermesHome, file)
     } catch {
       void 0
     }
@@ -153,7 +154,7 @@ export function writeUpdateMarker(
         : Math.floor(nowMs / 1000)
 
   try {
-    fs.writeFileSync(file, `${pid}\n${acquiredAt}\n`, 'utf8')
+    writeFileInRoot(hermesHome, file, `${pid}\n${acquiredAt}\n`)
   } catch {
     // Best-effort: if we can't write the marker, proceed anyway. The
     // updater will write its own when it reaches run_update.

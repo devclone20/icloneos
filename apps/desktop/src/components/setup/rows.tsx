@@ -7,6 +7,7 @@ import { formatBytes } from '@/iclone-shared/format'
 import { triggerHaptic } from '@/lib/haptics'
 
 import { type ComputerUseState, type SetupBank, useSetupCopy } from './copy'
+import { CuaDriverAction, CuaDriverExplain, CuaDriverFlowNote } from './cua-driver-explain'
 import type { SetupPackage, SetupSystemRow, SetupSystemStatus } from './types'
 import { useComputerUse, useSetupPackages, useSetupSystem } from './use-setup-live'
 
@@ -27,6 +28,7 @@ const NOTE = 'py-3 text-[0.75rem] leading-4 text-(--ui-text-tertiary)'
 const SYSTEM_TONE: Readonly<Record<SetupSystemStatus, 'muted' | 'primary' | 'warn'>> = {
   granted: 'primary',
   denied: 'warn',
+  restartNeeded: 'warn',
   restricted: 'muted',
   declined: 'muted',
   notDetermined: 'muted',
@@ -38,7 +40,8 @@ const COMPUTER_USE_TONE: Readonly<Record<ComputerUseState, 'muted' | 'primary' |
   granted: 'primary',
   needs: 'muted',
   notInstalled: 'warn',
-  unavailable: 'muted'
+  unavailable: 'muted',
+  unknown: 'warn'
 }
 
 function packageStatus(copy: SetupBank, one: SetupPackage): string {
@@ -107,7 +110,9 @@ function SystemRow({
         : copy.system.action.request
       : row.action === 'openSettings'
         ? copy.system.action.openSettings
-        : null
+        : row.action === 'restart'
+          ? copy.system.action.restart
+          : null
 
   return (
     <div className={ROW} data-setup-item={row.id} data-setup-status={row.status}>
@@ -115,7 +120,21 @@ function SystemRow({
         <span className={NAME}>{words.name}</span>
         <span className={PURPOSE}>{words.purpose}</span>
         {row.status === 'declined' ? <span className={EFFECT}>{copy.system.declined}</span> : null}
-        {row.restartToApply && row.status !== 'declined' ? <span className={EFFECT}>{copy.system.restart}</span> : null}
+        {row.status === 'restartNeeded' ? (
+          <span className={EFFECT}>{copy.system.restartNeeded}</span>
+        ) : row.restartToApply && row.status !== 'declined' ? (
+          <span className={EFFECT}>{copy.system.restart}</span>
+        ) : null}
+        {row.status === 'denied' && row.id === 'screen' ? (
+          <span className={EFFECT}>{copy.system.switchOnStale}</span>
+        ) : null}
+        {row.identity ? (
+          <span className={EFFECT} data-setup-identity={row.identity.bundleId ?? ''}>
+            {row.identity.expected && row.identity.bundleId
+              ? copy.system.identity(row.identity.bundleId)
+              : copy.system.identityOther(row.identity.bundleId)}
+          </span>
+        ) : null}
       </div>
       <div className={SIDE}>
         <Pill tone={SYSTEM_TONE[row.status]}>{copy.system.status[row.status]}</Pill>
@@ -197,7 +216,7 @@ function KeychainRow({ copy }: { copy: SetupBank }) {
 }
 
 function ComputerUseRow({ copy }: { copy: SetupBank }) {
-  const { grant, granting, state } = useComputerUse(true)
+  const { grant, install, phase, reason, state, status } = useComputerUse(true)
 
   if (!state) {
     return null
@@ -210,23 +229,12 @@ function ComputerUseRow({ copy }: { copy: SetupBank }) {
       <div className="min-w-0">
         <span className={NAME}>{words.name}</span>
         <span className={PURPOSE}>{words.purpose}</span>
+        <CuaDriverFlowNote phase={phase} reason={reason} state={state} status={status} />
+        <CuaDriverExplain />
       </div>
       <div className={SIDE}>
         <Pill tone={COMPUTER_USE_TONE[state]}>{copy.system.computerUse[state]}</Pill>
-        {state === 'needs' ? (
-          <Button
-            data-setup-action="request"
-            disabled={granting}
-            onClick={() => {
-              triggerHaptic('selection')
-              grant()
-            }}
-            size="sm"
-            variant="outline"
-          >
-            {copy.system.action.request}
-          </Button>
-        ) : null}
+        <CuaDriverAction grant={() => void grant()} install={() => void install()} phase={phase} state={state} />
       </div>
     </div>
   )

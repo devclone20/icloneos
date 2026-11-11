@@ -326,7 +326,7 @@ export function ItTerminalHost({ onAddSelectionToChat }: { onAddSelectionToChat:
 }
 
 if (import.meta.env.DEV && typeof window !== 'undefined') {
-  // The lab's handle on the ONE iT surface (gate probes in RESUME/run/gates/R5).
+  // The lab's handle on the ONE iT surface (read by the R5 gate probes).
   const pane = (ref?: string) => ref || activeItWorkspace()?.focusTerminalId || ''
 
   Object.assign(window, {

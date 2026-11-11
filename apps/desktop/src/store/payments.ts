@@ -54,12 +54,44 @@ async function loadPayments(): Promise<void> {
   }
 }
 
+let inFlight: Promise<void> | null = null
+let again = false
+
+/**
+ * One read at a time (L4-03). A change main announces, or a write's answer, during a read runs one more read after
+ * it (that read may predate the change); the 3 s tick skips while one is in flight, so a slow main never piles them.
+ */
+export function refreshPayments(): Promise<void> {
+  if (inFlight) {
+    again = true
+
+    return inFlight
+  }
+
+  inFlight = loadPayments().finally(() => {
+    inFlight = null
+
+    if (again) {
+      again = false
+      void refreshPayments()
+    }
+  })
+
+  return inFlight
+}
+
+const pollPayments = (): void => {
+  if (!inFlight) {
+    void refreshPayments()
+  }
+}
+
 /** While the pane is open: read now, every few seconds, and on every change main announces. */
 export function watchPayments(): () => void {
-  const off = bridge()?.onChanged(() => void loadPayments())
-  const timer = window.setInterval(() => void loadPayments(), POLL_MS)
+  const off = bridge()?.onChanged(() => void refreshPayments())
+  const timer = window.setInterval(pollPayments, POLL_MS)
 
-  void loadPayments()
+  void refreshPayments()
 
   return () => {
     off?.()
@@ -78,7 +110,7 @@ async function after<T>(pending: Promise<T> | undefined, fallback: T): Promise<T
     result = fallback
   }
 
-  void loadPayments()
+  void refreshPayments()
 
   return result
 }

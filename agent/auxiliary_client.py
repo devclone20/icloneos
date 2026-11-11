@@ -2113,13 +2113,30 @@ def _resolve_codex_credential_and_base() -> Tuple[Optional[str], str]:
     if pool_present:
         token = _pool_runtime_api_key(entry)
         if token:
-            if override:
-                return token, override
             # Same route rule as the chat path (row URL, else ``model.base_url``); never empty.
-            from hermes_cli.auth_codex import _codex_pool_route_base_url
-            return token, _codex_pool_route_base_url(_pool_runtime_base_url(entry))
+            from hermes_cli.auth_codex import _codex_pool_route_base_url, _ensure_codex_credential_host
+            if override:
+                return token, _ensure_codex_credential_host(token, override)
+            return token, _codex_pool_route_base_url(_pool_runtime_base_url(entry), token=token)
     # No usable pool token: auth.json only (re-selecting could pair another row's key with the default).
-    return _read_codex_singleton_token(), override or _CODEX_AUX_BASE_URL
+    token, base = _read_codex_singleton_token(), override or _CODEX_AUX_BASE_URL
+    if token:
+        from hermes_cli.auth_codex import _ensure_codex_credential_host
+        _ensure_codex_credential_host(token, base)
+    return token, base
+
+
+def _codex_credential_and_base_or_none() -> Tuple[Optional[str], str]:
+    """The auxiliary chain's view: a refused credential is no credential, and the next rung runs. The
+    refusal, with its fix, was logged where it was raised."""
+    from hermes_cli.auth_codex import CODEX_HOST_UNKNOWN_CODE
+    from hermes_cli.auth_constants import AuthError
+    try:
+        return _resolve_codex_credential_and_base()
+    except AuthError as exc:
+        if exc.code != CODEX_HOST_UNKNOWN_CODE:
+            raise
+        return None, _CODEX_AUX_BASE_URL
 
 
 def _read_codex_singleton_token() -> Optional[str]:
@@ -2971,7 +2988,7 @@ def _build_codex_client(model: str) -> Tuple[Optional[Any], Optional[str]]:
             "pass model explicitly (auxiliary.<task>.model in config.yaml)."
         )
         return None, None
-    codex_token, base_url = _resolve_codex_credential_and_base()
+    codex_token, base_url = _codex_credential_and_base_or_none()
     if not codex_token:
         return None, None
     logger.debug("Auxiliary client: Codex OAuth (%s via Responses API)", model)
@@ -5054,7 +5071,7 @@ def _resolve_openai_codex_branch(req: _ResolveRequest) -> _ResolveResult:
     no_token_msg = "resolve_provider_client: openai-codex requested but no Codex OAuth token found (run: hermes model)"
     if req.raw_codex:
         # Raw OpenAI client for callers needing responses.stream() (main agent loop).
-        codex_token, base_url = _resolve_codex_credential_and_base()
+        codex_token, base_url = _codex_credential_and_base_or_none()
         if not codex_token:
             logger.warning(no_token_msg)
             return None, None
@@ -5114,6 +5131,10 @@ def _resolve_custom_branch(req: _ResolveRequest) -> _ResolveResult:
         if _main_base and _main_key:
             custom_base, custom_key = _main_base, _main_key
     if custom_base and custom_key:
+        from hermes_cli.auth_codex import _codex_host_accepts_credential, _codex_refusal_message, _is_chatgpt_route
+        if _is_chatgpt_route(custom_base) and not _codex_host_accepts_credential(custom_key, custom_base):
+            logger.warning("resolve_provider_client: %s", _codex_refusal_message())
+            return None, None
         if _is_actual_auxiliary_route(req, custom_base):
             from hermes_cli.auth import normalize_actual_base_url
             custom_base = normalize_actual_base_url(custom_base)

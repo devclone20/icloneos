@@ -37,7 +37,7 @@
  * later re-sync only reaches the agent after a backend restart.
  */
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 import { app, ipcMain } from 'electron'
@@ -47,6 +47,7 @@ import type { SkillHost } from '../src/iclone-shared/skill-manifest'
 import { attachSkillRequirements, type PortedSkillCatalog, realSkillHost } from './iclone-skill-requires'
 import { deriveSkillCatalog, hostOs, renderCatalogFiles } from './iclone-skills-catalog'
 import { isAtomicTempName, writeFileAtomicSync } from './lib/atomic-write'
+import { mkdirsInRoot, readFileInRoot, renameInRoot, resolveInRoot } from './lib/no-follow-fs'
 
 export type { SkillCatalog, SkillCatalogEntry } from './iclone-skills-catalog'
 
@@ -129,17 +130,18 @@ function listFiles(root: string, relative = ''): string[] {
   return out
 }
 
-function sameContent(content: string, file: string): boolean {
+function sameContent(content: string, hermesHome: string, file: string): boolean {
   try {
-    return readFileSync(file, 'utf8') === content
+    return readFileInRoot(hermesHome, file).toString('utf8') === content
   } catch {
     return false
   }
 }
 
-function sameBytes(a: string, b: string): boolean {
+/** `installed` lies in the runtime's own home: a FIFO must not hang the boot, a link must not answer for the file. */
+function sameBytes(bundled: string, hermesHome: string, installed: string): boolean {
   try {
-    return readFileSync(a).equals(readFileSync(b))
+    return readFileSync(bundled).equals(readFileInRoot(hermesHome, installed))
   } catch {
     return false
   }
@@ -172,19 +174,22 @@ function sweepTemps(dir: string, deep: boolean): void {
 }
 
 /** Copy one skill into `<targetRoot>/<name>`; true when anything was written. */
-function syncSkill(sourceDir: string, targetDir: string, stamp: string, hooks?: SyncHooks): boolean {
+function syncSkill(sourceDir: string, hermesHome: string, targetDir: string, stamp: string, hooks?: SyncHooks): boolean {
   let wrote = false
 
+  // The runtime writes these folders: a link on the way would send the bundled files wherever it points.
+  resolveInRoot(hermesHome, path.join(targetDir, MARKER))
   sweepTemps(targetDir, true)
 
   for (const rel of listFiles(sourceDir)) {
     const from = path.join(sourceDir, rel)
     const to = path.join(targetDir, rel)
 
-    if (sameBytes(from, to)) {
+    if (sameBytes(from, hermesHome, to)) {
       continue
     }
 
+    resolveInRoot(hermesHome, to)
     copyAtomic(from, to, hooks)
     wrote = true
   }
@@ -275,6 +280,16 @@ export function syncSkillTrees(options: {
   for (const target of skillTargets(hermesHome)) {
     report.targets.push(target)
 
+    // A link anywhere down to the target would send the bundled files and the catalogue wherever it points.
+    try {
+      resolveInRoot(hermesHome, path.join(target, MARKER))
+    } catch (error) {
+      report.ok = false
+      report.errors.push(`target ${target}: ${error instanceof Error ? error.message : String(error)}`)
+
+      continue
+    }
+
     for (const name of RETIRED_SKILLS) {
       const stale = path.join(target, name)
 
@@ -287,8 +302,9 @@ export function syncSkillTrees(options: {
         const label = path.relative(hermesHome, target).replace(/[\\/]/g, '__')
         const dest = path.join(retiredRoot, label, name)
 
-        mkdirSync(path.dirname(dest), { recursive: true })
-        renameSync(stale, dest)
+        resolveInRoot(hermesHome, stale)
+        mkdirsInRoot(hermesHome, path.dirname(dest))
+        renameInRoot(hermesHome, stale, dest)
         report.retired.push(stale)
       } catch (error) {
         report.ok = false
@@ -298,7 +314,7 @@ export function syncSkillTrees(options: {
 
     for (const name of report.skills) {
       try {
-        if (syncSkill(path.join(sourceDir, name), path.join(target, name), stamp, hooks)) {
+        if (syncSkill(path.join(sourceDir, name), hermesHome, path.join(target, name), stamp, hooks)) {
           report.written.push(path.join(target, name))
         }
       } catch (error) {
@@ -321,10 +337,10 @@ export function syncSkillTrees(options: {
       }
 
       try {
-        if (content !== null && !sameContent(content, to)) {
+        if (content !== null && !sameContent(content, hermesHome, to)) {
           writeFileAtomicSync(to, content, { beforeRename: hooks?.beforeRename })
           report.written.push(to)
-        } else if (content === null && !sameBytes(path.join(sourceDir, file), to)) {
+        } else if (content === null && !sameBytes(path.join(sourceDir, file), hermesHome, to)) {
           copyAtomic(path.join(sourceDir, file), to, hooks)
           report.written.push(to)
         }

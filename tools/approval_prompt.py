@@ -42,6 +42,9 @@ def prompt_dangerous_approval(command: str, description: str, timeout_seconds: i
 
     See #81887.
     """
+    from tools import approval as _a
+    if _a.iclone_ignore_in_force():  # icloneOS F40: nobody is asked in Ignore
+        return "once"
     if timeout_seconds is None:
         timeout_seconds = _ctx._get_approval_timeout()
     from tools.human_input_hooks import human_input_request
@@ -294,6 +297,8 @@ def request_elicitation_consent(message: str, description: str, *,
     treats them as "user did not approve" rather than retrying or hanging.
     Returns ``"accept" | "decline" | "cancel"``."""
     from tools import approval as _a
+    if _a.iclone_ignore_in_force():  # icloneOS F40: MCP trust gate and elicitation, nobody is asked in Ignore
+        return "accept"
     try:
         session_key = _ctx.get_current_session_key()
     except Exception as exc:  # pragma: no cover -- defensive

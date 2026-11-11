@@ -9,7 +9,7 @@ import type { HermesGitBaseBranch, HermesGitBranch } from '@/global'
 import { getHermesConfig, hermesApi, type HermesGateway } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { errorMessage } from '@/iclone-shared/errors'
-import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
+import { desktopDefaultCwd, desktopFsProfile, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
 import { desktopGit } from '@/lib/desktop-git'
 import { isMissingRestEndpoint, isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { isUnderPath } from '@/lib/path-compare'
@@ -27,6 +27,7 @@ import {
 import {
   $selectedStoredSessionId,
   $sessions,
+  noteNamedFolder,
   sessionMatchesStoredId,
   setSessions,
   workspaceCwdForNewSession
@@ -1368,8 +1369,23 @@ export async function copyPath(path: null | string): Promise<void> {
 // the backend filesystem (seeded at its default cwd) where sessions run; local
 // mode opens the native dialog. Returns the absolute path, or null if cancelled.
 export async function pickProjectFolder(): Promise<null | string> {
+  const defaultPath = (await desktopDefaultCwd())?.cwd
+  const pickInMain = window.hermesDesktop?.pickProjectFolder
+
+  // fx26b: on this machine main shows the dialog and lists what the user picked in its own record.
+  if (pickInMain && !isDesktopFsRemoteMode()) {
+    const answer = await pickInMain({ defaultPath, profile: desktopFsProfile() })
+
+    // fx29 (round2 medium): main's refusal is shown, as noteNamedFolder shows it: the folder opens, its commands narrowed.
+    if (answer.path && !answer.listed && typeof answer.message === 'string' && answer.message) {
+      notify({ kind: 'warning', title: answer.path, message: answer.message })
+    }
+
+    return answer.path
+  }
+
   const [dir] = await selectDesktopPaths({
-    defaultPath: (await desktopDefaultCwd())?.cwd,
+    defaultPath,
     directories: true,
     multiple: false
   })
@@ -1388,6 +1404,11 @@ export async function openFolderAsProject(dir?: string): Promise<void> {
 
   if (!target) {
     return
+  }
+
+  // A `dir` is the path the user typed or pasted in the palette; a picked one was listed by main already.
+  if (dir !== undefined) {
+    noteNamedFolder('typed', target)
   }
 
   // Refresh first so the membership check runs against live truth — a repo

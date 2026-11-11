@@ -6,6 +6,7 @@ or root keeps the consumed refresh token and the next reader gets the whole fami
 Token values are synthetic placeholders.
 """
 
+import base64
 import json
 import threading
 from pathlib import Path
@@ -18,6 +19,13 @@ from hermes_cli import auth, auth_codex
 
 def _pair(prefix: str) -> dict:
     return {"access_token": f"{prefix}-at", "refresh_token": f"{prefix}-rt"}
+
+
+def _chatgpt_login_jwt(name: str) -> str:
+    """A login shaped as OpenAI issues it: refreshing it is what these tests play (R5 refuses anything else)."""
+    def part(claims: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(claims).encode()).rstrip(b"=").decode()
+    return f'{part({"alg": "RS256"})}.{part({"iss": "https://auth.openai.com", "sub": name})}.sig'
 
 
 def _write(path: Path, store: dict) -> None:
@@ -113,10 +121,11 @@ class _RotatingEndpoint:
 def test_concurrent_refreshes_of_shared_root_grant_submit_old_token_once(profile_env, monkeypatch):
     """Two refreshers holding the same stale pre-read pair: the second re-reads ROOT under its lock,
     sees the peer's rotated pair and adopts it instead of replaying the single-use token."""
+    old_login = {**_pair("old"), "access_token": _chatgpt_login_jwt("old")}
     profile_path, root_path = profile_env
     _write(root_path, {
         "version": 1,
-        "providers": {"openai-codex": {"auth_mode": "chatgpt", "tokens": _pair("old")}},
+        "providers": {"openai-codex": {"auth_mode": "chatgpt", "tokens": old_login}},
     })
     _write(profile_path, {"version": 1, "providers": {}})
     endpoint = _RotatingEndpoint(hold_seconds=1.5)  # longer than the lock floor (1 s)
@@ -130,7 +139,7 @@ def test_concurrent_refreshes_of_shared_root_grant_submit_old_token_once(profile
 
     def _refresh(name):
         try:
-            results[name] = auth._refresh_codex_auth_tokens(_pair("old"), timeout_seconds=1.0)
+            results[name] = auth._refresh_codex_auth_tokens(old_login, timeout_seconds=1.0)
         except Exception as exc:  # pragma: no cover - surfaced via the assertion below
             errors[name] = exc
 

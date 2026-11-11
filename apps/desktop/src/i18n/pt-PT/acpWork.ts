@@ -123,6 +123,7 @@ export const acpWork: AcpWorkTranslations = {
       ? 'Uma escrita foi interrompida ou reparada. O registo de trabalho anota a falha.'
       : `${count} escritas foram interrompidas ou reparadas. O registo de trabalho anota cada falha.`,
   chainBroken: 'O registo de trabalho não se verifica.',
+  chainVerifying: 'A verificar o registo de trabalho…',
   errors: {
     gesture: 'Isto precisa de um clique seu.',
     invalid: 'Esse trabalho já não é uma oferta aberta.',

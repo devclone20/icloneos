@@ -11,6 +11,7 @@ existing Codex CLI tokens via `hermes auth openai-codex`. The old
 "Codex CLI shared file" discovery tests were removed with that change.
 """
 
+from tests.chatgpt_token_fixture import chatgpt_jwt
 import base64
 import json
 import time
@@ -43,7 +44,7 @@ def hermes_auth_only_env(tmp_path, monkeypatch):
         "providers": {
             "openai-codex": {
                 "tokens": {
-                    "access_token": _make_fake_jwt(),
+                    "access_token": chatgpt_jwt(),
                     "refresh_token": "fake-refresh",
                 },
                 "last_refresh": "2026-04-12T00:00:00Z",

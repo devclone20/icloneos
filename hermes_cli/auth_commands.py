@@ -257,7 +257,7 @@ _OAUTH_ADD_SPECS: dict[str, _OAuthAddSpec] = {
         source=_codex_pool_source,
         fields=lambda creds, provider: {
             "refresh_token": creds["tokens"].get("refresh_token"),
-            "base_url": creds.get("base_url"),
+            "base_url": auth_mod.DEFAULT_CODEX_BASE_URL,  # the env is read at each send, never copied here
             "last_refresh": creds.get("last_refresh")},
         activate_first=True),
     "xai-oauth": _OAuthAddSpec(
@@ -392,7 +392,7 @@ def auth_add_command(args) -> None:
     if requested_type == "api-key":
         requested_type = AUTH_TYPE_API_KEY
     elif not requested_type:
-        oauth_default = provider in _OAUTH_DEFAULT_PROVIDERS and not is_custom
+        oauth_default = provider in _OAUTH_DEFAULT_PROVIDERS and not is_custom and not getattr(args, "api_key", None)
         requested_type = AUTH_TYPE_OAUTH if oauth_default else AUTH_TYPE_API_KEY
 
     pool = load_pool(provider)
@@ -531,8 +531,9 @@ def auth_list_command(args) -> None:
             continue
         print(f"{provider} ({len(entries)} credentials):")
         for idx, entry in enumerate(entries, start=1):
-            marker = "← " if current is not None and entry.id == current.id else "  "
-            status = _format_exhausted_status(entry)
+            refused = _codex_refused_mark(provider, entry)
+            marker = "← " if current is not None and entry.id == current.id and not refused else "  "
+            status = _format_exhausted_status(entry) + refused
             source = _display_source(entry.source)
             row = (
                 f"  #{idx}  {entry.label:<20} {entry.auth_type:<7} "
@@ -542,6 +543,14 @@ def auth_list_command(args) -> None:
         print()
     if not provider_filter or provider_filter in EXTERNAL_LOGIN_PROVIDERS:
         _print_external_login_notice()
+
+
+def _codex_refused_mark(provider: str, entry) -> str:
+    """Chat's own rule, so the list and chat agree on a row with no gateway. Never shows the key."""
+    if provider != "openai-codex":
+        return ""
+    from hermes_cli.auth_codex import _codex_entry_accepted
+    return "" if _codex_entry_accepted(entry) else " refused: no known host"
 
 
 def _print_external_login_notice() -> None:

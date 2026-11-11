@@ -15,6 +15,7 @@ import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-cla
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { InftPill } from './inft-pill'
 import { ModelPill } from './model-pill'
+import { PermissionPill } from './permission-pill'
 import type { ChatBarState, VoiceStatus } from './types'
 import { VoiceMenu } from './voice-menu'
 
@@ -112,6 +113,7 @@ export function ComposerControls({
           <InftPill compact={compactModelPill} disabled={disabled} />
           <ContextChip compact={compactModelPill} disabled={disabled} />
           <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
+          <PermissionPill compact={compactModelPill} disabled={disabled} />
           {voiceControls}
         </>
       )}

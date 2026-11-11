@@ -151,7 +151,7 @@ class TestExecuteCodeRemoteTempDir(unittest.TestCase):
         self.assertFalse(result["stdout_truncated"])
         self.assertEqual(result["stdout_bytes_total"], len("hello\n".encode("utf-8")))
         # The session-kernel path runs first and fails open on this fake env
-        # (no PID from nohup), so search for the per-call sandbox commands
+        # (no PID from the spawn), so search for the per-call sandbox commands
         # rather than pinning positions.
         mkdir_cmd = next(cmd for cmd, _, _ in env.commands
                          if "mkdir -p" in cmd and "hermes_exec_" in cmd)

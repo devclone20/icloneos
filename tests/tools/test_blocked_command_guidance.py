@@ -72,3 +72,11 @@ class TestBackgroundGuidanceRecipes:
 
     def test_quoted_ampersand_not_flagged(self):
         assert _foreground_background_guidance('git commit -m "a & b"') is None
+
+
+def test_the_tool_description_says_what_confinement_refuses_and_what_to_use():
+    """fx35e (R41): inside confinement these ask about other processes and fail; the model is told before it tries."""
+    from tools.terminal_tool import TERMINAL_TOOL_DESCRIPTION as text
+    line = next(row for row in text.splitlines() if "nohup" in row)
+    for word in ("nohup", "ps", "top", "pgrep", "lsof", "background=true"):
+        assert word in line, word

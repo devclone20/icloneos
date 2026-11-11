@@ -424,7 +424,9 @@ export async function readImageForRemoteAttach(
     }
   }
 
-  const dataUrl = await window.hermesDesktop?.readFileDataUrl(filePath)
+  // The attach reader: a native-size screenshot can pass the preview reader's limit.
+  const reader = window.hermesDesktop?.readFileDataUrlForAttach ?? window.hermesDesktop?.readFileDataUrl
+  const dataUrl = await reader?.(filePath)
   const contentBase64 = dataUrl ? base64FromDataUrl(dataUrl) : ''
 
   return contentBase64 ? { contentBase64, filename: imageFilenameFromPath(filePath) } : null

@@ -64,7 +64,7 @@ export function createContainerBackend(deps: ContainerDeps = {}): ConfinementBac
 
       return view
     },
-    spawn(): SpawnResult {
+    async spawn(): Promise<SpawnResult> {
       return { ok: false, error: containerRefusal(seen) }
     },
     list(): ConfinedProcessView[] {

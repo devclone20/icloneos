@@ -45,4 +45,31 @@ describe('pmCommittedVenv', () => {
     fs.writeFileSync(f.facts, '{not json')
     expect(pmCommittedVenv(f.root, f.home)).toBeNull()
   })
+
+  it('answers null for a record naming a venv outside this install’s own environments folder, however complete that venv is', () => {
+    const f = fixture()
+
+    for (const elsewhere of [
+      path.join(f.home, 'cache', 'v'),
+      path.join(f.home, 'installs', 'fedcba9876543210', 'environments', 'gen1', 'venv'),
+      path.join(f.home, 'installs', path.basename(path.dirname(f.facts)), 'venv')
+    ]) {
+      fs.mkdirSync(path.join(elsewhere, 'bin'), { recursive: true })
+      fs.writeFileSync(path.join(elsewhere, 'pyvenv.cfg'), 'home = /usr/bin\n')
+      fs.writeFileSync(path.join(elsewhere, 'bin', 'python'), '#!/bin/sh\n', { mode: 0o755 })
+      fs.writeFileSync(f.facts, JSON.stringify({ packages: { venv: { environment: elsewhere } } }))
+      expect(pmCommittedVenv(f.root, f.home)).toBeNull()
+    }
+
+    // A link from inside the generations folder to a venv outside it is judged by where it really is.
+    const linked = path.join(f.home, 'installs', path.basename(path.dirname(f.facts)), 'environments', 'gen2', 'venv')
+
+    fs.mkdirSync(path.dirname(linked), { recursive: true })
+    fs.symlinkSync(path.join(f.home, 'cache', 'v'), linked)
+    fs.writeFileSync(f.facts, JSON.stringify({ packages: { venv: { environment: linked } } }))
+    expect(pmCommittedVenv(f.root, f.home)).toBeNull()
+
+    fs.writeFileSync(f.facts, JSON.stringify({ packages: { venv: { environment: f.env } } }))
+    expect(pmCommittedVenv(f.root, f.home)).toBe(f.env)
+  })
 })

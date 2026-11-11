@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from tests.plugins.test_iclone_permissions import (  # noqa: F401 — fixtures: _isolated, plugin, wired
-    FakeMain, INFT, KEY, KID, MODES, _body, _decide_all_modes, _events, _isolated, _load, _locked_manager, _spawn_env,
+    FakeMain, INFT, KEY, KID, MODES, _body, _decide_all_modes, _events, _g28_floor_holds, _isolated, _load, _locked_manager, _spawn_env,
     _write_policy, plugin, wired,
 )
 
@@ -230,8 +230,13 @@ class TestNewBypasses:
     ])
     def test_b11_kill_forms_against_main_or_hermes(self, plugin, tmp_path, cmd):
         res = _all_modes_refuse(plugin, "terminal", {"command": cmd}, str(tmp_path), guardPids=[4242])
-        # record the per-form verdict; assert refuse in every mode
-        assert all(v[0] == "refuse" for v in res.values()), (cmd, res)
+        # g28b, G28's rule on stopping icloneOS: a stop the gate reads asks in Manual, Accept edits and Automatic,
+        # Plan refuses; Ignore runs it (proved in _decide_all_modes). One it cannot read keeps the refusal.
+        from hermes_plugins.iclone_permissions.policy import UNREAD_CONFINEMENT_FLOOR
+        assert set(res) == {"manual", "acceptEdits", "automatic", "plan"}, (cmd, res)
+        assert all(v[3] and v[3].startswith("confinement:") for v in res.values()), (cmd, res)
+        assert all((v[0], v[1]) == ("refuse", "floor") if v[3] == UNREAD_CONFINEMENT_FLOOR
+                   else _g28_floor_holds(m, v[0], v[1], v[3]) for m, v in res.items()), (cmd, res)
 
     def test_b12_dotenv_in_hermes_home_cannot_set_lock_0_for_a_grandchild_env(self, tmp_path, monkeypatch):
         """Also: a child that sets HERMES_YOLO_MODE in os.environ is reverted by restore_environ."""

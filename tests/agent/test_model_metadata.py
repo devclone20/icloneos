@@ -34,8 +34,19 @@ from agent.model_metadata import (
 )
 
 
+def _gateway_jwt() -> str:
+    """A JWT whose issuer names the gateway: not a ChatGPT login, so a custom Codex base may take it (R36)."""
+    import base64
+    import json
+
+    def part(payload: dict) -> str:
+        return base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+
+    return f"{part({'alg': 'RS256'})}.{part({'iss': 'https://codex-gw.example', 'sub': 'gw'})}.sig"
+
+
 def _codex_jwt(subject: str) -> str:
-    """JWT-shaped test stand-in: the live-probe path gates on the token parsing as a JWT
+    """ChatGPT-token stand-in: the live-probe path gates on the token reading as ChatGPT's own
     (a gateway key is not a ChatGPT credential and must stay off chatgpt.com, #121486);
     the signature itself is never verified client-side."""
     import base64 as _b64
@@ -43,7 +54,7 @@ def _codex_jwt(subject: str) -> str:
     def _enc(raw: bytes) -> str:
         return _b64.urlsafe_b64encode(raw).rstrip(b"=").decode()
     header = _enc(b'{"alg":"RS256"}')
-    payload = _enc(_json.dumps({"sub": subject}).encode())
+    payload = _enc(_json.dumps({"iss": "https://auth.openai.com", "sub": subject}).encode())
     return f"{header}.{payload}.test-signature"
 
 
@@ -514,7 +525,7 @@ class TestCodexOAuthContextLength:
         mock_get.assert_not_called()
 
     def test_custom_base_probes_its_own_catalog(self):
-        """A JWT reached through a custom Codex base probes that base's ``/models``, never the
+        """A gateway's own JWT reached through a custom Codex base probes that base's ``/models``, never the
         hard-coded chatgpt.com host (#121486)."""
         import agent.model_metadata as mm
         mm._codex_oauth_context_cache = {}
@@ -530,7 +541,7 @@ class TestCodexOAuthContextLength:
             ctx = get_model_context_length(
                 model="gpt-5.5",
                 base_url="https://codex-gw.example/backend-api/codex",
-                api_key=_codex_jwt("acct"),
+                api_key=_gateway_jwt(),
                 provider="openai-codex",
             )
 

@@ -438,3 +438,123 @@ describe('the payment ledger', () => {
     expect(readLedger(file)).toMatchObject({ ok: true, problem: null })
   })
 })
+
+describe('L4-03: the cached read and the one-line append keep the chain as strong as a full re-read', () => {
+  const clock = () => new Date('2026-10-21T10:00:00Z')
+
+  it('appends one line per row, in order; the cached read is the file read from genesis', async () => {
+    const file = fresh()
+    const ledger = createLedger({ file, now: clock })
+    const sizes: number[] = []
+
+    for (let i = 0; i < 40; i += 1) {
+      const row =
+        i % 3 === 0
+          ? ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 + i })
+          : ledger.append({ kind: 'refuse', agent: 'x', rule: 'per_day' })
+
+      expect(row?.seq).toBe(i + 1)
+      sizes.push(fs.statSync(file).size)
+    }
+
+    // Append-only: every row only added bytes after the ones before it.
+    expect(sizes.every((size, i) => i === 0 || size > sizes[i - 1])).toBe(true)
+    expect(ledger.read()).toEqual(readLedger(file))
+    expect(await ledger.readAsync()).toEqual(readLedger(file))
+    expect(ledger.read().records.map(row => row.seq)).toEqual(Array.from({ length: 40 }, (_, i) => i + 1))
+    expect(JSON.parse(fs.readFileSync(headFileOf(file), 'utf8'))).toMatchObject({ seq: 40 })
+    await ledger.flush()
+  })
+
+  it('a row tampered after a cached read is caught by read, readAsync and append (same length, no new row)', async () => {
+    const file = fresh()
+    const ledger = createLedger({ file, now: clock })
+
+    for (let i = 0; i < 5; i += 1) {
+      ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 })
+    }
+
+    expect(ledger.read().ok).toBe(true)
+    expect((await ledger.readAsync()).ok).toBe(true)
+
+    const text = fs.readFileSync(file, 'utf8')
+    const at = text.indexOf('"micros":1000', text.indexOf('"seq":3'))
+
+    fs.writeFileSync(file, `${text.slice(0, at)}"micros":9000${text.slice(at + 13)}`)
+    expect(fs.statSync(file).size).toBe(text.length)
+
+    expect(await ledger.readAsync()).toMatchObject({ ok: false, problem: 'line', brokenAt: 3 })
+    expect(ledger.read()).toMatchObject({ ok: false, problem: 'line', brokenAt: 3 })
+    expect(ledger.limitsView().ok).toBe(false)
+    expect(ledger.append({ kind: 'signed', agent: 'x', micros: 1 })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8')).toBe(`${text.slice(0, at)}"micros":9000${text.slice(at + 13)}`)
+  })
+
+  it('a well-chained row forged onto the tail is caught by the head, after a cached read', () => {
+    const file = fresh()
+    const ledger = createLedger({ file, now: clock })
+
+    ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 })
+
+    const last = ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 })
+
+    expect(ledger.read().ok).toBe(true)
+
+    // A forged row chained to the real tail with a head left alone: the head lags, which is accepted…
+    const forged = { ...last!, seq: 3, prev: last!.sha, micros: 1 }
+    const { sha: _sha, ...body } = forged
+    const sha = createHash('sha256').update(JSON.stringify(body)).digest('hex')
+
+    fs.appendFileSync(file, `${JSON.stringify({ ...body, sha })}\n`)
+    // …so the forger must also move the head, and a head naming any other row than the file's is a break.
+    fs.writeFileSync(headFileOf(file), JSON.stringify({ seq: 3, sha: 'f'.repeat(64) }))
+    expect(ledger.read()).toMatchObject({ ok: false, problem: 'head' })
+    expect(ledger.append({ kind: 'refuse', agent: 'x', rule: 'per_day' })).toBeNull()
+  })
+
+  it('a write by anyone between a verify and the append is never appended after: the chain is verified again first', () => {
+    const file = fresh()
+    const ledger = createLedger({ file, now: clock })
+
+    ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 })
+    expect(ledger.read().ok).toBe(true)
+    fs.appendFileSync(file, 'garbage\n')
+    expect(ledger.append({ kind: 'signed', agent: 'x', micros: 1_000 })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8').endsWith('garbage\n')).toBe(true)
+  })
+
+  it('a kill before the row is written leaves the ledger as it was; the next ledger appends on', () => {
+    const file = fresh()
+
+    createLedger({ file, now: clock }).append({ kind: 'signed', agent: 'x', micros: 1_000 })
+
+    const before = fs.readFileSync(file, 'utf8')
+
+    const killed = createLedger({
+      file,
+      now: clock,
+      beforeAppend: () => {
+        throw new Error('SIGKILL')
+      }
+    })
+
+    expect(killed.append({ kind: 'signed', agent: 'x', micros: 1_000 })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8')).toBe(before)
+
+    const next = createLedger({ file, now: clock })
+
+    expect(next.append({ kind: 'signed', agent: 'x', micros: 2_000 })?.seq).toBe(2)
+    expect(readLedger(file)).toMatchObject({ ok: true })
+  })
+
+  it('a symlink planted at the ledger path is never followed', () => {
+    const file = fresh()
+    const target = path.join(path.dirname(path.dirname(file)), 'elsewhere.jsonl')
+
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    fs.writeFileSync(target, '')
+    fs.symlinkSync(target, file)
+    expect(createLedger({ file, now: clock }).append({ kind: 'signed', agent: 'x', micros: 1 })).toBeNull()
+    expect(fs.readFileSync(target, 'utf8')).toBe('')
+  })
+})

@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { registry } from '@/contrib/registry'
 
@@ -85,6 +85,10 @@ describe('frameTools', () => {
     expect(FRAME_TOOL_IDS.indexOf('iclone-hud')).toBeGreaterThan(FRAME_TOOL_IDS.indexOf('iclone-browser-recording'))
   })
 
+  it('puts AI record directly beside the browser record button', () => {
+    expect(FRAME_TOOL_IDS.indexOf('iclone-ai-record')).toBe(FRAME_TOOL_IDS.indexOf('iclone-browser-recording') + 1)
+  })
+
   it('keeps the frame order whatever order the registry holds', () => {
     const ids = frameTools([...FRAME_TOOL_IDS].reverse().map(id => tool(id))).map(t => t.id)
 
@@ -107,6 +111,13 @@ describe('frameTools', () => {
 })
 
 describe('FrameTools', () => {
+  // The real AI record module, which offers its button only where the app's recorder bridge exists.
+  beforeAll(() => {
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = {
+      screenRecord: { onState: () => () => undefined, status: () => Promise.resolve(null) }
+    }
+  })
+
   it('renders wallet, theme, the browser pair, then HUD mode, each icon-only and outside the drag region', async () => {
     await act(async () => {
       render(<FrameTools />)
@@ -115,7 +126,15 @@ describe('FrameTools', () => {
     const buttons = screen.getAllByRole('button')
 
     expect(buttons.map(b => b.getAttribute('data-ic-frame-tool'))).toEqual([...FRAME_TOOL_IDS])
-    expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Wallet', 'Theme', 'Browser', 'Record', 'HUD mode'])
+    expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual([
+      'Wallet',
+      'Theme',
+      'Browser',
+      'Record',
+      // The owner's order: AI record beside the browser button. This module is not mocked here, its real words show.
+      expect.stringMatching(/^AI record/),
+      'HUD mode'
+    ])
     expect(screen.getByRole('toolbar').className).toContain('[-webkit-app-region:no-drag]')
   })
 

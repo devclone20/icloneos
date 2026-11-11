@@ -143,7 +143,7 @@ export function consentState(
 
 /**
  * Only an explicit OFF declines; undecided keys leave the decision to the system prompt.
- * @public used by RESUME/run/gates/R10/extra/2026-10-17_r4_web_undecided.mjs
+ * @public used by a gate probe kept outside this repository
  */
 export function permissionAllowed(record: ConsentRecord | null, key: ConsentPermissionKey): boolean {
   return record?.permissions[key] !== false

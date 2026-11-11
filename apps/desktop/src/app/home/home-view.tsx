@@ -17,7 +17,7 @@ import './home.css'
 import { useStore } from '@nanostores/react'
 import { X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
 import { HOME_ROUTE, NEW_CHAT_ROUTE, SETTINGS_ROUTE } from '@/app/routes'
 import { homeCards } from '@/app/settings/inft-book/book-model'
@@ -35,7 +35,7 @@ import { setSidebarOpen } from '@/store/layout'
 import { $acpConfigMap, refreshAcpConfigMap } from './acp-setup'
 import { resetAura } from './aura-prefs'
 import { CollectionsPanel, CollectionsTab, type INftCardData } from './collections'
-import { LazyContainersWindow, useContainersDockItem } from './containers/containers-dock'
+import { $containersOpen, LazyContainersWindow, useContainersDockItem } from './containers/containers-dock'
 import { Dock, type DockItem, focusDockTile } from './dock'
 import { $econBadges } from './econ/badges'
 import { prefetchEcon } from './econ/prefetch'
@@ -358,13 +358,26 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
     }
   }, [closeEcon, econ])
 
+  const containersOpen = useStore($containersOpen)
+
+  const closeContainersToDock = useCallback(() => {
+    $containersOpen.set(false)
+    focusDockTile('containers')
+  }, [])
+
   const closeMessageToDock = useCallback(() => {
     closeMessageWindow(onClose)
     focusDockTile('chat')
   }, [onClose])
 
   // The window this surface's Escape would close: the econ window over everything, else the Message window.
-  const topWindowId = econ ? econWindowId(econ) : mode === 'window' ? MESSAGE_WINDOW_ID : null
+  const topWindowId = econ
+    ? econWindowId(econ)
+    : containersOpen
+      ? 'containers'
+      : mode === 'window'
+        ? MESSAGE_WINDOW_ID
+        : null
 
   useEffect(() => {
     // A proper escape-layer citizen. The raw listener this replaces fired on
@@ -384,7 +397,8 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
 
       const target = homeEscapeTarget({
         collectionsOpen,
-        econ: Boolean(econ),
+        // Containers is a Dock window like the econ ones: without this, Escape over it would leave the stage.
+        econ: Boolean(econ) || containersOpen,
         editable: isEditableTarget(event.target),
         // An expanded window retracts on the first Escape and closes on the next (STAGE tester 1 W-1).
         expanded: topWindowId !== null && isWindowExpanded(topWindowId),
@@ -405,7 +419,11 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
           retractWindow(topWindowId)
         }
       } else if (target === 'econ') {
-        closeEconToDock()
+        if (econ) {
+          closeEconToDock()
+        } else {
+          closeContainersToDock()
+        }
       } else if (target === 'collections') {
         setCollectionsOpen(false)
       } else if (target === 'message') {
@@ -421,7 +439,17 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
       window.removeEventListener('keydown', onKey)
       releaseLayer()
     }
-  }, [closeEconToDock, closeMessageToDock, collectionsOpen, econ, mode, onClose, topWindowId])
+  }, [
+    closeContainersToDock,
+    closeEconToDock,
+    closeMessageToDock,
+    collectionsOpen,
+    containersOpen,
+    econ,
+    mode,
+    onClose,
+    topWindowId
+  ])
 
   // The iNFT island, opened from its tab or from a window's "Summon an iNFT"
   // gate. Opening refreshes the collection silently — never a manual scan —
@@ -453,12 +481,27 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
   )
 
   // V3-G: the Containers window, one Dock window at a time like the others.
+  // Opening it leaves the chat for the home route: its close goes back there, so the chord twice changes nothing.
+  const location = useLocation()
+  const containersOpenedFrom = useRef<string | null>(null)
+
   const openContainers = useCallback(() => {
+    containersOpenedFrom.current = mode === 'window' ? `${location.pathname}${location.search}` : null
     closeEcon()
     navigate(HOME_ROUTE, { replace: true })
-  }, [closeEcon, navigate])
+  }, [closeEcon, location.pathname, location.search, mode, navigate])
 
-  const containersItem = useContainersDockItem(DOCK_HINTS[7], openContainers)
+  const backFromContainers = useCallback(() => {
+    const from = containersOpenedFrom.current
+
+    containersOpenedFrom.current = null
+
+    if (from) {
+      navigate(from, { replace: true })
+    }
+  }, [navigate])
+
+  const containersItem = useContainersDockItem(DOCK_HINTS[7], openContainers, backFromContainers)
 
   // Owner rule: NO Home tile. The dock only exists on the home surface, so a
   // button to reach it would point at where you already are. The door that is
@@ -518,8 +561,10 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
   // The chords fire anywhere on the home surface except inside a text field
   // (the composer, a search box) — those keep their own keys.
   useEffect(() => {
+    // No editable-target guard: with the Message window open the focus lives in the composer, and mod+shift+digit types
+    // nothing there. An editor that claims one of these calls preventDefault first.
     const onKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || isEditableTarget(event.target)) {
+      if (event.defaultPrevented) {
         return
       }
 

@@ -11,6 +11,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { readJsonFileSync } from './lib/fs-json'
+import { NO_LINKS_ENV } from './lib/no-follow-fs'
 import { type RuntimePinInfo, UPDATE_POLICY_LOG_TAG, type UpdatePolicy } from './update-policy'
 
 /** The SYNC reader under its pre-P0p name, kept for L1's electron/main/updates.ts + updates-ipc.ts (they import it
@@ -104,9 +105,13 @@ export async function ensureCuratedRuntimeConfig(deps: {
     ? [
         deps.sealed.python,
         ['-s', '-P', '--check-hash-based-pycs', 'always', '-m', 'hermes_cli.main', ...cliArgs],
-        { ...deps.sealed.sealEnv({ ...process.env, HERMES_HOME: deps.hermesHome }), PYTHONDONTWRITEBYTECODE: '1' }
+        {
+          ...deps.sealed.sealEnv({ ...process.env, HERMES_HOME: deps.hermesHome }),
+          PYTHONDONTWRITEBYTECODE: '1',
+          ...NO_LINKS_ENV
+        }
       ]
-    : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome }]
+    : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome, ...NO_LINKS_ENV }]
 
   const result = await deps
     .run(cmd, args, { env, timeoutMs: deps.timeoutMs ?? CURATED_CONFIG_TIMEOUT_MS })

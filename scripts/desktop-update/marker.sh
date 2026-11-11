@@ -27,6 +27,11 @@
 # which ships with macOS). The sidecar is never deleted. Busy for 10 s, or no
 # lock tool at all, fails closed.
 
+# Sourced on its own by the shared-corpus harness, so it brings its own way to the helper.
+NF_PERL=/usr/bin/perl; [ -x "$NF_PERL" ] || NF_PERL=perl
+NF_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/no_follow.pl"
+nf() { "$NF_PERL" "$NF_SCRIPT" "$@"; }
+
 MARKER_CT_RE='^ct:([0-9]+(\.[0-9]+)?)$'
 MARKER_DELEGATE_RE='^delegate:([0-9]+) ct:([0-9]+(\.[0-9]+)?)$'
 MARKER_RUN_RE='^run:([A-Za-z0-9._-]{1,128})$'
@@ -74,7 +79,7 @@ pid_parent() { # pid -> parent pid, or nothing
 # running update as a failed launch.
 marker_names_handoff() { # daemon pid -> 0 iff line 1 names it or a process it forked
   local p
-  p="$(head -1 "$MARKER" 2>/dev/null | tr -d '[:space:]')"
+  p="$(nf read "$MARKER" 2>/dev/null | head -1 | tr -d '[:space:]')"
   [ -n "$p" ] && { [ "$p" = "$1" ] || [ "$(pid_parent "$p")" = "$1" ]; }
 }
 
@@ -240,6 +245,11 @@ fd_flock() { # fd wait-seconds -> 0 iff an exclusive flock is now held on that f
 
 marker_locked() { # fn args... -> runs fn holding the A7 lock; 75 when the lock is busy
   local rc
+  # bash cannot open without following: a swap right after this check stays open, and at worst creates an empty file or
+  # stalls this detached helper. flock needs this very descriptor, so no_follow.pl cannot open it for us.
+  if [ -L "$MARKER.lock" ] || { [ -e "$MARKER.lock" ] && [ ! -f "$MARKER.lock" ]; }; then
+    log "WARNING: refused the update marker lock $MARKER.lock: a link or a special file"; return 75
+  fi
   if ! { exec 9>>"$MARKER.lock"; } 2>/dev/null; then
     log "WARNING: cannot open the update marker lock $MARKER.lock"; return 75
   fi
@@ -256,21 +266,17 @@ marker_locked() { # fn args... -> runs fn holding the A7 lock; 75 when the lock 
 # ── mutations (call ONLY through marker_locked) ──────────────────────────────
 marker_read() { # -> SEEN, return 1 when there is no marker
   [ -e "$MARKER" ] || return 1
-  SEEN="$(cat "$MARKER" 2>/dev/null)"
+  SEEN="$(nf read "$MARKER" 2>/dev/null)"
 }
 
 marker_replace() { # body -> atomic replace (we hold the lock, so nobody judged in between)
-  local tmp="$MARKER.$$.tmp"
-  printf '%s' "$1" > "$tmp" 2>/dev/null && mv -f "$tmp" "$MARKER" 2>/dev/null && return 0
-  rm -f "$tmp" 2>/dev/null
-  return 1
+  printf '%s' "$1" | nf replace "$MARKER" 2>/dev/null
 }
 
 marker_publish_new() { # body -> 0 iff we created the marker (never replaces one)
-  local tmp="$MARKER.$$.tmp" rc
-  printf '%s' "$1" > "$tmp" 2>/dev/null || { rm -f "$tmp" 2>/dev/null; return 2; }
-  ln "$tmp" "$MARKER" 2>/dev/null; rc=$?  # link(2) is an atomic no-replace create
-  rm -f "$tmp" 2>/dev/null
+  local rc
+  printf '%s' "$1" | nf publish-new "$MARKER" 2>/dev/null; rc=$?  # link(2) is an atomic no-replace create
+  [ "$rc" -ne 3 ] || return 2
   return $rc
 }
 

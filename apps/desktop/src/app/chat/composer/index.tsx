@@ -2,8 +2,10 @@ import { ComposerPrimitive } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef } from 'react'
 
+import { FirstScanStatus } from '@/app/home/containers/first-scan-status'
 import { useHudComposerDrag } from '@/app/hud/composer-drag'
 import { composerFill, composerFloatingStrip, composerSurfaceGlass } from '@/components/chat/composer-dock'
+import { IsolationComposerNote } from '@/components/permissions/isolation-control'
 import { Button } from '@/components/ui/button'
 import { Slot as ContribSlot } from '@/contrib/react/slot'
 import { useI18n } from '@/i18n'
@@ -217,6 +219,8 @@ export function ChatBar({
   const gatewayState = useStore($gatewayState)
   const reconnecting = gatewayState === 'closed' || gatewayState === 'error'
   const inputDisabled = disabled && !reconnecting
+  // The window also dials between closed and open. Enter there used to do nothing and say nothing.
+  const sendHolds = disabled && (reconnecting || gatewayState === 'connecting')
 
   // The draft engine — detached source of truth (DOM + draftRef + edge
   // selectors); typing never re-renders the chrome. ChatBar owns `queueEditRef`
@@ -378,6 +382,7 @@ export function ChatBar({
     queueCurrentDraft,
     queueEdit,
     queuedPrompts,
+    sendHolds,
     sessionId,
     setComposerText,
     stashAt
@@ -858,7 +863,7 @@ export function ChatBar({
       const editorText = editorRef.current ? composerPlainText(editorRef.current) : draftRef.current
       const hasLivePayload = editorText.trim().length > 0 || attachments.length > 0
 
-      if (disabled) {
+      if (disabled && !sendHolds) {
         return
       }
 
@@ -1154,6 +1159,8 @@ export function ChatBar({
               5px transparent grab margin — so both strips carry the same inset
               and share one left edge with it. */}
           <div className={cn(composerFloatingStrip, 'px-[5px] pb-1.5 empty:hidden')}>
+            <IsolationComposerNote />
+            <FirstScanStatus />
             <ActionBadges sessionId={statusSessionId} />
             <SuggestionPills sessionId={statusSessionId} />
           </div>

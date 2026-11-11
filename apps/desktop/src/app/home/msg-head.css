@@ -84,6 +84,30 @@
   stroke: var(--ic-econ-ink-88);
 }
 
+/* The minimum window: the title never gives way (econ.css) and the titlebar tools keep their span, so this cluster gets
+   what is left: tight, the ring without its number, and one door, the tasks when any run, else the context. */
+@media (max-width: 520px) {
+  .ic-win__head.imsg-head[data-expanded] {
+    gap: 4px;
+  }
+
+  .imsg-head[data-expanded] .imsg-head__ctx-button {
+    padding-inline: 6px;
+  }
+
+  .imsg-head[data-expanded] .imsg-head__ctx-value {
+    display: none;
+  }
+
+  .imsg-head[data-expanded] .imsg-head__bg:not(:has(.imsg-head__bg-count, [data-testid='msg-tasks-died-mark'])) {
+    display: none;
+  }
+
+  .imsg-head[data-expanded] .imsg-head__tools:has(.imsg-head__bg-count, [data-testid='msg-tasks-died-mark']) .imsg-head__ctx {
+    display: none;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .imsg-head__ctx-ring-fill {
     transition: none;

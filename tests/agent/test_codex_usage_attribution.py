@@ -239,6 +239,8 @@ def test_credential_pool_custom_endpoint_keeps_existing_identity(
         runtime_base_url="https://proxy.example/backend-api/codex",
     )
     monkeypatch.setattr(auxiliary_client, "_select_pool_entry", lambda _p: (True, entry))
+    # A login reaches a proxy only when HERMES_CODEX_BASE_URL names it (R43 b): this is that proxy.
+    monkeypatch.setenv("HERMES_CODEX_BASE_URL", entry.runtime_base_url)
 
     client, model = auxiliary_client._build_codex_client(MODEL)
     try:

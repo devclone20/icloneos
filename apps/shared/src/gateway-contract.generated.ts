@@ -3925,12 +3925,23 @@ export interface BrowserManageParams {
   session_id?: string | null
   profile?: string | null
 }
-export type BrowserAction = 'status' | 'connect' | 'disconnect' | 'use'
+export type BrowserAction = 'status' | 'connect' | 'disconnect' | 'use' | 'record_status' | 'record_sync' | 'record_stop'
 export interface BrowserManageResult {
-  connected: boolean
+  connected?: boolean | null
   url?: string | null
   messages?: string[] | null
   browser_use?: boolean | null
+  armed?: boolean | null
+  boot?: string | null
+  capturing?: string[] | null
+  notices?: BrowserRecordNotice[] | null
+}
+export interface BrowserRecordNotice {
+  seq: number
+  ok: boolean
+  message: string
+  file?: string | null
+  path?: string | null
 }
 /** Handlers that look a live session up with ``_sessions.get(params.get("session_id"))``: an absent / unknown id falls back to the launch profile's config, so it is never required. */
 export interface _SessionScoped {

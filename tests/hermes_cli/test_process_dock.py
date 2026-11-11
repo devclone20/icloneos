@@ -52,10 +52,34 @@ def test_dock_paints_processes_under_agents_and_retires_finished_rows(monkeypatc
         assert dock.dock_text(columns=100, rows=30).count('\n') == 0
         assert f"{t('cli.subagents.count_live', count=1)} · {t('cli.subagents.count_procs_one', count=1)}" in dock.dock_text(columns=100, rows=30)
         # Finished rows leave after the retention window; running ones stay.
+        _wait(lambda: process_registry.get(quick_id).exited_at)  # retiring counts from the stamp
         later = cli_process_dock.process_rows(time.time() + cli_process_dock.RETAIN_SECONDS + 1)
         assert [r['id'] for r in later] == [slow_id]
     finally:
         process_registry.kill_process(slow_id)
+
+
+def test_a_row_whose_exit_is_not_stamped_yet_stays_until_it_can_retire(monkeypatch):
+    """A process is marked exited before the move to finished stamps exited_at; the dock used to drop it in between."""
+    import threading
+
+    from hermes_cli import cli_process_dock
+    from tools.process_registry import process_registry
+
+    gate = threading.Event()
+    move = process_registry._move_to_finished
+    monkeypatch.setattr(process_registry, '_move_to_finished', lambda session: (gate.wait(10), move(session))[1])
+    quick_id = process_registry.spawn_local(command="exit 3", cwd='.', task_id='t', owner_task_id='t', session_key='').id
+    try:
+        _wait(lambda: process_registry.get(quick_id).exited)
+        assert process_registry.get(quick_id).exited_at == 0.0
+        assert [(r['id'], r['status']) for r in cli_process_dock.process_rows() if r['id'] == quick_id] == [(quick_id, 'failed')]
+    finally:
+        gate.set()
+    _wait(lambda: process_registry.get(quick_id).exited_at)
+    assert quick_id in [r['id'] for r in cli_process_dock.process_rows()]
+    later = time.time() + cli_process_dock.RETAIN_SECONDS + 1
+    assert quick_id not in [r['id'] for r in cli_process_dock.process_rows(later)]
 
 
 def test_monitor_controls_stop_processes_and_never_steer_them():

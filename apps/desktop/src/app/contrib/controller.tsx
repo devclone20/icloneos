@@ -5,6 +5,7 @@ import { useLocation } from 'react-router'
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { ScreenRecordBadge } from '@/app/home/screen-record-tool'
 import { FrameTools } from '@/app/shell/frame-tools'
 import { legacyShellMode, WINDOW_DRAG_BAND_PX } from '@/app/shell/legacy-shell'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
@@ -421,7 +422,7 @@ function WindowDragBand() {
       data-ic-window-drag=""
       style={{ height: WINDOW_DRAG_BAND_PX }}
     >
-      {!isAuxiliaryWindow() && <FrameTools />}
+      {isAuxiliaryWindow() ? <ScreenRecordBadge /> : <FrameTools />}
     </div>
   )
 }

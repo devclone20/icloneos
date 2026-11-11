@@ -6,7 +6,7 @@ import { FUNCTION_COPY } from '@/iclone-shared/permission-function-copy'
 
 export const ptPtPermissions: PermissionsCopy = {
   title: 'Permissões',
-  lead: `O que o seu agente pode fazer neste Mac sem lhe perguntar. Só um clique seu aqui o altera — nunca o agente, nunca uma atualização.`,
+  lead: `O que o seu agente pode fazer neste Mac sem lhe perguntar. Um modo muda com um clique nesta app, não com um pedido do agente nem com uma atualização; em Ignorar permissões, com o controlo do computador ligado, o agente também pode clicar.`,
   enforcement: {
     enforced: 'Em vigor: cada chamada de ferramenta do seu agente passa primeiro por estas regras.',
     starting: 'A iniciar: a verificar se o controlo de permissões está carregado no seu agente.',
@@ -17,7 +17,7 @@ export const ptPtPermissions: PermissionsCopy = {
       'O porta-chaves do sistema não conseguiu proteger a chave do registo: só Manual, e o registo não pode ser verificado entre reinícios.',
     // FX-2 r1b: the degraded state's cause when the owner's Keychain setting is off, and the fix.
     'keychain-off':
-      'Só Manual: a definição do Porta-chaves está desligada, por isso os outros modos não podem ser protegidos. Ligue o Porta-chaves em Definições › Máquina › Gateways › «Guardar as palavras-passe no porta-chaves do sistema» para usar Automático, Plano e os outros modos.',
+      'O modo que escolher dura até fechar o icloneOS e depois volta a Manual: a definição do Porta-chaves está desligada, por isso não pode ser guardado protegido. Para o manter, ligue o Porta-chaves em Definições › Máquina › Gateways › «Guardar as palavras-passe no porta-chaves do sistema».',
     // V3-FX M1: turned on while the app runs — payments and the ACP tools follow at once, the modes after a restart.
     'keychain-restart':
       'O Porta-chaves está ligado. A chave das permissões é selada quando o icloneOS arranca: reinicie o icloneOS para usar Automático, Plano e os outros modos. Os pagamentos e as ferramentas ACP já o usam.'
@@ -29,24 +29,44 @@ export const ptPtPermissions: PermissionsCopy = {
   modes: {
     ignore: {
       name: 'Ignorar permissões',
+      short: 'Nunca pergunta',
       summary:
-        'Trabalha sem perguntar, exceto para gastar dinheiro ou pedir uma permissão do sistema. Nunca é a predefinição.'
+        'Não pergunta nada, incluindo gastar dinheiro, mover iNFTs, enviar chaves, a palavra-passe de administrador e as próprias permissões. Além do confinamento enquanto estiver ligado, ficam cinco verificações: destruir o disco inteiro, a pasta pessoal ou o sistema, um apagamento recursivo cujo alvo inteiro é uma variável ou a saída de um comando que não consegue ler, ou um apagamento recursivo que consiga ler como dirigido ao disco, a uma pasta pessoal ou ao sistema, também quando uma variável deixada vazia o faria, ou por um comando cujo nome não consegue ler, ou um apagamento recursivo cujos alvos ou opções não consegue ler por inteiro, uma chamada ilegível demais para verificar (um patch cujos ficheiros não consegue nomear, uma escrita que não nomeia nenhum ficheiro, ou argumentos que não consegue ler), as regras de recusa que escreveu, e as ferramentas de ficheiros sobre os arquivos do próprio runtime (escrever em state.db, sessões, tokens, emparelhamento, cofre, perfil do browser e o .env do próprio runtime; ler tokens, cofre, perfil do browser, auth.json, auth.lock, esse .env e subscrições de webhooks). O controlo do computador, a gravação do ecrã e o browser correm fora do Seatbelt, e as ferramentas de ficheiros escrevem ficheiros na sua pasta pessoal fora dele, um ficheiro de cada vez.'
     },
     manual: {
       name: 'Manual',
-      summary: 'Pergunta antes de cada escrita, comando, acesso à rede, mensagem, instalação e eliminação. Ler é livre.'
+      short: 'Pergunta antes de agir',
+      summary:
+        'Pergunta antes de cada escrita fora do seu próprio perfil iNFT (SOUL, memórias, a sua pasta) e antes de cada comando, acesso à rede, mensagem, instalação e eliminação. Ler no projeto não pergunta, um ficheiro noutro ponto da pasta pessoal pode perguntar, e um comando confinado só lê uma pasta quando corre nela.'
     },
     automatic: {
       name: 'Automático',
-      summary: 'Escreve no projeto, executa comandos seguros e lê a web sozinho. Para o resto, pergunta.'
+      short: 'Edita, corre comandos seguros',
+      summary: 'Escreve no projeto, executa comandos seguros e usa a web sozinho. Para o resto, pergunta.'
     },
     plan: {
       name: 'Plano',
-      summary: 'Só leitura. O seu agente lê e escreve o plano na conversa; não altera nada.'
+      short: 'Lê e planeia',
+      summary:
+        'Lê e planeia na conversa. Não altera nada além do seu próprio perfil iNFT (SOUL, memórias, a sua pasta).'
     },
     acceptEdits: {
       name: 'Aceitar edições',
+      short: 'Edita sem perguntar',
       summary: 'Edita sozinho os ficheiros do projeto. Para tudo o resto, pergunta.'
+    }
+  },
+  menu: {
+    title: 'Esta conversa',
+    trigger: (mode: string) => `Modo de permissões desta conversa: ${mode}`,
+    triggerNotInForce: (inForce: string, chosen: string) =>
+      `Modo de permissões desta conversa: ${inForce}. ${chosen} está escolhido, sem efeito`,
+    appliesToSession:
+      'Só esta conversa, a partir da próxima mensagem. Predefinição em Definições › Agente › Permissões.',
+    appliesToNewChat: 'Só esta nova conversa. Predefinição em Definições › Agente › Permissões.',
+    ignoreNote: {
+      confined: 'Ainda há cinco recusas. Detalhes nas Definições.',
+      unconfined: 'Seatbelt desligado: só cinco verificações da app.'
     }
   },
   classes: {
@@ -62,47 +82,48 @@ export const ptPtPermissions: PermissionsCopy = {
     D: 'eliminar ficheiros'
   },
   current: 'Em uso',
+  chosenNotInForce: 'Escolhido, sem efeito',
   choose: 'Usar',
   scope: {
     label: 'Aplica-se a',
-    standing: 'Em todo o lado',
+    standing: 'Predefinição para novas sessões',
+    standingNote:
+      'Uma conversa aberta com modo próprio mantém-no; altere-o na barra de mensagem dela. Uma conversa sem modo próprio nem do seu projeto segue esta predefinição.',
     project: (path: string) => `Este projeto · ${path}`,
     noProject: 'Abra um projeto para lhe dar um modo próprio.'
   },
-  ignoreConfirm: {
-    standingOnly: 'Ignorar permissões nunca é a predefinição para tudo: escolha-o para um projeto.'
-  },
   refused: {
-    gesture: 'O modo só muda com um clique seu.',
+    gesture: 'O modo só muda com um clique nesta app.',
     invalid: 'Este modo não pode ser escolhido aqui.',
     unavailable: `Os modos de permissão precisam da aplicação para computador do ${PRODUCT_NAME}.`
   },
   floor: {
-    title: 'Nunca, em nenhum modo nem em nenhum nível',
+    title: 'O que continua a ser verificado',
     items: [
-      'Apagar o disco, a sua pasta pessoal ou pastas do sistema, formatar uma unidade ou desligar o Mac',
-      'Alterar as próprias permissões, este modo ou o registo do que fez',
-      'Ler as suas chaves, palavras-passe, frases de recuperação da carteira ou tokens para os enviar para algum lado',
-      `Parar o ${PRODUCT_NAME}, o ambiente de execução do agente ou este controlo de permissões`,
-      'Escrever a sua palavra-passe de administrador ou ativar uma permissão do sistema para si próprio',
-      'Transferir um iNFT ou assinar uma aprovação para um iNFT'
+      'Em todos os modos, incluindo Ignorar permissões, recusa apagar o disco, a sua pasta pessoal ou pastas do sistema, ou formatar uma unidade.',
+      'Fora de Ignorar permissões, não pode mover um iNFT, enviar as suas chaves, escrever a palavra-passe de administrador nem alterar as próprias permissões sem a sua resposta, e nenhuma permissão dispensa isso.',
+      'Em Ignorar permissões nada pergunta, por isso pode fazer tudo isto.',
+      'Estas são verificações na app, não uma barreira no kernel: um programa pode contorná-las.'
     ]
   },
   // V3-F2: the Functions matrix (shared with main's native raise confirm).
   functions: FUNCTION_COPY['pt-PT'],
   // FX-6: what confinement really does (on by default, V3-G); the pane picks the line for the live state.
   shellNote: {
-    on: 'Os comandos do agente são executados confinados por omissão (Seatbelt), em todos os modos, incluindo Ignorar permissões: só escrevem no projeto e numa pasta temporária, e só acedem à rede quando o modo ou uma permissão o permite. Pode desligar isto em Contentores, escolhendo Este Mac.',
-    off: 'O confinamento está desligado (escolheu Este Mac em Contentores): em Ignorar permissões e Automático, um comando pode escrever fora do projeto.',
+    on: 'O confinamento está ligado e pode desligá-lo. Os comandos do agente são executados confinados (Seatbelt) em todos os modos, incluindo Ignorar permissões: só escrevem no projeto e numa pasta temporária, e só acedem à rede quando o modo ou uma permissão o permite. Um comando de shell que aprove é executado uma vez fora do confinamento.',
+    off: 'O confinamento está desligado: os comandos correm em seu nome, em todos os modos, e podem ler e alterar tudo a que tem acesso.',
     // V3-FX M2: main's live verdict is red (on but not working), or not read yet.
-    red: 'O confinamento não está a funcionar agora (Contentores mostra porquê): até estar, em Ignorar permissões e Automático um comando pode escrever fora do projeto.',
+    red: 'O confinamento não está a funcionar agora (Contentores mostra porquê): até estar, um comando em qualquer modo pode ler e alterar tudo a que tem acesso.',
     pending: 'A ler o estado do confinamento…'
   },
   grants: {
     title: 'Permissões que concedeu',
     empty: 'Nenhuma. Quando permitir algo por mais do que uma vez, aparece aqui.',
     scope: { session: 'esta conversa', project: 'este projeto', standing: 'em todo o lado' },
-    revoke: 'Revogar'
+    revoke: 'Revogar',
+    folderTitle: 'Pasta que permitiu',
+    folderHint: 'os comandos podem escrever aqui quando um modo o permite',
+    removeFolder: 'Remover'
   },
   // A-1: um ficheiro de estado das permissões que o processo principal recusou ou não conseguiu verificar no arranque.
   integrity: {
@@ -130,8 +151,9 @@ export const ptPtPermissions: PermissionsCopy = {
   audit: {
     title: 'Atividade',
     empty: 'Ainda nada registado.',
-    chainOk: (count: number) => `${count} ${count === 1 ? 'registo' : 'registos'} · cadeia intacta`,
+    chainOk: (count: number) => `${count.toLocaleString()} ${count === 1 ? 'registo' : 'registos'} · cadeia intacta`,
     chainBroken: `O registo tem uma falha ou foi alterado fora do ${PRODUCT_NAME}.`,
+    chainVerifying: 'A verificar os registos…',
     otherKind: 'Registo de permissões',
     kinds: {
       use: 'Permitido',
@@ -154,7 +176,7 @@ export const ptPtPermissions: PermissionsCopy = {
       withdrawn: 'Retirado antes da sua resposta',
       noGesture: 'Sem um clique seu',
       notConfirmed: 'Sem confirmação na caixa de diálogo do sistema',
-      standingIgnore: 'Ignorar permissões não pode ser a predefinição em todo o lado',
+      standingIgnore: 'Recusado por uma versão anterior: Ignorar permissões não podia então ser a predefinição',
       invalid: 'Alteração inválida',
       raced: 'O nível mudou enquanto a caixa de diálogo estava aberta',
       gateNotStarted: (pid: string | null) =>
@@ -205,13 +227,18 @@ export const ptPtPermissions: PermissionsCopy = {
     eyebrow: (who: string) => `Pedido de permissão · ${who}`,
     title: (what: string) => `O seu agente quer ${what}`,
     targetLabel: 'Exatamente isto',
+    folderLabel: 'Na pasta',
     expand: 'Mostrar tudo',
     collapse: 'Mostrar menos',
     reasonLabel: 'Porquê, nas palavras do seu agente',
+    heldFile:
+      'Este é um ficheiro a partir do qual o shell, o git ou o launchd executam, ou guarda chaves. O que o agente escrever aqui pode ser executado mais tarde com o seu acesso. Leia o caminho antes de permitir.',
+    outsideFilePatch:
+      'Permitir lê este ficheiro e depois escreve-o, fora do Seatbelt. O agente vê as linhas que altera:',
     effects: {
       R: 'Vai ler isto e não altera nada.',
       Wp: 'Vai criar ou alterar este ficheiro dentro do projeto.',
-      Wo: 'Vai criar ou alterar este ficheiro fora do projeto.',
+      Wo: 'Vai criar ou alterar este ficheiro fora do projeto. Enquanto o Seatbelt estiver ligado, os ficheiros desta app ficam fechados, e o agente é informado de que deve usar um comando de shell, que lê por inteiro primeiro.',
       X: 'Vai executar este comando neste Mac.',
       N: 'Vai enviar este pedido pela internet.',
       $: 'Vai movimentar este montante da sua carteira ou do seu cartão.',
@@ -223,6 +250,10 @@ export const ptPtPermissions: PermissionsCopy = {
     mode: (name: string) => `Modo: ${name}`,
     scopeLabel: 'Permitir para',
     scopes: { once: 'Só desta vez', session: 'Esta conversa', project: 'Este projeto', standing: 'Em todo o lado' },
+    laterConfined:
+      'Só este comando vai para fora. Os comandos seguintes que nenhuma verificação trava correm sem perguntar e ficam dentro do Seatbelt, por isso um que precise de mais é recusado. Revogue isto em Definições › Agente › Permissões para voltar a ser perguntado.',
+    heldRead:
+      'Este ficheiro ou pasta guarda chaves ou tokens, ou corre a partir da sua shell. Com o Seatbelt desligado nada mais impede: permitir dá ao agente tudo o que lá está, e o que ele lê vai para o modelo.',
     covers: {
       session: (what: string) => `Permite todos os pedidos para ${what} nesta conversa, não só este.`,
       project: (what: string) => `Permite todos os pedidos para ${what} neste projeto, não só este.`,
@@ -231,6 +262,19 @@ export const ptPtPermissions: PermissionsCopy = {
     deny: 'Recusar',
     allow: 'Permitir',
     expires: 'Sem resposta em dois minutos conta como Recusar.'
+  },
+  modeReset: {
+    standing: (mode: string) =>
+      `A sua predefinição voltou a ${mode} porque o registo estava em falta. Escolha-a de novo.`,
+    project: (mode: string | null) =>
+      mode === null
+        ? 'O modo próprio de um projeto foi removido porque o registo estava em falta. Escolha-o de novo.'
+        : `O modo de um projeto voltou a ${mode} porque o registo estava em falta. Escolha-o de novo.`,
+    session: (mode: string | null) =>
+      mode === null
+        ? 'O modo próprio de uma conversa foi removido porque o registo estava em falta. Escolha-o de novo.'
+        : `O modo de uma conversa voltou a ${mode} porque o registo estava em falta. Escolha-o de novo.`,
+    dismiss: 'Fechar'
   },
   approvalPointer: 'À espera da sua permissão — responda no pedido no topo.'
 }

@@ -108,6 +108,7 @@ export const acpWork: AcpWorkTranslations = {
   chainGaps: count =>
     `中断または修復された書き込みが ${count} 件あります。台帳にはそれぞれ欠落として記録されています。`,
   chainBroken: 'ワーク台帳を検証できません。',
+  chainVerifying: 'ワーク台帳を検証しています…',
   errors: {
     gesture: 'あなた自身のクリックが必要です。',
     invalid: 'そのジョブはもう受付中のオファーではありません。',

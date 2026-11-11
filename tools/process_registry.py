@@ -45,6 +45,29 @@ CHECKPOINT_PATH = get_hermes_home() / "processes.json"
 _CHECKPOINT_PATH_AT_IMPORT = CHECKPOINT_PATH
 
 
+def _background_paths(temp_dir: str, session_id: str) -> tuple[str, str, str]:
+    """Where a background command's log, pid and exit code live inside its environment."""
+    log_path, pid_path, exit_path = (f"{temp_dir}/hermes_bg_{session_id}.{ext}" for ext in ("log", "pid", "exit"))
+    return log_path, pid_path, exit_path
+
+
+def background_shell(command: str, temp_dir: str, session_id: str) -> str:
+    """The shell line that starts a background command on an environment (plugins/iclone-confinement/launcher.py
+    recognises exactly this shape). The command text comes from the model, so it is only ever one quoted word.
+
+    The hangup is ignored in the wrapper's own shell and stays ignored through exec, for the command and whatever it
+    starts; the wrapper survives too, so the exit code is still written. Not nohup: it asks the kernel about another
+    process to learn whether it holds a terminal, and inside confinement that is refused and it exits 127."""
+    q = shlex.quote
+    log_path, pid_path, exit_path = _background_paths(temp_dir, session_id)
+    # g17: `;`, never `&&`: "a && ( b ) &" backgrounds the whole list, so $! would name a shell with no trap, which a hangup
+    # kills while the command lives on, and every later poll and kill would read it as gone.
+    return (f"mkdir -p {q(temp_dir)}; "
+            f"( trap '' HUP; bash -lc {q(command)} > {q(log_path)} 2>&1; "
+            f"rc=$?; printf '%s\\n' \"$rc\" > {q(exit_path)} ) & "
+            f"echo $! > {q(pid_path)} && cat {q(pid_path)}")
+
+
 def _checkpoint_path() -> Path:
     """Active profile's checkpoint file at call time: the patched ``CHECKPOINT_PATH`` when a test
     changed it, else live profile-scoped HERMES_HOME — the multiplexed gateway serves every
@@ -1297,15 +1320,13 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin):
         session = self._new_session(command, task_id, owner_task_id, session_key, cwd, env_ref=env, pid_scope="sandbox",
                                     persist_on_release=persist_on_release)
         temp_dir = self._env_temp_dir(env)
-        log_path, pid_path, exit_path = (f"{temp_dir}/hermes_bg_{session.id}.{ext}" for ext in ("log", "pid", "exit"))
+        log_path, pid_path, exit_path = _background_paths(temp_dir, session.id)
         q = shlex.quote
-        bg_command = (
-            f"mkdir -p {q(temp_dir)} && "
-            f"( nohup bash -lc {q(command)} > {q(log_path)} 2>&1; "
-            f"rc=$?; printf '%s\\n' \"$rc\" > {q(exit_path)} ) & "
-            f"echo $! > {q(pid_path)} && cat {q(pid_path)}")
+        bg_command = background_shell(command, temp_dir, session.id)
         try:
-            result = env.execute(bg_command, timeout=timeout, rewrite_compound_background=False)
+            # iclone-seam: G2 A4, a confined environment runs it in the folder asked for: the owner's Allow is bound to it.
+            where = {"cwd": cwd} if cwd and hasattr(env, "background_alive") else {}
+            result = env.execute(bg_command, timeout=timeout, rewrite_compound_background=False, **where)
             output = result.get("output", "").strip()
             session.pid = next((int(ln) for ln in map(str.strip, output.splitlines()) if ln.isdigit()), None)
             # No PID from the wrapper (syntax error, broken redirect): a failed launch,
@@ -1491,10 +1512,17 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin):
                     self._check_watch_patterns(session, delta)
                     self._emit_output(session, delta)
 
-                check = env.execute(
-                    f"kill -0 \"$(cat {q(pid_path)} 2>/dev/null)\" 2>/dev/null; echo $?", timeout=5)
-                check_output = check.get("output", "").strip()
-                if check_output and check_output.splitlines()[-1].strip() != "0":
+                # An environment whose every command is its own sandbox cannot ask this through its shell: the kernel
+                # refuses the signal for a command that lives (plugins/iclone-confinement/seatbelt.py).
+                own_answer = getattr(env, "background_alive", None)
+                if callable(own_answer):
+                    exited = not own_answer(session.pid)
+                else:
+                    check = env.execute(
+                        f"kill -0 \"$(cat {q(pid_path)} 2>/dev/null)\" 2>/dev/null; echo $?", timeout=5)
+                    check_output = check.get("output", "").strip()
+                    exited = bool(check_output) and check_output.splitlines()[-1].strip() != "0"
+                if exited:
                     # Exited -- read the exit code captured by the wrapper shell.
                     exit_str = env.execute(f"cat {q(exit_path)} 2>/dev/null", timeout=5).get("output", "").strip()
                     try:
@@ -2278,7 +2306,14 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin):
             # leaves Git Bash descendants behind.
             self._terminate_host_pid(session.process.pid, session.host_start_time)
         elif session.env_ref and session.pid:
-            session.env_ref.execute(f"kill {session.pid} 2>/dev/null", timeout=5)
+            own_stop = getattr(session.env_ref, "stop_background", None)
+            if callable(own_stop):
+                left = own_stop(session.pid)
+                if left:
+                    return {"status": "error", "error": f"Kill incomplete: {len(left)} process(es) still alive; session running",
+                            "session_id": session.id, "survivors": left, "process_running": True}
+            else:
+                session.env_ref.execute(f"kill {session.pid} 2>/dev/null", timeout=5)
         elif session.detached and session.pid_scope == "host" and session.pid:
             # Same fate as poll/list: a gone or reused PID means our process is
             # gone — never tree-kill the stranger — but a live PID with an

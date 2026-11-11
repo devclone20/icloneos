@@ -9,6 +9,7 @@ Run with:  python -m pytest tests/test_delegate.py -v
    or:     python tests/test_delegate.py
 """
 
+from tests.chatgpt_token_fixture import chatgpt_jwt
 import json
 import threading
 import time
@@ -183,7 +184,7 @@ class TestDelegateTask(unittest.TestCase):
     def test_child_inherits_runtime_credentials(self):
         parent = _make_mock_parent(depth=0)
         parent.base_url = "https://chatgpt.com/backend-api/codex"
-        parent.api_key="***"
+        parent.api_key = chatgpt_jwt()
         parent.provider = "openai-codex"
         parent.api_mode = "codex_responses"
 

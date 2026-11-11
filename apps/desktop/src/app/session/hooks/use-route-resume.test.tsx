@@ -244,6 +244,41 @@ describe('useRouteResume', () => {
     expect(markSelectionRestore).toHaveBeenCalledTimes(1)
   })
 
+  it('a backend that came back while Settings was open still re-resumes the conversation on return (F41b)', () => {
+    const resumeSession = vi.fn(async () => undefined)
+
+    const props = {
+      activeSessionId: 'runtime-1',
+      activeSessionIdRef: { current: 'runtime-1' } as MutableRefObject<null | string>,
+      creatingSessionRef: { current: false },
+      freshDraftReady: false,
+      resumeSession,
+      runtimeIdByStoredSessionIdRef: { current: new Map([['session-1', 'runtime-1']]) },
+      selectedStoredSessionId: 'session-1',
+      selectedStoredSessionIdRef: { current: 'session-1' } as MutableRefObject<null | string>,
+      startFreshSessionDraft: vi.fn()
+    }
+
+    const chat = { currentView: 'chat', locationPathname: '/session-1', routedSessionId: 'session-1' }
+    const settings = { currentView: 'settings', locationPathname: '/settings', routedSessionId: null }
+    const { rerender } = render(<RouteResumeHarness {...props} {...chat} gatewayState="open" />)
+
+    resumeSession.mockClear()
+    rerender(<RouteResumeHarness {...props} {...settings} gatewayState="open" />)
+    rerender(<RouteResumeHarness {...props} {...settings} gatewayState="closed" />)
+    rerender(<RouteResumeHarness {...props} {...settings} gatewayState="open" />)
+    expect(resumeSession).not.toHaveBeenCalled()
+
+    // The runtime id it still holds died with the old backend, so looking "already active" must not skip this.
+    rerender(<RouteResumeHarness {...props} {...chat} gatewayState="open" />)
+    expect(resumeSession).toHaveBeenCalledTimes(1)
+    expect(resumeSession).toHaveBeenCalledWith('session-1', true)
+
+    rerender(<RouteResumeHarness {...props} {...settings} gatewayState="open" />)
+    rerender(<RouteResumeHarness {...props} {...chat} gatewayState="open" />)
+    expect(resumeSession).toHaveBeenCalledTimes(1)
+  })
+
   it('resumes the selected route again when the gateway reconnects', () => {
     const resumeSession = vi.fn(async () => undefined)
     const startFreshSessionDraft = vi.fn()

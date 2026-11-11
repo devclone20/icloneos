@@ -139,6 +139,7 @@ function ToolPayloadDisclosure({ args, result }: { args: unknown; result: unknow
 }
 
 interface ToolStatusCopy {
+  permissionAsked: string
   statusDone: string
   statusError: string
   statusRecovered: string
@@ -193,6 +194,10 @@ function statusGlyph(status: ToolStatus, copy: ToolStatusCopy): ReactNode {
 
   if (status === 'error') {
     return <AlertCircle aria-label={copy.statusError} className="size-3.5 shrink-0 text-[color:var(--ic-danger)]" />
+  }
+
+  if (status === 'asked') {
+    return <AlertCircle aria-label={copy.permissionAsked} className="size-3.5 shrink-0 text-(--ic-text-2)" />
   }
 
   if (status === 'warning') {

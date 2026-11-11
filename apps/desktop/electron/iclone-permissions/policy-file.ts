@@ -9,7 +9,7 @@
  * back a revoked grant or an older mode. Bad, missing or replayed ⇒ the plugin runs Manual.
  */
 import { createHmac, timingSafeEqual } from 'node:crypto'
-import { readdirSync, readFileSync, rmSync } from 'node:fs'
+import { readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 import { writeFileAtomicSync } from '../lib/atomic-write'
@@ -23,6 +23,8 @@ const POLICY_DIR = 'policy'
 const GEN_FILE = 'policy-gen'
 /** Live Hermes spawns main signs a policy for; the oldest is retired beyond this (its key still verifies replays). */
 const LIVE_KEYS_MAX = 16
+/** Generations reserved per durable write of `policy-gen` (they are clock milliseconds: ten minutes of publishing). */
+const GEN_RESERVE = 600_000
 
 interface PolicyBody {
   v: 1
@@ -30,6 +32,9 @@ interface PolicyBody {
   issuedAt: string
   standing: PermissionMode
   projects: Record<string, PermissionMode>
+  /** fx19: every folder the store has a row for, whatever the seal state. A list, never a mode: an unsealed run clamps
+   *  `projects` to {} (nothing wider than Manual), and the launcher still has to know which folders the user allowed. */
+  folders?: string[]
   sessions: Record<string, PermissionMode>
   table: typeof MODE_TABLE
   ceilings: Record<string, Ceiling>
@@ -68,6 +73,7 @@ export function verifyMac(key: Buffer, text: string, mac: unknown): boolean {
 
 export function buildPolicyBody(input: {
   mode: ModeRecord
+  folders?: readonly string[]
   grants: readonly Grant[]
   ceilings: Record<string, Ceiling>
   protectedPaths: string[]
@@ -83,6 +89,7 @@ export function buildPolicyBody(input: {
     issuedAt: input.now.toISOString(),
     standing: input.mode.standing,
     projects: input.mode.projects,
+    folders: [...(input.folders ?? Object.keys(input.mode.projects))],
     sessions: input.mode.sessions,
     table: MODE_TABLE,
     ceilings: input.ceilings,
@@ -109,6 +116,8 @@ export function createPolicySigner(dir: string, keys: PermissionKeys, now: () =>
   const genFile = path.join(dir, GEN_FILE)
   const live = new Map<string, Buffer>()
   let lastBody: Omit<PolicyBody, 'gen'> | null = null
+  // V-3: what each live spawn's file was when main wrote it, so an unchanged body is not re-signed (see publish).
+  const written = new Map<string, string>()
 
   const readGen = (): number => {
     try {
@@ -120,12 +129,20 @@ export function createPolicySigner(dir: string, keys: PermissionKeys, now: () =>
     }
   }
 
+  // F-5 across restarts, V-3 without a flush per publish: `policy-gen` holds a CEILING, durably written before any
+  // generation up to it is used, so every generation ever signed is <= what the file says and a restart starts past it.
+  // One F_FULLFSYNC per GEN_RESERVE of generations (or of clock), instead of one per click.
   let gen = readGen()
+  let ceiling = gen
 
   const nextGen = (): number => {
-    // Strictly increasing: past the persisted value, past the last one in memory, and never behind the clock.
-    gen = Math.max(gen + 1, readGen() + 1, now())
-    writeFileAtomicSync(genFile, `${gen}\n`, { mode: 0o600, dirMode: 0o700 })
+    // Strictly increasing: past the last one (in memory, or the persisted ceiling at start), never behind the clock.
+    gen = Math.max(gen + 1, now())
+
+    if (gen > ceiling) {
+      ceiling = Math.max(gen, readGen()) + GEN_RESERVE
+      writeFileAtomicSync(genFile, `${ceiling}\n`, { mode: 0o600, dirMode: 0o700 })
+    }
 
     return gen
   }
@@ -133,15 +150,24 @@ export function createPolicySigner(dir: string, keys: PermissionKeys, now: () =>
   const writeFor = (keyId: string, key: Buffer, body: PolicyBody) => {
     const text = JSON.stringify(body)
     const signed: SignedPolicy = { v: 1, keyId, body: text, sig: createHmac('sha256', key).update(text).digest('hex') }
+    const file = path.join(policyDir, `${keyId}.json`)
 
-    writeFileAtomicSync(path.join(policyDir, `${keyId}.json`), `${JSON.stringify(signed)}\n`, {
-      mode: 0o600,
-      dirMode: 0o700
-    })
+    // V-3: atomic for the plugin that reads it, not fsynced. A spawn file is never trusted across a crash: every key is
+    // per spawn and in memory, so the next launch mints new ones and removes these files at its first publish, and a
+    // file lost to a power cut reads as no policy (Manual). What must survive a crash is the generation (nextGen).
+    writeFileAtomicSync(file, `${JSON.stringify(signed)}\n`, { mode: 0o600, dirMode: 0o700, durable: false })
+    written.set(keyId, fileStamp(file))
+  }
+
+  const liveFileIntact = (keyId: string): boolean => {
+    const stamp = written.get(keyId)
+
+    return stamp !== undefined && stamp !== '' && fileStamp(path.join(policyDir, `${keyId}.json`)) === stamp
   }
 
   const retire = (keyId: string) => {
     live.delete(keyId)
+    written.delete(keyId)
     rmSync(path.join(policyDir, `${keyId}.json`), { force: true })
   }
 
@@ -173,6 +199,13 @@ export function createPolicySigner(dir: string, keys: PermissionKeys, now: () =>
     currentGen: (): number => gen,
     /** Re-signs every live spawn's file under a new generation; files of keys main no longer holds are removed. */
     publish(body: Omit<PolicyBody, 'gen'>): number {
+      // V-3: the same body (all but its issue time) with every live file still as main wrote it is already in force:
+      // no new generation, no re-signing. A changed body always gets a newer generation; a live file that moved (edited,
+      // removed, replaced) is re-signed under a new one too, so it is never trusted to still be ours.
+      if (lastBody && sameBody(lastBody, body) && [...live.keys()].every(keyId => liveFileIntact(keyId))) {
+        return gen
+      }
+
       lastBody = body
 
       const published = nextGen()
@@ -194,6 +227,24 @@ export function createPolicySigner(dir: string, keys: PermissionKeys, now: () =>
       return published
     }
   }
+}
+
+const fileStamp = (file: string): string => {
+  try {
+    const stat = statSync(file)
+
+    return `${stat.ino}:${stat.size}:${stat.ctimeMs}:${stat.mtimeMs}`
+  } catch {
+    return ''
+  }
+}
+
+/** Two bodies that differ only in `issuedAt` sign the same policy. */
+function sameBody(a: Omit<PolicyBody, 'gen'>, b: Omit<PolicyBody, 'gen'>): boolean {
+  const { issuedAt: _a, ...left } = a
+  const { issuedAt: _b, ...right } = b
+
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 export type PolicySigner = ReturnType<typeof createPolicySigner>

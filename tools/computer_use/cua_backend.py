@@ -21,6 +21,7 @@ from hermes_cli._subprocess_compat import windows_hide_flags
 from hermes_platform.host.runtime import is_wsl
 from tools.computer_use.backend import ActionResult, ComputerUseBackend
 from tools.computer_use.cua_backend_capture import _CaptureMixin
+from tools.computer_use import cua_backend_driver as _driver
 from tools.computer_use.cua_backend_daemon import _EmbeddedCuaDaemon
 from tools.computer_use.cua_backend_driver import (  # noqa: F401 — resolve_cua_driver_cmd: frozen updater surface
     _CUA_DRIVER_CMD_ENV, cua_driver_binary_available, cua_driver_runtime_contract_status,
@@ -163,6 +164,10 @@ def sandbox_mcp_invocation() -> Optional[Tuple[Tuple[str, List[str]], Dict[str, 
     placement gets its screen started here and a ``refused`` one raises — the host driver is never the
     fallback for a sandbox whose screen is down."""
     from tools.bot_desktop import placement, runtime as _bd_runtime
+    # S10, lead's ruling: the signed driver through the launcher drives this Mac's apps; it hosts no screen for the sandbox,
+    # so placement does not decide it. Only this path, only this backend: the browser and any other service still ask.
+    if _driver.door_socket() and placement._terminal_backend() == "iclone_seatbelt":
+        return None
     if _bd_runtime.tool_placement() == placement.GATEWAY:
         return None
     published = _bd_runtime.published_env()
@@ -193,6 +198,9 @@ def _run_quiet(argv: List[str], *, timeout: float, swallow: Any = (), **kw: Any)
     """``subprocess.run`` for short probe verbs: text mode, stdin=DEVNULL unless overridden (older drivers fall into a
     stdin-reading mode on unknown verbs; EOF makes them exit fast instead of blocking until the timeout), output
     captured unless the caller redirects it. Exceptions in ``swallow`` return None; others raise."""
+    if argv and argv[0] == _driver._door_module().COMMAND:
+        kw["env"] = _driver.spawn_env(argv, kw.get("env"))
+        argv = _driver.spawn_argv(argv)
     kw.setdefault("stdin", subprocess.DEVNULL)
     kw.setdefault("encoding", "utf-8")
     kw.setdefault("errors", "replace")
@@ -239,6 +247,17 @@ def _linux_session_locked() -> Optional[bool]:
     except Exception:
         return None
 
+def _under_icloneos() -> bool:
+    from hermes_cli.iclone_policy_env import locked
+    return locked()
+
+
+def _repair_step() -> str:
+    """What the user does about a driver that is not ready (ruling R4): the app's door there, the CLI elsewhere."""
+    return ("In icloneOS open Settings > Setup > Computer use and press Install CuaDriver." if _under_icloneos()
+            else "Run `hermes computer-use install` to repair it.")
+
+
 def _empty_discovery_reason() -> str:
     """One-line diagnosis for 'window discovery found nothing'."""
     if _linux_session_locked() is True:
@@ -248,7 +267,8 @@ def _empty_discovery_reason() -> str:
         return "no DISPLAY is set — X11/XWayland is not reachable from this process"
     if sys.platform == "darwin":  # headless Mac / asleep panel: ScreenCaptureKit has 0 shareable displays while TCC looks fine
         return ("window discovery returned no windows; on macOS this usually means no shareable display (headless Mac or "
-                "panel asleep) — wake the display or attach a monitor/HDMI dummy, then run `hermes computer-use doctor`")
+                "panel asleep) — wake the display or attach a monitor/HDMI dummy"
+                + (", then try again" if _under_icloneos() else ", then run `hermes computer-use doctor`"))
     return "window discovery returned no windows; run `hermes computer-use doctor` (display reachability, AX capability)"
 
 class CuaDriverBackend(_CaptureMixin, _InputMixin, ComputerUseBackend):
@@ -259,7 +279,8 @@ class CuaDriverBackend(_CaptureMixin, _InputMixin, ComputerUseBackend):
             raise ValueError(f"unsupported cua-driver permission mode: {permission_mode}")
         self.permission_mode = permission_mode
         self._embedded_daemon: Optional[_EmbeddedCuaDaemon] = None
-        if permission_mode != "standard":
+        if permission_mode != "standard" or _driver.icloneos_started():
+            # Under icloneOS every mode has its own daemon: it ends with the app (S10), and never touches a shared one.
             # Manifest: mandatory for bounded (the daemon validates it), optional for unrestricted where it still
             # caps what an approval-bypassed run may touch.
             raw = _computer_use_cfg().get("capability_manifest")
@@ -291,14 +312,15 @@ class CuaDriverBackend(_CaptureMixin, _InputMixin, ComputerUseBackend):
         if sandbox_mcp_invocation() is not None:
             contract = {"ready": True}
         else:
-            if not os.environ.get(_CUA_DRIVER_CMD_ENV, "").strip():
+            # Under icloneOS nothing downloads on first use: the driver is found, or the Install button says what it fetches.
+            if not os.environ.get(_CUA_DRIVER_CMD_ENV, "").strip() and not _driver.icloneos_started():
                 from pm import ensure
                 ensure("cua-driver")
             contract = cua_driver_runtime_contract_status()
         if not contract.get("ready"):
             raise RuntimeError(f"cua-driver is not ready: {contract.get('reason') or 'runtime contract is incomplete'}. "
                                + ("Update the binary selected by HERMES_CUA_DRIVER_CMD or remove that override."
-                                  if os.environ.get(_CUA_DRIVER_CMD_ENV, "").strip() else "Run `hermes computer-use install` to repair it."))
+                                  if os.environ.get(_CUA_DRIVER_CMD_ENV, "").strip() else _repair_step()))
 
         # The MCP client SDK (`mcp`) is an optional dependency (the
         # `computer-use` / `mcp` extras), not part of Hermes' minimal core.
@@ -353,6 +375,8 @@ class CuaDriverBackend(_CaptureMixin, _InputMixin, ComputerUseBackend):
             logger.debug("cua-driver %s: %s", what, e)
 
     def is_available(self) -> bool:
+        if sys.platform == "darwin" and _driver.icloneos_started():
+            return True  # offered in every state: a missing driver or permission answers with what to do, never a silent gap
         return sys.platform in ("darwin", "win32", "linux") and cua_driver_binary_available()  # other Unix-likes untested E2E
 
     def _clear_active_target(self) -> None:

@@ -2067,6 +2067,9 @@ def _bridge_config_to_env(_cfg: dict) -> None:
     _terminal_cfg = _cfg.get("terminal", {})
     if _terminal_cfg and isinstance(_terminal_cfg, dict):
         _bridge_terminal_config_to_env(_terminal_cfg)
+    from hermes_cli.iclone_policy_env import settle_backend  # iclone-seam: fx35
+
+    settle_backend(os.environ)
     _auxiliary_cfg = _cfg.get("auxiliary", {})
     if _auxiliary_cfg and isinstance(_auxiliary_cfg, dict):
         _bridge_auxiliary_config_to_env(_auxiliary_cfg)

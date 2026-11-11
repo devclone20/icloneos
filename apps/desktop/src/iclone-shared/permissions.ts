@@ -13,6 +13,8 @@ export const ACTION_CLASSES = ['R', 'Wp', 'Wo', 'X', 'N', '$', 'M', 'S', 'I', 'D
 export type ActionClass = (typeof ACTION_CLASSES)[number]
 
 export type ModeScope = 'project' | 'session' | 'standing'
+/** S11: `new-session` is never stored: main holds it for the window that chose it, for the session that window starts. */
+export type ChoiceScope = 'new-session' | ModeScope
 export type PermissionDoorScope = 'once' | ModeScope
 
 /** V3-F2 — the functions a user sets a level for (Settings › Agent › Permissions › Functions), in display order. The
@@ -111,6 +113,8 @@ export interface PermissionIntegrityFinding {
 }
 
 export interface PermissionStateView {
+  /** S11: the choice main holds for THIS window's empty chat, for the session it starts next; only that window sees it. */
+  pendingMode?: PermissionMode | null
   /**
    * Whether the master key was sealed in the system keychain at launch. An unsealed policy clamps to Manual
    * everywhere, so the levels below are the user's stored CHOICE. A choice made unsealed takes effect only after a
@@ -127,6 +131,8 @@ export interface PermissionStateView {
     standing: PermissionMode
     projects: Record<string, PermissionMode>
     sessions: Record<string, PermissionMode>
+    /** fx20: the folders "Allow this folder" listed, by real path; no mode. */
+    folders?: string[]
     updatedAt: string
   }
   grants: PermissionGrantView[]
@@ -134,12 +140,25 @@ export interface PermissionStateView {
   functions: FunctionLevels
   fnGrants: FunctionGrantView[]
   ceilings: Record<string, 'off' | 'on' | 'undecided'>
-  chain: { ok: boolean; records: number; gaps: number }
+  /** `verifying`: a re-verification is running; `ok` is false until it ends and means nothing yet. */
+  chain: { ok: boolean; records: number; gaps: number; verifying?: boolean }
   /** A-1: every state file not in force as written (one alert line each in the pane); empty when all verify. */
   integrity: PermissionIntegrityFinding[]
   project: string | null
   /** Whether the permission gate in the running Hermes is proven loaded and answering (main's own observation). */
   enforcement: PermissionEnforcement
+  /** B2-m1: the layers this sealed launch narrowed because their audit record was missing (shown once, calmly). */
+  modeReset?: PermissionModeResetView[]
+}
+
+/** B2-m1: one mode layer put back at launch. `now` null: the project's or chat's own mode was removed. `id` is the
+ *  audit record that says so, which the window keeps once dismissed. */
+export interface PermissionModeResetView {
+  id: string
+  scope: ModeScope
+  key: string | null
+  was: PermissionMode
+  now: PermissionMode | null
 }
 
 const PERMISSION_ENFORCEMENT = ['degraded', 'enforced', 'no-agent', 'not-enforced', 'starting'] as const
@@ -168,7 +187,7 @@ export interface AuditRecordView {
 }
 
 export type SetModeResultView =
-  | { ok: true; mode: PermissionMode; scope: ModeScope }
+  | { ok: true; mode: PermissionMode; scope: ChoiceScope }
   | { ok: false; error: 'confirm' | 'gesture' | 'invalid'; message: string }
 
 export type SetFunctionLevelResultView =

@@ -45,8 +45,19 @@ def runtime_lock(project: Path, *, timeout: float | None = INSTALL_LOCK_TIMEOUT_
     cannot be skipped pass ``timeout=None`` — an install the user asked for is theirs to wait on.
     """
     state = install_state_dir(project)
-    state.mkdir(parents=True, exist_ok=True)
-    fd = os.open(state / ".install.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        state.mkdir(parents=True, exist_ok=True)
+        fd = os.open(state / ".install.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    except PermissionError:
+        # icloneOS: the runtime profile never writes installs/, and the folder can exist because the user ran with
+        # isolation off. A reader carries on as a lost race does; nothing else in this process waits on that lock.
+        from hermes_cli.iclone_policy_env import confined_at_exec
+
+        if timeout is None or not confined_at_exec():
+            raise
+        LOG.debug("dependency lock not writable under the confinement profile; continuing without it")
+        yield False
+        return
     try:
         if not _lock(fd, wait=True, timeout=timeout):
             LOG.warning(

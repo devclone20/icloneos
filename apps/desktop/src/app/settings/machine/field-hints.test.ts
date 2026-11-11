@@ -29,7 +29,7 @@ const REWRITTEN = [
 ]
 
 // ar keeps its hints inline in i18n/ar/settings/shell (outside this front): the Arabic sentences for the rewritten rows
-// are in RESUME/run/gates/L/extra/UF3C_20261021_r1_ar_hints.md for the lead; until wired, ar is checked for banned words only.
+// are in the UF3C r1 hint note for the lead; until wired, ar is checked for banned words only.
 const ar = arLocale.settings.fieldDescriptions
 
 const BANNED = [

@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
-import { findStoredIdForRuntimeId, resolveRoutingSessionId, resolveSessionRpcOwner } from './wiring-routing'
+import { findStoredIdForRuntimeId, openNewChatDoor, plusStacksTile, resolveRoutingSessionId, resolveSessionRpcOwner } from './wiring-routing'
 
 describe('findStoredIdForRuntimeId', () => {
   it('reverse-resolves a runtime id to its stored id', () => {
@@ -170,5 +170,24 @@ describe('resolveSessionRpcOwner', () => {
         tileOwnerRoute: none
       })
     ).toBeUndefined()
+  })
+})
+
+describe('openNewChatDoor (Cmd+T)', () => {
+  it('starts a new chat in main while no pane renders tiles', () => {
+    const startFresh = vi.fn()
+    const openTile = vi.fn()
+
+    openNewChatDoor(startFresh, openTile)
+    expect(startFresh).toHaveBeenCalledTimes(1)
+    expect(openTile).not.toHaveBeenCalled()
+  })
+})
+
+describe('plusStacksTile', () => {
+  it('never stacks a tile while no pane renders tiles: the + starts a chat the user can see', () => {
+    expect(plusStacksTile(true, true)).toBe(false)
+    expect(plusStacksTile(true, false)).toBe(false)
+    expect(plusStacksTile(undefined, true)).toBe(false)
   })
 })

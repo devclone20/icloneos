@@ -6,7 +6,7 @@ import { PRODUCT_NAME } from '@/i18n/en/enConsent'
 import type { SetupPackageState, SetupSection, SetupSystemAction, SetupSystemItem, SetupSystemStatus } from './types'
 
 export type SetupRowId = SetupSystemItem | 'computerUse'
-export type ComputerUseState = 'granted' | 'needs' | 'notInstalled' | 'unavailable'
+export type ComputerUseState = 'granted' | 'needs' | 'notInstalled' | 'unavailable' | 'unknown'
 
 export interface SetupBank {
   sheet: {
@@ -38,6 +38,10 @@ export interface SetupBank {
     action: Record<Exclude<SetupSystemAction, 'none'>, string>
     testNotification: string
     restart: string
+    restartNeeded: string
+    identity: (bundleId: string) => string
+    identityOther: (bundleId: string | null) => string
+    switchOnStale: string
     declined: string
     perApp: string
     notification: { title: string; body: string }
@@ -87,7 +91,7 @@ const en: SetupBank = {
       microphone: { name: 'Microphone', purpose: 'Voice messages, voice conversation and the wake word.' },
       screen: {
         name: 'Screen recording',
-        purpose: 'Lets the HUD and your agent read the titles of the windows on screen. No pixels are kept.'
+        purpose: 'Lets the HUD and your agent read the titles of the windows on screen, and lets your agent record the screen to a file when you allow it.'
       },
       notifications: { name: 'Notifications', purpose: 'Tells you when a long task finishes or needs you.' },
       computerUse: {
@@ -109,6 +113,7 @@ const en: SetupBank = {
       denied: 'Not allowed',
       notDetermined: 'Not asked yet',
       notSetUp: 'Not set up',
+      restartNeeded: 'Restart to apply',
       restricted: 'Managed by your organisation',
       declined: 'Off in Privacy',
       unknown: 'macOS decides'
@@ -117,11 +122,18 @@ const en: SetupBank = {
       granted: 'Allowed',
       needs: 'Not allowed yet',
       notInstalled: 'Not installed',
-      unavailable: 'Available once the agent is running'
+      unavailable: 'Available once the agent is running',
+      unknown: 'Could not be read'
     },
-    action: { request: 'Allow…', openSettings: 'Open System Settings' },
+    action: { request: 'Allow…', openSettings: 'Open System Settings', restart: 'Restart now' },
     testNotification: 'Show a test notification',
     restart: `macOS applies a new Screen recording permission after ${PRODUCT_NAME} restarts.`,
+    restartNeeded: `macOS has allowed this. It applies when ${PRODUCT_NAME} starts again; anything your agent is doing now will stop.`,
+    identity: bundleId => `macOS decides this for ${bundleId}.`,
+    identityOther: bundleId =>
+      `This build runs as ${bundleId ?? 'an unknown app'}, not ${PRODUCT_NAME}. macOS judges it separately: a permission given to the installed app does not apply here.`,
+    switchOnStale:
+      'Switch already on? macOS is holding an old entry: select it, press −, come back and press Allow… once more.',
     declined: 'Switched off in Settings › Privacy, so the app never asks macOS for it.',
     perApp:
       'Controlling another app and the local network are asked by macOS per app, the first time they are used. No app can ask for them in advance.',
@@ -206,6 +218,7 @@ const ptPt: SetupBank = {
       denied: 'Não permitido',
       notDetermined: 'Ainda não pedido',
       notSetUp: 'Não configurado',
+      restartNeeded: en.system.status.restartNeeded,
       restricted: 'Gerido pela sua organização',
       declined: 'Desativado em Privacidade',
       unknown: 'O macOS decide'
@@ -214,11 +227,16 @@ const ptPt: SetupBank = {
       granted: 'Permitido',
       needs: 'Ainda não permitido',
       notInstalled: 'Não instalado',
-      unavailable: 'Disponível quando o agente estiver em execução'
+      unavailable: 'Disponível quando o agente estiver em execução',
+      unknown: en.system.computerUse.unknown
     },
-    action: { request: 'Permitir…', openSettings: 'Abrir Definições do Sistema' },
+    action: { request: 'Permitir…', openSettings: 'Abrir Definições do Sistema', restart: en.system.action.restart },
     testNotification: 'Mostrar uma notificação de teste',
     restart: `O macOS aplica uma nova permissão de Gravação do ecrã depois de o ${PRODUCT_NAME} reiniciar.`,
+    restartNeeded: en.system.restartNeeded,
+    identity: en.system.identity,
+    identityOther: en.system.identityOther,
+    switchOnStale: en.system.switchOnStale,
     declined: 'Desativado em Definições › Privacidade, por isso a aplicação nunca o pede ao macOS.',
     perApp:
       'Controlar outra aplicação e a rede local são pedidos pelo macOS por aplicação, na primeira utilização. Nenhuma aplicação os pode pedir antecipadamente.',
@@ -301,6 +319,7 @@ const ja: SetupBank = {
       denied: '許可されていません',
       notDetermined: 'まだ確認していません',
       notSetUp: '未設定',
+      restartNeeded: en.system.status.restartNeeded,
       restricted: '組織が管理しています',
       declined: 'プライバシーでオフ',
       unknown: 'macOS が決定'
@@ -309,11 +328,16 @@ const ja: SetupBank = {
       granted: '許可済み',
       needs: 'まだ許可されていません',
       notInstalled: '未インストール',
-      unavailable: 'エージェントの実行中に利用できます'
+      unavailable: 'エージェントの実行中に利用できます',
+      unknown: en.system.computerUse.unknown
     },
-    action: { request: '許可…', openSettings: 'システム設定を開く' },
+    action: { request: '許可…', openSettings: 'システム設定を開く', restart: en.system.action.restart },
     testNotification: 'テスト通知を表示',
     restart: `新しい画面収録の権限は、${PRODUCT_NAME} の再起動後に macOS が適用します。`,
+    restartNeeded: en.system.restartNeeded,
+    identity: en.system.identity,
+    identityOther: en.system.identityOther,
+    switchOnStale: en.system.switchOnStale,
     declined: '設定 › プライバシーでオフになっているため、アプリが macOS に求めることはありません。',
     perApp:
       '他のアプリの操作とローカルネットワークは、初めて使うときに macOS がアプリごとに尋ねます。事前に求めることはどのアプリにもできません。',
@@ -394,6 +418,7 @@ const zh: SetupBank = {
       denied: '未允许',
       notDetermined: '尚未询问',
       notSetUp: '未设置',
+      restartNeeded: en.system.status.restartNeeded,
       restricted: '由你的组织管理',
       declined: '已在隐私中关闭',
       unknown: '由 macOS 决定'
@@ -402,11 +427,16 @@ const zh: SetupBank = {
       granted: '已允许',
       needs: '尚未允许',
       notInstalled: '未安装',
-      unavailable: '智能体运行后可用'
+      unavailable: '智能体运行后可用',
+      unknown: en.system.computerUse.unknown
     },
-    action: { request: '允许…', openSettings: '打开系统设置' },
+    action: { request: '允许…', openSettings: '打开系统设置', restart: en.system.action.restart },
     testNotification: '显示测试通知',
     restart: `新的屏幕录制权限会在 ${PRODUCT_NAME} 重启后由 macOS 生效。`,
+    restartNeeded: en.system.restartNeeded,
+    identity: en.system.identity,
+    identityOther: en.system.identityOther,
+    switchOnStale: en.system.switchOnStale,
     declined: '已在 设置 › 隐私 中关闭，因此应用绝不会向 macOS 请求。',
     perApp: '控制其他应用和本地网络由 macOS 在首次使用时按应用询问。任何应用都无法提前请求。',
     notification: { title: '通知已开启', body: `${PRODUCT_NAME} 将通过这种方式提醒你。` }
@@ -486,6 +516,7 @@ const zhHant: SetupBank = {
       denied: '未允許',
       notDetermined: '尚未詢問',
       notSetUp: '未設定',
+      restartNeeded: en.system.status.restartNeeded,
       restricted: '由你的組織管理',
       declined: '已在隱私中關閉',
       unknown: '由 macOS 決定'
@@ -494,11 +525,16 @@ const zhHant: SetupBank = {
       granted: '已允許',
       needs: '尚未允許',
       notInstalled: '未安裝',
-      unavailable: '代理執行後可用'
+      unavailable: '代理執行後可用',
+      unknown: en.system.computerUse.unknown
     },
-    action: { request: '允許…', openSettings: '打開系統設定' },
+    action: { request: '允許…', openSettings: '打開系統設定', restart: en.system.action.restart },
     testNotification: '顯示測試通知',
     restart: `新的螢幕錄製權限會在 ${PRODUCT_NAME} 重新啟動後由 macOS 生效。`,
+    restartNeeded: en.system.restartNeeded,
+    identity: en.system.identity,
+    identityOther: en.system.identityOther,
+    switchOnStale: en.system.switchOnStale,
     declined: '已在 設定 › 隱私 中關閉，因此 App 絕不會向 macOS 請求。',
     perApp: '控制其他 App 和區域網路由 macOS 在首次使用時按 App 詢問。任何 App 都無法事先請求。',
     notification: { title: '通知已開啟', body: `${PRODUCT_NAME} 將透過這種方式提醒你。` }
@@ -580,6 +616,7 @@ const ar: SetupBank = {
       denied: 'غير مسموح',
       notDetermined: 'لم يُطلب بعد',
       notSetUp: 'غير مُعَدّ',
+      restartNeeded: en.system.status.restartNeeded,
       restricted: 'تديره مؤسستك',
       declined: 'متوقف في الخصوصية',
       unknown: 'يقرّر macOS'
@@ -588,11 +625,16 @@ const ar: SetupBank = {
       granted: 'مسموح',
       needs: 'غير مسموح بعد',
       notInstalled: 'غير مثبّت',
-      unavailable: 'متاح عندما يعمل الوكيل'
+      unavailable: 'متاح عندما يعمل الوكيل',
+      unknown: en.system.computerUse.unknown
     },
-    action: { request: 'السماح…', openSettings: 'فتح إعدادات النظام' },
+    action: { request: 'السماح…', openSettings: 'فتح إعدادات النظام', restart: en.system.action.restart },
     testNotification: 'عرض إشعار تجريبي',
     restart: `يطبّق macOS إذن تسجيل الشاشة الجديد بعد إعادة تشغيل ${PRODUCT_NAME}.`,
+    restartNeeded: en.system.restartNeeded,
+    identity: en.system.identity,
+    identityOther: en.system.identityOther,
+    switchOnStale: en.system.switchOnStale,
     declined: 'متوقف في الإعدادات › الخصوصية، لذا لا يطلبه التطبيق من macOS أبدًا.',
     perApp:
       'التحكم في تطبيق آخر والشبكة المحلية يسأل عنهما macOS لكل تطبيق عند أول استخدام. لا يمكن لأي تطبيق طلبهما مسبقًا.',
@@ -619,3 +661,30 @@ export const setupBankFor = (locale: Locale): SetupBank => BANKS[locale] ?? en
 export function useSetupCopy(): SetupBank {
   return setupBankFor(useI18n().locale)
 }
+
+/**
+ * G-99 — what CuaDriver is, in the app. English only, whatever the locale, like every new string since the 10-25 rule.
+ */
+export const CUA_DRIVER_WORDS = {
+  disclose: 'What is CuaDriver?',
+  what: 'A small helper from Cua that lets your agent see and use other apps on this Mac. It runs when your agent uses computer use, and it asks for nothing until you press Allow.',
+  whyTitle: 'Why it needs what',
+  accessibility: 'Accessibility, to click, type and read the buttons of an app.',
+  screen: 'Screen recording, to see the window of the app it is using.',
+  identity: `macOS lists it as CuaDriver (com.trycua.driver), apart from ${PRODUCT_NAME}. Each has its own switch.`,
+  installTitle: 'How to install',
+  install: 'Press Install CuaDriver. It fetches the version this app was tested with, signed by its maker.',
+  grantTitle: 'How to allow it',
+  grant: 'Press Allow. macOS asks only the first time; after that, turn CuaDriver on in the pane that opens.',
+  installAction: 'Install CuaDriver',
+  installing: 'Installing…',
+  installFailed: 'CuaDriver could not be installed. Check the connection and press Install CuaDriver again.',
+  waiting: 'Waiting for macOS…',
+  waitingNote: 'Approve the dialog from CuaDriver. If none appears, macOS is not asking again: use the buttons below.',
+  notAsked: 'macOS did not ask again. Turn CuaDriver on in the pane that opened, then come back here.',
+  failed: (reason: string) => `CuaDriver could not ask macOS: ${reason}`,
+  unreadable: 'CuaDriver did not answer, so its permissions are unknown. Press Allow… or check again.',
+  recheck: 'Check again',
+  openAccessibility: 'Open Accessibility',
+  openScreen: 'Open Screen recording'
+} as const

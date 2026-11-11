@@ -22,6 +22,31 @@
  * without booting Electron or reading main.ts source text.
  */
 
+/** sandbox-exec's own exit status when the profile applied but the command could not be started under it. */
+export const SANDBOX_EXEC_FAILED_STATUS = 71
+
+const SANDBOX_EXECVP_REFUSED = /sandbox-exec: execvp\(\) of '([^'\n]+)' failed: Operation not permitted/
+
+/**
+ * The plain reason when a confined local backend never started: sandbox-exec exits 71 with `execvp() of '<path>'
+ * failed: Operation not permitted` on stderr when the kernel would not let the profile exec the interpreter by that
+ * path (a link on the way the profile does not name, a binary outside its roots). Null for any other exit, so the
+ * generic before-ready message keeps the output tail.
+ */
+export function describeConfinedExecFailure(code: number | null, outputTail: string): string | null {
+  if (code !== SANDBOX_EXEC_FAILED_STATUS) {
+    return null
+  }
+
+  const match = SANDBOX_EXECVP_REFUSED.exec(outputTail)
+
+  if (!match) {
+    return null
+  }
+
+  return `The agent runtime could not start inside its sandbox profile: ${match[1]} is not reachable from the profile (a link on the way to the interpreter the profile does not name, or a binary outside its roots).`
+}
+
 interface BackendStartFailureContext {
   /**
    * True when the boot that just failed was resolving/dialing a REMOTE (or

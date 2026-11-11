@@ -49,7 +49,7 @@ import base64
 import binascii
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 _MAX_DEPTH = 3
 _MAX_WORDS = 4000  # a line longer than this is pathological; stop folding and let the caller fail closed
@@ -64,6 +64,8 @@ _KNOWN_BINARIES = frozenset({
 _WRAPPERS = frozenset({
     "sudo", "doas", "command", "builtin", "exec", "nohup", "nice", "ionice", "setsid", "caffeinate", "stdbuf",
     "time", "env",
+    # P5s (lens W5a): the Homebrew GNU coreutils copies
+    "genv", "gnice", "gnohup", "gstdbuf",
 })
 # Runners that expose the NEXT token as the real program (`npx privy …` runs privy). `uv run`, `pnpm dlx`,
 # `yarn dlx` take one extra sub-word first.
@@ -102,11 +104,15 @@ class SimpleCommand:
     unresolvable: bool = False      # the program word could not be read (floors when it names a guard/money bin)
     runner: str = ""                # the runner that exposed ``prog`` (`npx`, `pnpm`, `uv` …), "" if none
     code: List[str] = field(default_factory=list)  # interpreter code it runs (-c/-e/--eval, piped or heredoc stdin)
+    # args that were written as literal data and hold a `$` or a backtick (``cat '$(rm -rf /)'``): the line re-joined
+    # for the floor quotes them again, so that reading never runs as a command what the shell passes as text.
+    literal_args: FrozenSet[int] = frozenset()
 
     @property
     def candidate(self) -> str:
         extra = [body for body in self.code if body not in self.args]
-        return " ".join([self.prog, *self.args, *extra]).strip()
+        args = [shlex.quote(a) if k in self.literal_args else a for k, a in enumerate(self.args)]
+        return " ".join([self.prog, *args, *extra]).strip()
 
 
 @dataclass
@@ -118,6 +124,9 @@ class NormalizedCommand:
     unknown_consumer: bool = False   # r7: piped/redirected data reaches a consumer that is not known (see module doc)
     overflow: bool = False           # r7: code nested past _MAX_DEPTH was not read
     data_kept: bool = False          # r7: data-sink arguments were kept as argv (the mask is OFF on this reading)
+    # P5i: the same commands re-joined for the DESTRUCTION FLOOR ONLY — two commands keep the original operator
+    # between them only when each is the own command of adjacent top-level segments; every other join is " ; ".
+    floor_text: str = ""
 
 
 # ---- the lexer: raw text → pieces per word, respecting quotes and substitutions -----------------------------------
@@ -342,8 +351,12 @@ def _lex_dollar(text: str, i: int) -> Tuple[Optional[_Piece], int, bool]:
         name = _VARNAME.match(inner)
         if name and name.group(0) == inner:
             return ("var", inner), j, False
-        # ${v:-default} and friends: take the variable name, keep it resolvable from the map
+        # P5c: ${v:-w}, ${v=w}, ${v:+w} keep their operator and word, so this reading answers what the floor's does
+        # (``${X:+build}`` is build or nothing, never a bare $X). Other operators take the variable name, kept
+        # resolvable from the map.
         vm = _VARNAME.match(inner)
+        if vm and re.match(r":?[-=+]", inner[vm.end():]):
+            return ("param", inner), j, False
         return ("var", vm.group(0) if vm else inner), j, False
     if nxt in "!#?$*@-":
         return ("lit", "$" + nxt), i + 2, False
@@ -551,16 +564,35 @@ def _fold_pieces(pieces: List[_Piece], assigns: Dict[str, str], sentinel: bool =
             out.append(payload)
         elif kind == "var":
             out.append(assigns.get(payload, "$" + payload))
+        elif kind == "param":
+            out.append(_fold_param(payload, assigns))
         elif sentinel and kind in ("subst", "unreadable"):
             out.append("$(…)")
     return "".join(out)
+
+
+def _fold_param(inner: str, assigns: Dict[str, str]) -> str:
+    """``${v:-w}`` and friends: expanded as the shell does when v is in the map, else left exactly as written."""
+    found = re.match(r"([A-Za-z_][A-Za-z0-9_]*)(:?)([-=+])(.*)", inner, re.S)
+    if not found or found.group(1) not in assigns:
+        return "${" + inner + "}"
+    name, colon, operator, word = found.groups()
+    present = bool(assigns[name]) or not colon
+    if operator == "+":
+        return word if present else ""
+    return assigns[name] if present else word
+
+
+def _param_name(payload: str) -> str:
+    found = _VARNAME.match(payload)
+    return found.group(0) if found else payload
 
 
 def _word_is_resolvable_literal(word: _Word, assigns: Dict[str, str]) -> bool:
     for kind, payload in word.pieces:
         if kind == "subst" or kind == "unreadable":
             return False
-        if kind == "var" and payload not in assigns:
+        if kind in ("var", "param") and _param_name(payload) not in assigns:
             return False
     return True
 
@@ -648,6 +680,9 @@ class _Ctx:
     unknown_consumer: bool = False  # r7: some piped/redirected data reaches a consumer that is not known
     overflow: bool = False      # r7: some code nested past _MAX_DEPTH was not read
     keep_data: bool = False     # r7: keep data-sink arguments as argv (the reading with the mask OFF)
+    # P5i: per top-level segment, (own command or None, operator after it, segment may hold a group boundary)
+    top_segs: Dict[int, Tuple[Optional["SimpleCommand"], str, bool, bool, str]] = field(default_factory=dict)
+    top_own: List["SimpleCommand"] = field(default_factory=list)
 
 
 @dataclass
@@ -662,6 +697,8 @@ class _Parsed:
 
 # Shells that run the script on their stdin when they are given no `-c` and no script file.
 _SHELLS = frozenset({"sh", "bash", "zsh", "dash", "ksh", "mksh", "ash", "fish"})
+# Schedulers that run their stdin with sh at a later time (`echo CODE | at now`, `batch <<< CODE`).
+_STDIN_SCHEDULERS = frozenset({"at", "batch"})
 # Interpreters: their `-c`/`-e`/`--eval` argument is code, and with no script operand (or `-`) so is their stdin.
 _INTERP = re.compile(r"^(python[\d.]*|pypy[\d.]*|node|nodejs|bun|deno|tsx|ts-node|ruby|perl[\d.]*|php[\d.]*|osascript"
                      r"|swift|lua[\d.]*|luajit|tclsh[\d.]*)$")
@@ -795,6 +832,9 @@ def _executor(p: _Parsed) -> Tuple[str, bool]:
         return "", not code
     if base == "xargs":
         return "xargs", False
+    if base in _STDIN_SCHEDULERS:  # P5s (lens W5a): at / batch run their stdin with sh later; -f FILE runs a file
+        return ("", True) if any(f == "-f" or (f.startswith("-") and not f.startswith("--") and "f" in f)
+                                 for f in flats) else ("shell", False)
     return "", False
 
 
@@ -806,7 +846,7 @@ def _consumer_known(p: Optional[_Parsed]) -> bool:
     if p is None or p.unresolvable or not p.prog:
         return False
     base = _basename(p.prog)
-    if base in _SHELLS or base in ("source", ".", "xargs") or _INTERP.match(base):
+    if base in _SHELLS or base in ("source", ".", "xargs") or base in _STDIN_SCHEDULERS or _INTERP.match(base):
         return True
     if base not in NON_EXECUTING:
         return False
@@ -894,7 +934,7 @@ def _parse(words: List[_Word], ctx: _Ctx) -> Optional[_Parsed]:
     prog_flat, prog_word = folded[idx]
     unresolvable = prog_word.has_subst \
         or any(k in ("subst", "unreadable") for k, _ in prog_word.pieces) \
-        or (any(k == "var" for k, _ in prog_word.pieces) and not _word_is_resolvable_literal(prog_word, ctx.assigns))
+        or (any(k in ("var", "param") for k, _ in prog_word.pieces) and not _word_is_resolvable_literal(prog_word, ctx.assigns))
     prog = "" if (unresolvable and not prog_flat) else _strip_known_path(prog_flat).lower()
     return _Parsed(prog, folded[idx + 1:], runner, unresolvable, redirects, prog_word)
 
@@ -1025,6 +1065,7 @@ def _emit_parsed(p: _Parsed, ctx: _Ctx, depth: int, stdin: Optional["_Stream"], 
     is_sink = (base_prog in _DATA_SINKS and not (base_prog == "printf" and rest[:1] and rest[0][0] == "-v")) \
         or (base_prog == "git" and bool(rest) and rest[0][0].lower() in _GIT_DATA_SUBCMDS)
     args: List[str] = []
+    literal: Set[int] = set()
     for k, (flat, w) in enumerate(rest):
         if k in code_indices:
             continue
@@ -1039,8 +1080,11 @@ def _emit_parsed(p: _Parsed, ctx: _Ctx, depth: int, stdin: Optional["_Stream"], 
             if not ctx.keep_data:
                 continue
         args.append(_fold_pieces(w.pieces, ctx.assigns, sentinel=True))
+        if all(kind == "lit" for kind, _payload in w.pieces) and re.search(r"[$`]", args[-1]):
+            literal.add(len(args) - 1)
 
-    cmd = SimpleCommand(prog=prog, args=args, unresolvable=p.unresolvable, runner=p.runner)
+    cmd = SimpleCommand(prog=prog, args=args, unresolvable=p.unresolvable, runner=p.runner,
+                        literal_args=frozenset(literal))
     if _INTERP.match(base_prog):
         cmd.code.extend(_interp_parse(base_prog, [f for f, _ in rest])[0])
     kind, runs_file = _executor(p)
@@ -1057,6 +1101,8 @@ def _emit_parsed(p: _Parsed, ctx: _Ctx, depth: int, stdin: Optional["_Stream"], 
                 cmd.code.append(text)
             else:
                 _emit_nested(text, ctx, depth, live or consumed, (enc,) + chain)
+    if depth == 0:
+        ctx.top_own.append(cmd)
     ctx.out.append(cmd)
 
 
@@ -1110,7 +1156,12 @@ def _unwrap_container(prog: str, rest: List[Tuple[str, _Word]], ctx: _Ctx, depth
         inner_snippets.append((" ".join(code(w) for _, w in rest), enc))
         consumed.update(range(len(rest)))
     elif prog == "trap" and rest:
-        inner_snippets.append((code(rest[0][1]), _quoting(rest[0][1])))
+        # pass 5j (lens P-1): `trap -- CODE SIG` — the code is the first word after an optional "--"; every
+        # word is also read as code (fail closed: a word the shell may run is never skipped).
+        first = 1 if rest[0][0] == "--" and len(rest) > 1 else 0
+        for k in range(first, len(rest)):
+            inner_snippets.append((code(rest[k][1]), _quoting(rest[k][1])))
+            consumed.add(k)
         consumed.add(0)
     elif prog == "find":
         joined = [f for f, _ in rest]
@@ -1171,6 +1222,7 @@ def _emit_segments(text: str, ctx: _Ctx, depth: int, live: bool = False, chain: 
         pipelines.append(current)
 
     local_data: List[str] = []
+    seg_no = 0
     for pipe in pipelines:
         parsed = [_parse(words, ctx) if words else None for words in pipe]
         kinds = [_executor(p)[0] if p is not None else "" for p in parsed]
@@ -1189,15 +1241,70 @@ def _emit_segments(text: str, ctx: _Ctx, depth: int, live: bool = False, chain: 
             if stdin is None and k > 0:
                 stdin = prev if prev is not None else ("", False, _ENC_UNKNOWN)
             consumed = any(kinds[m] for m in range(k + 1, len(parsed)))
+            own_before = len(ctx.top_own)
             _emit_parsed(p, ctx, depth, stdin, consumed, live, local_data, chain)
             prev = _stdout_of(p, stdin, ctx)
+            if depth == 0:
+                _note_top_segment(ctx, parts, seg_no + k, ctx.top_own[own_before:] if p is not None else [])
+        if depth == 0:
+            for k in range(len(parsed)):
+                if parsed[k] is None:
+                    _note_top_segment(ctx, parts, seg_no + k, [])
+        seg_no += len(pipe)
     ctx.data.extend(local_data)
+
+
+_MKTEMP_ARGS = r"(?:/usr/bin/)?mktemp(?:[ \t]+[\w./@%+:=-]+)*[ \t]*"
+_MKTEMP_CD_SEGMENT = re.compile(r"(?:cd|pushd)[ \t]+(?:\"\$\([ \t]*" + _MKTEMP_ARGS + r"\)\"|\$\([ \t]*" + _MKTEMP_ARGS
+                                + r"\)|`[ \t]*" + _MKTEMP_ARGS + r"`)")
+_GROUP_CHARS = re.compile(r"[(){}`]|\$\(|<<|\b(?:do|done|then|else|elif|fi|esac|in)\b")
+
+
+def _note_top_segment(ctx: _Ctx, parts: List[Tuple[str, str]], idx: int, own: List[SimpleCommand]) -> None:
+    """P5i: remember one top-level segment for :func:`_render_floor_text`, in source order."""
+    seg, op = parts[idx] if idx < len(parts) else ("", "")
+    bare = _unquoted(seg)
+    # cd "$(mktemp -d)": the floor reads that exact text as a fresh temp folder, so it is kept as written
+    fresh = seg.strip() if _MKTEMP_CD_SEGMENT.fullmatch(seg.strip()) else ""
+    ctx.top_segs[idx] = (own[-1] if len(own) == 1 else None, op, bool(_GROUP_CHARS.search(bare)) and not fresh,
+                         not seg.strip(), fresh)
 
 
 # ---- the public entry point -----------------------------------------------------------------------------------------
 
 def _render_text(commands: List[SimpleCommand]) -> str:
     return " ; ".join(c.candidate for c in commands if c.candidate)
+
+
+def _render_floor_text(commands: List[SimpleCommand], ctx: _Ctx) -> str:
+    """P5i: :func:`_render_text` for the destruction floor only. The original operator (``&&``, ``||``, ``|``, ``&``)
+    joins two commands only when they are the own commands of two top-level segments with nothing emitted between
+    them, the first segment holds no group, substitution, here-doc or keyword boundary, and every segment between
+    them is an empty continuation after ``&&``/``||``/``|``. Every other join (code unwrapped from a pipe, a
+    here-string, a substitution, ``;`` or a newline) is " ; ", the reading that keeps the folder before a cd."""
+    segs = [ctx.top_segs[k] for k in sorted(ctx.top_segs)]  # source order
+    pos = {}
+    fresh = {}
+    for n, (own, _op, _grp, _empty, written) in enumerate(segs):
+        if own is not None and written:
+            fresh[id(own)] = written
+        if own is not None:
+            pos[id(own)] = n
+    shown = [c for c in commands if c.candidate]
+    out: List[str] = []
+    for i, cmd in enumerate(shown):
+        if i:
+            sep = ";"
+            a, b = pos.get(id(shown[i - 1])), pos.get(id(cmd))
+            if a is not None and b is not None and b > a and not segs[a][2]:
+                op = segs[a][1]
+                between = segs[a + 1:b]
+                if op in ("&&", "||", "|", "|&", "&") and all(e[3] for e in between) \
+                        and (not between or op in ("&&", "||", "|")):
+                    sep = op
+            out.append(" ; " if sep == ";" else f" {sep} ")
+        out.append(fresh.get(id(cmd), cmd.candidate))
+    return "".join(out)
 
 
 def normalize(cmd: str, keep_data: bool = False) -> NormalizedCommand:
@@ -1217,9 +1324,11 @@ def normalize(cmd: str, keep_data: bool = False) -> NormalizedCommand:
     commands = ctx.out
     unresolvable = any(c.unresolvable for c in commands)
     text = _render_text(commands) or cmd
+    floor_text = _render_floor_text(commands, ctx) or text
     data = [] if ctx.poisoned else [w for w in ctx.data if w.strip()]
     return NormalizedCommand(text=text, commands=commands, unresolvable=unresolvable, data=data,
-                             unknown_consumer=ctx.unknown_consumer, overflow=ctx.overflow, data_kept=keep_data)
+                             unknown_consumer=ctx.unknown_consumer, overflow=ctx.overflow, data_kept=keep_data,
+                             floor_text=floor_text)
 
 
 def mask_data(command: str, data: List[str]) -> str:

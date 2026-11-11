@@ -5,6 +5,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 from hermes_cli.auth import (
     AuthError,
@@ -71,7 +72,7 @@ def test_resolve_codex_runtime_credentials_falls_back_to_pool_when_singleton_emp
             "openai-codex": [
                 {
                     "source": "device_code",
-                    "access_token": "pool-fallback-token",
+                    "access_token": chatgpt_jwt("pool-fallback-token"),
                     "refresh_token": "pool-refresh",
                     "last_status": "ok",
                     "auth_type": "oauth",
@@ -83,7 +84,7 @@ def test_resolve_codex_runtime_credentials_falls_back_to_pool_when_singleton_emp
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
     resolved = resolve_codex_runtime_credentials()
-    assert resolved["api_key"] == "pool-fallback-token"
+    assert resolved["api_key"] == chatgpt_jwt("pool-fallback-token")
     assert resolved["source"] == "credential_pool"
     assert resolved["base_url"]  # default codex backend URL
 
@@ -348,7 +349,8 @@ def test_codex_tokens_not_written_to_shared_file(tmp_path, monkeypatch):
 
 def test_resolve_returns_hermes_auth_store_source(tmp_path, monkeypatch):
     hermes_home = tmp_path / "hermes"
-    _setup_hermes_auth(hermes_home)
+    access = chatgpt_jwt("access")
+    _setup_hermes_auth(hermes_home, access_token=access)
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 
     creds = resolve_codex_runtime_credentials()
@@ -412,7 +414,7 @@ def test_refresh_429_classified_as_quota_not_auth_failure(monkeypatch):
     _patch_httpx(monkeypatch, response)
 
     with pytest.raises(AuthError) as exc_info:
-        refresh_codex_oauth_pure("a-tok", "r-tok")
+        refresh_codex_oauth_pure("", "r-tok")
 
     err = exc_info.value
     assert err.code == CODEX_RATE_LIMITED_CODE
@@ -432,7 +434,7 @@ def test_refresh_429_without_retry_after_header(monkeypatch):
     _patch_httpx(monkeypatch, response)
 
     with pytest.raises(AuthError) as exc_info:
-        refresh_codex_oauth_pure("a-tok", "r-tok")
+        refresh_codex_oauth_pure("", "r-tok")
 
     err = exc_info.value
     assert err.code == CODEX_RATE_LIMITED_CODE
@@ -447,7 +449,7 @@ def test_pool_only_force_refresh_rotates_the_pool_entry(tmp_path, monkeypatch):
     (hermes_home / "auth.json").write_text(json.dumps({
         "version": 1, "providers": {},
         "credential_pool": {"openai-codex": [{
-            "source": "device_code", "access_token": "pool-revoked", "refresh_token": "pool-refresh",
+            "source": "device_code", "access_token": chatgpt_jwt("pool-revoked"), "refresh_token": "pool-refresh",
             "last_status": "ok", "auth_type": "oauth"}]},
     }))
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
@@ -456,11 +458,11 @@ def test_pool_only_force_refresh_rotates_the_pool_entry(tmp_path, monkeypatch):
     class Pool:
         def try_refresh_matching(self, api_key_hint=None, credential_id=None):
             hints.append(api_key_hint)
-            return SimpleNamespace(runtime_api_key="pool-fresh")
+            return SimpleNamespace(runtime_api_key=chatgpt_jwt("pool-fresh"))
 
     monkeypatch.setattr("agent.credential_pool.load_pool", lambda provider: Pool())
 
     resolved = resolve_codex_runtime_credentials(force_refresh=True)
-    assert resolved["api_key"] == "pool-fresh"
+    assert resolved["api_key"] == chatgpt_jwt("pool-fresh")
     assert resolved["source"] == "credential_pool"
-    assert hints == ["pool-revoked"]
+    assert hints == [chatgpt_jwt("pool-revoked")]

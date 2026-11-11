@@ -16,22 +16,68 @@ import logging
 import os
 import re
 import secrets
+import shlex
+import socket
 import stat as stat_mod
+import struct
+import subprocess
 import sys
+import threading
 import time
+import unicodedata
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+
+def disk_fold(name: str) -> str:
+    """Same as agent/disk_name.py, which this stdlib-only module cannot import: the launcher loads it by path."""
+    return unicodedata.normalize("NFD", unicodedata.normalize("NFD", name).casefold())
+
 ACTIVITY_CLASSES = ("research", "project", "build", "offline", "media")
 SANDBOX_EXEC = "/usr/bin/sandbox-exec"
 MARKER_PREFIX = "iclone-confined"
+# Who issued a confined command, said to the launcher in the request's environment (never the command's: the launcher
+# drops the variable before the command starts). The plugin sets it for the runtime's own housekeeping — the programs
+# it runs to learn about the host, the environment it builds only to probe a backend — and the launcher adds the shell
+# environment's own scripts (the session snapshot and its probes, which never come through Hermes' command wrapper).
+ORIGIN_ENV = "ICLONE_RUN_ORIGIN"
+ORIGIN_AGENT = "agent"
+ORIGIN_RUNTIME = "runtime"
+# The environment Hermes builds only to learn a backend's facts for the system prompt (agent/prompt_builder.py
+# ``_run_backend_probe``): every command it runs is the runtime's own.
+RUNTIME_PROBE_TASK_IDS = frozenset({"prompt-backend-probe"})
 _SESSION_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
+def runtime_own_call() -> bool:
+    """Whether the backend call under way is one Hermes issues for itself, by the runtime's own word at the call
+    (``hermes_cli.observability.shared_metrics_loop.unmetered_backend_calls``: the TUI gateway's directory listing for
+    path completion, run in the session's environment each turn). Said to the launcher like a probe's command
+    (``ORIGIN_ENV``), never read off the command's text. A runtime without that word has no such calls."""
+    try:
+        from hermes_cli.observability.shared_metrics_loop import backend_calls_unmetered
+    except ImportError:
+        return False
+    return backend_calls_unmetered()
+
+
+# The run-refusal codes the app's ledger knows (``RunRefusalCode`` in the app's shared confinement types).
+REFUSAL_CODES = frozenset({"bad-request", "cwd-spelling", "cwd-gone", "cannot-scan", "hard-links", "launcher-unavailable", "no-profile",
+                           "profile-unknown", "other"})
+# The closing block of every generated profile: a program's widening goes right before it, so it never outranks it.
+NEVER_MARK = "; never, whatever the class or the permission mode"
+
+
 class ConfinementRefused(RuntimeError):
-    """The layer cannot confine this command: it is refused, never run unconfined."""
+    """The layer cannot confine this command: it is refused, never run unconfined. ``code`` says why, in the ledger's
+    words (``REFUSAL_CODES``)."""
+
+    def __init__(self, message: str = "", code: str = "other"):
+        super().__init__(message)
+        self.code = code if code in REFUSAL_CODES else "other"
 
 
 @dataclass(frozen=True)
@@ -53,6 +99,12 @@ class ProfileIndex:
     refusals_dir: str = ""
     # T2'': the pnpm store roots a ``build`` command may be linked into without a gesture (main names them).
     pnpm_store_roots: Tuple[str, ...] = ()
+    # fx7: never written by any class, never a project root or around one (main's profiles.ts protectedWrites).
+    protected_writes: Tuple[str, ...] = ()
+    # G8 (R1): the tool store main named (Hermes' PM store, <hermes home>/tools), where a real install keeps agent-browser.
+    tool_store_roots: Tuple[str, ...] = ()
+    # G23: what holds the confinement itself and the one-file route's own ledger (main's profiles.ts appOwnFiles).
+    app_files: Tuple[str, ...] = ()
 
 
 _trusted_spec = ""
@@ -63,6 +115,50 @@ def trust_spec(raw: str) -> None:
     """Called once, at import, with the spec popped from the env main spawned Hermes with."""
     global _trusted_spec
     _trusted_spec = raw
+
+
+_git_identity: Tuple[str, str] = ("", "")
+
+
+def trust_git_identity(name: str, email: str) -> None:
+    """Called once, at import, with the two values main read from the user's own git config (``user.name`` and
+    ``user.email``; popped from the env, so no child inherits them). fx18 (F3): a confined ``git commit`` takes the
+    user's identity from them, and nothing else of ``~/.gitconfig``, which may hold credentials, reaches the agent."""
+    global _git_identity
+    clean = tuple(v.replace("\n", " ").replace("\r", " ").strip() if isinstance(v, str) else "" for v in (name, email))
+    _git_identity = (clean[0], clean[1])
+
+
+def git_identity() -> Tuple[str, str]:
+    return _git_identity
+
+
+def _git_config_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def seed_scratch_git_config(scratch: str) -> Optional[str]:
+    """The session's own global git config (``GIT_CONFIG_GLOBAL`` points here): written once, with the user's
+    ``user.name`` and ``user.email`` and nothing else, when the scratch has none yet. A file already there is the
+    agent's (its own ``git config --global`` lands in it) and is kept. Returns the path, or ``None`` with no identity."""
+    name, email = git_identity()
+    path = os.path.join(scratch, ".gitconfig")
+    if not (name or email):
+        return None
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC, 0o600)
+    except FileExistsError:
+        return path
+    except OSError:
+        return None
+    lines = ["[user]"]
+    if name:
+        lines.append(f"\tname = {_git_config_quote(name)}")
+    if email:
+        lines.append(f"\temail = {_git_config_quote(email)}")
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    return path
 
 
 def trust_link_key(raw_hex: str) -> None:
@@ -95,7 +191,10 @@ def parse_spec(raw: str) -> ProfileIndex:
                              # r5: the roots are trusted from spec v5 on (main filters the denied directories there);
                              # an older main's roots are ignored and every link keeps the gesture path.
                              tuple(str(p) for p in spec.get("pnpmStoreRoots") or []
-                                   if os.path.isabs(str(p)) and int(spec.get("v") or 0) >= 5))
+                                   if os.path.isabs(str(p)) and int(spec.get("v") or 0) >= 5),
+                             tuple(str(p) for p in spec.get("protectedWrites") or [] if os.path.isabs(str(p))),
+                             tuple(str(p) for p in spec.get("toolStoreRoots") or [] if os.path.isabs(str(p))),
+                             tuple(str(p) for p in spec.get("appFiles") or [] if os.path.isabs(str(p))))
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
         raise ConfinementRefused(f"main did not hand over the confinement spec ({exc}); commands are refused") from exc
     if not all(os.path.isabs(p) for p in (index.scratch_root, index.home, index.members_dir)):
@@ -109,17 +208,20 @@ def read_verified(profile: Profile) -> str:
         with open(profile.file, "r", encoding="utf-8") as handle:
             text = handle.read()
     except OSError as exc:
-        raise ConfinementRefused(f"profile {profile.cls} is unreadable: {exc}") from exc
+        raise ConfinementRefused(f"profile {profile.cls} is unreadable: {exc}", "no-profile") from exc
     if hashlib.sha256(text.encode("utf-8")).hexdigest() != profile.sha256:
-        raise ConfinementRefused(f"profile {profile.cls}.sb changed on disk; refusing to run under it")
+        raise ConfinementRefused(f"profile {profile.cls}.sb changed on disk; refusing to run under it", "no-profile")
     return text
 
 
 def new_run_token(index: ProfileIndex, cls: str, sha256: str, session_id: Optional[str]) -> str:
     """An empty file only this run's sandbox may read (members.ts): how main finds every process of the run."""
     os.makedirs(index.members_dir, mode=0o700, exist_ok=True)
+    # fx28: only made when absent: the runtime's profile lets it create a file here and never open one for writing.
     for name in (".member", ".decoy"):
-        with open(os.path.join(index.members_dir, name), "a", encoding="utf-8"):
+        try:
+            os.close(os.open(os.path.join(index.members_dir, name), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+        except FileExistsError:
             pass
     session = session_id if session_id and _SESSION_RE.match(session_id) else "-"
     path = os.path.join(os.path.realpath(index.members_dir), f"{cls}+{sha256[:12]}+{session}+{secrets.token_hex(16)}")
@@ -127,16 +229,83 @@ def new_run_token(index: ProfileIndex, cls: str, sha256: str, session_id: Option
     return path
 
 
-def write_ack(path: str, backend: str) -> None:
-    """Tells main this Hermes loaded the plugin (the pane reads RED while Hermes runs without it)."""
+ACK_REASON_MAX = 400
+
+
+def ack_file_of(path: str, pid: int) -> str:
+    """G22 B1: each runtime process has its own acknowledgement beside the path main named (``hermes-ack.<pid>.json``):
+    the window's runtime and a profile's runtime are alive together, and main judges each by its own word."""
+    stem, ext = os.path.splitext(path)
+    return f"{stem}.{pid}{ext}"
+
+
+def write_ack(path: str, backend: str, commands: Optional[Tuple[bool, str]] = None, note: str = "") -> None:
+    """Tells main this Hermes loaded the plugin (the pane reads RED while Hermes runs without it) and, when known,
+    whether the agent's commands can run now (``commands``: available, and the plain reason when they cannot). The
+    availability is the runtime's own word: main may only turn the verdict red on it, never green. ``note`` is said
+    in the pane and decides nothing."""
     if not path or not os.path.isabs(path):
         return
+    path = ack_file_of(path, os.getpid())
+    body: Dict[str, Any] = {"v": 2, "pid": os.getpid(), "backend": backend}
+    if commands is not None:
+        available, reason = commands
+        body["commands"] = {"available": bool(available), "reason": "" if available else str(reason)[:ACK_REASON_MAX]}
+        if note:
+            body["commands"]["note"] = str(note)[:ACK_REASON_MAX]
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as handle:
-        json.dump({"pid": os.getpid(), "backend": backend}, handle)
+        json.dump(body, handle)
     os.chmod(tmp, 0o600)
     os.replace(tmp, path)
+
+
+# Where this process acknowledges the plugin, and what it last said about the agent's commands: the acknowledgement is
+# rewritten only when that answer changes (every tool listing asks it). One per process: a routed copy of this plugin
+# neither clears nor sets the launch copy's word.
+def _process_ack() -> Tuple[Dict[str, Any], Any]:
+    from hermes_cli.iclone_policy_env import process_ack  # not at import: the launcher loads this module without hermes_cli
+
+    return process_ack()
+
+
+def arm_ack(path: str, backend: str) -> bool:
+    """Called at register, with the acknowledgement file main named and the backend main chose. True for the first
+    copy of the process; a later copy changes nothing."""
+    state, lock = _process_ack()
+    with lock:
+        if state["path"]:
+            return False
+        state.update(path=path, backend=backend, said=None)
+        return True
+
+
+def note_config_unreadable(reason: str) -> None:
+    """A config.yaml that cannot be parsed: said with the next answer, until a restart reads it again. Commands still
+    run in the sandbox: only a terminal.backend in the file went unread. A note, never a refusal."""
+    _process_ack()[0]["config"] = str(reason)
+
+
+def report_commands(available: bool, reason: str = "") -> None:
+    """The acknowledgement carries this answer from now on (rewritten when it changed). Never raises. A refused backend
+    answers first: the sandbox being ready says nothing about a process whose every tool refuses."""
+    from hermes_cli.iclone_policy_env import refused_backend
+
+    standing = refused_backend()
+    if standing:
+        available, reason = False, standing
+    state, lock = _process_ack()
+    note = str(state.get("config") or "")
+    said = (bool(available), "" if available else str(reason)[:ACK_REASON_MAX], note)
+    with lock:
+        if not state["path"] or state["said"] == said:
+            return
+        try:
+            write_ack(state["path"], state["backend"], said[:2], note)
+            state["said"] = said
+        except OSError:
+            logger.warning("could not tell the app whether agent commands can run", exc_info=True)
 
 
 def _within(child: str, parent: str) -> bool:
@@ -209,18 +378,50 @@ def _inside_folder(child: str, parent: str) -> bool:
         at = up
 
 
-def acceptable_project_root(root: Optional[str], index: ProfileIndex) -> bool:
-    """Mirrors profiles.ts acceptableProjectRoot: never /, the home or an ancestor, ~/Library, or a denied dir; r6: nor
-    a pnpm store root or a folder inside one (a store is never a project). Folders compare by identity too."""
+def project_git_state(project: str, scratch: str) -> str:
+    """``unborn`` lifts the profile's rule on the project's own ``.git`` for one run: it has none yet, so git init can
+    write one. A scratch folder standing in for a project is nobody's repository. Anything unsure is ``locked``."""
+    if project == scratch:
+        return "unborn"
+    try:
+        os.lstat(os.path.join(project, ".git"))
+    except FileNotFoundError:
+        return "unborn"
+    except OSError:
+        return "locked"
+    return "locked"
+
+
+def project_root_refusal(root: Optional[str], index: ProfileIndex) -> Optional[str]:
+    """Why ``root`` may not be a project (``None`` when it may): the one rule behind ``acceptable_project_root``,
+    worded for the agent (fx18: a command whose folder is refused is told which rule refused it, never a bare EPERM).
+    Mirrors profiles.ts acceptableProjectRoot: never /, the home or an ancestor, ~/Library, or a denied dir; r6: nor
+    a pnpm store root or a folder inside one (a store is never a project). fx7: nor a folder the user's own shell or
+    tools later run from — a ``.git`` folder (its hooks), a shell startup file, a binary folder on PATH (the spec's
+    ``protectedWrites``) — at, inside or around the root. Folders compare by identity too."""
     if not root or not os.path.isabs(root):
-        return False
+        return "it is not an absolute path"
     real = os.path.realpath(root)
     home = os.path.realpath(index.home)
-    if real == os.sep or _inside_folder(home, real) or _inside_folder(real, os.path.join(home, "Library")):
-        return False
+    if real == os.sep or _inside_folder(home, real):
+        return "it is your home folder or a folder above it"
+    if _inside_folder(real, os.path.join(home, "Library")):
+        return "it is inside ~/Library"
+    if ".git" in disk_fold(real).split(os.sep):
+        return "it is inside a .git folder"
     if any(_inside_folder(real, store) for store in index.pnpm_store_roots):
-        return False
-    return not any(_inside_folder(real, denied) or _inside_folder(denied, real) for denied in index.denied)
+        return "it is a package store, never a project"
+    if any(_within(real, p) or _within(p, real) or _inside_folder(real, p) or _inside_folder(p, real)
+           for p in index.protected_writes):
+        return "it is, holds or sits inside a folder your own shell or tools run from"
+    if any(_inside_folder(real, denied) or _inside_folder(denied, real) for denied in index.denied):
+        return "it is, holds or sits inside a folder icloneOS denies every command"
+    return None
+
+
+def acceptable_project_root(root: Optional[str], index: ProfileIndex) -> bool:
+    """True when ``project_root_refusal`` finds no rule against ``root``."""
+    return project_root_refusal(root, index) is None
 
 
 def marker(cls: str, sha256: str, session_id: Optional[str]) -> str:
@@ -244,20 +445,24 @@ def _permissions_module() -> Optional[Any]:
     return None
 
 
-def grant_params(session_id: Optional[str], project: Optional[str]) -> Dict[str, str]:
+def grant_params(session_id: Optional[str], project: Optional[str], window: Optional[str] = None) -> Dict[str, str]:
     """NET and WRITE_PROJECT for one command, from V3-F's table and live grants.
 
     NET opens only on an *allow* for class N (the mode allows the network, or a live grant covers it): an ask never
     opens a socket mid-command. WRITE_PROJECT holds unless class Wp is *refused* (Plan mode, the file-writing switch
-    OFF): the owner already allowed the shell command itself. Without V3-F the strict reading holds: no network.
+    OFF): the owner already allowed the shell command itself. Without V3-F there is no policy, and no policy opens
+    nothing: no network, no project writes (fx7 — the launcher reads the same answer from main's own copy of the
+    policy and refuses a request that asks for more, so a runtime that skipped this function gains nothing).
     """
     module = _permissions_module()
     policy_mod = sys.modules.get(f"{module.__name__}.policy") if module is not None else None
     if module is None or policy_mod is None:
-        return {"NET": "0", "WRITE_PROJECT": "1"}
+        return {"NET": "0", "WRITE_PROJECT": "0"}
     body = module._state["policy"].body()
-    net = policy_mod.decide(body, cls="N", facts={}, floor=None, ceiling_key=None, session_id=session_id, project=project)
-    write = policy_mod.decide(body, cls="Wp", facts={}, floor=None, ceiling_key=None, session_id=session_id, project=project)
+    net = policy_mod.decide(body, cls="N", facts={}, floor=None, ceiling_key=None, session_id=session_id, project=project,
+                          mode_project=project if window is None else window)
+    write = policy_mod.decide(body, cls="Wp", facts={}, floor=None, ceiling_key=None, session_id=session_id, project=project,
+                            mode_project=project if window is None else window)
     return {"NET": "1" if net.outcome == "allow" else "0", "WRITE_PROJECT": "0" if write.outcome == "refuse" else "1"}
 
 
@@ -292,13 +497,20 @@ _STORE_AUTO_PASS_CLASS = "build"
 _scan_cache: Dict[str, List[Any]] = {}
 
 
-def _walk(root: str, stat_files: bool) -> Tuple[str, int, List[Dict[str, Any]], List[str]]:
+class ScanTooLarge(OSError):
+    """fx20 (lens5 M1): the walk ran past the caller's time budget. An ``OSError``, so the after-run scan records its
+    root as one it could not scan; before a command the caller refuses, naming the size as the reason."""
+
+
+def _walk(root: str, stat_files: bool, deadline: Optional[float] = None) -> Tuple[str, int, List[Dict[str, Any]], List[str]]:
     fingerprint: List[str] = []
     by_inode: Dict[Tuple[int, int], Dict[str, Any]] = {}
     unscannable: List[str] = []
     stack = [root]
     files = 0
     while stack:
+        if deadline is not None and time.monotonic() > deadline:
+            raise ScanTooLarge(root)
         directory = stack.pop()
         rel = os.path.relpath(directory, root)
         try:
@@ -347,14 +559,15 @@ def _walk(root: str, stat_files: bool) -> Tuple[str, int, List[Dict[str, Any]], 
     return "\n".join(fingerprint), files, linked, sorted(unscannable)
 
 
-def linked_inodes(root: str, now: Optional[float] = None) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
+def linked_inodes(root: str, now: Optional[float] = None,
+                  deadline: Optional[float] = None) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
     """The inodes under ``root`` with a name outside it, whether the answer came from the cache, and the directories
     inside it that could not be listed (T1: any of them refuses the root)."""
     at = time.monotonic() if now is None else now
     hit = _scan_cache.get(root)
-    if hit and at - hit[1] < _CACHE_MAX_AGE_S and _walk(root, False)[0] == hit[0]:
+    if hit and at - hit[1] < _CACHE_MAX_AGE_S and _walk(root, False, deadline)[0] == hit[0]:
         return hit[2], True, hit[4]
-    fingerprint, files, linked, unscannable = _walk(root, True)
+    fingerprint, files, linked, unscannable = _walk(root, True, deadline)
     _scan_cache[root] = [fingerprint, at, linked, files, unscannable, None]
     return linked, False, unscannable
 
@@ -548,10 +761,11 @@ def refusal_sentence(root: str, paths: List[str], count: int, kind: str = "hard-
             f"remove {pronoun} or allow {pronoun} in Containers")
 
 
-def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None) -> Optional[Dict[str, Any]]:
+def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None,
+                deadline: Optional[float] = None) -> Optional[Dict[str, Any]]:
     """What refuses ``root`` right now: ``{"kind", "paths", "count"}`` or ``None`` when it is clean. ``cls`` is the
     command's class: ``build`` alone may pass a link whose other names all resolve into the pnpm store (T2'')."""
-    linked, _cached, unscannable = linked_inodes(root)
+    linked, _cached, unscannable = linked_inodes(root, deadline=deadline)
     if unscannable:
         return {"kind": "cannot-scan", "paths": unscannable[:HARDLINK_PATHS_SHOWN], "count": len(unscannable)}
     acks = verified_acks(index) if linked else []
@@ -565,16 +779,16 @@ def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None) -> Op
             "count": len(open_inodes)}
 
 
-def check_hardlinks(index: ProfileIndex, root: str, cls: Optional[str] = None) -> None:
+def check_hardlinks(index: ProfileIndex, root: str, cls: Optional[str] = None, deadline: Optional[float] = None) -> None:
     """Before a command in ``root``: refuses while an inode with a name outside it is not acknowledged by the owner,
-    or while a directory inside it cannot be listed."""
-    block = _open_block(index, root, cls)
+    or while a directory inside it cannot be listed. ``ScanTooLarge`` past ``deadline`` (``time.monotonic``)."""
+    block = _open_block(index, root, cls, deadline)
     try:
         _report(index, root, block)
     except OSError:
         logger.warning("could not tell the app which project was refused", exc_info=True)
     if block:
-        raise ConfinementRefused(refusal_sentence(root, block["paths"], block["count"], block["kind"]))
+        raise ConfinementRefused(refusal_sentence(root, block["paths"], block["count"], block["kind"]), block["kind"])
 
 
 def _refusal_row(index: ProfileIndex, row: Dict[str, Any]) -> None:
@@ -589,14 +803,14 @@ def _refusal_row(index: ProfileIndex, row: Dict[str, Any]) -> None:
 
 
 def check_hardlinks_after_run(index: ProfileIndex, roots: List[str], pid: int, session_id: Optional[str],
-                              cls: Optional[str] = None) -> None:
+                              cls: Optional[str] = None, deadline: Optional[float] = None) -> None:
     """T3: when a confined command exits, scan again. A link planted while it ran was reachable (Seatbelt has no
     inode filter): that cannot be undone, only recorded, as a refusal-class row main's pane says in that run's name.
     The next command in that root is refused by ``check_hardlinks`` like any other."""
     ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + f".{int(time.time() * 1000) % 1000:03d}Z"
     for root in roots:
         try:
-            block = _open_block(index, root, cls)
+            block = _open_block(index, root, cls, deadline)
         except OSError:
             block = {"kind": "cannot-scan", "paths": [root], "count": 1}
         if not block:
@@ -610,3 +824,497 @@ def check_hardlinks_after_run(index: ProfileIndex, roots: List[str], pid: int, s
                                      "target": target, "sessionId": session_id, "root": root})
             except OSError:
                 logger.warning("could not record a hard link that appeared during run %s", pid, exc_info=True)
+
+
+# --- The launcher (runtime confined): every confined command goes through a stub child to the launcher main runs ----
+
+STUB = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "stub.py"))
+LAUNCHER_UNREACHABLE = "the launcher is not answering"
+
+
+def runtime_confined() -> bool:
+    """This Hermes runs under its own runtime profile: it cannot apply a profile itself (profiles do not nest), so
+    every confined command is handed to the launcher main started outside any sandbox."""
+    return os.environ.get("ICLONE_RUNTIME_CONFINED") == "1" and bool(os.environ.get("ICLONE_CONFINEMENT_LAUNCHER"))
+
+
+LAUNCHER_NOT_NAMED = "the launcher's socket is not named in this runtime's environment"
+# The one request that carries no fds: answered at once, never journaled (launcher.py ``PING``).
+PING = {"v": 1, "op": "ping"}
+PING_TIMEOUT_S = 2.0
+
+
+def runtime_confinement_requested() -> bool:
+    """Main started this Hermes under its runtime profile (whether or not it also named the launcher)."""
+    return os.environ.get("ICLONE_RUNTIME_CONFINED") == "1"
+
+
+def launcher_problem(timeout: float = PING_TIMEOUT_S) -> Optional[str]:
+    """None when the launcher answers a ping on its socket now; otherwise the plain reason commands cannot run. Under
+    the runtime profile this is what "Seatbelt is here" means: the runtime never execs sandbox-exec itself (it cannot
+    even stat it), the launcher does."""
+    socket_path = os.environ.get("ICLONE_CONFINEMENT_LAUNCHER", "")
+    if not os.path.isabs(socket_path):
+        return LAUNCHER_NOT_NAMED
+    try:
+        if not stat_mod.S_ISSOCK(os.lstat(socket_path).st_mode):
+            return LAUNCHER_UNREACHABLE
+    except OSError:
+        return LAUNCHER_UNREACHABLE
+    reply = _ask_launcher(socket_path, PING, timeout)
+    if isinstance(reply, dict) and reply.get("ok") is True and reply.get("op") == "pong":
+        return None
+    return LAUNCHER_UNREACHABLE
+
+
+def _ask_launcher(socket_path: str, request: Dict[str, Any], timeout: float) -> Any:
+    """One request without fds, one answer; None when the launcher does not give one."""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout)
+        sock.connect(socket_path)
+        body = json.dumps(request).encode("utf-8")
+        sock.sendall(struct.pack(">I", len(body)) + body)
+        buffered = b""
+        while len(buffered) < 4 or len(buffered) < 4 + struct.unpack(">I", buffered[:4])[0]:
+            if len(buffered) >= 4 and struct.unpack(">I", buffered[:4])[0] > 4096:
+                return None
+            chunk = sock.recv(4096)
+            if not chunk:
+                return None
+            buffered += chunk
+        size = struct.unpack(">I", buffered[:4])[0]
+        return json.loads(buffered[4:4 + size].decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    finally:
+        sock.close()
+
+
+# proofaudit row 11: every command is its own sandbox instance and the profile allows a signal only inside one, so from
+# the next instance the kernel answers EPERM for a command that lives. The launcher started it and stands outside every
+# profile: it says whether this pid is one of its runs' members and ends it, and only those.
+BACKGROUND_OP = "background"
+BACKGROUND_STOP_TIMEOUT_S = 10.0
+
+
+def is_background_request(req: Any) -> bool:
+    return (isinstance(req, dict) and req.get("v") == 1 and req.get("op") == BACKGROUND_OP
+            and type(req.get("pid")) is int and req["pid"] > 1 and type(req.get("stop")) is bool)
+
+
+def launcher_background(pid: int, stop: bool) -> Dict[str, Any]:
+    """The launcher's word on a background command: ``alive``, and after a stop what is ``left``. No answer raises."""
+    reply = _ask_launcher(os.environ.get("ICLONE_CONFINEMENT_LAUNCHER", ""),
+                          {"v": 1, "op": BACKGROUND_OP, "pid": pid, "stop": stop},
+                          BACKGROUND_STOP_TIMEOUT_S if stop else PING_TIMEOUT_S)
+    if not isinstance(reply, dict) or reply.get("ok") is not True:
+        raise ConfinementRefused(LAUNCHER_UNREACHABLE, "launcher-unreachable")
+    return reply
+
+
+# --- G-98 F42: the hand-off of an owner's answer from the permission hook to the run. Nothing here is authority: a
+# one-shot that main did not record is refused by the launcher, and a folder the owner did not allow runs read-only.
+ONESHOT_FLAG = "--iclone-oneshot"
+ONESHOT_ENV = "ICLONE_ONESHOT_COMMAND"
+ONESHOT_BACKGROUND_ENV = "ICLONE_ONESHOT_BACKGROUND"
+ONEFILE_FLAG = "--iclone-onefile"
+ONEFILE_ENV = "ICLONE_ONEFILE_PATH"
+ONEFILE_READ_FLAG = "--iclone-onefile-read"
+ONEFILE_SEEN_ENV = "ICLONE_ONEFILE_SEEN"
+ONEFILE_SEEN_PARTIAL = "partial"
+ONEFILE_TIMEOUT_S = 120.0
+_approved_files: Dict[str, float] = {}
+_approved_reads: Dict[str, float] = {}
+_seen_files: Dict[str, str] = {}
+_seen_pages: Dict[str, Tuple[str, int]] = {}  # G27: digest, the next line a whole-file view still needs
+# fx23: one quoted word as shlex.quote writes it, and Hermes' background wrapper (process_registry.spawn_via_env), whole.
+_QUOTED = r"(?:'[^']*'|\"'\"|[\w@%+=:,./-])+"
+BACKGROUND_SHAPE = re.compile(
+    rf"mkdir -p (?P<dir>{_QUOTED}); \( trap '' HUP; bash -lc (?P<command>{_QUOTED}) > (?P<log>{_QUOTED}hermes_bg_[\w-]+\.log) 2>&1; "
+    rf"rc=\$\?; printf '%s\\n' \"\$rc\" > (?P<exit>{_QUOTED}hermes_bg_[\w-]+\.exit) \) & "
+    rf"echo \$! > (?P<pid>{_QUOTED}hermes_bg_[\w-]+\.pid) && cat (?P=pid)")
+_HANDOFF_TTL_S = 120.0
+_handoff_lock = threading.Lock()
+_approved_commands: Dict[str, float] = {}
+# F50: one tool call's folder, held in that call's context. The permission gate runs in the call's context, and a tool
+# worker gets a copy of it (propagate_context_to_thread), so no other call and no other session can read it. Before this
+# it was a table for the whole process, matched on a run's text for 120 s, which moved later commands into the folder.
+_approved_folder: "ContextVar[Optional[Tuple[str, float]]]" = ContextVar("iclone_approved_folder", default=None)
+# f57: the same value by tool call id, for a worker whose context was copied before the gate ran.
+_approved_folder_of_call: Dict[str, Tuple[str, float]] = {}
+
+
+def _live(table: Dict[str, float], now: float) -> None:
+    for key in [k for k, until in table.items() if until <= now]:
+        del table[key]
+
+
+def note_approved_command(command: str) -> None:
+    """Main answered that this exact text may run once outside the Seatbelt."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_commands, now)
+        _approved_commands[command] = now + _HANDOFF_TTL_S
+
+
+def take_approved_command(command: str) -> bool:
+    """True once, for exactly the text main's answer named, and only where a launcher can run it."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_commands, now)
+        return _approved_commands.pop(command, None) is not None and runtime_confined()
+
+
+def _one_word(quoted: str) -> Optional[str]:
+    try:
+        words = shlex.split(quoted)
+    except ValueError:
+        return None
+    return words[0] if len(words) == 1 else None
+
+
+def background_command(text: str) -> Optional[str]:
+    """fx23 (proof6 F5): the agent's command inside Hermes' background wrapper, or None. Only the wrapper's exact shape,
+    whole, with its own file names: a command with anything else in it is shown as it is, so nothing it does is hidden."""
+    match = BACKGROUND_SHAPE.fullmatch(text)
+    return _one_word(match.group("command")) if match else None
+
+
+def background_files_inside(text: str, root: str) -> bool:
+    """G2 A4: outside the Seatbelt the wrapper's own redirections have the owner's whole reach, so each of its files must
+    be under the scratch folder; the model never picks where they land."""
+    match = BACKGROUND_SHAPE.fullmatch(text)
+    if not match:
+        return False
+    real_root = os.path.realpath(root).rstrip(os.sep) + os.sep
+    words = [_one_word(match.group(name)) for name in ("dir", "log", "exit", "pid")]
+    return all(word and os.path.isabs(word) and os.path.realpath(word).startswith(real_root) for word in words)
+
+
+ONE_FILE_NOT_PLAIN = "it is a link or a folder, not a file"
+ONE_FILE_GRANT = "a grant for its folder does this"
+ONE_FILE_LINK_DANGLING = "it is a link whose target does not exist"
+ONE_FILE_LINK_OUTSIDE = "it is a link to a place outside your home folder, or to one of this app's own files"
+
+
+def one_file_refusal(index: Any, path: Any, opened: bool = False) -> Optional[str]:
+    """G2 A5, G23 (the owner's ruling: the user has total freedom and takes the responsibility): why this path is not the
+    one file main may record for a write outside the Seatbelt, or None. Any exact file under the home that a grant for its
+    folder cannot open, keys, shell startup files, browser profiles and ``.git`` included, in its own real spelling, a plain
+    file or nothing yet. A folder a grant can open takes the grant. Only this app's own files stay shut, because writing
+    them breaks the mechanism in use (``ProfileIndex.app_files``). G23-W2: ``opened``, main's row says this file goes by the
+    route though a grant could open its folder: Ignore, or the target of a link the owner's answer named."""
+    if not isinstance(path, str) or not path or any(ch in path for ch in "\x00\r\n") or not os.path.isabs(path) \
+            or os.path.normpath(path) != path:
+        return "it is not one exact path"
+    folder = os.path.dirname(path)
+    home = os.path.realpath(index.home)
+    if os.path.realpath(folder) != folder or not (folder == home or folder.startswith(home + os.sep)):
+        return "only a file under your home folder, in its own real spelling, can be allowed this way"
+    if any(_holds(own, path) for own in index.app_files):
+        return "it is one of this app's own files"
+    if not opened and project_root_refusal(folder, index) is None:
+        return ONE_FILE_GRANT
+    try:
+        mode = os.lstat(path).st_mode
+    except (FileNotFoundError, PermissionError):  # the runtime's profile may refuse the stat; the launcher's own judge has none
+        return None
+    except OSError:
+        return "that path could not be read"
+    return None if stat_mod.S_ISREG(mode) else ONE_FILE_NOT_PLAIN
+
+
+def one_file_target(index: Any, path: Any, opened: bool = False) -> "tuple[Optional[str], Optional[str]]":
+    """G23-W2: ``(the file to write, why not)``. A plain path answers for itself. A link, such as a ``~/.zshrc`` in a dotfiles
+    repo, answers with its real target when that is a file under the home and not one of this app's own files. The target may
+    sit in a folder a grant could open: the owner's answer names it, so no grant is what stands in the way."""
+    why = one_file_refusal(index, path, opened)
+    if why != ONE_FILE_NOT_PLAIN:
+        return path, why
+    try:
+        if not stat_mod.S_ISLNK(os.lstat(path).st_mode):
+            return None, why
+        real = os.path.realpath(path)
+        if not stat_mod.S_ISREG(os.stat(real).st_mode):
+            return None, ONE_FILE_NOT_PLAIN
+    except FileNotFoundError:
+        return None, ONE_FILE_LINK_DANGLING
+    except OSError:
+        return None, "that path could not be read"
+    home = os.path.realpath(index.home)
+    if not real.startswith(home + os.sep) or any(_holds(own, real) for own in index.app_files):
+        return None, ONE_FILE_LINK_OUTSIDE
+    why = one_file_refusal(index, real, opened=True)
+    return (None, why) if why else (real, None)
+
+
+def _holds(held: Any, path: str) -> bool:
+    """``held`` is this path, or a folder around it, or this path is a folder around it; by case too, as the Mac reads it."""
+    lowered, other = disk_fold(path), disk_fold(str(held))
+    return lowered == other or lowered.startswith(other.rstrip(os.sep) + os.sep) or other.startswith(lowered + os.sep)
+
+
+FILE_STAYS_SHUT = ("icloneOS: {path} was not written. It is one of this app's own files, and the file tools leave those alone "
+                   "in every mode, because writing them breaks the confinement in use. What works: the terminal tool, with "
+                   "the whole command in its text. In Manual the owner reads that text and, on Allow, it runs once outside "
+                   "the Seatbelt. In a mode that does not ask it stays confined and is refused too, so ask the owner to "
+                   "switch to Manual, or to make the change.")
+FILE_LINK_REFUSED = "icloneOS: {path} was not written: {why}. What works: the terminal tool, with the whole command in its text."
+FILE_NOT_PLAIN = ("icloneOS: {path} was not written. It is a link or a folder, and one Allow writes one plain file. Write the "
+                  "file the link points to, or use the terminal tool, with the whole command in its text.")
+
+
+def file_stays_shut(index: Any, path: str) -> Optional[str]:
+    """G23: the plain sentence for a write that cannot happen, before a confined shell turns it into a raw error. This app's
+    own files, except the folders the runtime writes inside them (the scratch folder sits in the app's data). None for
+    anything else: the run goes on and the kernel answers."""
+    holes = [os.path.realpath(hole) for hole in (index.scratch_root, index.refusals_dir, index.hardlink_acks) if hole]
+    if any(_holds(hole, path) for hole in holes):
+        return None
+    if any(_holds(own, path) for own in index.app_files):
+        return FILE_STAYS_SHUT.format(path=path)
+    _, why = one_file_target(index, path)
+    if why in (ONE_FILE_LINK_DANGLING, ONE_FILE_LINK_OUTSIDE):
+        return FILE_LINK_REFUSED.format(path=path, why=why)
+    return FILE_NOT_PLAIN.format(path=path) if why == ONE_FILE_NOT_PLAIN else None
+
+
+def note_approved_file(path: str) -> None:
+    """Main answered that this one file may be written once outside the Seatbelt."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_files, now)
+        _approved_files[path] = now + _HANDOFF_TTL_S
+
+
+def approved_file_waiting(path: str) -> bool:
+    """Main's answer for this file is here and unspent. Spending it stays with ``take_approved_file``."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_files, now)
+        return path in _approved_files and runtime_confined()
+
+
+def take_approved_file(path: str) -> bool:
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_files, now)
+        return _approved_files.pop(path, None) is not None and runtime_confined()
+
+
+def note_approved_read(path: str) -> None:
+    """G23-W2: main answered that this one file may be read once outside the Seatbelt."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_reads, now)
+        _approved_reads[path] = now + _HANDOFF_TTL_S
+
+
+def approved_read_waiting(path: str) -> bool:
+    """G24: main's answer for reading this file is here and unspent. Spending it stays with ``take_approved_read``."""
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_reads, now)
+        return path in _approved_reads and runtime_confined()
+
+
+def take_approved_read(path: str) -> bool:
+    now = time.monotonic()
+    with _handoff_lock:
+        _live(_approved_reads, now)
+        return _approved_reads.pop(path, None) is not None and runtime_confined()
+
+
+def note_seen_file(path: str, data: bytes) -> None:
+    with _handoff_lock:
+        _seen_files[path] = hashlib.sha256(data).hexdigest()
+        _seen_pages.pop(path, None)
+
+
+def note_route_view(path: str, digest: str, first: int, last: int, total: int) -> None:
+    """G27: what the agent was shown of a route read. Only contiguous pages of one content, up to its last line, license
+    a whole-file write. A later page of other bytes starts over; an earlier full view stays until the writer finds a change."""
+    with _handoff_lock:
+        held, next_line = _seen_pages.get(path) or (digest, 1)
+        if held != digest:
+            next_line = 1
+        if first <= next_line:
+            next_line = max(next_line, last + 1)
+        if next_line > total:
+            _seen_files[path] = digest
+            _seen_pages.pop(path, None)
+        else:
+            _seen_pages[path] = (digest, next_line)
+
+
+def forget_seen_file(path: str) -> None:
+    with _handoff_lock:
+        _seen_files.pop(path, None)
+        _seen_pages.pop(path, None)
+
+
+def one_file_seen(path: str) -> Optional[str]:
+    """G23-W2: what the writer must find. None when the runtime can stat this file: the file tools' read-before-write rule
+    judged it. Where its profile refuses the stat that rule sees no file, so the writer judges: the digest of the content this
+    runtime last showed whole or wrote there, ``partial`` after pages that do not reach the end, or ``none``, and an existing
+    file is then never overwritten unread."""
+    try:
+        os.lstat(path)
+        return None
+    except PermissionError:
+        with _handoff_lock:
+            return _seen_files.get(path) or (ONEFILE_SEEN_PARTIAL if path in _seen_pages else "none")
+    except OSError:
+        return None
+
+
+def _run_one_file(flag: str, path: str, data: bytes, seen: Optional[str] = None) -> "subprocess.CompletedProcess[bytes]":
+    """The launcher does it, against main's row: the path in ONEFILE_ENV, any content on the stub's stdin."""
+    session = os.environ.get("HERMES_SESSION_ID")
+    env = {"PATH": "/usr/bin:/bin", ONEFILE_ENV: path, "ICLONE_RUN_CWD": os.path.dirname(path),
+           **({ONEFILE_SEEN_ENV: seen} if seen else {}), **({"HERMES_SESSION_ID": session} if session else {})}
+    from tools.environments.host_lane import STUB_FILE  # the runtime's copy: the one form the spawn guard accepts
+
+    argv = via_launcher([SANDBOX_EXEC, flag])
+    argv[3] = os.path.realpath(str(STUB_FILE))
+    return subprocess.run(argv, input=data, capture_output=True, env=env, timeout=ONEFILE_TIMEOUT_S)
+
+
+def send_approved_file(path: str, data: bytes, patch_of: Optional[bytes] = None) -> int:
+    """``patch_of``: the bytes this patch read, so the writer finds those. The agent saw only its own lines, so a patch keeps
+    a whole-file license only where it had one: a later write_file after a blind patch is still a write over the unread."""
+    seen = one_file_seen(path)
+    base = hashlib.sha256(patch_of).hexdigest() if patch_of is not None else None
+    proc = _run_one_file(ONEFILE_FLAG, path, data, base if base and seen is not None else seen)
+    if proc.returncode != 0:
+        raise ConfinementRefused(proc.stderr.decode("utf-8", "replace").strip() or "the file was not written", "onefile")
+    if base is not None and seen != base:
+        forget_seen_file(path)
+    else:
+        note_seen_file(path, data)
+    return len(data)
+
+
+def read_one_file(path: str) -> bytes:
+    proc = _run_one_file(ONEFILE_READ_FLAG, path, b"")
+    if proc.returncode != 0:
+        raise ConfinementRefused(proc.stderr.decode("utf-8", "replace").strip() or "the file was not read", "onefile")
+    return proc.stdout
+
+
+def one_shot_argv() -> List[str]:
+    """The stub in its usual form, so the spawn guard reads one shape; the text travels in ONESHOT_ENV, which the
+    launcher pops before the command starts."""
+    return via_launcher([SANDBOX_EXEC, ONESHOT_FLAG])
+
+
+def _current_tool_call() -> str:
+    """The tool call this thread works for, bound by the executor in the gate's context and in the worker's."""
+    try:
+        from tools.approval_context import _approval_tool_call_id
+        return _approval_tool_call_id.get() or ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def note_approved_folder(folder: str, call_id: str = "") -> None:
+    """The owner allowed a file tool's write that names this folder: the runs of that one call are made for it.
+    f57: the executor may start the worker before the gate answers, so the call's id carries it to that worker."""
+    held = (folder, time.monotonic() + _HANDOFF_TTL_S)
+    _approved_folder.set(held)
+    if call_id:
+        with _handoff_lock:
+            _live_folders(time.monotonic())
+            _approved_folder_of_call[call_id] = held
+
+
+def forget_approved_folder(call_id: str = "") -> None:
+    """A tool call began or ended: what the last one was allowed is not this one's."""
+    _approved_folder.set(None)
+    if call_id:
+        with _handoff_lock:
+            _approved_folder_of_call.pop(call_id, None)
+
+
+def _live_folders(now: float) -> None:
+    for key in [k for k, held in _approved_folder_of_call.items() if held[1] <= now]:
+        del _approved_folder_of_call[key]
+
+
+def approved_folder_of(command: str) -> Optional[str]:
+    """The folder of this call's approved write, when this run's text names it; the kernel and the launcher still judge it."""
+    held = _approved_folder.get()
+    if held is None:
+        call_id = _current_tool_call()
+        with _handoff_lock:
+            held = _approved_folder_of_call.get(call_id) if call_id else None
+    if held is None or held[1] <= time.monotonic() or held[0] not in command:
+        return None
+    return held[0]
+
+
+def mode_label(session_id: Optional[str] = None, project: Optional[str] = None) -> str:
+    """The permission mode, by name, for a sentence the agent reads."""
+    module = _permissions_module()
+    policy_mod = sys.modules.get(f"{module.__name__}.policy") if module is not None else None
+    if policy_mod is None:
+        return "Manual"
+    try:
+        verdict = policy_mod.decide(module._state["policy"].body(), cls="R", facts={}, floor=None, ceiling_key=None,
+                                    session_id=session_id, project=project)
+        return str(verdict.mode or "manual").capitalize()
+    except Exception:  # noqa: BLE001 — a sentence never fails a run
+        return "Manual"
+
+
+def via_launcher(sandbox_argv: List[str]) -> List[str]:
+    """The argv that starts ``sandbox_argv``: unchanged unless the runtime is confined, then the stub that carries it
+    to the launcher. A launcher socket that is not there refuses here, before anything starts."""
+    if not runtime_confined():
+        return sandbox_argv
+    socket_path = os.environ.get("ICLONE_CONFINEMENT_LAUNCHER", "")
+    try:
+        is_socket = os.path.isabs(socket_path) and stat_mod.S_ISSOCK(os.lstat(socket_path).st_mode)
+    except OSError:
+        is_socket = False
+    if not is_socket:
+        raise ConfinementRefused(LAUNCHER_UNREACHABLE, "launcher-unavailable")
+    return [sys.executable, "-I", "-S", STUB, socket_path, "--", *sandbox_argv]
+
+
+def journal_dir() -> str:
+    """Where the run journal lives: ``ICLONE_LAUNCHER_JOURNAL_DIR``, else the launcher socket's folder."""
+    explicit = os.environ.get("ICLONE_LAUNCHER_JOURNAL_DIR", "")
+    if explicit:
+        return explicit if os.path.isabs(explicit) else ""
+    socket_path = os.environ.get("ICLONE_CONFINEMENT_LAUNCHER", "")
+    return os.path.dirname(socket_path) if os.path.isabs(socket_path) else ""
+
+
+def iso_now() -> str:
+    now = time.time()
+    return time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(now)) + f".{int(now * 1000) % 1000:03d}Z"
+
+
+def record_refusal(session_id: Optional[str], command: str, exc: BaseException) -> None:
+    """One ``refused`` line in ``<journal dir>/refused.jsonl`` for a command the plugin refused before the launcher was
+    asked (the launcher journals its own). Only while the runtime is confined; never raises."""
+    if not runtime_confined():
+        return
+    directory = journal_dir()
+    if not directory:
+        return
+    code = getattr(exc, "code", "other") if isinstance(exc, ConfinementRefused) else "other"
+    row = {"v": 1, "ev": "refused", "ts": iso_now(),
+           "session": session_id if session_id and _SESSION_RE.match(session_id) else None,
+           "command": str(command)[:2000], "code": code, "detail": str(exc)[:2000]}
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        fd = os.open(os.path.join(directory, "refused.jsonl"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, (json.dumps(row) + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+    except OSError:
+        logger.warning("could not record a refused command", exc_info=True)

@@ -148,6 +148,9 @@ def _mirror_config_to_env(defaults, _file_has_terminal_config):
                 os.environ[env_var] = str(val)
         elif _file_has_terminal_config or env_var not in os.environ:
             os.environ[env_var] = json.dumps(val) if isinstance(val, (list, dict)) else str(val)
+    from hermes_cli.iclone_policy_env import settle_backend  # iclone-seam: fx35
+
+    settle_backend(os.environ)
 
     browser_config = defaults.get("browser", {})
     if "inactivity_timeout" in browser_config:

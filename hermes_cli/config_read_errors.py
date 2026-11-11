@@ -9,6 +9,8 @@ remembers the failure for :func:`get_active_config_parse_failure`, and marks eve
 from __future__ import annotations
 
 import logging
+import os
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -61,7 +63,7 @@ def format_config_parse_failure(config_path: Path, exc: Exception, *, fallback: 
     at = f" at {where}" if where else ""
     fallback_msg = _PARSE_FAILURE_FALLBACK_MSG.get(fallback, _PARSE_FAILURE_DEFAULTS_MSG)
     if isinstance(exc, OSError):  # the file is intact; EMFILE/EIO/sharing violation, not a YAML problem
-        return f"Your settings file ({config_path}) could not be read. {fallback_msg} {_read_error_fix(exc)}"
+        return f"Your settings file ({config_path}) {_read_error_reason(config_path, exc)} {fallback_msg} {_read_error_fix(exc, config_path)}"
     repair = _PARSE_FAILURE_REPAIR_MSG.format(where=where or "the problem")
     return f"Your settings file ({config_path}) has a formatting error{at}. {fallback_msg} {repair}"
 
@@ -123,9 +125,76 @@ class FailedConfigRead(dict):
         self.read_error = error
 
 
-def _read_error_fix(exc: OSError) -> str:
+def _denied_link(path: Path, exc: OSError) -> bool:
+    """The sandbox refuses to follow a link out of the home (EPERM), which no file permission explains or fixes.
+    The only such sandbox is on macOS: anywhere else this is a plain permission problem, and `umask` may not exist."""
+    return sys.platform == "darwin" and isinstance(exc, PermissionError) and path.is_symlink()
+
+
+def _dangling_link(path: Path, exc: OSError) -> bool:
+    return isinstance(exc, FileNotFoundError) and path.is_symlink()
+
+
+def _read_error_reason(path: Path, exc: OSError) -> str:
+    if _denied_link(path, exc):
+        return "is a link to a file this process is not allowed to read, most likely outside the agent's home."
+    if _dangling_link(path, exc):
+        return "is a link to a file that does not exist."
+    return "could not be read."
+
+
+def plain_copy_command(path: Path) -> str:
+    """The way out of a linked settings file: a private plain copy of what it points at, taking the link's place."""
+    # A fixed temp name would write through a link the runtime planted there, in a command run outside the sandbox.
+    quoted, template = shlex.quote(str(path)), shlex.quote(f"{path}.XXXXXX")
+    return f'(umask 077 && t=$(mktemp {template}) && cp -L {quoted} "$t" && mv "$t" {quoted})'
+
+
+def _read_error_fix(exc: OSError, path: Optional[Path] = None) -> str:
+    if path is not None and _denied_link(path, exc):
+        return f"Replace it with a plain file: {plain_copy_command(path)}"
+    if path is not None and _dangling_link(path, exc):
+        return "Remove the link or restore its file."
     return _FIX_PERMS if isinstance(exc, PermissionError) else (
         "Try again; run `hermes config check` if it keeps failing.")
+
+
+def describe_unreadable_config(config_path: Path, exc: OSError) -> str:
+    """A settings file that exists and cannot be read is not a formatting problem: its reason and its way out."""
+    return f"Your settings file ({config_path}) {_read_error_reason(config_path, exc)} {_read_error_fix(exc, config_path)}"
+
+
+def unreadable_env_error(path: Path) -> Optional[OSError]:
+    """Why an existing ``.env`` cannot be read; None when it can, or when it is truly absent. A sandbox denial on a link's
+    target makes ``Path.exists`` answer False, so "absent" is asked of the name itself. O_NONBLOCK: a FIFO must not hang."""
+    try:
+        os.close(os.open(path, os.O_RDONLY | getattr(os, "O_NONBLOCK", 0)))
+        return None
+    except FileNotFoundError as exc:
+        return exc if path.is_symlink() else None
+    except OSError as exc:
+        return exc
+
+
+_ENV_UNREADABLE_WARNED: set = set()
+
+
+def warn_unreadable_env(path: Path, exc: OSError) -> None:
+    """Keys that exist and could not be loaded: log and stderr (once per path), never the silence of an absent file."""
+    if _denied_link(path, exc) or _dangling_link(path, exc):
+        message = f"Your keys file ({path}) {_read_error_reason(path, exc)} {_read_error_fix(exc, path)}"
+    else:
+        message = f"Your keys file ({path}) could not be read. {_FIX_PERMS}"
+    message += " No key from this file is loaded."
+    if str(path) in _ENV_UNREADABLE_WARNED:
+        return
+    _ENV_UNREADABLE_WARNED.add(str(path))
+    logger.warning("%s Details: %s", message, exc)
+    try:
+        sys.stderr.write(f"⚠️  hermes config: {message}\n    Details: {exc}\n")
+        sys.stderr.flush()
+    except Exception:
+        pass
 
 
 def _refuse_failed_read(config_path: Path, data: Any) -> None:
@@ -134,7 +203,7 @@ def _refuse_failed_read(config_path: Path, data: Any) -> None:
         return
     exc = data.read_error
     if isinstance(exc, OSError):
-        raise _refuse_overwrite(config_path, "could not be read", exc, _read_error_fix(exc))
+        raise _refuse_overwrite(config_path, "could not be read", exc, _read_error_fix(exc, config_path))
     raise _refuse_overwrite(
         config_path, "has a formatting error", exc, _FIX_YAML.format(backups=_backups_dir_display()))
 

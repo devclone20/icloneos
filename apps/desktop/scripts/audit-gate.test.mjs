@@ -706,7 +706,7 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     assert.equal(code, 0, lines.join('\n'))
     assert.match(lines.at(-1), /GREEN: .* 0 failing, 4 waived, 0 stale/)
     assert.ok(
-      lines.some(line => /^WAIVED zod@3\.25\.76 until v0\.0\.6/.test(line)),
+      lines.some(line => /^WAIVED zod@3\.25\.76 until v0\.0\.8/.test(line)),
       lines.join('\n')
     )
   })
@@ -795,13 +795,14 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
         'DoS of the sign-in window only',
         'no data or code is exposed',
         'accepted by the owner 2026-11-03/04',
-        're-decided at v0.0.6; removed when a compatible fix exists'
+        're-decided 2026-11-05 for v0.0.6 by the security review; removed when a compatible fix exists',
+        're-reviewed 2026-11-10 for v0.0.7: still no compatible fix'
       ]) {
         assert.ok(entry.reason.includes(text), `${id}: ${text}`)
       }
 
       assert.ok(entry.until.includes('re-decided each release; removed when a compatible fix exists (backlog'), id)
-      assert.deepEqual(untilVersion(entry.until), [0, 0, 6], id)
+      assert.deepEqual(untilVersion(entry.until), [0, 0, 8], id)
     }
 
     for (const consumer of ['@privy-io/api-base', '@coinbase/cdp-sdk', 'x402', '@reown/appkit-wallet']) {
@@ -818,15 +819,29 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     }
   })
 
-  test('at v0.0.6 every waiver has EXPIRED, and the gate is red', () => {
-    const verdict = judgeIn(WAIVERS, '0.0.6')
+  test('at v0.0.7 every waiver still applies, and the gate is green: the re-decision of this release', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.7')
+
+    assert.deepEqual([verdict.failing, verdict.stale, verdict.untied, verdict.expired], [[], [], [], []])
+    assert.deepEqual(ids(verdict.waived), ACCEPTED)
+    assert.equal(render(verdict, WAIVERS).code, 0)
+  })
+
+  test('each sign-in waiver says what the shipped bundle holds of it', () => {
+    assert.ok(WAIVERS['zod@3.25.76'].reason.includes('this copy is in privy-login.js'))
+    assert.ok(WAIVERS['zod@3.22.4'].reason.includes('in the lock but not in privy-login.js'))
+    assert.ok(WAIVERS['decode-uri-component@0.2.2'].reason.includes('neither package is in privy-login.js'))
+  })
+
+  test('at v0.0.8 every waiver has EXPIRED, and the gate is red', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.8')
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.deepEqual(verdict.expired.map(e => e.id).sort(), Object.keys(WAIVERS).sort())
     assert.deepEqual(ids(verdict.failing), ACCEPTED)
     assert.equal(code, 1)
     assert.ok(
-      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.6/.test(line)),
+      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.8/.test(line)),
       lines.join('\n')
     )
   })
@@ -1026,14 +1041,16 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
         'runs out of memory or stalls',
         'no data or code is exposed',
         'accepted by the owner 2026-11-03/04',
-        're-decided at v0.0.6; removed when a compatible fix exists'
+        're-decided 2026-11-05 for v0.0.6 by the security review; removed when a compatible fix exists',
+        're-reviewed 2026-11-10 for v0.0.7: still no compatible fix'
       ]) {
         assert.ok(entry.reason.includes(text), `${id}: ${text}`)
       }
 
       assert.ok(entry.until.includes('re-decided each release; removed when a compatible fix exists'), id)
       assert.ok(entry.until.includes('backlog: move the ACP CLI to acp-node-v2'), id)
-      assert.deepEqual(untilVersion(entry.until), [0, 0, 6], id)
+      assert.ok(entry.until.includes('still needs zod 3 through @account-kit/infra'), id)
+      assert.deepEqual(untilVersion(entry.until), [0, 0, 8], id)
     }
 
     for (const text of ['@account-kit/infra', '@aa-sdk/core', 'acp-node-v2']) {
@@ -1041,15 +1058,23 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
     }
   })
 
-  test('at v0.0.6 both waivers have EXPIRED, and the gate is red', () => {
-    const verdict = judgeIn(WAIVERS, '0.0.6')
+  test('at v0.0.7 both waivers still apply, and the gate is green: the re-decision of this release', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.7')
+
+    assert.deepEqual([verdict.failing, verdict.stale, verdict.untied, verdict.expired], [[], [], [], []])
+    assert.deepEqual(ids(verdict.waived), ACCEPTED)
+    assert.equal(render(verdict, WAIVERS).code, 0)
+  })
+
+  test('at v0.0.8 both waivers have EXPIRED, and the gate is red', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.8')
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.deepEqual(verdict.expired.map(e => e.id).sort(), Object.keys(WAIVERS).sort())
     assert.deepEqual(ids(verdict.failing), ACCEPTED)
     assert.equal(code, 1)
     assert.ok(
-      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.6/.test(line)),
+      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.8/.test(line)),
       lines.join('\n')
     )
   })

@@ -671,6 +671,9 @@ def credential_pool_entry_serves_endpoint(entry: Any, base_url: Any) -> bool:
     entry_url = getattr(entry, "runtime_base_url", None) or getattr(entry, "base_url", None)
     if not isinstance(entry_url, str) or not entry_url:
         return True
+    if getattr(entry, "provider", None) == "openai-codex":  # its URL stays canonical; it serves where its key routes
+        from hermes_cli.auth_codex import _codex_entry_route
+        entry_url = _codex_entry_route(entry)
     from hermes_cli.route_identity import normalize_route_base_url
     return normalize_route_base_url(entry_url) == normalize_route_base_url(base_url)
 
@@ -1527,7 +1530,23 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
 
     # ---- refresh -----------------------------------------------------------
 
+    def _codex_token_not_refreshable(self, entry: PooledCredential) -> bool:
+        if self.provider != "openai-codex":
+            return False
+        from hermes_cli.auth_codex import _codex_token_is_refreshable
+        return not _codex_token_is_refreshable(entry.access_token)
+
+    def _codex_key_row_refused(self, entry: PooledCredential) -> bool:
+        """A key row whose route refuses it made no request, so nothing failed: a forced refresh leaves it."""
+        if self.provider != "openai-codex" or entry.auth_type == AUTH_TYPE_OAUTH:
+            return False
+        from hermes_cli.auth_codex import _codex_entry_accepted
+        return not _codex_entry_accepted(entry)
+
     def _refresh_entry(self, entry: PooledCredential, *, force: bool) -> Optional[PooledCredential]:
+        if self._codex_key_row_refused(entry) or (
+                entry.auth_type == AUTH_TYPE_OAUTH and self._codex_token_not_refreshable(entry)):
+            return None  # never posted to auth.openai.com, and the row stays as it was
         if entry.auth_type != AUTH_TYPE_OAUTH or not entry.refresh_token:
             if force:
                 self._mark_exhausted(entry, None)
@@ -1974,9 +1993,8 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
                 self._sync_device_code_entry_to_auth_store(entry)
                 token = entry.access_token or token
             # The row keeps the canonical URL; a gateway key belongs to its route host (#121486).
-            from hermes_cli.auth_codex import _codex_pool_route_base_url
-            return bool(auth_mod._probe_codex_quota_restored(
-                token, base_url=_codex_pool_route_base_url(entry.base_url)))
+            from hermes_cli.auth_codex import _codex_row_probe_route
+            return bool(auth_mod._probe_codex_quota_restored(token, base_url=_codex_row_probe_route(token, entry.base_url)))
         except Exception:
             logger.debug("Codex quota-restored probe failed", exc_info=True)
             return False
@@ -1987,7 +2005,8 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
         if self.provider == "anthropic" or plugin_refresh_hook(self.provider) is not None:
             return plugin_row_is_expiring(entry)  # expiry-stamped rows: rotate 2 min ahead of expires_at_ms
         if self.provider == "openai-codex":
-            return _codex_access_token_is_expiring(entry.access_token, CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS)
+            return (not self._codex_token_not_refreshable(entry)
+                    and _codex_access_token_is_expiring(entry.access_token, CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS))
         if self.provider == "xai-oauth":
             return auth_mod._xai_access_token_is_expiring(
                 entry.access_token, auth_mod._xai_proactive_refresh_skew_seconds(entry.access_token),
@@ -2163,15 +2182,23 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
         self._last_no_entries_log_at = now
         logger.info("credential pool: no available entries (all exhausted or empty)")
 
+    def _codex_choosable(self, available: List[PooledCredential], *, rotating: bool = False) -> List[PooledCredential]:
+        if self.provider != "openai-codex":
+            return available
+        from hermes_cli.auth_codex import _codex_choosable_entries
+        return _codex_choosable_entries(available, pool_rows=self._entries, rotating=rotating)
+
     def _select_unlocked(
-        self, *, refresh: bool = True, count: bool = True, model: Optional[str] = None,
+        self, *, refresh: bool = True, count: bool = True, model: Optional[str] = None, rotating: bool = False,
     ) -> Tuple[Optional[PooledCredential], List[PooledCredential]]:
         """Select the best available entry; returns ``(entry, pending_refresh)``.
 
         ``count=False`` skips the ``request_count`` bump for selections that are
         not going to serve a request (a forced-refresh target lookup).
+        ``rotating=True`` is the app moving a session on after a failure.
         """
         available, pending_refresh = self._available_entries(clear_expired=True, refresh=refresh, model=model)
+        available = self._codex_choosable(available, rotating=rotating)
         if not available:
             self._current_id = None
             self._log_no_available_entries()
@@ -2206,7 +2233,7 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
             current = self._current_unlocked()
             if current is not None:
                 return current
-            available, _pending = self._available_entries()
+            available = self._codex_choosable(self._available_entries()[0])
             return available[0] if available else None
 
     def reclaim(self, credential_id: str, *, model: Optional[str] = None) -> Optional[PooledCredential]:
@@ -2283,7 +2310,7 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
             self.provider,
         )
         self._current_id = None
-        next_entry, _pending = self._select_unlocked(refresh=False)
+        next_entry, _pending = self._select_unlocked(refresh=False, rotating=True)
         if next_entry is not None and len(self._available_entries()[0]) == 1:
             # A single-entry pool cannot rotate: returning its only entry would
             # report a recovery without changing the credential, and the
@@ -2322,7 +2349,7 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
                 self._cool_down_model(entry, model, error_context, failure_reason=failure_reason)
                 logger.info("credential pool: %s unavailable for model %s; other models stay available", _label, model)
                 self._current_id = None
-                next_entry, _pending = self._select_unlocked(refresh=False, model=model)
+                next_entry, _pending = self._select_unlocked(refresh=False, model=model, rotating=True)
                 return next_entry
             self._mark_exhausted(entry, status_code, error_context, failure_reason=failure_reason)
             # A 402/429/401 is a key-level failure, and the same key can back
@@ -2353,7 +2380,7 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
             else:
                 logger.info("credential pool: marking %s exhausted (status=%s), rotating", _label, status_code)
             self._current_id = None
-            next_entry, _pending = self._select_unlocked(refresh=False)
+            next_entry, _pending = self._select_unlocked(refresh=False, rotating=True)
             if next_entry is not None and next_entry.id == entry.id:
                 # No-recovery guard (#97315): selection handed back the very entry that was
                 # just marked (the auth-store sync adopted fresher tokens, or a quota probe
@@ -2401,6 +2428,7 @@ class CredentialPool(CredentialPoolAdminMixin, CredentialPoolModelCooldownMixin)
                 return credential_id, []
 
             available, pending_refresh = self._available_entries(clear_expired=True, refresh=True)
+            available = self._codex_choosable(available)
             if not available:
                 return None, pending_refresh
 

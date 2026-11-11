@@ -344,6 +344,12 @@ def unmetered_backend_calls() -> Iterator[None]:
         _UNMETERED.reset(token)
 
 
+def backend_calls_unmetered() -> bool:
+    """True inside ``unmetered_backend_calls``: the backend call under way is Hermes' own, not the user's. A
+    terminal backend that labels who issued each command reads this at the call, never the command's text."""
+    return _UNMETERED.get()
+
+
 def record_execution_backend(kind: str, backend: Any, result: Any = None, *, error_class: str | None = None) -> Any:
     """Count one tool call that reached its backend; returns ``result`` unchanged. ``backend`` may be a
     callable so resolving it costs nothing while collection is off. Calls the background review /

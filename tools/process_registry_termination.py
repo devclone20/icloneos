@@ -22,11 +22,24 @@ class ProcessTerminationMixin:
 
     @staticmethod
     def _proc_alive(proc) -> bool:
-        """True if a psutil.Process is running and not a zombie (already dead, just unreaped)."""
+        """True if a psutil.Process is running and not a zombie (already dead, just unreaped).
+        AccessDenied is not an answer about the process: confinement refuses the question for every other process, and
+        then only a signal 0 and the wait status are left to tell (iclone-seam: fx35f)."""
         try:
             import psutil
-            return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+            try:
+                return proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE
+            except psutil.AccessDenied:
+                return psutil.pid_exists(proc.pid) and not ProcessTerminationMixin._own_exited_child(proc.pid)
         except Exception:
+            return False
+
+    @staticmethod
+    def _own_exited_child(pid: int) -> bool:
+        """Our child has exited and nobody has reaped it. WNOWAIT leaves it for whoever owns the wait."""
+        try:
+            return os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        except (AttributeError, OSError):  # not our child, or a platform with no waitid
             return False
 
     @classmethod

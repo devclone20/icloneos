@@ -39,13 +39,14 @@ describe('the bundled runtime pin (R1.pin.split)', () => {
     expect(RUNTIME_PIN.sha).toBe(json.sha)
     expect(RUNTIME_PIN.sha).toBe(lock.verifiedAgainst.rev)
     expect(RUNTIME_PIN.tarballSha256).toBe(json.tarball_sha256)
-    // V3-RT: the runtime is built from this repository (K153); the upstream it tracks is 1ac3f97 (V3-UP), whose
-    // installer it ships unchanged.
+    // V3-RT: the runtime is built from this repository (K153); the upstream it tracks is 1ac3f97 (V3-UP). Its installer
+    // shipped unchanged through v0.0.5 (14b4c895...); v0.0.6 changes it on purpose (5b3a9bffa8: a linked config.yaml or .env
+    // is refused at spawn), so this pins the v0.0.6 installer, measured with shasum on scripts/install.sh at the pin.
     expect(RUNTIME_PIN.source).toBe('repo')
     expect(RUNTIME_PIN.upstream).toBe('1ac3f97fbe0958aa2743c0c26202b20b3b4e760e')
     expect(RUNTIME_PIN.manifestSha256).toMatch(/^[0-9a-f]{64}$/)
     expect(RUNTIME_PIN.files).toBe(json.files)
-    expect(RUNTIME_PIN.installShSha256).toBe('14b4c89518cf0e4e71841708dd5d8a28f1f494d22cd20e12f4d5eeb29c7d2fdb')
+    expect(RUNTIME_PIN.installShSha256).toBe('a19c2c01737669167f3d28e7264b46e7e6fb6ac5f736f0fcb7dbbb32dc099d80')
     expect(base).toBe('10b388300a63d83857fac3ca4f8b05b64e01bc50')
     expect(base).not.toBe(RUNTIME_PIN.sha)
   })

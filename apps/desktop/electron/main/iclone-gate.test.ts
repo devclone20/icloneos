@@ -3,6 +3,9 @@
  * armed probe) runs first; only then is a key minted. A pool spawn without a key, any role without the gate, and a
  * Hermes outside main are refused with `IcloneGateError`. What it returns is what the spawn must carry.
  */
+import { EventEmitter } from 'node:events'
+import os from 'node:os'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -12,11 +15,20 @@ const h = vi.hoisted(() => ({
   integrity: vi.fn(),
   release: vi.fn(),
   permissionAttach: vi.fn(),
-  permissions: vi.fn()
+  permissions: vi.fn(),
+  layer: null as null | Record<string, ReturnType<typeof vi.fn>>,
+  execFile: vi.fn()
 }))
 
-vi.mock('electron', () => ({ app: { getPath: () => '/ud', getVersion: () => '0.0.3', isPackaged: true } }))
+vi.mock('node:child_process', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  execFile: h.execFile
+}))
+vi.mock('electron', () => ({
+  app: { getPath: () => '/ud', getVersion: () => '0.0.3', isPackaged: true }
+}))
 vi.mock('../iclone-confinement/ipc', () => ({ confinementSpawnEnv: () => h.confinementEnv }))
+vi.mock('../iclone-confinement/index', () => ({ currentConfinement: () => h.layer }))
 vi.mock('../iclone-permissions/ipc', () => ({ permissionsSpawn: h.permissions }))
 vi.mock('../iclone-pycache', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -44,8 +56,10 @@ vi.mock('./managed-hermes-runtime', () => ({
   })
 }))
 
-const { forgetRuntimeIntegrity, GATED_STDIO, prepareHermesSpawn } = await import('./iclone-gate')
+const { checkRuntimeIntegrity, forgetRuntimeIntegrity, GATED_STDIO, prepareHermesSpawn } = await import('./iclone-gate')
 const { IcloneGateError } = await import('../iclone-hermes-plugins')
+const { rememberLog } = await import('./log')
+const { appTeardown } = await import('../teardown-registry')
 
 const backend = { command: '/managed/venv/bin/python', env: {}, root: '/managed' }
 const LOCK = { ICLONE_POLICY_FILE: '/ud/permissions/p.json', ICLONE_POLICY_KEY_FD: '3', ICLONE_POLICY_LOCK: '1' }
@@ -100,6 +114,42 @@ describe('V3-RT RT-3: the runtime is this release before its plugins are checked
     expect(h.ensure).not.toHaveBeenCalled()
     expect(h.permissions).not.toHaveBeenCalled()
     expect(h.fresh).not.toHaveBeenCalled()
+  })
+})
+
+describe('L4-01: every spawn checks its runtime, one check at a time, never a verdict reused by age', () => {
+  it('two spawns check twice; the second starts only after the first ended; a failed check fails only its spawn', async () => {
+    const events: string[] = []
+    let release: () => void = () => undefined
+    let n = 0
+
+    h.integrity.mockImplementation(async () => {
+      const id = (n += 1)
+      events.push(`start ${id}`)
+
+      if (id === 1) {
+        await new Promise<void>(resolve => (release = resolve))
+        events.push('end 1')
+
+        throw new IcloneGateError('the agent runtime still differs from this release')
+      }
+
+      events.push(`end ${id}`)
+
+      return { action: 'verified', files: 1, ms: 1 }
+    })
+
+    const first = checkRuntimeIntegrity('/managed', '/res')
+    const second = checkRuntimeIntegrity('/managed', '/res')
+    await new Promise(resolve => setImmediate(resolve))
+    expect(events).toEqual(['start 1'])
+
+    release()
+    await expect(first).rejects.toThrow(/still differs/)
+    await expect(second).resolves.toMatchObject({ action: 'verified' })
+    expect(events).toEqual(['start 1', 'end 1', 'start 2', 'end 2'])
+    await expect(checkRuntimeIntegrity('/managed', '/res')).resolves.toMatchObject({ action: 'verified' })
+    expect(h.integrity).toHaveBeenCalledTimes(3)
   })
 })
 
@@ -323,5 +373,328 @@ describe('prepareHermesSpawn', () => {
     ).rejects.toBeInstanceOf(IcloneGateError)
     expect(h.ensure).not.toHaveBeenCalled()
     expect(h.permissions).not.toHaveBeenCalled()
+  })
+})
+
+describe('runtime confinement: Hermes under the runtime profile, the launcher first', () => {
+  const TEXT = '(version 1)\n(deny default)\n(allow file-read* (subpath (param "RUNTIME_ROOT")))\n'
+
+  const SPAWN_ENV = {
+    ICLONE_CONFINEMENT: '1',
+    TERMINAL_ENV: 'iclone_seatbelt',
+    ICLONE_CONFINEMENT_LAUNCHER: '/ud/confinement/run/launcher.sock',
+    ICLONE_RUNTIME_CONFINED: '1'
+  }
+
+  let order: string[]
+
+  /** A confinement layer whose runtimeSpawn wraps like the generator: sandbox-exec, -p text, defines, then the command. */
+  function layer(launcher: 'down' | 'up' = 'up') {
+    const release = vi.fn(async () => undefined)
+
+    const fake = {
+      runtimeConfined: vi.fn(() => true),
+      interpreterRefusal: vi.fn((): null | string => null),
+      ensureLauncher: vi.fn(async () => {
+        order.push('launcher')
+
+        return launcher
+      }),
+      leaseLauncher: vi.fn(() => release),
+      stopLauncher: vi.fn(async () => undefined),
+      runtimeTmpDir: vi.fn(() => '/ud/confinement/run/tmp'),
+      runtimeSpawn: vi.fn((command: string, args: string[], facts: { project: null | string; runtimeRoot: string }) => ({
+        command: '/usr/bin/sandbox-exec',
+        args: [
+          '-p',
+          TEXT,
+          '-D',
+          `RUNTIME_ROOT=${facts.runtimeRoot}`,
+          '-D',
+          `PROJECT=${facts.project}`,
+          command,
+          ...args
+        ],
+        profile: { text: TEXT, sha256: 'e'.repeat(64), view: { reads: [], writes: [], denied: [] } }
+      }))
+    }
+
+    h.layer = fake
+
+    return { fake, release }
+  }
+
+  beforeEach(() => {
+    order = []
+    h.layer = null
+    h.confinementEnv = { ...SPAWN_ENV }
+    h.ensure.mockResolvedValue({ loaded: ['iclone-permissions'], env: {}, runtimeRoot: '/managed' })
+    h.execFile.mockReset()
+    h.execFile.mockImplementation(
+      (command: string, args: string[], _options: unknown, done: (e: null, out: string, err: string) => void) => {
+        order.push(`probe ${command === '/usr/bin/getconf' ? args[0] : 'python'}`)
+        done(null, '/rt/venv\n/rt/base\n', '')
+      }
+    )
+    keyed('v1 k1 abcd\n')
+  })
+
+  it('confinement on: command is sandbox-exec, -p is the generated profile, defines, then python with -s -P', async () => {
+    const { fake } = layer()
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary', webDist: '/web' })
+    const args = ['-m', 'hermes_cli.main', 'serve']
+
+    expect(gated.command(backend.command)).toBe('/usr/bin/sandbox-exec')
+
+    const argv = gated.argv(args, backend.command)
+
+    expect(argv.slice(0, 2)).toEqual(['-p', TEXT])
+    expect(argv.slice(2, 6)).toEqual(['-D', 'RUNTIME_ROOT=/managed', '-D', 'PROJECT=/work'])
+    // The interpreter and its isolation flags come right after the defines, unchanged.
+    expect(argv.slice(6, 9)).toEqual([backend.command, '-s', '-P'])
+    expect(argv.slice(6)).toEqual([backend.command, ...gated.argv(args)])
+    expect(argv.slice(-3)).toEqual(args)
+    // The fd-3 key pipe and the rest of stdio are what they always were.
+    expect(gated.stdio).toBe(GATED_STDIO)
+    expect(fake.runtimeSpawn).toHaveBeenLastCalledWith(
+      backend.command,
+      expect.arrayContaining(['-s', '-P', ...args]),
+      expect.objectContaining({
+        runtimeRoot: '/managed',
+        venvRoot: '/rt/venv',
+        pythonHome: '/rt/base',
+        python: backend.command,
+        tmpDir: '/ud/confinement/run/tmp',
+        cacheDir: null,
+        project: '/work',
+        webDist: '/web',
+        permDir: '/ud/run',
+        paySocket: '/ud/run/pay.sock'
+      })
+    )
+  })
+
+  it('the runtime-only temp folder is the confined Hermes TMPDIR; a pool backend names no pay socket', async () => {
+    const { fake } = layer()
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    expect(gated.seal({ TMPDIR: '/var/folders/x/T/' }).TMPDIR).toBe('/ud/confinement/run/tmp/')
+
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: 'work', role: 'pool' })
+    expect(fake.runtimeSpawn).toHaveBeenLastCalledWith(
+      backend.command,
+      [],
+      expect.objectContaining({ paySocket: null, tmpDir: '/ud/confinement/run/tmp' })
+    )
+  })
+
+  it('a cwd that fell back to the home is no project', async () => {
+    const { fake } = layer()
+
+    await prepareHermesSpawn({ backend, cwd: os.homedir(), profile: null, role: 'primary' })
+    expect(fake.runtimeSpawn).toHaveBeenLastCalledWith(backend.command, [], expect.objectContaining({ project: null }))
+  })
+
+  it('confinement off: TMPDIR is whatever the call site composed', async () => {
+    layer()
+    h.confinementEnv = {}
+
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    expect(gated.seal({ TMPDIR: '/var/folders/x/T/' }).TMPDIR).toBe('/var/folders/x/T/')
+  })
+
+  it('the interpreter is asked for its prefixes isolated (-I -S), with a fixed PATH and nothing inherited', async () => {
+    layer()
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    const python = h.execFile.mock.calls.find(call => call[0] === backend.command)
+
+    expect(python?.[1].slice(0, 3)).toEqual(['-I', '-S', '-c'])
+    expect(python?.[2]).toMatchObject({ env: { LANG: 'C', PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } })
+  })
+
+  it('a quit that began during the gate refuses before the launcher: no lease and no launcher the registry would miss', async () => {
+    const { fake } = layer()
+    const { QuitInProgressError, quitState } = await import('./state')
+
+    quitState.quitting = true
+
+    try {
+      await expect(prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })).rejects.toBeInstanceOf(
+        QuitInProgressError
+      )
+      expect(fake.leaseLauncher).not.toHaveBeenCalled()
+      expect(fake.ensureLauncher).not.toHaveBeenCalled()
+    } finally {
+      quitState.quitting = false
+    }
+  })
+
+  it('the launcher is ensured before prepareHermesSpawn returns, for the runtime the gate verified', async () => {
+    const { fake } = layer()
+
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    order.push('returned')
+
+    expect(fake.ensureLauncher).toHaveBeenCalledWith('/managed', expect.objectContaining({ tmpDir: expect.any(String) }))
+    // The profile's facts first (a profile that cannot be built starts nothing), then the launcher, then the spawn.
+    expect(order.slice(-2)).toEqual(['launcher', 'returned'])
+    // Only the interpreter is asked: the temp folder is the layer's own and the per-user cache is not a fact.
+    expect(order.slice(0, 1)).toEqual(['probe python'])
+    expect(order.filter(step => step.startsWith('probe'))).toEqual(['probe python'])
+  })
+
+  it('the Hermes env carries the launcher socket and the confined flag through the seal; foreign values do not win', async () => {
+    layer()
+
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    const env = gated.seal({
+      ICLONE_CONFINEMENT_LAUNCHER: '/tmp/evil.sock',
+      ICLONE_RUNTIME_CONFINED: '0',
+      ICLONE_FOREIGN: 'x'
+    })
+
+    expect(env.ICLONE_CONFINEMENT_LAUNCHER).toBe('/ud/confinement/run/launcher.sock')
+    expect(env.ICLONE_RUNTIME_CONFINED).toBe('1')
+    expect(env).not.toHaveProperty('ICLONE_FOREIGN')
+  })
+
+  it('launcher down ⇒ Hermes is still prepared under the runtime profile (its commands refuse), and it is logged', async () => {
+    layer('down')
+
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    expect(gated.command(backend.command)).toBe('/usr/bin/sandbox-exec')
+    expect(gated.argv(['serve'], backend.command)[0]).toBe('-p')
+    expect(vi.mocked(rememberLog).mock.calls.flat().join('\n')).toMatch(/launcher is not answering/)
+  })
+
+  it('a profile that cannot be built refuses the spawn ([iclone-gate]); the launcher is not started', async () => {
+    const { fake } = layer()
+
+    h.execFile.mockImplementation((_c: string, _a: string[], _o: unknown, done: (e: Error) => void) =>
+      done(new Error('python is missing'))
+    )
+
+    await expect(prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })).rejects.toThrow(
+      /\[iclone-gate\].*confinement profile could not be built/
+    )
+    expect(fake.ensureLauncher).not.toHaveBeenCalled()
+  })
+
+  it('an interpreter the runtime could have chosen is refused before any probe runs it: no gate, no prefix probe, no launcher', async () => {
+    const { fake } = layer()
+
+    fake.interpreterRefusal.mockReturnValue(`${backend.command} lies in /Users/owner/.hermes, which the agent runtime can write`)
+
+    await expect(prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })).rejects.toThrow(
+      /\[iclone-gate\].*interpreter is not trusted to run outside the sandbox \(.*which the agent runtime can write\), so the agent was not started/
+    )
+    expect(fake.interpreterRefusal).toHaveBeenCalledWith(backend.command)
+    expect(h.ensure).not.toHaveBeenCalled()
+    expect(h.execFile.mock.calls.find(call => call[0] === backend.command)).toBeUndefined()
+    expect(fake.ensureLauncher).not.toHaveBeenCalled()
+    expect(fake.runtimeSpawn).not.toHaveBeenCalled()
+  })
+
+  it('an unmanaged dev runtime’s plugin overlay is a fact of the profile: the gate’s HERMES_BUNDLED_PLUGINS reaches the spawn as pluginsDir', async () => {
+    const { fake } = layer()
+
+    h.ensure.mockResolvedValue({
+      loaded: ['iclone-permissions'],
+      env: { HERMES_BUNDLED_PLUGINS: '/ud/hermes-dev-plugins/plugins' },
+      runtimeRoot: '/checkout'
+    })
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    expect(fake.runtimeSpawn).toHaveBeenLastCalledWith(
+      backend.command,
+      [],
+      expect.objectContaining({ pluginsDir: '/ud/hermes-dev-plugins/plugins', runtimeRoot: '/checkout' })
+    )
+
+    h.ensure.mockResolvedValue({ loaded: ['iclone-permissions'], env: {}, runtimeRoot: '/managed' })
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    expect(fake.runtimeSpawn).toHaveBeenLastCalledWith(backend.command, [], expect.objectContaining({ pluginsDir: null }))
+  })
+
+  it('confinement says on but the layer is missing or off ⇒ refused, never an unconfined Hermes', async () => {
+    await expect(prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })).rejects.toThrow(
+      /\[iclone-gate\]/
+    )
+
+    const { fake } = layer()
+
+    fake.runtimeConfined.mockReturnValue(false)
+    await expect(prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })).rejects.toThrow(
+      /\[iclone-gate\]/
+    )
+  })
+
+  it('the primary and each pool backend claim the launcher and release it when they exit', async () => {
+    const { fake, release } = layer()
+    const primary = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    const child = new EventEmitter() as EventEmitter & { pid: number; stdio: unknown[] }
+
+    child.pid = 77
+    child.stdio = []
+    primary.attach(child as never)
+    expect(release).not.toHaveBeenCalled()
+    child.emit('exit', 0, null)
+    expect(release).toHaveBeenCalledTimes(1)
+
+    fake.leaseLauncher.mockClear()
+
+    const pool = await prepareHermesSpawn({ backend, cwd: '/work', profile: 'work', role: 'pool' })
+    const poolChild = new EventEmitter() as EventEmitter & { pid: number; stdio: unknown[] }
+
+    poolChild.pid = 78
+    poolChild.stdio = []
+    pool.attach(poolChild as never)
+    expect(fake.leaseLauncher).toHaveBeenCalledTimes(1)
+    expect(fake.ensureLauncher).toHaveBeenCalledTimes(2)
+    poolChild.emit('exit', 0, null)
+    expect(release).toHaveBeenCalledTimes(2)
+  })
+
+  it('the launcher stops on every way out (one registry entry, however many spawns)', async () => {
+    const { fake } = layer()
+
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    expect(appTeardown.names().filter(name => name === 'confinement launcher')).toHaveLength(1)
+    expect(appTeardown.run()).toContain('confinement launcher')
+    expect(fake.stopLauncher).toHaveBeenCalledTimes(1)
+  })
+
+  it('confinement off ⇒ byte-identical to before: command, argv and env untouched, no launcher, no probe', async () => {
+    const { fake } = layer()
+
+    h.confinementEnv = {}
+
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+    const args = ['-m', 'hermes_cli.main', 'serve']
+
+    expect(gated.command(backend.command)).toBe(backend.command)
+    expect(gated.argv(args, backend.command)).toEqual(gated.argv(args))
+    expect(gated.argv(args, backend.command)[0]).toBe('-s')
+    expect(gated.seal({})).not.toHaveProperty('ICLONE_RUNTIME_CONFINED')
+    expect(gated.seal({})).not.toHaveProperty('ICLONE_CONFINEMENT_LAUNCHER')
+    expect(fake.ensureLauncher).not.toHaveBeenCalled()
+    expect(fake.runtimeSpawn).not.toHaveBeenCalled()
+    expect(h.execFile).not.toHaveBeenCalled()
+  })
+
+  it('confinement on without the runtime flag (another platform) ⇒ no wrap either', async () => {
+    const { fake } = layer()
+
+    h.confinementEnv = { ICLONE_CONFINEMENT: '1', TERMINAL_ENV: 'iclone_seatbelt' }
+
+    const gated = await prepareHermesSpawn({ backend, cwd: '/work', profile: null, role: 'primary' })
+
+    expect(gated.command(backend.command)).toBe(backend.command)
+    expect(fake.ensureLauncher).not.toHaveBeenCalled()
   })
 })

@@ -15,10 +15,13 @@ import time
 import unittest
 from unittest.mock import patch
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from tools.code_kernel_remote import (
     _REMOTE_KERNELS,
+    RUNNER_LAUNCH,
     RemoteKernel,
     execute_in_remote_kernel,
     shutdown_all_remote_kernels,
@@ -61,7 +64,7 @@ def _spawn_ok_handlers(cell_results):
         return {"output": "", "returncode": 0}
 
     return [
-        ("nohup", lambda c: {"output": "PID:4242\n", "returncode": 0}),
+        ("kernel_runner.py >", lambda c: {"output": "PID:4242\n", "returncode": 0}),
         ("kill -0", lambda c: {"output": "ALIVE\n", "returncode": 0}),
         ("cat ", cat_handler),
     ]
@@ -131,12 +134,12 @@ class TestSpawnAndReuse(RemoteKernelBase):
         self.assertEqual(second["kernel"]["execution_count"], 2)
         # Exactly one spawn happened.
         self.assertEqual(
-            sum(1 for c in env.commands if "nohup" in c), 1,
+            sum(1 for c in env.commands if "kernel_runner.py >" in c), 1,
         )
 
     def test_spawn_failure_fails_open(self):
         env = ScriptedEnv([
-            ("nohup", lambda c: {"output": "sh: cannot fork\n", "returncode": 1}),
+            ("kernel_runner.py >", lambda c: {"output": "sh: cannot fork\n", "returncode": 1}),
         ])
         self.assertIsNone(_run(env))
         self.assertEqual(len(_REMOTE_KERNELS), 0)
@@ -147,7 +150,7 @@ class TestSpawnAndReuse(RemoteKernelBase):
         result = _run(env, reset=True)
         self.assertTrue(result["kernel"].get("state_reset"))
         self.assertFalse(result["kernel"]["reused"])
-        self.assertEqual(sum(1 for c in env.commands if "nohup" in c), 2)
+        self.assertEqual(sum(1 for c in env.commands if "kernel_runner.py >" in c), 2)
 
 
 class TestDeathDetection(RemoteKernelBase):
@@ -179,7 +182,7 @@ class TestDeathDetection(RemoteKernelBase):
     def test_cell_timeout_kills_kernel_and_reports(self):
         # cat never returns a result file → cell deadline expires.
         env = ScriptedEnv([
-            ("nohup", lambda c: {"output": "PID:77\n", "returncode": 0}),
+            ("kernel_runner.py >", lambda c: {"output": "PID:77\n", "returncode": 0}),
             ("kill -0", lambda c: {"output": "ALIVE\n", "returncode": 0}),
             ("cat ", lambda c: {"output": "", "returncode": 0}),
         ])
@@ -198,7 +201,7 @@ class TestOwnershipIsolation(RemoteKernelBase):
         _run(env, tools=frozenset({"web_search"}))
 
         self.assertEqual(len(_REMOTE_KERNELS), 2)
-        self.assertEqual(sum(1 for c in env.commands if "nohup" in c), 2)
+        self.assertEqual(sum(1 for c in env.commands if "kernel_runner.py >" in c), 2)
         keyed_tool_sets = {key[-1] for key in _REMOTE_KERNELS}
         self.assertEqual(
             keyed_tool_sets,
@@ -216,7 +219,7 @@ class TestOwnershipIsolation(RemoteKernelBase):
             _run(env, task="conv")
         # Two distinct kernels, two spawns.
         self.assertEqual(len(_REMOTE_KERNELS), 2)
-        self.assertEqual(sum(1 for c in env.commands if "nohup" in c), 2)
+        self.assertEqual(sum(1 for c in env.commands if "kernel_runner.py >" in c), 2)
 
     def test_owner_disposal_reaps_only_that_owner(self):
         env = ScriptedEnv(_spawn_ok_handlers([_cell(), _cell()]))
@@ -286,7 +289,7 @@ class TestIdleReapAndCapEviction(RemoteKernelBase):
             return {"output": json.dumps(_cell()), "returncode": 0}
 
         busy_env = ScriptedEnv([
-            ("nohup", lambda c: {"output": "PID:4242\n", "returncode": 0}),
+            ("kernel_runner.py >", lambda c: {"output": "PID:4242\n", "returncode": 0}),
             ("kill -0", lambda c: {"output": "ALIVE\n", "returncode": 0}),
             ("cat ", slow_cat),
         ])
@@ -370,7 +373,7 @@ class TestSharedHostLockdown(RemoteKernelBase):
         self.assertFalse(
             any(kernel.rpc_token in c for c in env.commands),
             "rpc token appeared in a remote command line")
-        spawn_cmd = next(c for c in env.commands if "nohup" in c)
+        spawn_cmd = next(c for c in env.commands if "kernel_runner.py >" in c)
         self.assertNotIn("HERMES_RPC_TOKEN=", spawn_cmd)
         mkdir_cmd = next(c for c in env.commands if "mkdir -p" in c)
         if sys.platform != "win32":
@@ -414,3 +417,40 @@ class TestSharedHostLockdown(RemoteKernelBase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipIf(sys.platform == "win32", "POSIX shell shape")
+class TestRunnerLaunch(unittest.TestCase):
+    """fx35f: confinement refuses nohup; the runner keeps what it gave every other backend."""
+
+    @pytest.mark.live_system_guard_bypass  # the one signal is to the runner this test started; it is reparented to init
+    def test_the_launch_has_no_nohup_and_the_runner_outlives_a_hangup_under_its_own_pid(self):
+        import signal
+        import subprocess
+        import tempfile
+        import time
+
+        self.assertNotIn("nohup", RUNNER_LAUNCH)
+        with tempfile.TemporaryDirectory() as root:
+            with open(os.path.join(root, "kernel_runner.py"), "w") as f:
+                f.write(
+                    "import os, signal, time\n"
+                    "open('ready', 'w').write(str(os.getpid()))\n"
+                    "while not os.path.exists('stop'):\n"
+                    "    time.sleep(0.01)\n"
+                    "open('lived.tmp', 'w').write(signal.getsignal(signal.SIGHUP).name)\n"
+                    "os.replace('lived.tmp', 'lived')\n")
+            started = subprocess.run(["/bin/bash", "-c", RUNNER_LAUNCH], cwd=root, capture_output=True, text=True, timeout=20)
+            pid = int(started.stdout.strip().removeprefix("PID:"))
+
+            def wait_for(name):
+                deadline = time.monotonic() + 15
+                while not os.path.exists(os.path.join(root, name)) and time.monotonic() < deadline:
+                    time.sleep(0.01)
+                with open(os.path.join(root, name)) as f:
+                    return f.read()
+
+            self.assertEqual(wait_for("ready"), str(pid))
+            os.kill(pid, signal.SIGHUP)
+            open(os.path.join(root, "stop"), "w").close()
+            self.assertEqual(wait_for("lived"), "SIG_IGN")

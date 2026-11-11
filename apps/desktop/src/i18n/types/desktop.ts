@@ -22,6 +22,12 @@ export type DesktopTranslations = {
   readOnlyTranscriptTitle: string
   readOnlyTranscriptBody: string
   readOnlyTranscriptSendBlocked: string
+  sendHeldReconnecting: string
+  sendKeptNoBackend: string
+  sendKeptRebind: string
+  sendKeptInFlight: string
+  sendKeptChatChanged: string
+  sendKeptStillSending: string
   resumeStrandedTitle: string
   resumeStrandedBody: string
   resumeRetry: string
@@ -166,9 +172,28 @@ export type DesktopTranslations = {
       browserUnknown: string
       browserWorking: string
       recordOff: string
+      recordCapturing: string
+      recordShowFile: string
+      recordStopRanOut: string
       recordOn: string
       recordUnknown: string
+      recordSaving: string
       recordWorking: string
+      screenRecordIdle: string
+      screenRecordActive: string
+      screenRecordWorking: string
+      screenRecordFirstUse: string
+      screenRecordConsentOff: string
+      screenRecordOpenPrivacy: string
+      screenRecordOpenSetup: string
+      screenRecordNoGrant: string
+      screenRecordRestart: string
+      screenRecordRestricted: string
+      screenRecordBlank: string
+      screenRecordFailed: string
+      screenRecordWaiting: string
+      screenRecordNoImages: (model: string, frames: number) => string
+      screenRecordNoModel: (frames: number) => string
       themeCycle: (natural: string, dark: string, light: string) => string
       themeNatural: string
       themeDark: string

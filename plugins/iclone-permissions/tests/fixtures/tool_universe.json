@@ -125,7 +125,6 @@
   ],
   "computer_use": [
    "registry",
-   "search_index",
    "static"
   ],
   "cronjob": [
@@ -360,6 +359,10 @@
   ],
   "retaindb_upload_file": [
    "memory"
+  ],
+  "screen_record": [
+   "registry",
+   "static"
   ],
   "search_files": [
    "registry",

@@ -19,7 +19,7 @@ import {
   terminalContextBlocksFromDraft
 } from '@/store/composer'
 import { $hudMode } from '@/store/hud'
-import { clearNotifications, notify, notifyError } from '@/store/notifications'
+import { clearNotifications, dismissNotification, notify, notifyError } from '@/store/notifications'
 import { consumePendingCredentialWarning, requestDesktopOnboarding } from '@/store/onboarding'
 import { isStoredTranscriptReadOnly } from '@/store/read-only-transcript'
 import {
@@ -37,6 +37,7 @@ import type { ClientSessionState } from '../../../types'
 import { sessionContextDrift } from '../session-context-drift'
 import { resolveSessionProfile } from '../use-session-actions/utils'
 
+import { cutOffInFlight, isGatewayReconnecting, neverLeftTheWindow, waitForGatewayOpen } from './reconnect-hold'
 import { finalizeInterruptedMessages } from './rewind'
 import { registerRecoveredRuntime, singleFlightSessionResume, takeRecoveredRuntime } from './single-flight-resume'
 import {
@@ -97,6 +98,9 @@ const MAIN_SUBMIT_SCOPE: NonNullable<SubmitPromptDeps['scope']> = {
   setBusy,
   setMessages
 }
+
+// One at a time: the newest reason replaces the last, and a send that lands retires it.
+const SEND_KEPT_NOTIFICATION_ID = 'send-kept'
 
 /** The prompt submit pipeline, extracted from usePromptActions. */
 export function useSubmitPrompt(deps: SubmitPromptDeps) {
@@ -169,13 +173,40 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       // one session's send on another session's turn.
       const hasSendable = Boolean(visibleText || terminalContextBlocks || attachments.length || hasImage)
 
+      if (!hasSendable) {
+        return false
+      }
+
+      // The composer stays usable through a reconnect, and the draft has already left it. Every false below puts the text
+      // back, so a send with no reason looks like nothing happened; a queued drain keeps its entry and says nothing.
+      const keepWithReason = (reason: string): false => {
+        if (!options?.fromQueue) {
+          notify({ id: SEND_KEPT_NOTIFICATION_ID, kind: 'warning', message: reason, survivesClear: true })
+        }
+
+        return false
+      }
+
+      // The backend is restarting: hold the send until the socket is back rather than fail it against a closed one. It runs
+      // once, from here on, with the ids of the live backend; the failure of a stale one would be cleared by the same
+      // reconnect's transcript reload. A chat switch during the hold ends in the composer-scope drift check below.
+      if (isGatewayReconnecting()) {
+        const held = options?.fromQueue ? null : notify({ kind: 'info', message: copy.sendHeldReconnecting })
+        const up = await waitForGatewayOpen()
+
+        if (held) {
+          dismissNotification(held)
+        }
+
+        if (!up) {
+          return keepWithReason(copy.sendKeptNoBackend)
+        }
+      }
+
       const guardSessionId = options?.sessionId ?? activeSessionIdRef.current
 
-      if (
-        !hasSendable ||
-        (!options?.fromQueue && isTargetSessionBusy($sessionStates.get(), guardSessionId, busyRef.current))
-      ) {
-        return false
+      if (!options?.fromQueue && isTargetSessionBusy($sessionStates.get(), guardSessionId, busyRef.current)) {
+        return keepWithReason(copy.sendKeptStillSending)
       }
 
       // Typing barge-in: a new send silences any in-flight spoken reply.
@@ -346,7 +377,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       const submitLockKey = targetStoredSessionId || sessionId || startingActiveSessionId || '__pending_new__'
 
       if (!acquireSubmitInFlight(submitLockKey)) {
-        return false
+        return keepWithReason(copy.sendKeptStillSending)
       }
 
       let submitLockReleased = false
@@ -476,11 +507,11 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         )
       }
 
-      const abortForSessionSwitch = (optimisticSessionId: null | string): false => {
+      const abortForSessionSwitch = (optimisticSessionId: null | string, reason = copy.sendKeptChatChanged): false => {
         dropOptimistic(optimisticSessionId)
         releaseBusy()
 
-        return false
+        return keepWithReason(reason)
       }
 
       // Foreground-only state: a background queue drain must never write the
@@ -547,7 +578,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         try {
           await resumeStoredSession(routedStoredSessionId)
         } catch {
-          return abortForSessionSwitch(null)
+          return abortForSessionSwitch(null, copy.sendKeptRebind)
         }
 
         const routedResumeDrift = sessionDriftReason()
@@ -638,7 +669,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // it with a contextless session (#55578). For a background/queued
           // drain this abort is a no-op on foreground state (both helpers are
           // targetIsCurrentView-guarded) and simply drops the queued send.
-          return abortForSessionSwitch(null)
+          return abortForSessionSwitch(null, copy.sendKeptRebind)
         }
 
         const resumeSettleDrift = sessionDriftReason()
@@ -650,7 +681,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         }
 
         if (!sessionId) {
-          return abortForSessionSwitch(null)
+          return abortForSessionSwitch(null, copy.sendKeptRebind)
         }
 
         seedOptimistic(sessionId)
@@ -782,40 +813,56 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         try {
           const recoverStoredSessionId = targetStoredSessionId ?? selectedStoredSessionIdRef.current
 
-          await withSessionNotFoundResume(
-            sessionId,
-            recoverStoredSessionId,
-            liveId =>
-              withSessionBusyRetry(() =>
-                requestGateway('prompt.submit', submitParams(liveId), PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
-              ),
-            {
-              requestGateway,
-              driftReason: sessionDriftReason,
-              onRecovered: recoveredId => {
-                if (onRuntimeRecovered) {
-                  onRuntimeRecovered(recoveredId)
-                } else {
-                  // Publish stored-to-runtime ownership before retrying the
-                  // session-scoped request. The window router needs this
-                  // binding to keep a recovered remote runtime on the gateway
-                  // that owns its durable session.
-                  if (recoverStoredSessionId) {
-                    updateSessionState(recoveredId, state => state, recoverStoredSessionId)
-                  }
+          const deliver = () =>
+            withSessionNotFoundResume(
+              liveSessionId,
+              recoverStoredSessionId,
+              liveId =>
+                withSessionBusyRetry(() =>
+                  requestGateway('prompt.submit', submitParams(liveId), PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
+                ),
+              {
+                requestGateway,
+                driftReason: sessionDriftReason,
+                onRecovered: recoveredId => {
+                  if (onRuntimeRecovered) {
+                    onRuntimeRecovered(recoveredId)
+                  } else {
+                    // Publish stored-to-runtime ownership before retrying the
+                    // session-scoped request. The window router needs this
+                    // binding to keep a recovered remote runtime on the gateway
+                    // that owns its durable session.
+                    if (recoverStoredSessionId) {
+                      updateSessionState(recoveredId, state => state, recoverStoredSessionId)
+                    }
 
-                  if (targetIsCurrentView()) {
-                    activeSessionIdRef.current = recoveredId
-                    setActiveSessionId(recoveredId)
+                    if (targetIsCurrentView()) {
+                      activeSessionIdRef.current = recoveredId
+                      setActiveSessionId(recoveredId)
+                    }
                   }
                 }
-              }
-            },
-            // A starved backend loop (#55578 symptom d) rejects the submit even
-            // though the stored session is fine — recover it like a dead id
-            // instead of erroring out and losing the session binding.
-            { alsoTimeout: true }
-          )
+              },
+              // A starved backend loop (#55578 symptom d) rejects the submit even
+              // though the stored session is fine — recover it like a dead id
+              // instead of erroring out and losing the session binding.
+              { alsoTimeout: true }
+            )
+
+          try {
+            await deliver()
+          } catch (err) {
+            // Refused before it left the window, so a second attempt is the first delivery. Anything else stays with the catch below.
+            if (!neverLeftTheWindow(err) || !(await waitForGatewayOpen())) {
+              throw err
+            }
+
+            if (sessionDriftReason()) {
+              return abortForSessionSwitch(sessionId)
+            }
+
+            await deliver()
+          }
         } catch (firstErr) {
           if (firstErr instanceof SessionRecoveryAborted) {
             console.warn('[submit-drift-abort]', firstErr.reason, { phase: 'post-resume-retry' })
@@ -838,6 +885,8 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           scope.removeAttachments(syncedAttachments)
         }
 
+        dismissNotification(SEND_KEPT_NOTIFICATION_ID)
+
         // Submit landed — the turn now runs (busy stays true), but the submit
         // window is closed, so release the lock for the next (sequential) send.
         releaseSubmitLock()
@@ -845,6 +894,14 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         return true
       } catch (err) {
         releaseBusy()
+
+        // Cut off with the request pending: the backend may have it, so no resend, and the user decides. An error bubble and
+        // a plain toast would go with the reconnect's reload and leave the text back in the composer with no word.
+        if (cutOffInFlight(err)) {
+          dropOptimistic(sessionId)
+
+          return keepWithReason(copy.sendKeptInFlight)
+        }
 
         // A queued drain that raced a not-yet-settled turn gets a transient
         // "session busy" (4009). Don't surface an error bubble/toast — the entry

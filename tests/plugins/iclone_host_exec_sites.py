@@ -28,7 +28,8 @@ FIXTURE_REL = "plugins/iclone-confinement/tests/fixtures/host_exec_sites.json"
 ALLOWLIST_REL = "plugins/iclone-confinement/spawn_sites.json"
 ALLOWLIST_NOTE = ("V3-UP r5, rulings 50 + 56: the sites the spawn guard lets start a program in a confined process — "
                   "fixed: an app-fixed program, only as the sandbox-exec argv confine_program sealed (inside the "
-                  "agent's Seatbelt); hermes: this runtime's own interpreter, confined. Generated from "
+                  "agent's Seatbelt); hermes: this runtime's own interpreter, confined; door (ruling R1): only the launcher's door to "
+                  "the browser, outside the Seatbelt. Generated from "
                   "tests/fixtures/host_exec_sites.json, never edited by hand")
 SCAN_ROOTS = ("tools", "agent", "plugins")  # r3's tool layer (kept for the wrapper scan below)
 # r4 (ruling 50): the inventory is by PRIMITIVE over the whole shipped runtime — every .py the runtime artifact
@@ -74,7 +75,7 @@ SPAWN_ATTRIBUTES = {"stdio_client", "StdioServerParameters", "subprocess_exec", 
 #      profile for its kind, widened only by what it needs). Each ``c`` row names the kind and the file:line;
 #   h  the confined runtime itself: the site is ``hermes`` in spawn_sites.json and starts this runtime's interpreter
 #      (or its hermes CLI) on Hermes' own code with ICLONE_CONFINEMENT=1, and that code installs the same guard first.
-VERDICTS = ("a", "b", "c", "h")
+VERDICTS = ("a", "b", "c", "h", "r")  # r: ruling R1, the one site that starts only the launcher's door to the browser
 ENV_DIRS = ("tools/environments/", "plugins/iclone-confinement/")
 
 
@@ -267,7 +268,7 @@ if __name__ == "__main__":
     if "--write" in sys.argv:
         (tree / FIXTURE_REL).write_text(json.dumps(data, indent=1, ensure_ascii=False) + "\n")
         (tree / ALLOWLIST_REL).write_text(json.dumps({"_": ALLOWLIST_NOTE, "fixed": fixed_sites(data),
-                                                      "hermes": fixed_sites(data, "h")}, indent=1) + "\n")
+                                                      "hermes": fixed_sites(data, "h"), "door": fixed_sites(data, "r")}, indent=1) + "\n")
     counts: dict = {}
     for row in data["sites"].values():
         counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1

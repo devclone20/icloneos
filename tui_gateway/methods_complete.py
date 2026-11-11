@@ -155,14 +155,16 @@ def _backend_dir_entries(search_dir: str, session_key: str | None) -> list[tuple
     Runs in the session's own backend (``task_id`` = session key), so relative paths and ``~`` resolve
     where the agent's commands do. Completion is advisory: an unreachable backend yields nothing —
     falling back to the gateway host would show a plausible but wrong tree (#112963).
+    A link is listed as a plain entry and never followed: under confinement a link out of the project would be a
+    refused look at its target, on every completion.
     """
     import json
     import shlex
 
     script = (
         'd=$1; case $d in "~") d=$HOME;; "~/"*) d=$HOME${d#?};; esac; [ -d "$d" ] || exit 0; '
-        'for p in "$d"/* "$d"/.[!.]* "$d"/..?*; do [ -e "$p" ] || [ -L "$p" ] || continue; '
-        'if [ -d "$p" ]; then printf "%s/\\n" "${p##*/}"; else printf "%s\\n" "${p##*/}"; fi; done'
+        'for p in "$d"/* "$d"/.[!.]* "$d"/..?*; do [ -L "$p" ] || [ -e "$p" ] || continue; '
+        'if [ ! -L "$p" ] && [ -d "$p" ]; then printf "%s/\\n" "${p##*/}"; else printf "%s\\n" "${p##*/}"; fi; done'
     )
     try:
         from hermes_cli.observability.shared_metrics_loop import unmetered_backend_calls

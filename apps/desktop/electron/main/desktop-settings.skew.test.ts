@@ -38,7 +38,8 @@ describe('the renderer-skew git call (K-RT9), exercised', () => {
         env: {
           GIT_CEILING_DIRECTORIES: '/Users/u/Library/Application Support/iclone os/hermes-runtime/abc',
           GIT_OPTIONAL_LOCKS: '0'
-        }
+        },
+        timeoutMs: 10_000
       }
     )
   })

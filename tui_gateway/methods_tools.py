@@ -1279,10 +1279,33 @@ def _container_checkpoint_refusal(session, mgr, cwd) -> str | None:
         _clear_session_context(tokens)
 
 
+def _browser_record_notices_waiting() -> bool:
+    from hermes_constants import get_process_hermes_home
+    return (get_process_hermes_home() / "browser_record_notices.json").exists()
+
+
+def _browser_record_idle_view() -> dict:
+    view = {"boot": "none", "capturing": [], "notices": []}
+    with contextlib.suppress(Exception):
+        from hermes_cli.config import read_raw_config
+        section = read_raw_config().get("browser") or {}
+        value = section.get("record_sessions", False) if isinstance(section, dict) else False
+        view["armed"] = value is True or str(value).strip().lower() == "true"
+    return view
+
+
 @method("browser.manage")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     action = params.get("action", "status")
+    if action in {"record_status", "record_sync", "record_stop"}:  # the record button: read, make the live browser match the config, or stop every capture
+        tool = sys.modules.get("tools.browser_tool")  # no browser ran in this process: nothing is recording, and nothing to load
+        if tool is None and _browser_record_notices_waiting():  # unless the last quit left the user something to read
+            import tools.browser_tool as tool
+        if tool is None:
+            return _ok(rid, _browser_record_idle_view())
+        answer = {"record_sync": tool.sync_recordings, "record_stop": tool.stop_recordings, "record_status": tool.recording_status}[action]
+        return _ok(rid, answer())
     if action in {"status", "use"}:
         from tools.browser_use_cli import is_browser_use_cli_mode, set_browser_use_mode
         if action == "use":

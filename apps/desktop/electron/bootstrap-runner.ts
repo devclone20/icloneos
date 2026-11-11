@@ -29,6 +29,7 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import https from 'node:https'
+import os from 'node:os'
 import path from 'node:path'
 import { finished, pipeline } from 'node:stream/promises'
 import { createGunzip } from 'node:zlib'
@@ -38,6 +39,8 @@ import { latestReleaseAssetUrl } from '../src/iclone-shared/public-repo'
 
 import { readRuntimeChoice, repairCommit } from './agent-update'
 import { resolveWindowsPowerShell } from './bootstrap-platform'
+import { homeSettingsRefusal } from './home-settings-files'
+import { confinementSpawnEnv } from './iclone-confinement/ipc'
 import { managedStampFor, readManagedStamp, RUNTIME_MANIFEST_FILE, writeManagedStamp } from './iclone-managed-runtime'
 import {
   beginInstallBudget,
@@ -56,6 +59,15 @@ import {
 import { replaceDirAtomicSync, writeStreamAtomic } from './lib/atomic-write'
 import { writeJsonAtomicSync } from './lib/fs-json'
 import { runGit } from './lib/git'
+import {
+  lstatInRoot,
+  mkdirsInRoot,
+  NO_LINKS_ENV,
+  openAppendFdInRoot,
+  readdirInRoot,
+  resolveInRoot,
+  unlinkInRoot
+} from './lib/no-follow-fs'
 import { codePathEnv } from './packaged-env'
 import { RUNTIME_PIN } from './runtime-pin.generated'
 import type { UpdatePolicy } from './update-policy'
@@ -63,6 +75,8 @@ import { hiddenWindowsChildOptions } from './windows-child-options'
 
 // Downloads keep the mode a plain createWriteStream gave them under the usual 022 umask.
 const DOWNLOAD_MODE = 0o644
+/** sysexits.h: the stage never started because its configuration files are not plain files. */
+const EX_CONFIG = 78
 const STAMP_COMMIT_RE = /^[0-9a-f]{7,40}$/i
 const FALLBACK_COMMIT_RE = /^0{7,40}$/
 
@@ -360,8 +374,10 @@ function resolveLocalInstallScript(sourceRepoRoot: null | string | undefined) {
   }
 }
 
-function bootstrapCacheDir(hermesHome: string) {
-  return path.join(hermesHome, 'bootstrap-cache')
+// Under `installs/`, which the runtime's profile never lets it write (HERMES_HOME_NEVER_WRITTEN): an installer kept where
+// it can write would be swapped between the sha256 check and `bash`, and then run outside the confinement.
+export function bootstrapCacheDir(hermesHome: string) {
+  return path.join(hermesHome, 'installs', 'bootstrap-cache')
 }
 
 // The install.sh / install.ps1 that ships inside the already-installed agent
@@ -1201,11 +1217,93 @@ export function stopProcessGroup(pid: number | undefined, graceMs = STAGE_KILL_G
   }
 }
 
-function spawnBash(
+/**
+ * The config stage runs outside the sandbox on a home the runtime can write. It judges the files as the launch does
+ * (home-settings-files.ts), so an owner's link inside the home updates as it starts, and a refusal carries the same reason
+ * and way out. install.sh walks those names no-follow when the app runs it, which is what closes a swap after this check.
+ * A full install (no `--stage`) runs that stage too.
+ */
+function plantedConfigSeed(
+  args: string[],
+  hermesHome: string | undefined,
+  doing: 'install' | 'update' = 'update'
+): null | string {
+  const stageAt = args.indexOf('--stage')
+  const runsConfig = stageAt >= 0 ? args[stageAt + 1] === 'config' : !args.includes('--manifest')
+
+  if (!runsConfig || !hermesHome) {
+    return null
+  }
+
+  return homeSettingsRefusal(hermesHome, {
+    doing,
+    linksOutsideRefused: confinementSpawnEnv().ICLONE_RUNTIME_CONFINED === '1',
+    root: hermesHome
+  })
+}
+
+/** The user-facing reason of a stage main refused before starting it; empty for a stage that ran and failed. */
+function refusedStageReason(result: { code: null | number; stderr?: string } | null | undefined): string {
+  return result?.code === EX_CONFIG && result.stderr ? ` ${result.stderr}` : ''
+}
+
+/**
+ * v0.0.5 kept its installers in `HERMES_HOME/bootstrap-cache`, a folder the runtime can write, and nothing reads it now
+ * (bootstrapCacheDir). Gone by the no-follow walk: a link in it is removed, never followed. Failing leaves it for the next
+ * start, and never stops one.
+ */
+export function removeOrphanedBootstrapCache(hermesHome: string, log: (line: string) => void): void {
+  const folder = path.join(hermesHome, 'bootstrap-cache')
+
+  const remove = (dir: string) => {
+    for (const entry of readdirInRoot(hermesHome, dir)) {
+      const child = path.join(dir, entry.name)
+
+      if (entry.isDirectory()) {
+        remove(child)
+      } else {
+        unlinkInRoot(hermesHome, child)
+      }
+    }
+
+    fs.rmdirSync(resolveInRoot(hermesHome, dir))
+  }
+
+  try {
+    const stat = lstatInRoot(hermesHome, folder)
+
+    if (stat === null) {
+      return
+    }
+
+    if (stat.isDirectory()) {
+      remove(folder)
+    } else {
+      unlinkInRoot(hermesHome, folder)
+    }
+
+    log('[bootstrap] removed the old installer cache left by v0.0.5')
+  } catch (error) {
+    log(`[bootstrap] the old installer cache was left in place: ${(error as Error).message}`)
+  }
+}
+
+export function spawnBash(
   scriptPath: string,
   args: string[],
   { emit, stageName, abortSignal, hermesHome, home, onChild }: SpawnOpts = {}
 ) {
+  const planted = plantedConfigSeed(args, hermesHome)
+
+  if (planted) {
+    emit?.({
+      type: 'log',
+      line: `[bootstrap] refused the config stage: ${planted}`
+    })
+
+    return Promise.resolve<SpawnResult>({ code: EX_CONFIG, killed: false, signal: null, stderr: planted, stdout: '' })
+  }
+
   return new Promise<SpawnResult>((resolve, reject) => {
     // r2 (critic M3): its own process group, so a stop reaches PM, uv and tar too, not only bash.
     const child = spawn('bash', [scriptPath, ...args], {
@@ -1213,6 +1311,7 @@ function spawnBash(
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
+        ...NO_LINKS_ENV,
         ...(home ? { HOME: home, XDG_CACHE_HOME: path.join(home, '.cache') } : {}),
         HERMES_HOME: hermesHome || codePathEnv('HERMES_HOME') || ''
       }
@@ -1689,6 +1788,13 @@ async function runStage({
       ]
     : ['-Stage', stage.name, '-NonInteractive', '-Json', ...buildPinArgs(installStamp, { pinCommit })]
 
+  // Refused here, not left to spawnBash: its refusal has no JSON frame for the parsing below, and speaks of an update.
+  const refused = isPosix ? plantedConfigSeed(args, hermesHome, 'install') : null
+
+  if (refused) {
+    return finishStage(emit, stage.name, 'failed', Date.now() - startedAt, { error: refused, json: null })
+  }
+
   // r2: the stage's target is where it writes (the runtime root): bytes landing there are progress too.
   const target = activeRoot || null
 
@@ -1742,16 +1848,20 @@ async function runStage({
 // ---------------------------------------------------------------------------
 
 /** The run log is best effort: a log root that cannot be created, opened or written (EACCES, ENOSPC) only loses the log. */
-function openRunLog(logRoot: string) {
-  try {
-    fs.mkdirSync(logRoot, { recursive: true })
-  } catch {
-    // The stream's open fails below and is swallowed by its 'error' listener.
-  }
-
+// `logRoot` is HERMES_HOME/logs: the runtime can make it a link to any folder, or plant the name.
+export function openRunLog(logRoot: string, hermesHome: string) {
   const ts = new Date().toISOString().replace(/[:.]/g, '-')
   const logPath = path.join(logRoot, `bootstrap-${ts}.log`)
-  const stream = fs.createWriteStream(logPath, { flags: 'a' })
+  const root = path.relative(hermesHome, logRoot).startsWith('..') ? path.dirname(logRoot) : hermesHome
+  let stream: fs.WriteStream
+
+  try {
+    mkdirsInRoot(root, logRoot)
+    stream = fs.createWriteStream('', { fd: openAppendFdInRoot(root, logPath) })
+  } catch {
+    // The run must not depend on its log, and a refused one has nowhere safe to go.
+    stream = fs.createWriteStream(os.devNull, { flags: 'a' })
+  }
 
   // Without a listener an open or write error is an uncaught exception in main; closeRunLog's finished() still sees it.
   stream.on('error', () => {})
@@ -1838,7 +1948,7 @@ async function runBootstrap(opts: {
     return { ok: false, cancelled: true }
   }
 
-  const runLog = openRunLog(logRoot || path.join(hermesHome, 'logs'))
+  const runLog = openRunLog(logRoot || path.join(hermesHome, 'logs'), hermesHome)
 
   // Tee every event to the runLog AND the caller's onEvent. This gives us a
   // forensic trail per bootstrap run AND lets the renderer subscribe live.
@@ -2201,7 +2311,7 @@ async function runSourceRuntimeUpdate({
         ok: false,
         code: result.code,
         error: 'runtime-update-failed',
-        message: `Runtime update failed (${name}). iclone os keeps running on the current runtime.`,
+        message: `Runtime update failed (${name}).${refusedStageReason(result)} iclone os keeps running on the current runtime.`,
         sha: pin.sha
       }
     }
@@ -2643,7 +2753,7 @@ async function alignBundledPin({ activeRoot, emit, hermesHome, pin, script, _ali
         ok: false,
         code: run?.code ?? null,
         error: 'runtime-update-failed',
-        message: `Runtime update failed at ${stage.name} (exit ${run?.code}). ${after}${parked}`,
+        message: `Runtime update failed at ${stage.name} (exit ${run?.code}).${refusedStageReason(run)} ${after}${parked}`,
         sha: pin.sha
       }
     }
@@ -2789,7 +2899,7 @@ export async function runPinnedRuntimeUpdate({
         ok: false,
         code: result.code,
         error: 'runtime-update-failed',
-        message: `Runtime update failed (exit ${result.code}). iclone os keeps running on the current runtime.`,
+        message: `Runtime update failed (exit ${result.code}).${refusedStageReason(result)} iclone os keeps running on the current runtime.`,
         sha: pin.sha
       }
     }

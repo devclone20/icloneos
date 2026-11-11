@@ -48,9 +48,17 @@ describe('main-process locale: English only (ruling 69)', () => {
     expect(functionCopyFor(MAIN_DIALOG_LOCALE)).toBe(FUNCTION_COPY.en)
   })
 
-  it('a saved Portuguese choice, once main is handed it, reads pt-PT in both dialogs', () => {
-    expect(ignoreConfirmCopy('pt-PT').title).not.toBe(ignoreConfirmCopy('en').title)
+  it('the Ignore alert is English for every locale, so no locale keeps an older promise (F40); the raise dialog keeps pt-PT', () => {
+    expect(ignoreConfirmCopy('pt-PT').title).toBe(ignoreConfirmCopy('en').title)
     expect(functionCopyFor('pt-PT')).toBe(FUNCTION_COPY['pt-PT'])
+  })
+
+  it('the Ignore alert keeps the fail-closed delete clause inside the second check, so five checks stay five (E2b-n2)', () => {
+    const still = ignoreConfirmCopy('en').still
+    expect(still).toContain(
+      'or by a command whose name it cannot read, or a recursive delete whose targets or options it cannot fully read; a call too unreadable to check'
+    )
+    expect(still.match(/cannot fully read/g)).toHaveLength(1)
   })
 })
 

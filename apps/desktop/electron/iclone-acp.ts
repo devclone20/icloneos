@@ -1045,7 +1045,7 @@ async function readStatus(inftId: string, opts: StatusOptions = {}): Promise<Inf
       }
 
       try {
-        writeFileAtomic(path.join(inftRoot(slug), 'status.json'), JSON.stringify(kept, null, 2))
+        writeFileAtomic(path.join(inftRoot(slug), 'status.json'), JSON.stringify(kept, null, 2), 0o600, false)
       } catch {
         // Cache only.
       }
@@ -1092,7 +1092,8 @@ async function readStatus(inftId: string, opts: StatusOptions = {}): Promise<Inf
   status.configured = status.authenticated && Boolean(status.agentId)
 
   try {
-    writeFileAtomic(path.join(inftRoot(slug), 'status.json'), JSON.stringify(status, null, 2))
+    // L4-05: status.json is a cache the next probe rewrites: atomic for readers, not fsynced.
+    writeFileAtomic(path.join(inftRoot(slug), 'status.json'), JSON.stringify(status, null, 2), 0o600, false)
   } catch {
     // Cache only — live probes still answer.
   }
@@ -1489,7 +1490,7 @@ export function acpWrapperSource(socketPath: string, tokenPath: string): string 
   const q = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`
 
   const client = [
-    'import json, socket, sys',
+    'import json, os, socket, sys',
     'sock_path, token_path, key = sys.argv[1], sys.argv[2], sys.argv[3]',
     'def bye(message, code):',
     '    sys.stderr.write("acp: " + message + "\\n")',
@@ -1501,7 +1502,7 @@ export function acpWrapperSource(socketPath: string, tokenPath: string): string 
     '    conn.connect(sock_path)',
     'except OSError:',
     '    bye("iclone os is not running — open iclone os, then run the command again", 3)',
-    'request = {"v": 1, "token": token, "inft": key or None, "argv": sys.argv[4:]}',
+    'request = {"v": 1, "token": token, "inft": key or None, "argv": sys.argv[4:], "session": os.environ.get("HERMES_SESSION_ID")}',
     'conn.sendall((json.dumps(request) + "\\n").encode("utf-8"))',
     'code = 1',
     'try:',

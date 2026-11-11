@@ -9,7 +9,7 @@
 <p align="center">An AI agent on your own Mac, with the iNFT you hold at the centre of it.<br>Signed with Developer ID and notarised by Apple.</p>
 
 <p align="center">
-  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.5"></a>
+  <a href="https://github.com/devclone20/icloneos/releases/latest"><img src="docs/media/brand/badge-release.svg" height="22" alt="Release v0.0.7"></a>
   <a href="docs/INSTALL.md"><img src="docs/media/brand/badge-macos.svg" height="22" alt="macOS 13 (Ventura) or later, Apple silicon"></a>
   <a href="docs/INSTALL.md#release-integrity"><img src="docs/media/brand/badge-notarised.svg" height="22" alt="Signed with Developer ID, notarised by Apple"></a>
   <a href="docs/PRIVACY.md#no-telemetry"><img src="docs/media/brand/badge-telemetry.svg" height="22" alt="No telemetry"></a>
@@ -73,17 +73,18 @@ The bundle identifier is `io.cloneframe.icloneos` and the signing team is `HJSLQ
 **On your Mac.** The app is an Electron shell around the Hermes agent runtime, which it installs on first launch
 from a copy inside the app, checked against a pinned SHA-256. The runtime calls the model you choose: a provider
 account, an API key, or a local endpoint. Every tool call passes the permission gate before it runs, and agent
-commands are confined by default in a macOS Seatbelt sandbox.
+commands are confined by default in a macOS Seatbelt sandbox, which you can turn off.
 
-Five more diagrams — your model, permissions, agent commands, the iNFT, and install and update — are in [`ARCHITECTURE.md`](ARCHITECTURE.md), with the trust model in [`SECURITY.md`](SECURITY.md#trust-model-in-brief).
+Two more diagrams — your model, and install and update — are in [`ARCHITECTURE.md`](ARCHITECTURE.md), with permissions, agent commands and the iNFT described in words, with the trust model in [`SECURITY.md`](SECURITY.md#trust-model-in-brief).
 
 ## Security and privacy
 
 - **Starts in Manual.** A new install starts in **Manual**, which asks before every write, command, network call, message, install and deletion. Only your own click changes the mode.
-- **Asks first, records everything.** Every ask, answer, grant and use goes into a hash-chained log, sealed with a key in your Keychain once the Keychain setting is on; the Activity view says when the record has a gap or was changed.
-- **Sandboxed commands.** Agent commands, tools, the browser and helper programs run under macOS Seatbelt profiles,
-  on by default, that refuse anything they do not name. The **Containers** window shows what runs and stops a process with everything it started.
-- **Money only under your signature.** Agents pay only under a mandate you sign, inside daily caps, to payees you list, after one confirmation per payment. **Stop all payments** refuses everything at once. Payments need the Keychain setting on, and are set to the Base Sepolia test network, with mainnet off.
+- **Asks first, records everything.** Outside Ignore permissions the app asks before it acts; in Ignore permissions nothing asks. Every ask, answer, grant and use goes into a hash-chained log, sealed with a key in your Keychain once the Keychain setting is on; the Activity view says when the record has a gap or was changed.
+- **Sandboxed commands.** Agent commands and the programs they start run under macOS Seatbelt profiles, on by default,
+  that refuse anything they do not name; you can turn them off, a shell command you approve runs once outside them, and
+  the agent's browser runs outside them. The **Containers** window shows what runs and stops a process with everything it started.
+- **Money only under your signature.** Outside Ignore permissions, agents pay only under a mandate you sign, inside daily caps, to payees you list, after one confirmation per payment. **Stop all payments** refuses everything at once. Payments need the Keychain setting on, and are set to the Base Sepolia test network, with mainnet off. In Ignore permissions the agent can spend with no ask.
 - **No telemetry.** The app sends no analytics or crash reports; logs stay on your Mac. What leaves your Mac, and when, is in [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 Report a vulnerability privately through [GitHub Security Advisories](https://github.com/devclone20/icloneos/security/advisories/new), as described in [`SECURITY.md`](SECURITY.md). Please do not open a public issue for a security problem.

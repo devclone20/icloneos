@@ -16,7 +16,7 @@ const ContainersWindowBody = lazy(async () => ({ default: (await import('./conta
 export const $containersOpen = atom(false)
 
 /** The Dock tile; pass a stable `onOpen`. It closes whichever Dock window is open: one window at a time. */
-export function useContainersDockItem(hint: string | undefined, onOpen: () => void): DockItem {
+export function useContainersDockItem(hint: string | undefined, onOpen: () => void, onClose?: () => void): DockItem {
   const copy = useContainersCopy()
   const open = useStore($containersOpen)
 
@@ -34,9 +34,13 @@ export function useContainersDockItem(hint: string | undefined, onOpen: () => vo
         }
 
         $containersOpen.set(!open)
+
+        if (open) {
+          onClose?.()
+        }
       }
     }),
-    [copy.tile, hint, onOpen, open]
+    [copy.tile, hint, onClose, onOpen, open]
   )
 }
 

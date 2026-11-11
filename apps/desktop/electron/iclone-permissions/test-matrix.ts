@@ -12,7 +12,7 @@ export const MATRIX_ACTIONS: Record<'A1' | 'A2' | 'A3' | 'A4', { cls: ActionClas
 
 /** §6, transcribed: A allow · Q ask · R! refuse. */
 export const MATRIX_EXPECTED: Record<PermissionMode, Record<keyof typeof MATRIX_ACTIONS, Outcome>> = {
-  ignore: { A1: 'allow', A2: 'allow', A3: 'allow', A4: 'ask' },
+  ignore: { A1: 'allow', A2: 'allow', A3: 'allow', A4: 'allow' },
   manual: { A1: 'ask', A2: 'ask', A3: 'ask', A4: 'ask' },
   automatic: { A1: 'allow', A2: 'ask', A3: 'allow', A4: 'ask' },
   plan: { A1: 'refuse', A2: 'refuse', A3: 'refuse', A4: 'refuse' },

@@ -264,7 +264,7 @@ describe('it — the human click and the settings verb', () => {
 // against the moved modules: `read-screen` must read the registry it-commands imports (one registry,
 // not a second copy behind a shim), and `rename` takes a REF first and only then the title — the
 // lab run proved a bare title is read as the ref, which is exactly what the live gate now asserts
-// (RESUME/run/gates/L/extra/E3c_20261019_r2_it_routes_keys.mjs, it_cli_rename).
+// (the E3c r2 iT routes probe, it_cli_rename).
 describe('it — read and rename against the moved engine', () => {
   beforeEach(() => {
     reset()

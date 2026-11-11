@@ -144,6 +144,9 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
     the leader's ``session``/``always``/``deny``/timeout; a ``once`` covers only
     the leader, so the follower falls through to a fresh prompt."""
     from tools import approval as _approval
+    if _approval.iclone_ignore_in_force():  # icloneOS F40: nobody is asked in Ignore
+        return {"resolved": True, "choice": "once", "reason": ""}
+    from tools import approval as _approval
     from agent.terminal_approval_batch import approval_published, preparing_terminal_approval, register_prepared_approval
 
     primary_key = approval_data.get("pattern_key", "")

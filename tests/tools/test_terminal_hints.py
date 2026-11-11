@@ -215,3 +215,9 @@ class TestMaskedSuccess:
             )
             is None
         )
+
+
+def test_fx22_a_kernel_refused_cd_does_not_get_the_chmod_hint():
+    output = "bash: line 1: cd: /p/linked: Operation not permitted"
+    assert annotate_failure("cd /p/linked", 126, output) is None
+    assert "chmod" in annotate_failure("./run.sh", 126, "not executable")

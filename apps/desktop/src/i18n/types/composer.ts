@@ -67,6 +67,7 @@ export type ComposerTranslations = {
   previewLabel: (label: string) => string
   couldNotPreview: (label: string) => string
   removeAttachment: (label: string) => string
+  screenFrames: (count: number) => string
   dictating: string
   preparingAudio: string
   speakingResponse: string

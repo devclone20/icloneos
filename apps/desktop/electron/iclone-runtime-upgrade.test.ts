@@ -167,7 +167,7 @@ SUITE('K-RT2 (ruling 36): the app installs its own runtime in its own folder', {
     // The app's copy is this release's runtime, stamped and manifest-exact; the user's folder is byte-for-byte as it was.
     expect(runtimeOwnership(managed, RUNTIME_PIN)).toEqual({ kind: 'managed', sha: RUNTIME_PIN.sha })
     const manifest = parseRuntimeManifest(fs.readFileSync(path.join(bundleDir, RUNTIME_MANIFEST_FILE), 'utf8'))
-    expect(verifyRuntimeTree(managed, manifest).ok).toBe(true)
+    expect((await verifyRuntimeTree(managed, manifest)).ok).toBe(true)
     // The installer copied the bundle's manifest into the tree and wrote the plain stamp (sha + app version, no key).
     // Asserted first, so a missing copy fails here on an assertion (ruling 53), not on the read below.
     expect(fs.existsSync(path.join(managed, RUNTIME_MANIFEST_FILE)), 'manifest copy missing').toBe(true)

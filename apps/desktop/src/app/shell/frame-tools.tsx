@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { registerIcloneBrowserTool } from '@/app/home/browser-tool'
 import { useIcloneHudTool } from '@/app/home/hud-tool'
+import { registerScreenRecordTool } from '@/app/home/screen-record-tool'
 import { registerIcloneThemeTool } from '@/app/home/theme-tool'
 import { $homeCopy, $toolsCopy } from '@/app/home/tools-copy'
 import { registerIcloneWalletTool } from '@/app/home/wallet-tool'
@@ -14,12 +15,13 @@ import { cn } from '@/lib/utils'
 import type { TitlebarTool } from './titlebar-controls'
 
 /** OUR frame's tools, left to right at the top right: wallet, theme cycle, the
- *  browser pair, then HUD mode (the old titlebar's system cluster sat last). */
+ *  browser pair, AI record beside them, then HUD mode (the old titlebar's system cluster sat last). */
 export const FRAME_TOOL_IDS = [
   'iclone-wallet',
   'iclone-theme-cycle',
   'iclone-browser-headed',
   'iclone-browser-recording',
+  'iclone-ai-record',
   'iclone-hud'
 ] as const
 
@@ -90,12 +92,16 @@ export function FrameTools() {
     registerIcloneWalletTool()
     registerIcloneThemeTool()
     registerIcloneBrowserTool()
+    registerScreenRecordTool()
   }, [])
 
   useIcloneHudTool()
 
   const tools = frameTools(useContributions(TOOLS_AREA))
   const modalOpen = useOurModalOpen()
+  // A recording stays visible and stoppable whatever is open: the rest of the strip leaves as it always has.
+  const kept = modalOpen ? tools.filter(tool => tool.keepOverModals) : tools
+  const stripHidden = modalOpen && kept.length === 0
   const stripRef = useRef<HTMLDivElement>(null)
 
   // The strip's measurement is published on <html>: --titlebar-tools-width is
@@ -148,21 +154,24 @@ export function FrameTools() {
       aria-label={t.desktop.home.windowTools}
       className={cn(
         'ichrome absolute inset-y-0 right-3.5 flex items-center gap-0.5 transition-opacity duration-(--ic-dur-fast) ease-(--ic-ease-std) [-webkit-app-region:no-drag]',
-        modalOpen ? 'pointer-events-none opacity-0' : 'pointer-events-auto'
+        stripHidden ? 'pointer-events-none opacity-0' : 'pointer-events-auto'
       )}
       data-ic-frame-tools=""
       dir="ltr"
-      inert={modalOpen}
+      inert={stripHidden}
       ref={stripRef}
       role="toolbar"
     >
-      {tools.map(tool => (
+      {kept.map(tool => (
         <Tip key={tool.id} label={tool.title ?? tool.label}>
           <button
             aria-busy={tool.busy || undefined}
             aria-label={tool.label}
             aria-pressed={tool.active === undefined ? undefined : tool.active}
-            className="ichrome__tool grid size-6 place-items-center rounded-(--ic-radius-sm) text-(--ic-ctl-ink) opacity-80 transition-[background-color,color,opacity] duration-(--ic-dur-fast) ease-(--ic-ease-std) hover:bg-(--ic-ctl-hover-fill) hover:text-(--ic-ctl-hover-ink) hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--ic-accent) disabled:pointer-events-none disabled:opacity-40 aria-pressed:text-(--ic-accent) aria-pressed:opacity-100"
+            className={cn(
+              'ichrome__tool grid size-6 place-items-center rounded-(--ic-radius-sm) text-(--ic-ctl-ink) opacity-80 transition-[background-color,color,opacity] duration-(--ic-dur-fast) ease-(--ic-ease-std) hover:bg-(--ic-ctl-hover-fill) hover:text-(--ic-ctl-hover-ink) hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--ic-accent) disabled:pointer-events-none disabled:opacity-40 aria-pressed:text-(--ic-accent) aria-pressed:opacity-100',
+              tool.className
+            )}
             data-ic-frame-tool={tool.id}
             data-working={tool.busy ? '' : undefined}
             disabled={tool.disabled}

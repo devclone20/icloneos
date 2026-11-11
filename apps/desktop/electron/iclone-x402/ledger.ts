@@ -8,8 +8,23 @@
  * The daily ceilings in `limits.ts` are folded from these rows on every read — nothing is a cached counter — so a
  * chain that does not verify refuses every payment (`limits` rule `ledger`) until the owner repairs it.
  *
- * Every write replaces the whole file atomically (temp + fsync + rename, `writeFileAtomicSync`), so a kill leaves
- * the old file or the new one, never a half row.
+ * A row is appended as one whole line (`appendLineSync`: one write(2) to an O_APPEND, no-follow descriptor, rolled
+ * back on a short write), then the head is replaced atomically, so a kill leaves the file without the row or with
+ * all of it, and a head that is never ahead of the file. O(1) per row, whatever the file's size.
+ *
+ * Durability per row (L4-03). A row that counts against a ceiling, a mandate's budget or a replay check, or that
+ * narrows what may be paid (`DURABLE_KINDS`), is fsynced before `append` returns: the signature, claim or stop it
+ * records is never acted on before it is on stable storage. Every other row (a refusal, a facilitator's answer)
+ * and the head are fsynced off the main thread (`ledgerSync`), so an agent hammering the socket with refused calls
+ * cannot hold main on a flush per call. A head that lags the file is accepted (below), so a head lost in a power cut
+ * costs nothing; a head that reached the disk ahead of a lost non-durable row reads as `truncated` and refuses
+ * every payment until the owner repairs it: a power cut can only fail closed.
+ *
+ * Reads (the Payments pane polls every 3 s; every agent payment reads first) are cached by the files' stamp (dev,
+ * ino, size, mtime, ctime of the ledger and the head). Our own append advances the cache by the one row it wrote,
+ * after checking the file was still the verified one and grew by exactly that row. Any other change moves the stamp
+ * and the next read verifies the WHOLE chain again from genesis, exactly as before; `readAsync` does that re-verify
+ * off the event loop (the file through the thread pool, the chain in slices that yield between them).
  *
  * Timestamps only move forward (I7): `append` refuses a row whose instant is earlier than the last row's `ts` (a stale
  * issued instant, or a wall clock stepped back: the write fails closed until the clock passes the last row), and
@@ -35,6 +50,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { redactSecrets } from '../../src/iclone-shared/redact'
+import { appendLineSync, AppendMismatchError, expectationOf, ledgerSync, stampOf, stampOfAsync } from '../lib/append-log'
 import { isAtomicTempName, writeFileAtomicSync } from '../lib/atomic-write'
 
 import type { LimitRule } from './limits'
@@ -229,8 +245,32 @@ function readHead(file: string): LedgerHead | null {
   }
 }
 
-const writeHead = (file: string, head: LedgerHead): void =>
-  writeFileAtomicSync(headFileOf(file), JSON.stringify(head), { mode: 0o600, dirMode: 0o700 })
+/** `durable: false` hands the head to the deferred flush: a head that lags the file is accepted on read. */
+const writeHead = (file: string, head: LedgerHead, durable: boolean): void => {
+  writeFileAtomicSync(headFileOf(file), JSON.stringify(head), { mode: 0o600, dirMode: 0o700, durable })
+
+  if (!durable) {
+    ledgerSync.mark(headFileOf(file))
+  }
+}
+
+/**
+ * Rows fsynced before `append` returns: a signature (counts against the ceilings), a server's claim and earning (the
+ * replay check), a mandate's issue / use / revoke (its budget), a settings change and the stop (what may be paid).
+ */
+const DURABLE_KINDS: ReadonlySet<LedgerKind> = new Set<LedgerKind>([
+  'signed',
+  'claim',
+  'earned',
+  'mandate_issue',
+  'mandate_use',
+  'mandate_revoke',
+  'setting',
+  'stop'
+])
+
+/** Rows verified per slice of `readLedgerAsync` (~1.5 ms of parse + hash on an M-class core) before it yields. */
+const VERIFY_SLICE_ROWS = 1_000
 
 type LedgerProblem = 'head' | 'line' | 'truncated'
 
@@ -262,6 +302,83 @@ function headProblem(head: LedgerHead | null, records: readonly LedgerRecord[]):
   return named === head.sha ? null : 'head'
 }
 
+interface ChainScan {
+  records: LedgerRecord[]
+  prev: string
+  lastMs: number
+  brokenAt: number | null
+}
+
+const startScan = (): ChainScan => ({ records: [], prev: GENESIS, lastMs: -Infinity, brokenAt: null })
+
+/** One line against the chain so far. False (and `brokenAt` set) at the first line that breaks it. */
+function scanLine(scan: ChainScan, line: string, index: number): boolean {
+  let parsed: unknown = null
+
+  try {
+    parsed = line.length <= ROW_MAX ? JSON.parse(line) : null
+  } catch {
+    parsed = null
+  }
+
+  if (!isRecord(parsed)) {
+    scan.brokenAt = index + 1
+
+    return false
+  }
+
+  const { sha, ...body } = parsed
+  const ms = Date.parse(parsed.ts)
+
+  // A row older than the one before it is not a row this ledger wrote (append refuses it): the chain is broken.
+  if (
+    digest(body) !== sha ||
+    parsed.prev !== scan.prev ||
+    parsed.seq !== scan.records.length + 1 ||
+    !Number.isFinite(ms) ||
+    ms < scan.lastMs
+  ) {
+    scan.brokenAt = index + 1
+
+    return false
+  }
+
+  scan.lastMs = ms
+  scan.records.push(parsed)
+  scan.prev = sha
+
+  return true
+}
+
+/** The file's lines, as `text.replace(/\n$/, '').split('\n')` gives them, without building the array of a 40 MB file. */
+function* linesOf(text: string): Generator<string> {
+  if (!text.length) {
+    return
+  }
+
+  const body = text.endsWith('\n') ? text.slice(0, -1) : text
+  let from = 0
+
+  for (;;) {
+    const end = body.indexOf('\n', from)
+
+    if (end < 0) {
+      yield body.slice(from)
+
+      return
+    }
+
+    yield body.slice(from, end)
+    from = end + 1
+  }
+}
+
+function finishScan(scan: ChainScan, head: LedgerHead | null): LedgerRead {
+  const problem: LedgerProblem | null = scan.brokenAt !== null ? 'line' : headProblem(head, scan.records)
+
+  return { records: scan.records, ok: problem === null, brokenAt: scan.brokenAt, problem }
+}
+
 /** Reads and verifies the whole chain against its head. Pure. */
 export function readLedger(file: string): LedgerRead {
   let text = ''
@@ -272,52 +389,64 @@ export function readLedger(file: string): LedgerRead {
     text = ''
   }
 
-  const lines = text.length ? text.replace(/\n$/, '').split('\n') : []
-  const records: LedgerRecord[] = []
-  let prev = GENESIS
-  let lastMs = -Infinity
-  let brokenAt: number | null = null
+  const scan = startScan()
+  let index = 0
 
-  for (let index = 0; index < lines.length; index += 1) {
-    let parsed: unknown = null
-
-    try {
-      parsed = lines[index].length <= ROW_MAX ? JSON.parse(lines[index]) : null
-    } catch {
-      parsed = null
-    }
-
-    if (!isRecord(parsed)) {
-      brokenAt = index + 1
-
+  for (const line of linesOf(text)) {
+    if (!scanLine(scan, line, index)) {
       break
     }
 
-    const { sha, ...body } = parsed
-    const ms = Date.parse(parsed.ts)
-
-    // A row older than the one before it is not a row this ledger wrote (append refuses it): the chain is broken.
-    if (
-      digest(body) !== sha ||
-      parsed.prev !== prev ||
-      parsed.seq !== records.length + 1 ||
-      !Number.isFinite(ms) ||
-      ms < lastMs
-    ) {
-      brokenAt = index + 1
-
-      break
-    }
-
-    lastMs = ms
-
-    records.push(parsed)
-    prev = sha
+    index += 1
   }
 
-  const problem: LedgerProblem | null = brokenAt !== null ? 'line' : headProblem(readHead(file), records)
+  return finishScan(scan, readHead(file))
+}
 
-  return { records, ok: problem === null, brokenAt, problem }
+const yieldToLoop = (): Promise<void> => new Promise(resolve => setImmediate(resolve))
+
+/**
+ * `readLedger` off the event loop: the same checks on the same bytes, the file and the head read through the thread
+ * pool and the chain verified `VERIFY_SLICE_ROWS` at a time with a yield between slices.
+ */
+export async function readLedgerAsync(file: string): Promise<LedgerRead> {
+  let text = ''
+
+  try {
+    text = await fs.promises.readFile(file, 'utf8')
+  } catch {
+    text = ''
+  }
+
+  const scan = startScan()
+  let index = 0
+
+  for (const line of linesOf(text)) {
+    if (!scanLine(scan, line, index)) {
+      break
+    }
+
+    index += 1
+
+    if (index % VERIFY_SLICE_ROWS === 0) {
+      await yieldToLoop()
+    }
+  }
+
+  let head: LedgerHead | null = null
+
+  try {
+    const parsed = JSON.parse(await fs.promises.readFile(headFileOf(file), 'utf8')) as Record<string, unknown> | null
+
+    head =
+      parsed && Number.isSafeInteger(parsed.seq) && typeof parsed.sha === 'string'
+        ? { seq: parsed.seq as number, sha: parsed.sha }
+        : null
+  } catch {
+    head = null
+  }
+
+  return finishScan(scan, head)
 }
 
 /** The rows the ceilings fold over: every signature, by agent and time. A broken chain folds to `ok:false`. */
@@ -346,13 +475,25 @@ export interface PaymentLedger {
    * were evaluated at); any other Date — a foreign clock's, or an issued one modified since — refuses the append.
    */
   append: (entry: LedgerEntry, at?: Date) => LedgerRecord | null
+  /** The verified chain: cached while the files' stamp holds, verified whole again (on this thread) when it moved. */
   read: () => LedgerRead
+  /** `read` with the re-verify off the event loop; concurrent calls for one stamp share one verify. */
+  readAsync: () => Promise<LedgerRead>
   limitsView: () => LimitsLedgerView
+  /** Resolves once every row and head written so far is on stable storage (the deferred fsync of non-durable rows). */
+  flush: () => Promise<void>
 }
 
 interface LedgerOptions {
   file: string
   now?: () => Date
+  /** Test seam: runs right before a row's write. A throw stands for a kill there: the row is not on disk. */
+  beforeAppend?: (file: string) => void
+}
+
+interface CachedRead {
+  stamp: string
+  read: LedgerRead
 }
 
 export function createLedger(options: LedgerOptions): PaymentLedger {
@@ -385,13 +526,56 @@ export function createLedger(options: LedgerOptions): PaymentLedger {
     }
   }
 
-  const read = () => readLedger(options.file)
+  const files = [options.file, headFileOf(options.file)] as const
+  let cache: CachedRead | null = null
+  let verifying: { stamp: string; pending: Promise<LedgerRead> } | null = null
 
-  const append = (entry: LedgerEntry, at?: Date): LedgerRecord | null => {
-    if (at !== undefined && issued.get(at) !== at.getTime()) {
-      return null
+  /** Caches `read` under `stamp` only when the files still carry it: a read that raced a write is never cached. */
+  const remember = (stamp: string, read: LedgerRead, still: string): LedgerRead => {
+    if (still === stamp) {
+      cache = { stamp, read }
     }
 
+    return read
+  }
+
+  const read = (): LedgerRead => {
+    const stamp = stampOf(files)
+
+    if (cache && cache.stamp === stamp) {
+      return cache.read
+    }
+
+    return remember(stamp, readLedger(options.file), stampOf(files))
+  }
+
+  const readAsync = async (): Promise<LedgerRead> => {
+    const stamp = await stampOfAsync(files)
+
+    if (cache && cache.stamp === stamp) {
+      return cache.read
+    }
+
+    if (verifying && verifying.stamp === stamp) {
+      return verifying.pending
+    }
+
+    const pending = readLedgerAsync(options.file).then(async verified =>
+      remember(stamp, verified, await stampOfAsync(files))
+    )
+
+    verifying = { stamp, pending }
+
+    try {
+      return await pending
+    } finally {
+      if (verifying?.pending === pending) {
+        verifying = null
+      }
+    }
+  }
+
+  const appendOnce = (entry: LedgerEntry, at: Date | undefined, retry: boolean): LedgerRecord | null => {
     const current = read()
 
     if (!current.ok) {
@@ -399,9 +583,9 @@ export function createLedger(options: LedgerOptions): PaymentLedger {
     }
 
     if (current.records.length === 0 && readHead(options.file) === null) {
-      // The genesis head goes down before the first row: from then on a missing head is always a problem.
+      // The genesis head goes down before the first row, durably: from then on a missing head is always a problem.
       try {
-        writeHead(options.file, { seq: 0, sha: GENESIS })
+        writeHead(options.file, { seq: 0, sha: GENESIS }, true)
       } catch {
         return null
       }
@@ -422,22 +606,63 @@ export function createLedger(options: LedgerOptions): PaymentLedger {
       return null
     }
 
-    const text = current.records.map(lineOf).join('') + lineOf(record)
+    // The append must find the ledger file exactly as it was verified (size and inode), or it writes nothing.
+    if (!cache || cache.read !== current) {
+      // read() raced a write and cached nothing: verify again rather than append after unverified bytes.
+      return retry ? appendOnce(entry, at, false) : null
+    }
+
+    const verified = expectationOf(cache.stamp)
+    let size: { before: number; after: number }
 
     try {
-      writeFileAtomicSync(options.file, text, { mode: 0o600, dirMode: 0o700 })
-    } catch {
-      return null
+      size = appendLineSync(options.file, lineOf(record), {
+        durable: DURABLE_KINDS.has(record.kind),
+        mode: 0o600,
+        dirMode: 0o700,
+        expect: verified,
+        beforeAppend: options.beforeAppend
+      })
+    } catch (error) {
+      cache = null
+
+      // Something wrote between the verify and the open: verify again from genesis, once, then decide.
+      return error instanceof AppendMismatchError && retry ? appendOnce(entry, at, false) : null
     }
 
     try {
-      writeHead(options.file, { seq: record.seq, sha: record.sha })
+      writeHead(options.file, { seq: record.seq, sha: record.sha }, false)
     } catch {
-      // The row is durable; a head left behind is caught on the next read as `head` and the owner repairs it.
+      // The row is on disk; a head left behind is accepted on read (a lagging head) and the next row's head heals it.
     }
+
+    const stamp = stampOf(files)
+    const after = expectationOf(stamp)
+
+    // Advanced by the one row only when the file is the one verified, grown by exactly that row.
+    cache =
+      after.size === size.after && (verified.ino === null || after.ino === verified.ino)
+        ? { stamp, read: { records: [...current.records, record], ok: true, brokenAt: null, problem: null } }
+        : null
 
     return record
   }
 
-  return { file: options.file, now, append, read, limitsView: () => limitsViewOf(read()) }
+  const append = (entry: LedgerEntry, at?: Date): LedgerRecord | null => {
+    if (at !== undefined && issued.get(at) !== at.getTime()) {
+      return null
+    }
+
+    return appendOnce(entry, at, true)
+  }
+
+  return {
+    file: options.file,
+    now,
+    append,
+    read,
+    readAsync,
+    limitsView: () => limitsViewOf(read()),
+    flush: () => ledgerSync.flush()
+  }
 }

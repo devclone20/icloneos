@@ -66,7 +66,7 @@ export function ConsentDoorSheet() {
   const name = permissionName(policy, request.key, bank)
   const purpose = policy ? consentRow(policy, request.key, bank).purpose : ''
 
-  const answer = (choice: ConsentDoorChoice | PermissionDoorChoice) => {
+  const answer = (choice: ConsentDoorChoice | PermissionDoorChoice, shown?: string) => {
     const bridge = consentBridge()
 
     if (!bridge?.doorAnswer || busy) {
@@ -75,7 +75,7 @@ export function ConsentDoorSheet() {
 
     triggerHaptic('selection')
     setBusy(true)
-    void bridge.doorAnswer({ id: request.id, choice }).then(
+    void bridge.doorAnswer({ id: request.id, choice, ...(shown === undefined ? {} : { shown }) }).then(
       () => (choice === 'always' ? loadConsent(true) : undefined),
       () => setBusy(false)
     )
@@ -99,6 +99,7 @@ export function ConsentDoorSheet() {
           <PermissionAskBody
             busy={busy}
             denyRef={denyRef}
+            key={request.id}
             onAnswer={answer}
             permission={request.permission}
             request={request}

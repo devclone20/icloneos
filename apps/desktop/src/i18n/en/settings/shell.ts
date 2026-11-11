@@ -12,7 +12,7 @@ export const settingsShell: Pick<Translations['settings'], keyof SettingsShellTr
   exportFailed: 'Export failed',
   resetFailed: 'Reset failed',
   nav: {
-    setup: 'Set up',
+    setup: 'Setup',
     privacy: 'Privacy',
     permissions: 'Permissions',
     engine: 'Engine',

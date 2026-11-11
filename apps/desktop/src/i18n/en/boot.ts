@@ -48,6 +48,25 @@ export const boot: Translations['boot'] = {
     gateTitle: 'The permission gate is not in place',
     gateDescription:
       'icloneOS did not start the agent: its permission gate could not be installed or loaded in this agent runtime, so no command would be checked. Nothing here deletes your chats or settings.',
+    homeSettingsHint: 'Fix it above, then choose Retry. Nothing else in your settings changes.',
+    homeSettingsReplace: 'Replace with a copy',
+    homeSettingsReplaceExplain: (target, file) =>
+      `Copies ${target} to ${file} as a private file and removes the link. The agent can read that copy. The original stays where it is, and later edits to it no longer reach the agent.`,
+    homeSettingsReplaced: file => `${file} is now a plain file. Choose Retry to start the agent.`,
+    homeSettingsTerminal: 'Or run this in Terminal:',
+    homeSettingsCopyFailed: {
+      changed: () => 'The link changed since this was shown, so nothing was replaced. Check it, then try again.',
+      'hard-link': target =>
+        `${target} has a second name on disk (a hard link), so it could be any of your files and nothing was replaced. Move this file yourself.`,
+      'not-a-link': () => 'That file is no longer a link, so nothing was replaced. Choose Retry.',
+      'not-eligible': () => 'This file can no longer be replaced from here, so nothing was replaced. Choose Retry.',
+      'not-plain': target => `${target} is not a plain file, so nothing was replaced.`,
+      'not-written': () =>
+        "This app could not write the copy into the agent's home, so the link is still there. Check that the disk has room and your account can write there, then try again.",
+      'too-large': target => `${target} is larger than 16 MB, too large for a settings file, so nothing was replaced.`,
+      unreadable: target =>
+        `This app cannot read ${target}, so nothing was replaced. Let your account read that file, then try again.`
+    },
     gateHint:
       'Retry checks the gate again. Repair install reinstalls the agent runtime, then the gate. If the box above says the gate is disabled via config, first remove iclone-permissions and iclone-confinement from plugins.disabled in your Hermes config.yaml, then Retry.',
     gateHintUnmanaged:

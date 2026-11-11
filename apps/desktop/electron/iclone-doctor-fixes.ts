@@ -37,6 +37,15 @@ import {
 } from './iclone-doctor-checks'
 import { mirrorFile, ownershipFile } from './iclone-ownership-store'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import {
+  chmodFileInRoot,
+  copyFileFromRoot,
+  NO_LINKS_ENV,
+  readFileInRoot,
+  renameInRoot,
+  replaceFileInRoot,
+  symlinkInRoot
+} from './lib/no-follow-fs'
 
 export type FixStep =
   | { kind: 'write'; path: string; content: string; mode: number }
@@ -205,7 +214,7 @@ export const FIXES: Record<string, FixImpl> = {
         args: ['-m', 'hermes_cli.main', 'config', 'set', 'updates.check', 'false'],
         backups: [file],
         timeoutMs: 20_000,
-        env: { ...process.env, HERMES_HOME: env.hermesHome }
+        env: { ...process.env, HERMES_HOME: env.hermesHome, ...NO_LINKS_ENV }
       }
     ]
   },
@@ -441,7 +450,14 @@ interface BackupEntry {
   link: string | null
 }
 
-function backupPath(dir: string, file: string, index: number, entries: BackupEntry[]): void {
+/** The folder a no-follow operation is bounded by: HERMES_HOME for what lies in it (the runtime writes every folder below). */
+function noFollowRoot(env: DoctorEnv, file: string): string {
+  const relative = path.relative(env.hermesHome, file)
+
+  return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? env.hermesHome : path.dirname(file)
+}
+
+function backupPath(env: DoctorEnv, dir: string, file: string, index: number, entries: BackupEntry[]): void {
   if (entries.some(e => e.path === file)) {
     return
   }
@@ -462,8 +478,7 @@ function backupPath(dir: string, file: string, index: number, entries: BackupEnt
 
   const target = path.join(dir, 'files', `${index}-${path.basename(file)}`)
   fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 })
-  fs.copyFileSync(file, target)
-  fs.chmodSync(target, 0o600)
+  copyFileFromRoot(noFollowRoot(env, file), file, target)
   entries.push({ path: file, backup: target, mode: modeOf(st), link: null })
 }
 
@@ -510,7 +525,7 @@ export async function applySteps(
   try {
     for (const step of steps) {
       if (dir) {
-        touched(step).forEach(file => backupPath(dir, file, entries.length, entries))
+        touched(step).forEach(file => backupPath(env, dir, file, entries.length, entries))
       }
 
       if (step.kind === 'gateway' && step.action !== 'offline') {
@@ -534,7 +549,7 @@ export async function applySteps(
     // Files moved aside go back BEFORE the gateway restarts: started on a missing state.db, hermes would create an
     // empty one (every session gone) and a later undo would overwrite what it wrote since. Once a start was
     // attempted the gateway may already hold the restored files, so they stay.
-    const lost = startAttempted ? [] : putBack(moved, entries)
+    const lost = startAttempted ? [] : putBack(env, moved, entries)
     const rolledBack = moved.length > 0 && !startAttempted && lost.length === 0
 
     let manifestNote = ''
@@ -569,12 +584,12 @@ interface MovedAside {
 }
 
 /** Moves files set aside back to their names; falls back to the backup's pre-image. Returns the paths it could not restore. */
-function putBack(moved: MovedAside[], entries: BackupEntry[]): string[] {
+function putBack(env: DoctorEnv, moved: MovedAside[], entries: BackupEntry[]): string[] {
   const lost: string[] = []
 
   for (const m of [...moved].reverse()) {
     try {
-      fs.renameSync(m.to, m.from)
+      renameInRoot(noFollowRoot(env, m.from), m.to, m.from)
     } catch {
       const pre = entries.find(e => e.path === m.from)?.backup
 
@@ -583,8 +598,7 @@ function putBack(moved: MovedAside[], entries: BackupEntry[]): string[] {
           throw new Error('no pre-image')
         }
 
-        fs.copyFileSync(pre, m.from)
-        fs.chmodSync(m.from, 0o600)
+        replaceFileInRoot(noFollowRoot(env, m.from), m.from, fs.readFileSync(pre), 0o600)
       } catch {
         lost.push(path.basename(m.from))
       }
@@ -607,28 +621,33 @@ function alive(pid: number): boolean {
 async function runStep(env: DoctorEnv, step: FixStep, stamp: string, moved: MovedAside[]): Promise<void> {
   switch (step.kind) {
     case 'write':
-      writeAtomic(step.path, step.content, step.mode)
+      replaceFileInRoot(noFollowRoot(env, step.path), step.path, step.content, step.mode)
 
       return
 
     case 'chmod':
-      fs.chmodSync(step.path, step.mode)
+      // Through a descriptor: the runtime can replace these files with a link to anything of the user's.
+      chmodFileInRoot(noFollowRoot(env, step.path), step.path, step.mode)
 
       return
 
     case 'quarantine':
-      fs.renameSync(step.path, `${step.path}.corrupt-${stamp}`)
+      renameInRoot(noFollowRoot(env, step.path), step.path, `${step.path}.corrupt-${stamp}`)
 
       return
 
     case 'copy':
-      writeFileAtomicSync(step.to, fs.readFileSync(step.from), { mode: step.mode })
+      replaceFileInRoot(
+        noFollowRoot(env, step.to),
+        step.to,
+        readFileInRoot(noFollowRoot(env, step.from), step.from),
+        step.mode
+      )
 
       return
 
     case 'symlink':
-      fs.rmSync(step.path, { force: true })
-      fs.symlinkSync(step.target, step.path)
+      symlinkInRoot(noFollowRoot(env, step.path), step.target, step.path)
 
       return
     case 'exec': {
@@ -679,7 +698,7 @@ async function runStep(env: DoctorEnv, step: FixStep, stamp: string, moved: Move
 
       // Synchronous from here to the next step: a clean exit may already have removed -wal/-shm.
       for (const f of step.offline.filter(file => lstat(file))) {
-        fs.renameSync(f, `${f}.corrupt-${stamp}`)
+        renameInRoot(noFollowRoot(env, f), f, `${f}.corrupt-${stamp}`)
         moved.push({ from: f, to: `${f}.corrupt-${stamp}` })
       }
 

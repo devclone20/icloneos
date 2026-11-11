@@ -387,11 +387,31 @@ def _load_interim_assistant_messages() -> bool:
     return is_truthy_value(_display_cfg().get("interim_assistant_messages", True))
 
 
+_browser_video_saver: threading.Thread | None = None
+
+
+def _start_saving_browser_videos() -> threading.Thread | None:
+    """No browser ran in this process: nothing to save, and nothing to load. One thread however many ask: the signal starts it, the
+    teardown waits for that same one."""
+    global _browser_video_saver
+    tool = sys.modules.get("tools.browser_tool")
+    if tool is None:
+        return None
+    if _browser_video_saver is None:
+        _browser_video_saver = threading.Thread(target=tool.stop_recordings_for_exit, daemon=True, name="browser-record-exit")
+        _browser_video_saver.start()
+    return _browser_video_saver
+
+
 def _shutdown_sessions() -> None:
+    # A video being captured starts saving now, beside the flush and never in its way: the transcripts keep their budget.
+    videos = _start_saving_browser_videos()
     # Durable-first: flush transcripts (bounded budget) BEFORE the slow teardown so a supervisor SIGKILL can't lose them.
     for step in (_flush_sessions_before_exit, _release_gateway_wake_owner, _stop_turns_before_exit):
         with contextlib.suppress(Exception):
             step()
+    if videos is not None:
+        videos.join()  # stop_recordings_for_exit holds its own bound
     with _sessions_lock:
         sids = list(_sessions)
     for sid in sids:

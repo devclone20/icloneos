@@ -136,7 +136,7 @@ export function Tabs<T extends string>({
   onChange,
   value
 }: {
-  items: Array<{ id: T; label: string; count?: number | string }>
+  items: Array<{ id: T; label: ReactNode; count?: number | string }>
   onChange: (id: T) => void
   value: T
 }) {

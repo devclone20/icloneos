@@ -101,6 +101,7 @@ export const composer: Translations['composer'] = {
   previewLabel: label => `Preview ${label}`,
   couldNotPreview: label => `Could not preview ${label}`,
   removeAttachment: label => `Remove ${label}`,
+  screenFrames: n => `${n} frame${n === 1 ? '' : 's'}`,
   dictating: 'Dictating',
   preparingAudio: 'Preparing audio',
   speakingResponse: 'Speaking response',

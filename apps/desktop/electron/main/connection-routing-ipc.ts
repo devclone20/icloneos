@@ -9,7 +9,7 @@ import {
   fetchJsonForBackend,
   primaryProfileKey,
   resetHermesConnection,
-  sendConnectionApplied,
+  sendBackendRestarted,
   teardownPrimaryBackendAndWait
 } from './backend'
 import type { revalidatePool, touchPoolBackend } from './backend-pool'
@@ -175,14 +175,14 @@ export function registerConnectionRoutingIpc({
       // the terminal full-screen boot-failure overlay: a slow spawn turned a
       // healthy app into a "reinstall me" screen over a toggle click.
       await startHermes()
-      sendConnectionApplied()
+      sendBackendRestarted()
 
       return { ok: true }
     } catch (error) {
       rememberLog(`[backend] restart failed: ${error instanceof Error ? error.message : String(error)}`)
       // Whatever happened, let the renderer re-dial — a failed soft restart
       // must degrade to the ordinary reconnect flow, never to a dead window.
-      sendConnectionApplied()
+      sendBackendRestarted()
 
       return { error: error instanceof Error ? error.message : String(error), ok: false }
     }

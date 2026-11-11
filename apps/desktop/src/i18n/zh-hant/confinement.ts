@@ -1,29 +1,27 @@
 // iclone os — V3-G 隔離：Dock 的「容器」面板（繁體中文）。
-import type { ConfinementCopy } from '../en/confinement'
+import { type ConfinementCopy, confinement as english } from '../en/confinement'
 
 export const confinement: ConfinementCopy = {
   title: '容器',
   tile: '容器',
   unavailable: '容器在桌面 App 中執行，你的代理也在那裡執行指令。',
-  loading: '正在讀取這台 Mac 上執行的內容…',
   verdict: {
     green: {
       label: '已隔離',
-      hint: '每個代理指令都在其設定檔內執行。隔離期間，MCP 伺服器、排程工作的指令碼、外掛/技能/套件的安裝、電腦操控、編輯前的檔案副本、編輯後的程式碼檢查、委派工作的副本和你的掛鉤皆關閉；選擇「這台 Mac」可恢復。'
+      hint: '每個代理指令都在其設定檔內執行，例外是你核准的 shell 指令，它會在設定檔之外執行一次。受隔離的指令在外部嘗試的操作會被阻擋，並列在 Refusals 下。隔離期間，MCP 伺服器、排程工作的指令碼、外掛/技能/套件的安裝、編輯前的檔案副本、編輯後的程式碼檢查、委派工作的副本和你的掛鉤會關閉。電腦操控在你授權後，透過已簽署的驅動程式在設定檔之外執行，並在「忽略權限」以外的所有模式下詢問。你可以在 Backends 或 設定 › 代理 › 權限 中關閉隔離；應用程式會先詢問。'
     },
     red: { label: '未隔離', hint: '隔離未經驗證。原因見下方。' },
     off: {
       label: '已關閉',
-      hint: '你選擇了「這台 Mac」：代理指令不受隔離，MCP 伺服器、排程工作的指令碼、安裝、電腦操控、編輯前的檔案副本、編輯後的程式碼檢查、委派工作的副本和你的掛鉤會重新執行。'
+      hint: '隔離已關閉：代理指令不受隔離，MCP 伺服器、排程工作的指令碼、安裝、編輯前的檔案副本、編輯後的程式碼檢查、委派工作的副本和你的掛鉤會重新執行。'
     }
   },
-  tabs: { live: '即時', agents: '代理', profiles: '設定檔', refusals: '拒絕紀錄', backends: '後端' },
-  inside: '隔離內',
-  outside: '隔離外',
-  col: { pid: 'PID', profile: '設定檔', session: '工作階段', time: '時間', command: '指令', kind: '類型' },
-  kinds: { hermes: 'Hermes', 'agent-command': '代理指令，未隔離', tool: '工具（MCP 伺服器、輔助程式）' },
-  kill: '終止',
-  killTip: pid => `停止 ${pid} 及其啟動的一切`,
+  kinds: {
+    hermes: '代理執行環境',
+    'agent-command': '代理指令，未隔離',
+    tool: '工具（MCP 伺服器、輔助程式）',
+    runtime: english.kinds.runtime
+  },
   killed: count => `已停止 ${count} 個程序`,
   killFailed: {
     survivors: count => `有 ${count} 個程序無法停止`,
@@ -31,18 +29,8 @@ export const confinement: ConfinementCopy = {
     'not-confined': () => '不是受隔離的程序：未停止任何內容',
     invalid: () => '不是程序：未停止任何內容'
   },
-  why: '原因',
-  follow: '追蹤',
-  following: pid => `正在追蹤 ${pid}`,
-  stopFollowing: '停止追蹤',
-  empty: {
-    inside: '沒有正在執行的代理指令。',
-    outside: '沒有代理內容在隔離外執行。',
-    agents: '尚無代理活動。',
-    refusals: '尚無拒絕紀錄。'
-  },
   scope:
-    '已隔離：終端機、程式碼執行、檔案工具，以及 Hermes 執行的瀏覽器與媒體處理，皆在同一沙盒內。隔離期間關閉：MCP 伺服器、排程工作的指令碼、外掛/技能/套件的安裝、電腦操控、從鑰匙圈匯入，以及本機語音辨識指令。',
+    '已隔離：終端機、程式碼執行、檔案工具與媒體處理，各自在自己的設定檔內。隔離期間關閉：MCP 伺服器、排程工作的指令碼、外掛/技能/套件的安裝、從鑰匙圈匯入，以及本機語音辨識指令。電腦操控在你授權後，透過已簽署的驅動程式在設定檔之外執行，並在「忽略權限」以外的所有模式下詢問。瀏覽器和螢幕錄影在模式允許時也在設定檔之外執行。「網頁瀏覽與網路呼叫」開啟時，瀏覽器在「手動」和「接受編輯」下詢問，在「自動」下不詢問直接執行，在「計畫」下只開啟和閱讀網頁，不詢問。螢幕錄影在其開關開啟時，除「計畫」（會拒絕）外的所有模式都詢問。在「忽略權限」下兩者都不詢問。',
   backendName: { seatbelt: 'Seatbelt（macOS）', container: 'Apple container' },
   backendStatus: {
     ready: '就緒',
@@ -65,7 +53,6 @@ export const confinement: ConfinementCopy = {
     media: { name: '媒體', summary: '讀取輸入，只寫入一個輸出資料夾。' }
   },
   defaultClass: name => `預設：${name}`,
-  refusal: { operation: '已拒絕', target: '目標', process: '程序' },
   unattributed: '未歸屬',
   noSession: '無工作階段',
   insideCount: count => `隔離內 ${count}`,
@@ -92,12 +79,19 @@ export const confinement: ConfinementCopy = {
     'unknown-profile': ({ pid }) => `程序 ${pid} 在並非本應用程式產生的設定檔下執行`,
     'agent-command-outside': ({ pid }) => `智慧代理命令 ${pid} 在隔離之外執行`,
     'forged-marker': ({ pid }) => `程序 ${pid} 聲稱已被隔離，但 macOS 表示並沒有`,
+    'agent-config-unreadable': () =>
+      '無法讀取 config.yaml，因此其中的 terminal.backend 未被套用。指令仍在沙箱中執行。請修正該檔案並重新啟動。',
     'membership-unverified': () => '無法向 macOS 查詢哪些程序受隔離：脫離程序樹的程序可能未被計入',
     'hardlink-appeared': ({ path, pid, root }) =>
       `執行 ${pid} 期間，${root} 中出現了指向專案外檔案的硬連結（${path}）：只能在執行結束後發現，該次執行可能已存取到它；在你允許之前，那裡的下一次執行將被拒絕`,
+    'runtime-not-confined': english.reason['runtime-not-confined'],
+    'runtime-not-running': english.reason['runtime-not-running'],
+    'launcher-down': english.reason['launcher-down'],
+    'agent-commands-unavailable': english.reason['agent-commands-unavailable'],
     'settings-ignored': () => '磁碟上的隔離設定檔未經本應用程式簽署，已被忽略：隔離按預設設定保持開啟'
   },
   notes: '注意',
+  backendEnforcingOff: '對照設定檔拒絕了測試檔案。',
   backendDetail: {
     enforcing: '正在生效：對照設定檔拒絕了測試檔案。',
     'not-enforcing': '可以執行但沒有生效：對照設定檔沒有拒絕測試檔案。',
@@ -111,6 +105,7 @@ export const confinement: ConfinementCopy = {
     'probe-failed': '檢查本身失敗了。',
     'probe-timeout': '檢查未能及時完成：這台 Mac 當時可能很忙。稍後會再次檢查。'
   },
+  firstScan: dirs => `正在檢查專案資料夾… ${dirs.toLocaleString('zh-Hant')} 個資料夾`,
   hardlinks: {
     blocked: (root, paths, count) =>
       `隔離不會在 ${root} 中啟動：${paths.join('、')}${count > paths.length ? ` 等 ${count} 個檔案` : ''}是指向專案外檔案的硬連結，請刪除它們或在下方按資料夾允許。`,
@@ -127,6 +122,11 @@ export const confinement: ConfinementCopy = {
       changed: '未允許：該資料夾下的檔案在顯示後發生了變化，請重新讀取',
       invalid: '未允許：該資料夾已不存在'
     },
+    showAll: (count: number) => `全部顯示（${count.toLocaleString('zh-Hant')}）`,
+    showMore: (left: number) => `再顯示 ${left.toLocaleString('zh-Hant')} 個`,
+    showFewer: '收合',
     cachesUnscanned: '套件快取（npm、pip、cargo、pnpm…）不掃描硬連結：Build 指令本來就可以讀寫它們。'
-  }
+  },
+  // The run ledger's words are English in every locale until the translation pass: the app ships in English.
+  ledger: english.ledger
 }

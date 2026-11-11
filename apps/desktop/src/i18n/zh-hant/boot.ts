@@ -46,6 +46,7 @@ export const boot: TranslationOverrides['boot'] = {
     gateTitle: '權限關卡未生效',
     gateDescription:
       'icloneOS 沒有啟動代理：無法在此代理執行環境中安裝或載入權限關卡，因此任何指令都不會被檢查。這裡的操作不會刪除你的聊天或設定。',
+    homeSettingsHint: '請在終端機執行上方的指令，然後選擇重試。你的設定不會變更。',
     gateHint:
       '「重試」會再次檢查權限關卡。「修復安裝」會重新安裝代理執行環境，再安裝權限關卡。如果上方的方框顯示權限關卡已在設定中停用，請先從 Hermes 的 config.yaml 的 plugins.disabled 中移除 iclone-permissions 與 iclone-confinement，然後再重試。',
     gateHintUnmanaged:

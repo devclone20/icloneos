@@ -47,7 +47,8 @@ FILE_TOOLS = [
 
 def _floored_everywhere(plugin_mod, tool, args, cwd):
     res = _decide_all_modes(plugin_mod, tool, args, cwd, protectedPaths=PROTECTED)
-    assert set(res) == set(MODES)
+    # F40, L2, the owner's rule changed the truth: the helper proves Ignore allows these, and they stay out of the rows below.
+    assert set(res) == set(MODES) - {"ignore"} and res.ignore_allow[0].outcome == "allow"
     return {m: (v.outcome, v.rule, c.floor) for m, (v, c) in res.items()}
 
 

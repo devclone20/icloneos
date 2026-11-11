@@ -26,6 +26,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 import { readManagedStamp } from './iclone-managed-runtime'
+import { type DigestCache, fileDigest, forEachBounded, linkDigest, listTree, lstatEntry } from './iclone-runtime-digest'
 import { pmCommittedVenv } from './pm-venv'
 
 export type ClosedMode = '644' | '755' | 'link'
@@ -172,11 +173,14 @@ function walk(dir: string, skip: (rel: string) => boolean = () => false): string
   return out.sort()
 }
 
-/** Everything in the runtime tree that is neither a manifest row, nor `ROOT_ALLOW`, nor below `.iclone-deps`. */
-export function unlistedRuntimeFiles(root: string, listed: ReadonlySet<string>): string[] {
-  return walk(root, rel => rel === DEPS_DIR || rel === LAUNCHERS_DIR || rel === '.git').filter(
-    rel => !listed.has(rel) && !ROOT_ALLOW.has(rel)
-  )
+/**
+ * Everything in the runtime tree that is neither a manifest row, nor `ROOT_ALLOW`, nor below `.iclone-deps` (sorted).
+ * L4-01: an async walk, so the event loop turns between folders.
+ */
+export async function unlistedRuntimeFiles(root: string, listed: ReadonlySet<string>): Promise<string[]> {
+  const all = await listTree(root, rel => rel === DEPS_DIR || rel === LAUNCHERS_DIR || rel === '.git')
+
+  return all.filter(rel => !listed.has(rel) && !ROOT_ALLOW.has(rel)).sort()
 }
 
 function rowOf(dir: string, rel: string): ClosedRow {
@@ -188,6 +192,29 @@ function rowOf(dir: string, rel: string): ClosedRow {
   }
 
   return [rel, (st.mode & 0o111) !== 0 ? '755' : '644', st.size, sha256(fs.readFileSync(file))]
+}
+
+/**
+ * The row `rowOf` would give, asynchronously and through the digest cache (L4-01); null when nothing is there. A
+ * directory or a special file where a file was recorded gets a row that can match no record.
+ */
+async function currentRow(dir: string, rel: string, digests: DigestCache | null): Promise<ClosedRow | null> {
+  const file = path.join(dir, rel)
+  const st = await lstatEntry(file)
+
+  if (!st) {
+    return null
+  }
+
+  if (st.isSymbolicLink()) {
+    return [rel, 'link', 0, await linkDigest(file)]
+  }
+
+  if (!st.isFile()) {
+    return [rel, '644', -1, '']
+  }
+
+  return [rel, (st.mode & 0o111n) !== 0n ? '755' : '644', Number(st.size), await fileDigest(file, st, digests)]
 }
 
 /**
@@ -344,15 +371,24 @@ export interface DepsCheck {
   removed: string[]
 }
 
-/** Before a spawn: the dependency environment against its install-time record; unlisted files are removed. */
-export function checkRuntimeDependencies(root: string, now: () => number = Date.now): DepsCheck {
+/**
+ * Before a spawn: the dependency environment against its install-time record; unlisted files are removed (`sweep`,
+ * default on; off for a read-only warm-up). L4-01: every file is read asynchronously, at most a few at a time, and a
+ * file whose stamp is unchanged since `digests` last hashed it is not read again.
+ */
+export async function checkRuntimeDependencies(
+  root: string,
+  options: { digests?: DigestCache | null; now?: () => number; sweep?: boolean } = {}
+): Promise<DepsCheck> {
+  const now = options.now ?? Date.now
+  const digests = options.digests ?? null
   const started = now()
   const result: DepsCheck = { changed: [], missing: [], ms: 0, problem: null, removed: [] }
   const done = (problem: null | string) => ({ ...result, ms: now() - started, problem })
   let manifest: DepsManifest
 
   try {
-    manifest = JSON.parse(fs.readFileSync(path.join(root, DEPS_MANIFEST_FILE), 'utf8')) as DepsManifest
+    manifest = JSON.parse(await fs.promises.readFile(path.join(root, DEPS_MANIFEST_FILE), 'utf8')) as DepsManifest
   } catch {
     return done('the Python environment was never recorded by the installer')
   }
@@ -388,31 +424,39 @@ export function checkRuntimeDependencies(root: string, now: () => number = Date.
 
   for (const { rel: base, rows } of manifest.roots) {
     const dir = path.join(root, base)
-    const listed = new Map(rows.map(row => [row[0], row]))
+    const listed = new Set(rows.map(row => row[0]))
 
-    for (const [rel, mode, size, digest] of rows) {
-      let row: ClosedRow
+    await forEachBounded(rows, async ([rel, mode, size, digest]) => {
+      let row: ClosedRow | null
 
       try {
-        row = rowOf(dir, rel)
+        row = await currentRow(dir, rel, digests)
       } catch {
-        result.missing.push(`${base}/${rel}`)
+        result.changed.push(`${base}/${rel}`)
 
-        continue
+        return
       }
 
-      if (row[1] !== mode || row[2] !== size || row[3] !== digest) {
+      if (!row) {
+        result.missing.push(`${base}/${rel}`)
+      } else if (row[1] !== mode || row[2] !== size || row[3] !== digest) {
         result.changed.push(`${base}/${rel}`)
       }
-    }
+    })
 
-    for (const rel of walk(dir)) {
-      if (!listed.has(rel)) {
-        fs.rmSync(path.join(dir, rel), { force: true })
+    if (options.sweep !== false) {
+      const unlisted = (await listTree(dir)).filter(rel => !listed.has(rel)).sort()
+
+      await forEachBounded(unlisted, async rel => {
+        await fs.promises.rm(path.join(dir, rel), { force: true })
         result.removed.push(`${base}/${rel}`)
-      }
+      })
     }
   }
+
+  result.changed.sort()
+  result.missing.sort()
+  result.removed.sort()
 
   const bad = result.changed.length + result.missing.length
 

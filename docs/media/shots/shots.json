@@ -3,7 +3,7 @@
   "appVersion": "0.0.3",
   "capturedAt": "2026-10-29T20:19:52.635Z",
   "contactSheet": {
-    "sha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02"
+    "sha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696"
   },
   "otherRasters": [
     {
@@ -17,11 +17,6 @@
       "textSidecarSha256": "a38de0457251fbddc2ef55d3b384db8ecef7a2caf68d1b1a53bd26181279364b"
     },
     {
-      "file": "docs/media/diagrams/inft.png",
-      "sha256": "fd1bc3be4b8a49777e01a445371a1173d0c8bf0b11b9b2694c8fca105f56b9a9",
-      "textSidecarSha256": "181c4e164e00c71c999c36d8245b98edb6f5379f5501adceaa400b8e0b23852b"
-    },
-    {
       "file": "docs/media/diagrams/install-update.png",
       "sha256": "6eed7e2e4eee53b5ddca4f3ec70e06bbce227ae75084500ac99667d1230380c9",
       "textSidecarSha256": "f6208af40f029fabbf9c6b89c28e736bab946a870e00d8b95dd6dde2114982a3"
@@ -30,31 +25,21 @@
       "file": "docs/media/diagrams/model-choice.png",
       "sha256": "81f0fc2f42ee88766bc156fdc4421e1504c141463f2122d12cfba4fb85a4776b",
       "textSidecarSha256": "c950c4383b4b56901b83a4cbc0ff384cbf95ca390b1945458be383cd4a70ab2d"
-    },
-    {
-      "file": "docs/media/diagrams/permissions.png",
-      "sha256": "fc347626c19e406b64c49f0e5562f53e6b9c23f5583114369a152f5f1bf8576f",
-      "textSidecarSha256": "3d9bea66d5d906659c2344e2597a4c573e35463a146673092b24cb2a1a5dc01b"
-    },
-    {
-      "file": "docs/media/diagrams/sandbox.png",
-      "sha256": "07873dbad7dcd25a5ee2f9886993864dcbd3c80fc2cd43aebfcc03d0bc6e93e2",
-      "textSidecarSha256": "05991858f2f6eaabc2eb2d966260ac05e93d046ce059f6c5c402fb7a688bef2c"
     }
   ],
   "shots": [
     {
       "area": "hero",
-      "bytes": 181804,
-      "data_on_screen": "iNFT #5: public GLB from the collection's own metadata",
+      "bytes": 187886,
+      "data_on_screen": "iNFT #6: public GLB from the collection's own metadata",
       "file": "docs/media/shots/hero.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
-        "ocrVerdictSha256": "410934d27008c95a5502753d4ff5df461c456dae29cc42d674e9b41ecf4ba2c0",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
+        "ocrVerdictSha256": "e23d22ca2ed8a05949b71046ccbe25ff80dc8e191809e1796d3303d0295498f9",
         "reviewer": "owner",
-        "sha256": "5b4144bda0a56ecb6f53d45aa75fb16636e9f1c52ab1a4ce2daa7ee640bd3652",
+        "sha256": "44cad6b33055c70b1f1e251aa0d2a26ac85a414a54977069aa33cee64d4341a5",
         "verdict": "clean"
       },
       "master": "masters/hero@2x.png",
@@ -79,27 +64,27 @@
         }
       },
       "route": "Home (stage mode) with the summoned iNFT and the Dock",
-      "sha256": "5b4144bda0a56ecb6f53d45aa75fb16636e9f1c52ab1a4ce2daa7ee640bd3652",
+      "sha256": "44cad6b33055c70b1f1e251aa0d2a26ac85a414a54977069aa33cee64d4341a5",
       "size": [
         1600,
         1000
       ],
-      "textSidecarSha256": "d7bb380bb1608603c4c0279651b379dcd01000cffe0fceebfcdad169e31371f2",
+      "textSidecarSha256": "5e5f4822ca2346713e3487dae90b98f340a8923ad74885b8ae61e7b6319ee059",
       "web_png_fallback": "masters/hero.png",
       "webp_quality": 92
     },
     {
       "area": "hero",
-      "bytes": 200142,
-      "data_on_screen": "iNFT #5: public GLB from the collection's own metadata",
+      "bytes": 211944,
+      "data_on_screen": "iNFT #6: public GLB from the collection's own metadata",
       "file": "docs/media/shots/hero-framed.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "7b86c888fd3911e824698b95c64275583bf3f8ef32187fbaef1bf14d22c0aee0",
         "reviewer": "owner",
-        "sha256": "ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743",
+        "sha256": "401b04c9c0becda2e1bbf7d9e4df673c94e817425e999f6151c29a00ffef1ea0",
         "verdict": "clean"
       },
       "master": "masters/hero-framed@2x.png",
@@ -124,12 +109,12 @@
         }
       },
       "route": "Home (stage mode) with the summoned iNFT and the Dock",
-      "sha256": "ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743",
+      "sha256": "401b04c9c0becda2e1bbf7d9e4df673c94e817425e999f6151c29a00ffef1ea0",
       "size": [
         1840,
         1220
       ],
-      "textSidecarSha256": "3fa28286a07a7aab72c47cba9ac4550e9f8f00d8d398f0ccd9b107a600148d5a",
+      "textSidecarSha256": "9f039c39e51c743e5c2d450915166768f9540db5ea9beed2052e89a2a68cd9dd",
       "web_png_fallback": "masters/hero-framed.png",
       "webp_quality": 92
     },
@@ -140,8 +125,8 @@
       "file": "docs/media/shots/inft.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "da5847a8eec9aad25cd966aae6be9b4f55ed1d5fa7d0a9cd2396d84065e3ee6c",
         "reviewer": "owner",
         "sha256": "976ae0c12f695f3b10e37251c9620ac274b4efff33f013fd2cdbb1037e5cb77d",
@@ -185,8 +170,8 @@
       "file": "docs/media/shots/acp-market.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "4acf1dc893268e4e87f07065a847fd464a4666235a62104c2f71f4e33f726fc7",
         "reviewer": "owner",
         "sha256": "267066c3afe67c9b22899108b30ddb9d2ebfff984d8fffc3dce617a453297fc9",
@@ -230,8 +215,8 @@
       "file": "docs/media/shots/economyos.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "7f6e75c5b9d8400db52170a26348140610b58498ce898520c2e84bf559bbb4e0",
         "reviewer": "owner",
         "sha256": "76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc",
@@ -275,8 +260,8 @@
       "file": "docs/media/shots/settings.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "68b668e217aa0dbda07dd96738cfb523e86c78dd9df9bae52f0cccc954fd8b7e",
         "reviewer": "owner",
         "sha256": "3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e",
@@ -320,8 +305,8 @@
       "file": "docs/media/shots/messages.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "fec99fedb114dc06daa521ce27d54f4b5582005f1b0bcd619150774c848702f6",
         "reviewer": "owner",
         "sha256": "b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387",
@@ -365,8 +350,8 @@
       "file": "docs/media/shots/it.webp",
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
-        "contactSheetSha256": "78a2015c82c64d84f2a8cf3ac9de38bc204357e40501ef9ca8d969f473eabf02",
-        "date": "2026-11-04",
+        "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
+        "date": "2026-11-12",
         "ocrVerdictSha256": "709df84a3d699203afa1e1424c108378e134d17fbc0d1b733ff5432ca0ed0736",
         "reviewer": "owner",
         "sha256": "b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36",

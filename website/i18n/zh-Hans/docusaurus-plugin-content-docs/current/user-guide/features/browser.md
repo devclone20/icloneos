@@ -595,7 +595,7 @@ browser:
   record_sessions: true  # default: false
 ```
 
-启用后，录制在首次 `browser_navigate` 时自动开始，会话关闭时保存到 `~/.hermes/browser_recordings/`。本地模式和云端模式（Browserbase）均支持。超过 72 小时的录制文件自动清理。
+启用后，录制在首次 `browser_navigate` 时自动开始，会话关闭或关闭录制时保存到 `~/Movies/icloneOS Recordings/`。通常不到一秒；在浏览器窗口可见且 Seatbelt 关闭时，最多可能需要约半分钟，保存期间录制按钮会说明这一点。本地模式和云端模式（Browserbase）均支持。不会有任何程序删除这些视频（保存失败留下的空文件除外）。v0.0.6 之前保存的视频保留在 `~/.hermes/browser_recordings/`，同样不会被删除。
 
 ## 隐身功能
 

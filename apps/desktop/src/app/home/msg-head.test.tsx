@@ -73,7 +73,7 @@ afterEach(() => {
 })
 
 /**
- * OWNER DECISION 2026-10-19 (RESUME/contracts/M1_message_head_band.md): the band is in BOTH Message
+ * OWNER DECISION 2026-10-19 (contract M1, message head band): the band is in BOTH Message
  * views — "the iT does not have that top, but it needs to have it there". It was chat-only before, so
  * that no pill sat over the shell's first lines; the terminal now starts at the band's bottom edge
  * instead (it-terminal.css, pinned in it-terminal-css.test.ts).
@@ -365,7 +365,7 @@ describe('Message head centring at every text size (U4-p2-13)', () => {
 })
 
 /**
- * V3-A (RESUME/contracts/V3A_background_tasks.md): the owner's "botão ao lado do botão do contexto … aonde ele mostra
+ * V3-A (contract V3-A, background tasks): the owner's "botão ao lado do botão do contexto … aonde ele mostra
  * atividades em segundo plano". A second door on the same band, left of the ring, in BOTH views (O1).
  */
 describe('the Background tasks door (V3-A)', () => {

@@ -38,6 +38,7 @@ export const boot: TranslationOverrides['boot'] = {
     gateTitle: 'بوابة الأذونات غير مفعّلة',
     gateDescription:
       'لم يشغّل icloneOS الوكيل: تعذّر تثبيت بوابة الأذونات أو تحميلها في بيئة تشغيل هذا الوكيل، لذلك لن يُفحص أي أمر. لا شيء هنا يحذف محادثاتك أو إعداداتك.',
+    homeSettingsHint: 'شغّل الأمر أعلاه في الطرفية، ثم اختر إعادة المحاولة. تبقى إعداداتك كما هي.',
     gateHint:
       'تعيد «إعادة المحاولة» فحص البوابة. يعيد «إصلاح التثبيت» تثبيت بيئة تشغيل الوكيل ثم البوابة. إذا ذكر المربع أعلاه أن البوابة معطّلة في الإعدادات، فأزل أولًا iclone-permissions وiclone-confinement من plugins.disabled في ملف config.yaml الخاص بـ Hermes، ثم أعد المحاولة.',
     gateHintUnmanaged:

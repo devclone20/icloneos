@@ -1346,11 +1346,11 @@ def _rebind_primary_credential_pool(agent, primary_provider, primary_model, matc
         # _swap_credential rebuilds the client and reapplies base-url-scoped headers.
         # ``_swap_credential`` rebuilds the OpenAI/Anthropic client, reapplies base-url-scoped headers, and
         # carries the accumulated base_url / OAuth-detection fixes (#33163).
-        agent._swap_credential(entry)
-        logger.info(
-            "Restore re-selected pool entry %s (%s)",
-            getattr(entry, "id", "?"), getattr(entry, "label", "?"),
-        )
+        if agent._swap_credential(entry) is not False:
+            logger.info(
+                "Restore re-selected pool entry %s (%s)",
+                getattr(entry, "id", "?"), getattr(entry, "label", "?"),
+            )
     else:
         logger.info(
             "Restore skipped pool entry %s (%s): provider %s does not match primary provider %s",

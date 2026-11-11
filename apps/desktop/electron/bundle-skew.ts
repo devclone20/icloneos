@@ -44,7 +44,7 @@ export interface BundleSkewResult {
 
 export type RunGit = (
   args: string[],
-  options: { cwd: string }
+  options: { cwd: string; timeoutMs?: number }
 ) => Promise<{ code: number; stderr: string; stdout: string }>
 
 const NOT_STALE: BundleSkewResult = { desktopCommitsBehind: null, outOfSync: false }
@@ -65,7 +65,9 @@ export async function detectBundleSkew(
 
   try {
     const result = await runGit(['rev-list', '--count', `${stamp.commit}..HEAD`, '--', 'apps/desktop'], {
-      cwd: repoRoot
+      cwd: repoRoot,
+      // A FIFO at ~/.gitconfig holds git for as long as nobody writes to it (proof6 F4): this check is never worth waiting for.
+      timeoutMs: 10_000
     })
 
     if (result.code !== 0) {

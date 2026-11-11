@@ -45,7 +45,20 @@ def _merge_browser_path(existing_path: str = "") -> str:
     return os.pathsep.join(prefix_parts + path_parts)
 
 
+def _under_icloneos() -> bool:
+    from hermes_cli.iclone_policy_env import locked
+    return locked()
+
+
+# What the user can do in the app (ruling R4): the CLI is not on this Mac.
+ICLONEOS_BROWSER_MISSING = ("The browser is not installed on this Mac yet. In icloneOS open Settings > Setup > Packages and "
+                            "press Install again next to agent-browser, then ask again. web_search still searches the "
+                            "web meanwhile.")
+
+
 def _browser_install_hint() -> str:
+    if _under_icloneos():
+        return ICLONEOS_BROWSER_MISSING
     if _is_termux_environment():
         return "npm install -g agent-browser && agent-browser install"
     return "hermes pm install agent-browser (system libraries: npx playwright install-deps chromium)"
@@ -79,12 +92,13 @@ def _find_agent_browser(*, validate: bool = True) -> str:
         candidate = shutil.which("agent-browser", path=search_path)
         if candidate and usable(candidate):
             return candidate
-    hint = f"agent-browser CLI not found. Install it with: {_browser_install_hint()}"
+    hint = _browser_install_hint() if _under_icloneos() else f"agent-browser CLI not found. Install it with: {_browser_install_hint()}"
     if validate and not termux:
         try:
             pm.ensure("agent-browser")
         except (pm.InstallError, OSError) as exc:
-            raise FileNotFoundError(f"{hint}\n{exc}") from exc
+            _origin().logger.info("agent-browser fetch: %s", exc)
+            raise FileNotFoundError(hint if _under_icloneos() else f"{hint}\n{exc}") from exc
         installed = pm.installed_package("agent-browser")
         if installed and installed.binary is not None:
             return str(installed.binary)
@@ -125,7 +139,7 @@ def _maybe_autoinstall_chromium() -> bool:
     except (InstallError, OSError) as exc:
         _bt.logger.warning("browser: Chromium auto-install failed: %s", exc)
         return False
-    return _chromium_installed()
+    return _chromium_installed() or _under_icloneos()
 
 
 def _running_in_docker() -> bool:
@@ -159,7 +173,7 @@ def check_browser_requirements() -> bool:
     try:
         _find_agent_browser(validate=False)
     except FileNotFoundError:
-        return False
+        return _under_icloneos()  # R1: under the app the tool stays offered and its call names the next step, never silence
 
     # Cloud mode also requires provider credentials; no local Chromium needed.
     provider = _cloud._get_cloud_provider()

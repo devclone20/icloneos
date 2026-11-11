@@ -11,8 +11,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { beforeAll, test } from 'vitest'
 
 import afterPack, { removeDefaultApp } from './after-pack.mjs'
+import { ADDON_OUTPUT, assertPinnedAddon } from './build-iclone-fsevents.mjs'
 import { electronDistDir } from './electron-dist.mjs'
 import { CHROMIUM_LICENSES_FILE } from './electron-licenses.mjs'
+import { packedAddonPath } from './iclone-fsevents-check.mjs'
 
 const PLATFORMS = ['darwin', 'linux', 'win32']
 
@@ -87,6 +89,16 @@ async function packed(platform, { withPlugins = false } = {}) {
   // afterPack also refuses a pack without the exact Chromium licence file of the dist it packed (every platform).
   if (withPlugins) {
     fs.copyFileSync(path.join(electronDistDir(), CHROMIUM_LICENSES_FILE), path.join(resources, CHROMIUM_LICENSES_FILE))
+  }
+
+  // FSEV (e1de8634fd): afterPack refuses a macOS pack without the pinned FSEvents addon (stage-iclone-plugins m5 proves
+  // the refusal), so the wiring fixture carries the pinned build; assertPinnedAddon throws if this tree has none.
+  if (withPlugins && platform === 'darwin') {
+    const addon = packedAddonPath(path.join(appOutDir, 'iclone os.app'))
+
+    assertPinnedAddon(ADDON_OUTPUT)
+    fs.mkdirSync(path.dirname(addon), { recursive: true })
+    fs.copyFileSync(ADDON_OUTPUT, addon)
   }
 
   return {

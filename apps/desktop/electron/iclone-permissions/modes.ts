@@ -15,8 +15,8 @@ export { ACTION_CLASSES, PERMISSION_MODES }
  * A cell of the table. `A`/`Q`/`R!` as in the contract; the qualified allows carry the footnotes:
  *   `A:safe`         allow unless the command is dangerous (Hermes smart semantics) → ask   (Automatic X, note 4)
  *   `A:get`          allow a GET with no body and no credentials, refuse anything else       (Plan N, note 5)
- *   `A:project`      allow within the project roots, ask outside                             (Ignore D, note 3)
- *   `A:unprivileged` allow an unprivileged installer, ask for anything privileged            (Ignore I, note 2)
+ *   `A:project`      allow within the project roots, ask outside                             (V3-F2 levels only)
+ *   `A:unprivileged` allow an unprivileged installer, ask for anything privileged            (V3-F2 levels only)
  *   `A:clean`        allow unless the call was measured dangerous; a structured call is clean  (V3-F2 levels only)
  */
 export type ModeCell = 'A' | 'A:clean' | 'A:get' | 'A:project' | 'A:safe' | 'A:unprivileged' | 'Q' | 'R!'
@@ -37,7 +37,8 @@ const ALL_ASK: Record<ActionClass, ModeCell> = {
 }
 
 export const MODE_TABLE: Readonly<Record<PermissionMode, Readonly<Record<ActionClass, ModeCell>>>> = {
-  ignore: { R: 'A', Wp: 'A', Wo: 'A', X: 'A', N: 'A', $: 'Q', M: 'A', S: 'Q', I: 'A:unprivileged', D: 'A:project' },
+  // F40 (owner, G-98): Ignore asks about nothing. Only a floor refuses, in `decide`, and the row carries no qualified cell.
+  ignore: { R: 'A', Wp: 'A', Wo: 'A', X: 'A', N: 'A', $: 'A', M: 'A', S: 'A', I: 'A', D: 'A' },
   manual: ALL_ASK,
   automatic: { ...ALL_ASK, Wp: 'A', X: 'A:safe', N: 'A' },
   plan: { R: 'A', Wp: 'R!', Wo: 'R!', X: 'R!', N: 'A:get', $: 'R!', M: 'R!', S: 'R!', I: 'R!', D: 'R!' },
@@ -102,11 +103,34 @@ export function cellOutcome(cell: ModeCell, facts: ActionFacts): Outcome {
   }
 }
 
-/** The whole decision for one call, in the contract's order: floor, ceiling OFF, mode, undecided ceiling, grant. */
-export function decide(input: DecideInput): Decision {
-  const cell = MODE_TABLE[input.mode][input.cls]
+/**
+ * The whole decision for one call, in the contract's order: floor, ceiling OFF, mode, undecided ceiling, grant.
+ * F40: in Ignore the floor is the only thing read. No switch, level or grant can bring an ask or a refusal back.
+ */
+/** F40, L1: Ignore's one floor. Mirror of policy.py, same text prefixes. */
+export const isTotalDestruction = (floor?: string | null): boolean =>
+  Boolean(floor) && /^(hardline: total destruction|unreadable:)/.test(floor as string)
 
-  if (input.floor) {
+/** F40, L1: iNFT moves, keys, the admin password, its own permissions ask outside Ignore, whatever a cell or grant says. */
+/** g28b: G28 moved stopping icloneOS. An unreadable program word beside a payment binary keeps its refusal outside Ignore. Mirror of policy.py. */
+export const UNREAD_CONFINEMENT_FLOOR = 'confinement: a command this gate cannot read sits beside a payment binary'
+
+export const floorAsks = (floor?: string | null): boolean =>
+  Boolean(floor) && !(floor as string).startsWith(UNREAD_CONFINEMENT_FLOOR) && (/^(inft|secrets|sudo|policy|privilege|confinement|unresolved delete):/.test(floor as string) || (/^hardline:/.test(floor as string) && !isTotalDestruction(floor)))
+
+/** G28: with the Seatbelt off nothing else stands before this read, so Plan refuses it where it reads anything else. Mirror of policy.py. */
+export const CREDENTIAL_READ_FLOOR = 'secrets: reading a key or credential file with the Seatbelt off'
+
+export function decide(input: DecideInput): Decision {
+  const cell = input.mode === 'plan' && input.floor === CREDENTIAL_READ_FLOOR ? 'R!' : MODE_TABLE[input.mode][input.cls]
+
+  if (input.mode === 'ignore') {
+    return isTotalDestruction(input.floor) || /^unresolved delete:/.test(input.floor ?? '')
+      ? { outcome: 'refuse', rule: 'floor', cell }
+      : { outcome: 'allow', rule: 'mode', cell }
+  }
+
+  if (input.floor && !floorAsks(input.floor)) {
     return { outcome: 'refuse', rule: 'floor', cell }
   }
 
@@ -115,6 +139,10 @@ export function decide(input: DecideInput): Decision {
   }
 
   const outcome = cellOutcome(cell, input.facts ?? {})
+
+  if (input.floor) {
+    return outcome === 'refuse' ? { outcome, rule: 'mode', cell } : { outcome: 'ask', rule: 'floor', cell }
+  }
 
   if (outcome === 'allow' && input.ceiling === 'undecided' && input.cls !== 'R') {
     return { outcome: input.granted ? 'allow' : 'ask', rule: input.granted ? 'grant' : 'ceiling', cell }
@@ -138,12 +166,8 @@ export function effectiveMode(layers: ModeLayers): PermissionMode {
   return layers.session ?? layers.project ?? layers.standing
 }
 
-/** Fresh install = Manual; Ignore permissions may never be the standing default. */
+/** Fresh install = Manual. */
 export const DEFAULT_STANDING_MODE: PermissionMode = 'manual'
-
-export function modeAllowedAt(mode: PermissionMode, scope: ModeScope): boolean {
-  return !(mode === 'ignore' && scope === 'standing')
-}
 
 export const isPermissionMode = (value: unknown): value is PermissionMode =>
   typeof value === 'string' && (PERMISSION_MODES as readonly string[]).includes(value)
@@ -168,4 +192,46 @@ export const DEFAULT_CEILING_KEY: Readonly<Record<ActionClass, string | null>> =
 /** Scopes a prompt may grant for a class: spending is once only (§3). */
 export function grantScopesFor(cls: ActionClass): readonly ('once' | ModeScope)[] {
   return cls === '$' ? ['once'] : ['once', 'session', 'project', 'standing']
+}
+
+const OUTCOME_RANK: Readonly<Record<Outcome, number>> = { refuse: 0, ask: 1, allow: 2 }
+
+/** Every combination of measured facts a cell can read, absent (= unmeasured) included. */
+const FACT_CASES: readonly ActionFacts[] = (() => {
+  const values = [undefined, false, true] as const
+  const cases: ActionFacts[] = []
+
+  for (const dangerous of values) {
+    for (const getOnly of values) {
+      for (const inProject of values) {
+        for (const privileged of values) {
+          cases.push({ dangerous, getOnly, inProject, privileged })
+        }
+      }
+    }
+  }
+
+  return cases
+})()
+
+/**
+ * Permfix (L3-2): `to` permits no more than `from` for every class and every measured fact (the table's own partial
+ * order). Leaving Ignore is a narrowing: Ignore allows past every ceiling and ask, and the one floor it refuses that
+ * another mode asks about (an unresolved delete) still waits for the owner there. Modes the table cannot order — Plan allows a GET that Manual
+ * asks about, Manual asks about a write Plan refuses — are not a narrowing: the change waits like a broadening.
+ */
+export function isNarrowing(from: PermissionMode, to: PermissionMode): boolean {
+  if (from === to || from === 'ignore') {
+    return true
+  }
+
+  if (to === 'ignore') {
+    return false
+  }
+
+  return ACTION_CLASSES.every(cls =>
+    FACT_CASES.every(
+      facts => OUTCOME_RANK[cellOutcome(MODE_TABLE[to][cls], facts)] <= OUTCOME_RANK[cellOutcome(MODE_TABLE[from][cls], facts)]
+    )
+  )
 }

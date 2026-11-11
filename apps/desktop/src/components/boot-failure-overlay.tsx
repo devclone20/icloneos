@@ -10,6 +10,7 @@ import { openExternalLink } from '@/lib/external-link'
 import { ChevronLeft, ExternalLink, FileText, Loader2, LogIn, RefreshCw, SlidersHorizontal, Wrench } from '@/lib/icons'
 import { $installOverlayOwnsFailure } from '@/store/agent-runtime'
 import { $desktopBoot } from '@/store/boot'
+import { activeGatewayProfileKey } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
 
@@ -21,6 +22,7 @@ import {
   signInLabel,
   sshFailureMessage
 } from './boot-failure-reauth'
+import { HomeSettingsRefusalPanel, useHomeSettingsRefusal } from './home-settings-refusal'
 
 // The recovery "Gateway settings" view embeds the real Settings → Gateway panel
 // (identical URL/auth/test/save controls — no parallel form to drift). Lazy so
@@ -69,6 +71,10 @@ export function BootFailureOverlay() {
   // While first-run onboarding owns the picker/flow we let it surface its own
   // progress; the recovery overlay is for hard failures, which it covers via a
   // higher z-index regardless of onboarding state.
+  const failedProfile = activeGatewayProfileKey()
+  const homeSettingsProfile = failedProfile === 'default' ? null : failedProfile
+  // Asked of main, never read from the error: the invoke's rejection reaches here as a prefixed string and no more.
+  const [homeSettings, setHomeSettings] = useHomeSettingsRefusal(visible, homeSettingsProfile)
   const suppressed = onboarding.flow.status !== 'idle' && onboarding.flow.status !== 'error'
 
   useEffect(() => {
@@ -145,7 +151,8 @@ export function BootFailureOverlay() {
     }
   }, [boot.error, visible])
 
-  if (!visible || suppressed) {
+  // Main answers in a moment; until then no card, or Repair would flash on a failure it cannot fix.
+  if (!visible || suppressed || homeSettings === undefined) {
     return null
   }
 
@@ -344,6 +351,11 @@ export function BootFailureOverlay() {
     ]
     // V3-S r4 (m-g): a runtime the app does not manage (a user's git checkout) gets its cause and its way out.
     hint = isIcloneGateUnmanaged(boot.error) ? copy.gateHintUnmanaged : copy.gateHint
+  } else if (!remoteFailure && homeSettings) {
+    // The owner's own file, and the fix is on this card: Repair reinstalls the runtime and would not touch it.
+    actions = [retryAction]
+    // Once every file is fixed the panel says what is next; this line would still ask for a fix.
+    hint = homeSettings.findings.length > 0 ? copy.homeSettingsHint : ''
   } else {
     // Local failure: Use-local is redundant with Retry (both re-target local), so
     // it's dropped here; keep it for remote failures where it's the fall-back.
@@ -431,13 +443,17 @@ export function BootFailureOverlay() {
           {diagnosis.class !== 'unknown' ? (
             <p className="ic-sys-body">{t.install.recovery.diagnosis[diagnosis.class]}</p>
           ) : null}
-          <div
-            className="ic-sys-callout max-h-40 min-w-0 overflow-y-auto [overflow-wrap:anywhere]"
-            data-testid="boot-failure-error"
-            data-tone="danger"
-          >
-            {firstLine(sshFailureMessage(connectionConfig, boot.error, t.settings.gateway))}
-          </div>
+          {!remoteFailure && homeSettings ? (
+            <HomeSettingsRefusalPanel onChange={setHomeSettings} profile={homeSettingsProfile} refusal={homeSettings} />
+          ) : (
+            <div
+              className="ic-sys-callout max-h-40 min-w-0 select-text overflow-y-auto px-3 py-2.5 [overflow-wrap:anywhere]"
+              data-testid="boot-failure-error"
+              data-tone="danger"
+            >
+              {firstLine(sshFailureMessage(connectionConfig, boot.error, t.settings.gateway))}
+            </div>
+          )}
 
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
@@ -452,7 +468,7 @@ export function BootFailureOverlay() {
                 {copy.openLogs}
               </IcButton>
             </div>
-            <p className="ic-sys-hint">{hint}</p>
+            {hint ? <p className="ic-sys-hint">{hint}</p> : null}
           </div>
 
           {logs.length > 0 ? (

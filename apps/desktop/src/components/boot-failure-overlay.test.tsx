@@ -276,3 +276,138 @@ describe('BootFailureOverlay', () => {
     expect(screen.getByRole('button', { name: /repair/i })).toBeTruthy()
   })
 })
+
+// The exact shape a real Electron invoke hands the renderer (home-settings-ipc.live.test.ts proves it).
+const WRAPPED =
+  "Error invoking remote method 'hermes:connection': Error: Your .env is a link to a file outside the agent's home (/dot/env), and the agent's sandbox cannot read outside its home, so the agent was not started. Replace the link with a plain file, then try again: (umask 077)"
+
+const REFUSAL = {
+  code: 'home-settings-refused',
+  findings: [
+    {
+      command: '(umask 077 && t=$(mktemp /h/.env.XXXXXX) && cp -L /h/.env "$t" && mv "$t" /h/.env)',
+      file: '.env',
+      kind: 'link-outside',
+      message: 'whole sentence',
+      path: '/h/.env',
+      reason: "Your .env is a link to a file outside the agent's home (/dot/env), so the agent was not started.",
+      target: '/dot/env'
+    }
+  ]
+}
+
+describe('BootFailureOverlay on a settings refusal over the real IPC shape', () => {
+  const failWith = (error: string) => {
+    failBoot()
+    $desktopBoot.set({ ...$desktopBoot.get(), error })
+  }
+
+  it('offers the copy and Retry, never Repair, and copies only when the owner clicks', async () => {
+    const replaceWithCopy = vi.fn(async () => ({ ok: true, refusal: null }))
+
+    const restore = stubDesktop(
+      { mode: 'local' },
+      { homeSettings: { check: async () => REFUSAL, replaceWithCopy, warnings: async () => [] } }
+    )
+
+    failWith(WRAPPED)
+    render(<BootFailureOverlay />)
+
+    const button = await screen.findByRole('button', { name: 'Replace with a copy' })
+
+    expect(screen.queryByRole('button', { name: /repair/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /retry/i })).toBeTruthy()
+    expect(screen.getByText(REFUSAL.findings[0].command)).toBeTruthy()
+    expect(screen.getByText(/The agent can read that copy\./)).toBeTruthy()
+    expect(replaceWithCopy).not.toHaveBeenCalled()
+
+    fireEvent.click(button)
+    await screen.findByRole('status')
+    expect(replaceWithCopy).toHaveBeenCalledExactlyOnceWith({ doing: 'start', file: '.env', profile: null, target: '/dot/env' })
+    expect(screen.queryByRole('button', { name: 'Replace with a copy' })).toBeNull()
+    expect(screen.queryByText(/Fix it above/)).toBeNull()
+    restore?.()
+  })
+
+  it('a link to a secret offers no copy, by button or by command: only that the owner moves it', async () => {
+    const replaceWithCopy = vi.fn()
+    const reason = 'Your .env is a link to /fake/.ssh/id_rsa, a file the agent must never read, so the agent was not started. Move this file yourself: put only the settings the agent should have in a plain file at /h/.env, then try again.'
+    const guarded = { code: REFUSAL.code, findings: [{ command: '', file: '.env', kind: 'link-guarded', message: reason, path: '/h/.env', reason, target: '/fake/.ssh/id_rsa' }] }
+
+    const restore = stubDesktop(
+      { mode: 'local' },
+      { homeSettings: { check: async () => guarded, replaceWithCopy, warnings: async () => [] } }
+    )
+
+    failWith(reason)
+    render(<BootFailureOverlay />)
+
+    expect((await screen.findByTestId('home-settings-refusal')).textContent).toContain('Move this file yourself')
+    expect(screen.queryByRole('button', { name: 'Replace with a copy' })).toBeNull()
+    expect(screen.queryByText(/Or run this in Terminal/)).toBeNull()
+    expect(replaceWithCopy).not.toHaveBeenCalled()
+    restore?.()
+  })
+
+  it('the button carries the mark the preload needs, and a failed call is not called unreadable', async () => {
+    const restore = stubDesktop(
+      { mode: 'local' },
+      {
+        homeSettings: {
+          check: async () => REFUSAL,
+          replaceWithCopy: async () => {
+            throw new Error('the call failed')
+          },
+          warnings: async () => []
+        }
+      }
+    )
+
+    failWith(WRAPPED)
+    render(<BootFailureOverlay />)
+
+    const button = await screen.findByRole('button', { name: 'Replace with a copy' })
+
+    expect(button.hasAttribute('data-confinement-confirm')).toBe(true)
+    fireEvent.click(button)
+
+    const alert = await screen.findByRole('alert')
+
+    expect(alert.textContent).toContain('could not write the copy')
+    expect(alert.textContent).not.toContain('cannot read')
+    restore?.()
+  })
+
+  it('a target that cannot be read is said on the card, and the refusal stays', async () => {
+    const restore = stubDesktop(
+      { mode: 'local' },
+      {
+        homeSettings: {
+          check: async () => REFUSAL,
+          replaceWithCopy: async () => ({ ok: false, reason: 'unreadable', refusal: REFUSAL }),
+          warnings: async () => []
+        }
+      }
+    )
+
+    failWith(WRAPPED)
+    render(<BootFailureOverlay />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Replace with a copy' }))
+    expect((await screen.findByRole('alert')).textContent).toContain('This app cannot read /dot/env')
+    expect(screen.getByRole('button', { name: 'Replace with a copy' })).toBeTruthy()
+    restore?.()
+  })
+
+  it('the words alone do nothing: main says no refusal, so the ordinary card with Repair', async () => {
+    const restore = stubDesktop(
+      { mode: 'local' },
+      { homeSettings: { check: async () => null, replaceWithCopy: vi.fn(), warnings: async () => [] } }
+    )
+
+    failWith(WRAPPED)
+    render(<BootFailureOverlay />)
+    expect(await screen.findByRole('button', { name: /repair/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Replace with a copy' })).toBeNull()
+    restore?.()
+  })
+})

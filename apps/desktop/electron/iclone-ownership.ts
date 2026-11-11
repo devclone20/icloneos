@@ -51,6 +51,7 @@ export {
   economyRefusal,
   isInftDeactivated
 } from './iclone-ownership-gate'
+import { copyFileFromRoot, lstatInRoot, readdirInRoot, readFileInRoot } from './lib/no-follow-fs'
 
 export const DAY_MS = 24 * 60 * 60 * 1000
 const DEACTIVATION_DELAY_MS = 7 * DAY_MS
@@ -1004,11 +1005,12 @@ interface CopyBudget {
   skipped: string[]
 }
 
-function copyTree(src: string, dest: string, budget: CopyBudget, rel = ''): void {
+// Exported for its link tests. `root` is where no link is trusted: the hermes profile it reads is the confined runtime's.
+export function copyTree(root: string, src: string, dest: string, budget: CopyBudget, rel = ''): void {
   let entries: fs.Dirent[]
 
   try {
-    entries = fs.readdirSync(src, { withFileTypes: true })
+    entries = readdirInRoot(root, src)
   } catch {
     return
   }
@@ -1026,7 +1028,7 @@ function copyTree(src: string, dest: string, budget: CopyBudget, rel = ''): void
 
     if (e.isDirectory()) {
       if (e.name !== 'acp') {
-        copyTree(from, to, budget, relName)
+        copyTree(root, from, to, budget, relName)
       }
 
       continue
@@ -1037,16 +1039,16 @@ function copyTree(src: string, dest: string, budget: CopyBudget, rel = ''): void
     }
 
     try {
-      if (fs.statSync(from).size > MAX_FILE_BYTES || DATABASE_FILE.test(e.name)) {
+      if ((lstatInRoot(root, from)?.size ?? 0) > MAX_FILE_BYTES || DATABASE_FILE.test(e.name)) {
         budget.skipped.push(relName)
 
         continue
       }
 
       if (MEDIA_FILE.test(e.name)) {
-        fs.copyFileSync(from, to)
+        copyFileFromRoot(root, from, to)
       } else {
-        const buf = fs.readFileSync(from)
+        const buf = readFileInRoot(root, from)
 
         if (!TEXT_FILE.test(e.name) && looksBinary(buf)) {
           budget.skipped.push(relName)
@@ -1147,8 +1149,8 @@ export function createArchiver(opts: {
 
       try {
         fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
-        copyTree(path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget)
-        copyTree(path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget)
+        copyTree(opts.hermesHome, path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget)
+        copyTree(opts.root, path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget)
         fs.writeFileSync(
           path.join(dir, 'README.md'),
           [

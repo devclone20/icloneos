@@ -35,9 +35,11 @@ import {
   onComposerFocusRequest,
   onComposerInsertRefsRequest,
   onComposerInsertRequest,
+  onComposerReplaceText,
   releaseActiveComposer
 } from '../focus'
 import { type InlineRefInput, insertInlineRefsIntoEditor } from '../inline-refs'
+import { replaceDraftText } from '../replace-draft-text'
 import { composerPlainText, normalizeComposerEditorDom, placeCaretEnd, renderComposerContents } from '../rich-editor'
 import { useComposerScope } from '../scope'
 import type { ChatBarProps } from '../types'
@@ -435,6 +437,19 @@ export function useComposerDraft({
 
   const syncDraftRef = useRef(syncDraft)
   syncDraftRef.current = syncDraft
+
+  // A recording's text, after the user took a frame off the message.
+  useEffect(
+    () =>
+      onComposerReplaceText(({ from, to }) => {
+        const next = replaceDraftText(syncDraftFromEditor(), from, to)
+
+        if (next !== null) {
+          paintDraft(next, false)
+        }
+      }),
+    [paintDraft, syncDraftFromEditor]
+  )
 
   useEffect(
     () =>

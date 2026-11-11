@@ -218,6 +218,10 @@ def make_acp_edit_approval_requester(
     def _requester(proposal: EditProposal) -> bool:
         from acp.schema import PermissionOption
         from acp_adapter.permissions import await_permission, resolve_permission_timeout
+        from tools.approval import iclone_ignore_in_force
+
+        if iclone_ignore_in_force():  # icloneOS F40: nobody is asked in Ignore
+            return True
 
         if auto_approve_getter is not None:
             try:

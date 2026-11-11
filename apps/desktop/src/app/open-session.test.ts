@@ -28,6 +28,7 @@ vi.mock('./routes', () => ({
 }))
 
 import { $activeSessionId, $selectedStoredSessionId } from '@/store/session'
+import { $sessionTilesRender } from '@/store/tile-render'
 
 import { mainChatOccupied, openSession, openSessionIntentFromModifiers } from './open-session'
 
@@ -37,6 +38,9 @@ import { mainChatOccupied, openSession, openSessionIntentFromModifiers } from '.
  * tab rather than replacing a chat that may still be mid-turn, and an open from
  * nowhere does the same.
  */
+// The tile paths stay covered for the pane shell that renders them; open-session-unrendered-tile.test.ts has today's.
+beforeEach(() => $sessionTilesRender.set(true))
+
 describe('mainChatOccupied', () => {
   it('is occupied once a conversation is on screen', () => {
     expect(mainChatOccupied('runtime-a', 'stored-a')).toBe(true)

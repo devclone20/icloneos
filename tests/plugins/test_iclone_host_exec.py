@@ -196,7 +196,7 @@ class TestEverySpawnSiteIsEnumerated:
             assert row["why"].strip(), key
             if row["verdict"] == "a":
                 assert key.startswith(sites_module.ENV_DIRS), key
-            if row["verdict"] in ("c", "h"):  # justified with the program and file:line
+            if row["verdict"] in ("c", "h", "r"):  # justified with the program and file:line
                 assert f"{key.split('::')[0]}:{row['line']}" in row["why"], key
             if row["verdict"] == "c":  # ruling 56: an app-fixed program runs inside the agent's Seatbelt
                 assert row["why"].startswith("inside the agent's Seatbelt, "), key
@@ -206,6 +206,7 @@ class TestEverySpawnSiteIsEnumerated:
         allow = json.loads((ROOT / sites_module.ALLOWLIST_REL).read_text())
         assert allow["fixed"] == sites_module.fixed_sites(committed)
         assert allow["hermes"] == sites_module.fixed_sites(committed, "h")
+        assert allow["door"] == sites_module.fixed_sites(committed, "r") == ["tools/browser_tool_session.py::_popen_agent_browser"]
         from tools.environments import host_lane
 
         assert host_lane._load_sites() == (frozenset(allow["fixed"]), frozenset(allow["hermes"]))
@@ -371,6 +372,8 @@ class TestEverySpawnSiteIsEnumerated:
 # the predicate; the rest only describe the host's path namespace (a confining subclass shares it).
 IDENTITY_CHECKS = {
     "tools/environments/host_lane.py::env_is_host": "THE predicate (type is LocalEnvironment, or a declared subclass)",
+    "tools/environments/host_lane.py::env_reads_this_host":
+        "f55: a stat and a hash for the fresh-read record of a file the confined shell just showed; opens no lane, runs no helper",
     "tools/file_operations_search.py::_normalized_filename_search_root": "path math (abspath/normpath), no I/O",
     "tools/file_operations_search.py::SearchMixin._quote_executable": "shell quoting of an executable name",
     "tools/file_operations_search.py::SearchMixin._is_broad_local_search_root":

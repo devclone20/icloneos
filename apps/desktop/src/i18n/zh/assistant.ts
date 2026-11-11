@@ -123,6 +123,7 @@ export const assistant: Translations['assistant'] = {
     statusError: '错误',
     statusRecovered: '已恢复',
     statusDone: '完成',
+    permissionAsked: '已请求您的许可',
     memoryWriteNoted: '已记下记忆写入',
     actions: {
       read: '已读取',

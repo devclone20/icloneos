@@ -16,6 +16,7 @@ real on-disk auth stores (profile + root under ``tmp_path``) rather than
 mocking the save boundary, so they exercise the actual atomic write path.
 """
 
+import base64
 import json
 import threading
 import time
@@ -224,7 +225,7 @@ def test_codex_pool_refresh_holds_auth_store_lock_across_post(monkeypatch, tmp_p
     entry = _entry(
         provider,
         id="codex-1",
-        access_token="stale-access",
+        access_token=f"h.{base64.urlsafe_b64encode(json.dumps({'iss': 'https://auth.openai.com'}).encode()).rstrip(b'=').decode()}.s",
         refresh_token="stale-refresh",
     )
     pool = CredentialPool(provider, [entry])

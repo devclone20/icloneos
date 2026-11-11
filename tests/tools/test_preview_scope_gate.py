@@ -66,3 +66,8 @@ def test_unwrap_desktop_scope_not_blocked():
 def test_non_surface_tool_keeps_generic_message():
     err = json.loads(_bridge("computer_use", TUI_SCOPE))["error"]
     assert "not available in this session" in err
+
+
+def test_a_core_tool_this_session_holds_is_still_told_to_call_it_directly():
+    # G16: computer_use is off TUI_SCOPE, so "call it directly" would send the model to a tool it does not have (above).
+    assert "directly-listed" in json.loads(_bridge("read_file", TUI_SCOPE))["error"]

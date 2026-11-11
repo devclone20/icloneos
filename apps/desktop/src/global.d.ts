@@ -33,6 +33,11 @@ import type {
   HermesSelectPathsOptions,
   HermesTitleBarTheme
 } from './iclone-shared/bridge-contract'
+import type {
+  HomeSettingsFile,
+  HomeSettingsRefusal,
+  HomeSettingsReplaceResult
+} from './iclone-shared/home-settings'
 import type { PetPromptResult } from './iclone-shared/pet-prompt'
 import type { WakeIndicatorState } from './lib/wake-indicator'
 import type {
@@ -151,6 +156,8 @@ declare global {
       // V3-ON — the first-launch Set up step (system permission status, packages' state).
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
       icloneSetup?: import('./components/setup/types').IcloneSetupBridge
+      // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
+      screenRecord?: import('./store/screen-record').ScreenRecordBridge
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
       icloneConfinement?: import('./store/confinement').IcloneConfinementBridge
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
@@ -349,6 +356,16 @@ declare global {
         onShown: (callback: () => void) => () => void
       }
       getBootProgress: () => Promise<DesktopBootProgress>
+      homeSettings?: {
+        check: (profile: null | string, doing?: 'install' | 'start') => Promise<HomeSettingsRefusal | null>
+        replaceWithCopy: (payload: {
+          doing?: 'install' | 'start'
+          file: HomeSettingsFile
+          profile: null | string
+          target: string
+        }) => Promise<HomeSettingsReplaceResult>
+        warnings: (profile: null | string) => Promise<string[]>
+      }
       getConnectionConfig: (profile?: null | string) => Promise<DesktopConnectionConfig>
       saveConnectionConfig: (payload: DesktopConnectionConfigInput) => Promise<DesktopConnectionConfig>
       applyConnectionConfig: (payload: DesktopConnectionConfigInput) => Promise<DesktopConnectionConfig>
@@ -510,6 +527,9 @@ declare global {
        *  Resolved and cached in the main process (electron/favicon.ts). */
       resolveFavicon?: (url: string) => Promise<string>
       sanitizeWorkspaceCwd: (cwd?: null | string) => Promise<{ cwd: string; sanitized: boolean }>
+      /** fx17: lists a folder the user opened for the confinement launcher (main checks the gesture and the path). */
+      noteFolder?: (folder: string, source: 'drag' | 'typed') => Promise<{ ok: boolean; error?: string; message?: string }>
+      pickProjectFolder?: (options?: { defaultPath?: string; profile?: string }) => Promise<{ path: null | string; listed: boolean; message?: string }>
       settings: {
         getDefaultProjectDir: () => Promise<{ defaultLabel: string; dir: null | string; resolvedCwd: string }>
         pickDefaultProjectDir: () => Promise<{ canceled: boolean; dir: null | string }>
@@ -677,6 +697,7 @@ declare global {
       onBackendExit: (callback: (payload: BackendExit) => void) => () => void
       // Soft gateway-mode apply: primary backend was torn down without a window
       // reload. Wipe session lists (skeletons) and re-dial.
+      onBackendRestarted?: (callback: () => void) => () => void
       onConnectionApplied?: (callback: () => void) => () => void
       onPowerResume?: (callback: () => void) => () => void
       getOnBattery?: () => Promise<boolean>

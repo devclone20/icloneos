@@ -104,6 +104,7 @@ export const acpWork: AcpWorkTranslations = {
       ? 'One write was interrupted or repaired. The ledger records the gap.'
       : `${count} writes were interrupted or repaired. The ledger records each gap.`,
   chainBroken: 'The work ledger does not verify.',
+  chainVerifying: 'Verifying the work ledger…',
   errors: {
     gesture: 'This needs your own click.',
     invalid: 'That job is no longer an open offer.',

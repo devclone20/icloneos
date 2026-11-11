@@ -518,7 +518,7 @@ describe('R14 — the skills catalog is the folder truth', () => {
   )
 })
 
-// The r4 critic probe (RESUME/run/gates/R14/extra/2026-10-17_r4_yaml_drop.sh): valid YAML Hermes indexes.
+// The r4 critic probe (a critic probe kept outside this repository): valid YAML Hermes indexes.
 const R4_FIXTURES: Record<string, string> = {
   'block-list':
     '---\nname: block-list\ndescription: Use when a block list is used. More.\nplatforms:\n  - linux\n---\n# Body\n',

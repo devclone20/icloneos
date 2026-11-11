@@ -491,9 +491,11 @@ from pathlib import Path
 _root = Path(__file__).resolve().parent
 try:
     os.getcwd()
-except FileNotFoundError:
+except (FileNotFoundError, PermissionError):
     # Reaped workspaces leave children in a deleted cwd. PM resolves relative
     # import paths before the CLI's guards, so recover before any PM work.
+    # PermissionError: icloneOS's runtime profile does not read a cwd that fell back
+    # to the home (no project, so no grant); the agent's folder is TERMINAL_CWD, not this.
     os.chdir(_root)
 
 

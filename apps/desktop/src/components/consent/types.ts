@@ -1,8 +1,8 @@
 import type {
   ActionClass,
   AuditRecordView,
+  ChoiceScope,
   FunctionLevel,
-  ModeScope,
   PermissionDoorScope,
   PermissionFunction,
   PermissionMode,
@@ -110,7 +110,12 @@ export interface IcloneConsentBridge {
   openPolicy: () => Promise<boolean>
   quit: () => Promise<boolean>
   doorCurrent?: () => Promise<ConsentDoorRequest | null>
-  doorAnswer?: (input: { id: string; choice: ConsentDoorChoice | PermissionDoorChoice }) => Promise<boolean>
+  doorAnswer?: (input: {
+    id: string
+    choice: ConsentDoorChoice | PermissionDoorChoice
+    /** S1: the whole text of a one-shot ask, as the sheet rendered it, on an Allow. */
+    shown?: string
+  }) => Promise<boolean>
   requests?: () => Promise<ConsentDoorRecent[]>
   onDoor?: (callback: (request: ConsentDoorRequest | null) => void) => () => void
   /** V3-F (electron/iclone-permissions/ipc.ts). Absent in the web app: no agent runs there. */
@@ -120,8 +125,12 @@ export interface IcloneConsentBridge {
 /** setMode and revoke count only when called synchronously inside the click handler of a `data-perm-mode-confirm`
  *  control: the preload adds the gesture proof main checks. */
 export interface IclonePermissionsBridge {
-  setMode: (input: { mode: PermissionMode; scope: ModeScope; key?: string | null }) => Promise<SetModeResultView>
+  /** S11: the session this window just started takes the choice main holds for the window. Names no mode. */
+  claimWindowChoice?: (sessionId: string) => Promise<{ ok: boolean }>
+  setMode: (input: { mode: PermissionMode; scope: ChoiceScope; key?: string | null }) => Promise<SetModeResultView>
   revoke: (id: string) => Promise<boolean>
+  /** fx20: takes a folder "Allow this folder" listed off the list. Same gesture rule. */
+  removeFolder?: (folder: string) => Promise<{ ok: boolean }>
   setFunctionLevel: (input: { fn: PermissionFunction; level: FunctionLevel }) => Promise<SetFunctionLevelResultView>
   hermesApproval: (input: {
     command: string
@@ -146,6 +155,19 @@ export interface ConsentDoorPermission {
   session: string | null
   subagent: string | null
   scopes: readonly PermissionDoorScope[]
+  /** G-98 F42: allowing runs this one command outside the Seatbelt, in this folder; the sheet says so. */
+  outsideOnce?: string | null
+  /** G2 A5: allowing writes this one file outside the Seatbelt, and opens nothing else; the sheet says so. */
+  outsideFile?: string | null
+  outsideFileRuns?: boolean
+  outsideFileRead?: boolean
+  outsideFileLink?: string | null
+  /** G25: the path is on the credential floor's list; where no one-file line stands, the sheet says so in its own line. */
+  credentialFile?: boolean
+  /** G28: a read of that list with the Seatbelt off; the sheet says what the agent gets. */
+  credentialRead?: boolean
+  /** Keychain off: nothing can be remembered, so Allow covers this one request; the sheet says so. */
+  keychainOff?: boolean
 }
 
 /** The agent's request on screen (electron/iclone-consent-door.ts). */

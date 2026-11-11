@@ -6,9 +6,12 @@
 // Output:
 //   dist/electron-main.mjs    (MJS bundle — entry point for packaged app)
 //   dist/electron-preload.js (CJS bundle — loaded via BrowserWindow preload)
+//   dist/hardlinks-walk-worker.cjs (CJS bundle — the F7 guard's full-scan worker thread, v0.0.7 CF1: main reads it
+//                             and starts it as a worker_threads script, electron/iclone-confinement/hardlinks-walker.ts)
 //
-// `electron` and `node-pty` are external (provided by the runtime / staged
-// separately via stage-native-deps).
+// `electron`, `node-pty` and `get-windows` are external (provided by
+// the runtime / staged separately via stage-native-deps). The F7 guard's FSEvents addon is
+// loaded by path at runtime (dist/native/iclone_fsevents.node), so the bundle never sees it.
 //
 // K141: the bundles must never carry a path of the build machine. esbuild
 // names every module in a `// <path>` comment and in its __commonJS/__esm key,
@@ -19,8 +22,10 @@
 // the same: 667 = 667 measured), and the build refuses an output that still
 // names the home, the tree or the real place of node_modules.
 import { build } from 'esbuild'
+import { spawnSync } from 'node:child_process'
 import {
   existsSync,
+  mkdtempSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -29,7 +34,7 @@ import {
   rmSync,
   writeFileSync
 } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -65,7 +70,10 @@ export function bundleOptions({ root = DESKTOP_ROOT, isDev = false, logLevel = '
       format: 'esm',
       outfile: resolve(distDir, 'electron-main.mjs'),
       banner: {
-        js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+        // v0.0.7 rehearsal 2026-11-11: the banner's import must not take a name a source module can import too. With
+        // `import { createRequire } from 'node:module'` in iclone-fsevents.ts, the bundle declared it twice and the
+        // packed app threw a SyntaxError before its first line ran. A private name: no source import can collide.
+        js: "import { createRequire as __icloneBannerCreateRequire } from 'module'; const require = __icloneBannerCreateRequire(import.meta.url);"
       }
     },
     preload: {
@@ -73,6 +81,13 @@ export function bundleOptions({ root = DESKTOP_ROOT, isDev = false, logLevel = '
       entryPoints: [resolve(root, 'electron/preload.ts')],
       format: 'cjs',
       outfile: resolve(distDir, 'electron-preload.js')
+    },
+    // CF1: imports only `node:` modules; evaluated as a worker's script, so CommonJS with no banner.
+    walkWorker: {
+      ...common,
+      entryPoints: [resolve(root, 'electron/iclone-confinement/hardlinks-walk.ts')],
+      format: 'cjs',
+      outfile: resolve(distDir, 'hardlinks-walk-worker.cjs')
     }
   }
 }
@@ -135,10 +150,13 @@ export function leakedBuildPaths(text, places, home = homedir()) {
   return leaks
 }
 
+/** Every bundle this script writes (each checked in memory for build-machine paths before it reaches dist/). */
+export const BUNDLES = ['main', 'preload', 'walkWorker']
+
 /** The renderer files the leak check reads: the text vite emits (binaries such as images and fonts carry no path). */
 const RENDERER_TEXT = /\.(?:[cm]?js|css|html?|json|svg|map|txt|webmanifest|xml)$/i
 /** dist/ entries that are not the renderer: the two Electron bundles (checked in memory) and staged native deps. */
-const NOT_RENDERER = new Set(['electron-main.mjs', 'electron-preload.js', 'node_modules'])
+const NOT_RENDERER = new Set(['electron-main.mjs', 'electron-preload.js', 'hardlinks-walk-worker.cjs', 'node_modules'])
 
 /**
  * K141 r2 (m4): where the Vite renderer output in `dist/` names a machine place (same places, same forms as the
@@ -175,6 +193,24 @@ export function rendererLeaks({ root = DESKTOP_ROOT, home = homedir(), places = 
   return leaks
 }
 
+/** True when `node --check` accepts the text as the module kind its file name says (.mjs ESM, .cjs/.js CommonJS). */
+export function bundleParses(text, fileName) {
+  const ext = fileName.endsWith('.mjs') ? '.mjs' : '.cjs'
+  const dir = mkdtempSync(join(tmpdir(), 'bundle-check-'))
+  const file = join(dir, `bundle${ext}`)
+
+  try {
+    writeFileSync(file, text)
+
+    return (
+      spawnSync(process.execPath, ['--check', file], { stdio: 'ignore', env: { PATH: process.env.PATH ?? '' } })
+        .status === 0
+    )
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
 export async function bundleElectron({
   root = DESKTOP_ROOT,
   isDev = false,
@@ -186,7 +222,7 @@ export async function bundleElectron({
   mkdirSync(resolve(root, 'dist'), { recursive: true })
   const options = bundleOptions({ root, isDev, logLevel })
   const places = buildPlaces(root, home)
-  const outfiles = ['main', 'preload'].map(which => options[which].outfile)
+  const outfiles = BUNDLES.map(which => options[which].outfile)
   const refuse = (what, places, occurrences) => {
     // Neither bundle is left behind: a failed build must not leave dist/ looking built (a later builder run would pack
     // it). Counts only: the places themselves are the machine layout this check keeps out of logs.
@@ -219,11 +255,11 @@ export async function bundleElectron({
     }
   }
 
-  // Both bundles are built in memory and checked BEFORE either reaches dist/ (a refused bundle is never on disk), then
+  // Every bundle is built in memory and checked BEFORE any reaches dist/ (a refused bundle is never on disk), then
   // each is written to a temp name beside it and renamed into place.
   const built = []
 
-  for (const which of ['main', 'preload']) {
+  for (const which of BUNDLES) {
     const { outputFiles } = await build({ ...options[which], write: false })
 
     for (const file of outputFiles) {
@@ -235,6 +271,18 @@ export async function bundleElectron({
           `${leaks.length} place(s)`,
           leaks.reduce((n, l) => n + l.count, 0)
         )
+      }
+    }
+
+    // A bundle the runtime cannot even parse is refused here, not found by the packed app (it shows Electron's error box
+    // and never boots). `node --check` reports early errors such as a duplicate declaration, and runs nothing.
+    for (const file of outputFiles) {
+      if (/\.(mjs|cjs|js)$/.test(file.path) && !bundleParses(file.text, file.path)) {
+        for (const out of outfiles) {
+          rmSync(out, { force: true })
+        }
+
+        throw new Error(`${relative(root, file.path)}: the bundle does not parse (node --check)`)
       }
     }
 

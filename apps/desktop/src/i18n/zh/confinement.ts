@@ -1,29 +1,27 @@
 // iclone os — V3-G 隔离：程序坞的“容器”面板（简体中文）。
-import type { ConfinementCopy } from '../en/confinement'
+import { type ConfinementCopy, confinement as english } from '../en/confinement'
 
 export const confinement: ConfinementCopy = {
   title: '容器',
   tile: '容器',
   unavailable: '容器在桌面应用中运行，你的智能体也在那里执行命令。',
-  loading: '正在读取这台 Mac 上运行的内容…',
   verdict: {
     green: {
       label: '已隔离',
-      hint: '每条智能体命令都在其配置文件内运行。隔离期间，MCP 服务器、计划任务的脚本、插件/技能/软件包的安装、电脑操控、编辑前的文件副本、编辑后的代码检查、委派工作的副本和你的钩子均关闭；选择“这台 Mac”可恢复。'
+      hint: '每条智能体命令都在其配置文件内运行，例外是你批准的 shell 命令，它会在配置文件之外运行一次。受隔离的命令在外部尝试的操作会被阻止，并列在 Refusals 下。隔离期间，MCP 服务器、计划任务的脚本、插件/技能/软件包的安装、编辑前的文件副本、编辑后的代码检查、委派工作的副本和你的钩子会关闭。电脑操控在你授权后，通过已签名的驱动程序在配置文件之外运行，并在除“忽略权限”外的所有模式下询问。你可以在 Backends 或 设置 › 智能体 › 权限 中关闭隔离；应用会先询问。'
     },
     red: { label: '未隔离', hint: '隔离未经验证。原因见下方。' },
     off: {
       label: '已关闭',
-      hint: '你选择了“这台 Mac”：智能体命令不受隔离，MCP 服务器、计划任务的脚本、安装、电脑操控、编辑前的文件副本、编辑后的代码检查、委派工作的副本和你的钩子会重新运行。'
+      hint: '隔离已关闭：智能体命令不受隔离，MCP 服务器、计划任务的脚本、安装、编辑前的文件副本、编辑后的代码检查、委派工作的副本和你的钩子会重新运行。'
     }
   },
-  tabs: { live: '实时', agents: '智能体', profiles: '配置文件', refusals: '拒绝记录', backends: '后端' },
-  inside: '隔离内',
-  outside: '隔离外',
-  col: { pid: 'PID', profile: '配置文件', session: '会话', time: '时长', command: '命令', kind: '类型' },
-  kinds: { hermes: 'Hermes', 'agent-command': '智能体命令，未隔离', tool: '工具（MCP 服务器、辅助程序）' },
-  kill: '终止',
-  killTip: pid => `停止 ${pid} 及其启动的所有进程`,
+  kinds: {
+    hermes: '智能体运行时',
+    'agent-command': '智能体命令，未隔离',
+    tool: '工具（MCP 服务器、辅助程序）',
+    runtime: english.kinds.runtime
+  },
   killed: count => `已停止 ${count} 个进程`,
   killFailed: {
     survivors: count => `有 ${count} 个进程无法停止`,
@@ -31,18 +29,8 @@ export const confinement: ConfinementCopy = {
     'not-confined': () => '不是受隔离的进程：未停止任何内容',
     invalid: () => '不是进程：未停止任何内容'
   },
-  why: '原因',
-  follow: '跟随',
-  following: pid => `正在跟随 ${pid}`,
-  stopFollowing: '停止跟随',
-  empty: {
-    inside: '没有正在运行的智能体命令。',
-    outside: '没有智能体内容在隔离外运行。',
-    agents: '暂无智能体活动。',
-    refusals: '暂无拒绝记录。'
-  },
   scope:
-    '已隔离：终端、代码执行、文件工具，以及 Hermes 运行的浏览器和媒体处理，均在同一沙盒内。隔离期间关闭：MCP 服务器、计划任务的脚本、插件/技能/软件包的安装、电脑操控、从钥匙串导入，以及本地语音识别命令。',
+    '已隔离：终端、代码执行、文件工具和媒体处理，各自在自己的配置文件内。隔离期间关闭：MCP 服务器、计划任务的脚本、插件/技能/软件包的安装、从钥匙串导入，以及本地语音识别命令。电脑操控在你授权后，通过已签名的驱动程序在配置文件之外运行，并在除“忽略权限”外的所有模式下询问。浏览器和屏幕录制在模式允许时也在配置文件之外运行。“网页浏览与网络调用”开启时，浏览器在“手动”和“接受编辑”下询问，在“自动”下不询问直接运行，在“计划”下只打开和阅读网页，不询问。屏幕录制在其开关开启时，除“计划”（会拒绝）外的所有模式都询问。在“忽略权限”下两者都不询问。',
   backendName: { seatbelt: 'Seatbelt（macOS）', container: 'Apple container' },
   backendStatus: {
     ready: '就绪',
@@ -65,7 +53,6 @@ export const confinement: ConfinementCopy = {
     media: { name: '媒体', summary: '读取输入，只写入一个输出文件夹。' }
   },
   defaultClass: name => `默认：${name}`,
-  refusal: { operation: '被拒绝', target: '目标', process: '进程' },
   unattributed: '未归属',
   noSession: '无会话',
   insideCount: count => `隔离内 ${count}`,
@@ -92,12 +79,19 @@ export const confinement: ConfinementCopy = {
     'unknown-profile': ({ pid }) => `进程 ${pid} 在并非本应用生成的配置文件下运行`,
     'agent-command-outside': ({ pid }) => `智能体命令 ${pid} 在隔离之外运行`,
     'forged-marker': ({ pid }) => `进程 ${pid} 声称已被隔离，但 macOS 表示并没有`,
+    'agent-config-unreadable': () =>
+      '无法读取 config.yaml，因此其中的 terminal.backend 未被应用。命令仍在沙盒中运行。请修复该文件并重新启动。',
     'membership-unverified': () => '无法向 macOS 查询哪些进程受隔离：脱离进程树的进程可能未被计入',
     'hardlink-appeared': ({ path, pid, root }) =>
       `运行 ${pid} 期间，${root} 中出现了指向项目外文件的硬链接（${path}）：只能在运行结束后发现，该次运行可能已访问到它；在你允许之前，那里的下一次运行将被拒绝`,
+    'runtime-not-confined': english.reason['runtime-not-confined'],
+    'runtime-not-running': english.reason['runtime-not-running'],
+    'launcher-down': english.reason['launcher-down'],
+    'agent-commands-unavailable': english.reason['agent-commands-unavailable'],
     'settings-ignored': () => '磁盘上的隔离设置文件未经本应用签名，已被忽略：隔离按默认设置保持开启'
   },
   notes: '注意',
+  backendEnforcingOff: '对照配置文件拒绝了测试文件。',
   backendDetail: {
     enforcing: '正在生效：对照配置文件拒绝了测试文件。',
     'not-enforcing': '可以运行但没有生效：对照配置文件没有拒绝测试文件。',
@@ -111,6 +105,7 @@ export const confinement: ConfinementCopy = {
     'probe-failed': '检查本身失败了。',
     'probe-timeout': '检查未能及时完成：这台 Mac 当时可能很忙。稍后会再次检查。'
   },
+  firstScan: dirs => `正在检查项目文件夹… ${dirs.toLocaleString('zh')} 个文件夹`,
   hardlinks: {
     blocked: (root, paths, count) =>
       `隔离不会在 ${root} 中启动：${paths.join('、')}${count > paths.length ? ` 等 ${count} 个文件` : ''}是指向项目外文件的硬链接，请删除它们或在下方按文件夹允许。`,
@@ -127,6 +122,11 @@ export const confinement: ConfinementCopy = {
       changed: '未允许：该文件夹下的文件在显示后发生了变化，请重新读取',
       invalid: '未允许：该文件夹已不存在'
     },
+    showAll: (count: number) => `全部显示（${count.toLocaleString('zh')}）`,
+    showMore: (left: number) => `再显示 ${left.toLocaleString('zh')} 个`,
+    showFewer: '收起',
     cachesUnscanned: '软件包缓存（npm、pip、cargo、pnpm…）不扫描硬链接：Build 命令本来就可以读写它们。'
-  }
+  },
+  // The run ledger's words are English in every locale until the translation pass: the app ships in English.
+  ledger: english.ledger
 }

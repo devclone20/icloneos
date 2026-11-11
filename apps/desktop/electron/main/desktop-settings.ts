@@ -56,9 +56,12 @@ function persistWindowState() {
   try {
     const { x, y, width, height } = windowsState.mainWindow.getNormalBounds()
     fs.mkdirSync(path.dirname(DESKTOP_WINDOW_STATE_PATH), { recursive: true })
+    // L4-05: geometry is cheap to lose (a power cut restores the previous bounds), so atomic but not fsynced: the
+    // two F_FULLFSYNCs (~30 ms) used to land on the main thread after every drag.
     writeFileAtomicSync(
       DESKTOP_WINDOW_STATE_PATH,
-      JSON.stringify({ x, y, width, height, isMaximized: windowsState.mainWindow.isMaximized() }, null, 2)
+      JSON.stringify({ x, y, width, height, isMaximized: windowsState.mainWindow.isMaximized() }, null, 2),
+      { durable: false }
     )
   } catch (err) {
     rememberLog(`[window-state] persist failed: ${errorMessage(err) || err}`)
@@ -89,7 +92,9 @@ export function readZoomState() {
 export function writeZoomState(zoomLevel: number) {
   try {
     fs.mkdirSync(path.dirname(DESKTOP_ZOOM_STATE_PATH), { recursive: true })
-    writeFileAtomicSync(DESKTOP_ZOOM_STATE_PATH, JSON.stringify({ zoomLevel }, null, 2))
+    // L4-05: a zoom step lost in a power cut restores the previous zoom: atomic, not fsynced. Not debounced: one write
+    // per keystroke costs well under a millisecond without the fsync, and the last step must survive a quick quit.
+    writeFileAtomicSync(DESKTOP_ZOOM_STATE_PATH, JSON.stringify({ zoomLevel }, null, 2), { durable: false })
   } catch (error) {
     rememberLog(`[zoom] json persist failed: ${errorMessage(error) || error}`)
   }

@@ -1,5 +1,7 @@
 import type { Translations } from '../types'
 
+import { aiRecordCopy } from './ai-record'
+
 export const desktop: Translations['desktop'] = {
   audioReadFailed: 'Could not read recorded audio',
   sessionUnavailable: 'Session unavailable',
@@ -26,6 +28,13 @@ export const desktop: Translations['desktop'] = {
   readOnlyTranscriptBody:
     'No connected backend claims this older chat yet, so it opened as a read-only transcript. Its history is intact; sending is disabled until a backend claims it.',
   readOnlyTranscriptSendBlocked: 'This chat is open as a read-only transcript — sending is disabled.',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: "Couldn't load this session",
   resumeStrandedBody:
     'The connection to this session failed and automatic retries gave up. Check that the gateway is running, then try again.',
@@ -177,10 +186,17 @@ export const desktop: Translations['desktop'] = {
       browserUnknown: 'Browser visibility — could not read the setting; click to retry',
       browserWorking: 'Switching browser mode and restarting the agent…',
       recordOff:
-        'Recording off — click to ask the agent to record its browsing (the built-in browser saves a video of each session to its recordings folder; the Browser-Use CLI records frames into its workspace)',
-      recordOn: 'Recording ON — the agent records what it does in the browser. Click to stop.',
+        'Recording off. Click to ask the agent to record what it does in its browser, as a video in Movies/icloneOS Recordings.',
+      recordOn:
+        'Recording on, not capturing yet — the agent records what it does in the browser from the next page it opens. Click to turn off.',
+      recordCapturing: 'Recording the browser now — click to stop and save the video to Movies/icloneOS Recordings.',
+      recordShowFile: 'Show in Finder',
+      recordStopRanOut:
+        'The browser video did not finish saving before the runtime restarted. It is not confirmed: check Movies/icloneOS Recordings. The file may be incomplete.',
       recordUnknown: 'Browser recording — could not read the setting; click to retry',
+      recordSaving: 'Saving the browser video. This can take about half a minute, and at most a minute.',
       recordWorking: 'Switching recording…',
+      ...aiRecordCopy,
       themeCycle: (natural, dark, light) => `Theme — ${natural} · ${dark} · ${light}`,
       themeNatural: 'natural',
       themeDark: 'dark',

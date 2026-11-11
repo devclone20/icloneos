@@ -62,7 +62,8 @@ const { registerSetupIpc } = await import('./setup-ipc')
 
 registerSetupIpc(
   (() => true) as never,
-  { screenCaptureAttempted: () => false, markScreenCaptureAttempt: () => {} } as never
+  { screenCaptureAttempted: () => false, markScreenCaptureAttempt: () => {} } as never,
+  () => undefined
 )
 
 function showNotification() {

@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-import { getComputerUseStatus, grantComputerUsePermissions } from '@/api/toolsets'
-
 import { packageRowsOf, setupAgentRuntime } from './agent-runtime'
-import type { ComputerUseState } from './copy'
+import { useComputerUseFlow } from './computer-use-flow'
 import { setupBridge } from './store'
 import type { SetupPackage, SetupSystemItem, SetupSystemRow } from './types'
 
@@ -112,43 +110,12 @@ export function useSetupPackages() {
   return { packages, retrying, retry }
 }
 
-/** Computer use's grants live on CuaDriver (not the app): read through the backend's existing route. */
+/** Computer use's grants live on CuaDriver (not the app): read through the backend's existing route, on return too. */
 export function useComputerUse(enabled: boolean) {
-  const [state, setState] = useState<ComputerUseState | null>(null)
-  const [granting, setGranting] = useState(false)
+  const flow = useComputerUseFlow(enabled)
+  const { refresh } = flow
 
-  const refresh = useCallback(() => {
-    if (!enabled) {
-      return
-    }
+  useOnReturn(useCallback(() => void refresh(), [refresh]))
 
-    void getComputerUseStatus().then(
-      status =>
-        setState(
-          !status.platform_supported || !status.can_grant
-            ? null
-            : !status.installed
-              ? 'notInstalled'
-              : status.ready
-                ? 'granted'
-                : 'needs'
-        ),
-      () => setState('unavailable')
-    )
-  }, [enabled])
-
-  useEffect(refresh, [refresh])
-  useOnReturn(refresh)
-
-  const grant = useCallback(() => {
-    setGranting(true)
-    void grantComputerUsePermissions()
-      .catch(() => undefined)
-      .finally(() => {
-        setGranting(false)
-        refresh()
-      })
-  }, [refresh])
-
-  return { state, granting, grant }
+  return flow
 }

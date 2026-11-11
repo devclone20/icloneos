@@ -1,22 +1,23 @@
 /**
  * V3-G live gates against the real `/usr/bin/sandbox-exec` (macOS only). Every refusal is paired with its control:
  * the same command run unconfined must succeed (or the path must exist), so a probe that "fails" because its target
- * is missing proves nothing and fails the test instead.
+ * is missing proves nothing and fails the test instead. A refusal is the kernel's denial, observed: see probeVerdict.
  */
-import { execFileSync, spawn } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, chai, describe, expect, it } from 'vitest'
 
 import { PERF, PERF_TAG, skipUnderLoad } from '../perf-gate.test-helpers'
 
 import { confinementMarker, parseMarker } from './backend'
 import { knownProfile, profilesOnDisk, profileView } from './backend-seatbelt'
 import { createLiveWorld, type LiveWorld } from './live-harness'
+import { plantHomeDecoys, probeVerdict } from './live-verdict.test-helpers'
 import { probeSeatbelt, SANDBOX_EXEC } from './probe'
 import { realOrSelf } from './profiles'
 import { createRefusalLog, startRefusalStream } from './refusals'
@@ -24,16 +25,54 @@ import { foldState, readPs, type Snapshot } from './state'
 
 const LIVE = process.platform === 'darwin' && existsSync(SANDBOX_EXEC)
 const HOME = os.homedir()
-const refused = (outcome: { code: number | null }) => outcome.code !== 0
+// A verdict carries its cause in the string; the default threshold cuts it out of the failure message.
+chai.config.truncateThreshold = 0
+
+const CONTROL_FAILED = 'control failed: target missing, probe did not run'
 
 let world: LiveWorld
 
 beforeAll(() => {
+  if (LIVE) {
+    plantHomeDecoys()
+  }
+
   world = createLiveWorld()
 })
 
 afterAll(() => {
   world?.dispose()
+})
+
+describe('probeVerdict — an exit code alone is not a refusal', () => {
+  it.each([
+    ['the kernel denial', { code: 1, out: 'cat: x: Operation not permitted\n', pid: 7 }, 'refused'],
+    ['exit 0', { code: 0, out: 'secret\n', pid: 7 }, 'allowed: secret'],
+    [
+      'a missing target',
+      { code: 1, out: 'cat: x: No such file or directory\n', pid: 7 },
+      'did-not-run: exit 1 with no kernel denial: cat: x: No such file or directory'
+    ],
+    [
+      'a missing binary',
+      { code: 127, out: 'sh: x: command not found\n', pid: 7 },
+      'did-not-run: exit 127 with no kernel denial: sh: x: command not found'
+    ],
+    ['a killed probe', { code: null, out: '', pid: 7 }, 'did-not-run: killed before it exited: '],
+    [
+      'a failed spawn',
+      { code: null, out: 'confinement refused to start', pid: 0 },
+      'did-not-run: spawn failed: confinement refused to start'
+    ]
+  ])('%s', (_name, outcome, verdict) => {
+    expect(probeVerdict(outcome)).toBe(verdict)
+  })
+
+  it('a silent row still needs an exit: killed stays did-not-run, exit 0 stays allowed', () => {
+    expect(probeVerdict({ code: 1, out: '' }, 'silent')).toBe('refused')
+    expect(probeVerdict({ code: null, out: '', pid: 7 }, 'silent')).toBe('did-not-run: killed before it exited: ')
+    expect(probeVerdict({ code: 0, out: '' }, 'silent')).toBe('allowed: ')
+  })
 })
 
 describe.runIf(LIVE)('probe — the negative control on this Mac', () => {
@@ -64,8 +103,8 @@ describe.runIf(LIVE)('G1 — 20 planted probes, 20/20 refused, each with an unco
     async index => {
       const command = reads()[index]
 
-      expect((await world.runPlain(command)).code).toBe(0)
-      expect(refused(await world.runConfined(command))).toBe(true)
+      expect((await world.runPlain(command)).code, CONTROL_FAILED).toBe(0)
+      expect(probeVerdict(await world.runConfined(command))).toBe('refused')
     }
   )
 
@@ -87,7 +126,7 @@ describe.runIf(LIVE)('G1 — 20 planted probes, 20/20 refused, each with an unco
       const { command, file } = writes()[index]
       const before = file === null ? readFileSnapshot(world) : null
 
-      expect(refused(await world.runConfined(command))).toBe(true)
+      expect(probeVerdict(await world.runConfined(command))).toBe('refused')
 
       if (file) {
         expect(existsSync(file)).toBe(false)
@@ -101,8 +140,10 @@ describe.runIf(LIVE)('G1 — 20 planted probes, 20/20 refused, each with an unco
     const server = await listenTcp()
 
     try {
-      expect((await world.runPlain(`nc -z -G 2 127.0.0.1 ${server.port}`)).code).toBe(0)
-      expect(refused(await world.runConfined(`nc -z -G 2 127.0.0.1 ${server.port}`, { network: false }))).toBe(true)
+      expect((await world.runPlain(`nc -zv -G 2 127.0.0.1 ${server.port}`)).code, CONTROL_FAILED).toBe(0)
+      expect(probeVerdict(await world.runConfined(`nc -zv -G 2 127.0.0.1 ${server.port}`, { network: false }))).toBe(
+        'refused'
+      )
     } finally {
       server.close()
     }
@@ -118,7 +159,7 @@ describe.runIf(LIVE)('G1 — 20 planted probes, 20/20 refused, each with an unco
       const confined = await world.runConfined(`nc -U ${socket} < /dev/null`, { network: true, cls: 'research' })
 
       expect(confined.out).not.toContain('pong')
-      expect(refused(confined)).toBe(true)
+      expect(probeVerdict(confined, 'silent')).toBe('refused')
     } finally {
       server.close()
     }
@@ -126,11 +167,11 @@ describe.runIf(LIVE)('G1 — 20 planted probes, 20/20 refused, each with an unco
 
   it('exec of a binary outside every readable root is refused (and runs unconfined)', async () => {
     expect((await world.runPlain(`${world.outside}/run.sh`)).out).toContain('ran-outside')
-    expect(refused(await world.runConfined(`${world.outside}/run.sh`))).toBe(true)
+    expect(probeVerdict(await world.runConfined(`${world.outside}/run.sh`))).toBe('refused')
   })
 
   it('the TCC tool cannot reach tccd from inside', async () => {
-    expect(refused(await world.runConfined('tccutil reset All com.iclone.v3g.none'))).toBe(true)
+    expect(probeVerdict(await world.runConfined('tccutil reset All com.iclone.v3g.none'))).toBe('refused')
   })
 
   it('launchd, Apple Events and the keychain CLI are refused by name', async () => {
@@ -150,10 +191,10 @@ describe.runIf(LIVE)('keychain — never, in any class, with or without the netw
   it('the login keychain file and the keychain services are refused', async () => {
     const db = `${HOME}/Library/Keychains/login.keychain-db`
 
-    expect((await world.runPlain(`head -c 4 ${db} > /dev/null`)).code).toBe(0)
+    expect((await world.runPlain(`head -c 4 ${db} > /dev/null`)).code, CONTROL_FAILED).toBe(0)
 
     for (const cls of ['research', 'project', 'build', 'offline', 'media'] as const) {
-      expect(refused(await world.runConfined(`head -c 4 ${db}`, { cls, network: true }))).toBe(true)
+      expect(probeVerdict(await world.runConfined(`head -c 4 ${db}`, { cls, network: true }))).toBe('refused')
     }
   })
 })
@@ -188,16 +229,49 @@ describe.runIf(LIVE)('G5 — 30 unnamed capabilities, 30/30 refused', () => {
     '/usr/bin/sudo -n true',
     'crontab -l',
     'pbpaste',
-    'kill -0 1',
-    'nc -z -G 2 127.0.0.1 22'
+    'kill -0 <peer>',
+    'nc -zv -G 2 127.0.0.1 <listener>'
   ]
+
+  // A row with no entry here is its own control. These would act on the owner's machine if run unconfined (write
+  // outside, drive Finder, open an app), so the control proves only that the target is there.
+  const CONTROLS: Record<string, string> = {
+    [`touch ${HOME}/Library/LaunchAgents/iclone-v3g.plist`]: `test -d ${HOME}/Library/LaunchAgents`,
+    'touch /Users/Shared/iclone-v3g': 'test -d /Users/Shared',
+    'touch /private/tmp/iclone-v3g': 'test -d /private/tmp',
+    'launchctl list': 'test -x /bin/launchctl',
+    'osascript -e \'tell application "Finder" to get name\'': 'test -x /usr/bin/osascript',
+    'open -g -a TextEdit': 'test -x /usr/bin/open',
+    '/usr/bin/sudo -n true': 'test -x /usr/bin/sudo',
+    'crontab -l': 'test -x /usr/bin/crontab',
+    pbpaste: 'pbpaste > /dev/null'
+  }
+
+  let peer: ChildProcess
+  let listener: Awaited<ReturnType<typeof listenTcp>>
+
+  beforeAll(async () => {
+    // Not pid 1: signalling that is EPERM for any non-root process, sandboxed or not, so it proves nothing.
+    peer = spawn('/bin/sleep', ['300'], { stdio: 'ignore' })
+    listener = await listenTcp()
+  })
+
+  afterAll(() => {
+    peer?.kill('SIGKILL')
+    listener?.close()
+  })
+
+  const resolved = (row: string) => row.replace('<peer>', String(peer.pid)).replace('<listener>', String(listener.port))
 
   it('has 30 cases', () => {
     expect(CASES).toHaveLength(30)
   })
 
-  it.each(CASES)('refused: %s', async command => {
-    expect(refused(await world.runConfined(`${command} >/dev/null 2>&1`))).toBe(true)
+  it.each(CASES)('refused: %s', async row => {
+    const command = resolved(row)
+
+    expect((await world.runPlain(CONTROLS[row] ?? command)).code, CONTROL_FAILED).toBe(0)
+    expect(probeVerdict(await world.runConfined(command), row === 'pbpaste' ? 'silent' : 'observed')).toBe('refused')
   })
 
   it('left nothing behind', () => {
@@ -226,12 +300,12 @@ describe.runIf(LIVE)('positive controls — the confinement still lets the work 
 
   it('Plan mode (WRITE_PROJECT=0) reads the project but cannot write it', async () => {
     expect((await world.runConfined('cat README.md', { writeProject: false })).code).toBe(0)
-    expect(refused(await world.runConfined('touch plan.txt', { writeProject: false }))).toBe(true)
+    expect(probeVerdict(await world.runConfined('touch plan.txt', { writeProject: false }))).toBe('refused')
   })
 
   it('research reads the project, writes only its scratch', async () => {
     expect((await world.runConfined('cat README.md', { cls: 'research' })).code).toBe(0)
-    expect(refused(await world.runConfined('touch research.txt', { cls: 'research' }))).toBe(true)
+    expect(probeVerdict(await world.runConfined('touch research.txt', { cls: 'research' }))).toBe('refused')
     expect((await world.runConfined('touch "$TMPDIR/r.txt"', { cls: 'research' })).code).toBe(0)
   })
 
@@ -242,7 +316,9 @@ describe.runIf(LIVE)('positive controls — the confinement still lets the work 
     expect((await world.runConfined(`cp README.md ${output}/copy.md`, { cls: 'media', outputDir: output })).code).toBe(
       0
     )
-    expect(refused(await world.runConfined('touch media.txt', { cls: 'media', outputDir: output }))).toBe(true)
+    expect(probeVerdict(await world.runConfined('touch media.txt', { cls: 'media', outputDir: output }))).toBe(
+      'refused'
+    )
   })
 
   it('the network opens with a grant for research/project/build, never for offline', async () => {
@@ -250,7 +326,7 @@ describe.runIf(LIVE)('positive controls — the confinement still lets the work 
 
     try {
       // The grant is the internet (the machine's own addresses are loopback to Seatbelt, F4): a public resolver.
-      const internet = 'nc -z -G 3 1.1.1.1 443'
+      const internet = 'nc -zv -G 3 1.1.1.1 443'
 
       expect((await world.runPlain(internet)).code, 'this Mac must reach the internet for the control').toBe(0)
 
@@ -258,10 +334,12 @@ describe.runIf(LIVE)('positive controls — the confinement still lets the work 
         expect((await world.runConfined(internet, { cls, network: true })).code, cls).toBe(0)
       }
 
-      expect(refused(await world.runConfined(internet, { cls: 'offline', network: true }))).toBe(true)
+      expect(probeVerdict(await world.runConfined(internet, { cls: 'offline', network: true }))).toBe('refused')
       expect(
-        refused(await world.runConfined(`nc -z -G 2 127.0.0.1 ${server.port}`, { cls: 'project', network: false }))
-      ).toBe(true)
+        probeVerdict(
+          await world.runConfined(`nc -zv -G 2 127.0.0.1 ${server.port}`, { cls: 'project', network: false })
+        )
+      ).toBe('refused')
     } finally {
       server.close()
     }
@@ -270,7 +348,7 @@ describe.runIf(LIVE)('positive controls — the confinement still lets the work 
   it('a project root the layer refuses (the home) falls back to the scratch dir', async () => {
     const outcome = await world.runConfined('pwd; touch here.txt', { projectRoot: HOME, cwd: world.root })
 
-    expect(refused(outcome)).toBe(true)
+    expect(probeVerdict(outcome)).toBe('refused')
     expect(existsSync(path.join(HOME, 'here.txt'))).toBe(false)
   })
 })
@@ -284,8 +362,10 @@ describe.runIf(LIVE)('F4 — a network grant is the internet: loopback and local
 
       try {
         for (const target of [`127.0.0.1 ${v4.port}`, `::1 ${v6.port}`, `${lanAddress()} ${v4.port}`]) {
-          expect((await world.runPlain(`nc -z -G 2 ${target}`)).code, target).toBe(0)
-          expect(refused(await world.runConfined(`nc -z -G 2 ${target}`, { cls, network: true })), target).toBe(true)
+          expect((await world.runPlain(`nc -zv -G 2 ${target}`)).code, target).toBe(0)
+          expect(probeVerdict(await world.runConfined(`nc -zv -G 2 ${target}`, { cls, network: true })), target).toBe(
+            'refused'
+          )
         }
       } finally {
         v4.close()
@@ -309,7 +389,7 @@ describe.runIf(LIVE)('F3 — no write hole outside the per-run scratch (the xcru
     try {
       for (const target of targets) {
         for (const network of [false, true]) {
-          expect(refused(await world.runConfined(`echo p > ${target}`, { network })), target).toBe(true)
+          expect(probeVerdict(await world.runConfined(`echo p > ${target}`, { network })), target).toBe('refused')
           expect(existsSync(target), target).toBe(false)
         }
       }
@@ -323,17 +403,19 @@ describe.runIf(LIVE)('F3 — no write hole outside the per-run scratch (the xcru
 
 describe.runIf(LIVE)('G3 — the pane count is derived from ps, never cached', () => {
   it('3 confined commands appear as 3 roots, and 0 after they are killed', async () => {
-    const spawned = [1, 2, 3].map(() =>
-      world.backend.spawn({
-        cls: 'project',
-        argv: ['/bin/sleep', '30'],
-        cwd: world.project,
-        env: { PATH: '/usr/bin:/bin' },
-        projectRoot: world.project,
-        network: false,
-        writeProject: true,
-        sessionId: 'v3g-g3'
-      })
+    const spawned = await Promise.all(
+      [1, 2, 3].map(() =>
+        world.backend.spawn({
+          cls: 'project',
+          argv: ['/bin/sleep', '30'],
+          cwd: world.project,
+          env: { PATH: '/usr/bin:/bin' },
+          projectRoot: world.project,
+          network: false,
+          writeProject: true,
+          sessionId: 'v3g-g3'
+        })
+      )
     )
 
     const pids = spawned.map(item => (item.ok ? item.pid : 0))
@@ -353,7 +435,7 @@ describe.runIf(LIVE)('G3 — the pane count is derived from ps, never cached', (
 
 describe.runIf(LIVE)('G2 — Kill ends the whole confined tree (PID proof), 10/10', () => {
   it.each(Array.from({ length: 10 }, (_, index) => index))('trial %i', async () => {
-    const result = world.backend.spawn({
+    const result = await world.backend.spawn({
       cls: 'project',
       argv: ['/bin/sh', '-c', '/bin/sleep 60 & /bin/sleep 60 & wait'],
       cwd: world.project,
@@ -446,7 +528,9 @@ describe.runIf(LIVE)('G4 — negative control: a widened profile turns the state
         pluginAckPids: [],
         audit: [],
         refusals: [],
-        hardlinks: []
+        hardlinks: [],
+        // The command sandboxes alone: this world starts no runtime, whose confinement is folded on macOS only.
+        darwin: false
       })
     }
 
@@ -459,7 +543,7 @@ describe.runIf(LIVE)('G4 — negative control: a widened profile turns the state
     writeFileSync(project.file, widenedText)
 
     // The backend never re-reads the file: it runs the text it generated, so the widened file confines nothing extra.
-    expect(refused(await world.runConfined(`cat ${world.outside}/secret.txt`))).toBe(true)
+    expect(probeVerdict(await world.runConfined(`cat ${world.outside}/secret.txt`))).toBe('refused')
 
     const marker = confinementMarker('project', widenedSha, 'v3g-g4')
 
@@ -504,7 +588,7 @@ describe.runIf(LIVE)('G4 — negative control: a widened profile turns the state
     }
 
     await waitFor(async () => (await fold()).verdict === 'green', 2_000)
-    expect(refused(await world.runConfined(`cat ${world.outside}/secret.txt`))).toBe(true)
+    expect(probeVerdict(await world.runConfined(`cat ${world.outside}/secret.txt`))).toBe('refused')
   })
 })
 
@@ -518,6 +602,7 @@ describe.runIf(LIVE)('R2 — refusals reach the log within 1 s (p95, G1), tagged
 
     const stream = startRefusalStream({
       log,
+      membersDir: world.paths.membersDir,
       confined: async () => new Map(),
       onRefusal: refusal => arrived.set(refusal.target, Date.now())
     })
@@ -627,24 +712,70 @@ function lanAddress(): string {
   return address
 }
 
-function listenTcp(host = '0.0.0.0'): Promise<{ port: number; close: () => void }> {
-  return new Promise(resolve => {
-    const server = net.createServer(socket => socket.end())
+// The probes are `nc -z` (connect, then hang up at once) and `nc -U`. When the peer is gone before this process reads
+// the accepted socket, macOS reports `read ENOTCONN` (or a reset) on OUR side of the connection; with no listener that
+// became an uncaught exception that failed the file after every test had passed. The proof is the nc exit code and
+// output, never this side of the socket, so a peer hang-up is expected here; any other socket error still throws.
+const PEER_HANGUP = new Set(['ENOTCONN', 'ECONNRESET', 'EPIPE'])
+const LISTEN_TIMEOUT_MS = 5_000
 
-    server.listen(0, host, () => {
-      const address = server.address()
+function answer(reply: (socket: net.Socket) => void): (socket: net.Socket) => void {
+  return socket => {
+    socket.on('error', (error: NodeJS.ErrnoException) => {
+      if (!PEER_HANGUP.has(error.code ?? '')) {
+        throw error
+      }
+    })
+    reply(socket)
+  }
+}
 
-      resolve({ port: typeof address === 'object' && address ? address.port : 0, close: () => server.close() })
+// Resolves only once the server is listening, and rejects (closing it) on a listen error or after LISTEN_TIMEOUT_MS:
+// a probe never runs against a server that is not there, and a server that never listens fails the test.
+function listening(server: net.Server, start: (ready: () => void) => void, what: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const fail = (error: Error) => {
+      clearTimeout(timer)
+      server.close()
+      reject(error)
+    }
+
+    const timer = setTimeout(
+      () => fail(new Error(`${what} did not listen within ${LISTEN_TIMEOUT_MS} ms`)),
+      LISTEN_TIMEOUT_MS
+    )
+
+    server.once('error', fail)
+    start(() => {
+      clearTimeout(timer)
+      server.off('error', fail)
+      resolve()
     })
   })
 }
 
-function listenUnix(file: string): Promise<{ close: () => void }> {
+async function listenTcp(host = '0.0.0.0'): Promise<{ port: number; close: () => void }> {
+  const server = net.createServer(answer(socket => socket.end()))
+
+  await listening(server, ready => server.listen(0, host, ready), `the TCP control server on ${host}`)
+
+  const address = server.address()
+
+  if (typeof address !== 'object' || !address || !address.port) {
+    server.close()
+
+    throw new Error(`the TCP control server on ${host} has no port`)
+  }
+
+  return { port: address.port, close: () => server.close() }
+}
+
+async function listenUnix(file: string): Promise<{ close: () => void }> {
   rmSync(file, { force: true })
 
-  return new Promise(resolve => {
-    const server = net.createServer(socket => socket.end('pong\n'))
+  const server = net.createServer(answer(socket => socket.end('pong\n')))
 
-    server.listen(file, () => resolve({ close: () => server.close() }))
-  })
+  await listening(server, ready => server.listen(file, ready), `the unix control server at ${file}`)
+
+  return { close: () => server.close() }
 }

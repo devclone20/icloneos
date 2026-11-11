@@ -31,17 +31,41 @@ const grep = (files: string[], pattern: RegExp) =>
   files.filter(file => pattern.test(readFileSync(file, 'utf8'))).map(rel)
 
 describe('LOCK: one writer of the mode, reachable only from the gesture-checked set-mode handler', () => {
-  it('mode.json is named and written only by the store; writeMode is called only by authority.setMode', () => {
+  it('mode.json is named and written only by the store; writeMode is reached only through setMode, after the gesture and the alert, or through what setMode held', () => {
     expect(grep(ELECTRON, /['"]mode\.json['"]|MODE_FILE/)).toEqual(['electron/iclone-permissions/store.ts'])
     expect(grep([...ELECTRON, ...RENDERER], /\.writeMode\(/)).toEqual(['electron/iclone-permissions/authority.ts'])
 
     const authority = readFileSync(path.join(DESKTOP, 'electron/iclone-permissions/authority.ts'), 'utf8')
-    const setMode = authority.slice(authority.indexOf('async setMode(input: unknown, gestureOk: boolean)'))
+    const setMode = authority.slice(authority.indexOf('async setMode(input: unknown, gestureOk: boolean, windowId?: number)'))
 
     expect(authority.match(/\.writeMode\(/g)).toHaveLength(1)
     expect(setMode.indexOf('if (!gestureOk)')).toBeGreaterThan(-1)
-    expect(setMode.indexOf('if (!gestureOk)')).toBeLessThan(setMode.indexOf('.writeMode('))
-    expect(setMode.indexOf('deps.confirmIgnore')).toBeLessThan(setMode.indexOf('.writeMode('))
+    expect(setMode.indexOf('if (!gestureOk)')).toBeLessThan(setMode.indexOf('writeInForce('))
+    expect(setMode.indexOf('deps.confirmIgnore')).toBeLessThan(setMode.indexOf('writeInForce('))
+    // S11: two callers of the one write. A held choice is set in one place, after the gesture and the alert; the claim only takes it.
+    expect(authority.match(/\bwriteInForce\(/g)).toHaveLength(2)
+    expect(authority.match(/windowChoices\.set\(/g)).toHaveLength(1)
+    expect(setMode.indexOf('if (!gestureOk)')).toBeLessThan(setMode.indexOf('windowChoices.set('))
+    expect(setMode.indexOf('deps.confirmIgnore')).toBeLessThan(setMode.indexOf('windowChoices.set('))
+    expect(setMode.indexOf('windowChoices.set(')).toBeLessThan(setMode.indexOf('claimWindowChoice('))
+  })
+
+  // Exempt, on purpose: the branch route (a branch takes the Setting, S11) and the bots plugin's own create route (it
+  // has no empty composer). Neither shows a selector that could hold a choice.
+  it('S11: the empty chat\'s send and the new tile, the two composer routes, take the held choice before anything can run in them', () => {
+    const actions = readFileSync(path.join(DESKTOP, 'src/app/session/hooks/use-session-actions/index.ts'), 'utf8')
+    const first = actions.indexOf("'session.create'")
+    const claim = actions.indexOf('await claimWindowChoice(stored)')
+    const second = actions.indexOf("'session.create'", claim)
+    const secondClaim = actions.indexOf('await claimWindowChoice(stored)', second)
+
+    expect(actions.split('await claimWindowChoice(stored)')).toHaveLength(3)
+    expect(first).toBeGreaterThan(-1)
+    expect(first).toBeLessThan(claim)
+    expect(claim).toBeLessThan(second)
+    expect(second).toBeLessThan(secondClaim)
+    expect(actions.slice(first, claim)).not.toContain('prompt.submit')
+    expect(actions.slice(second, secondClaim)).not.toContain('prompt.submit')
   })
 
   it('authority.setMode is called from exactly one place: the set-mode IPC handler, with main’s own gesture verdict', () => {
@@ -49,9 +73,22 @@ describe('LOCK: one writer of the mode, reachable only from the gesture-checked 
 
     const ipc = readFileSync(path.join(DESKTOP, 'electron/iclone-permissions/ipc.ts'), 'utf8')
 
-    expect(ipc).toContain(
-      "ipcMain.handle('iclone:permissions:set-mode', (event, input) => authority.setMode(input, gesture(event, input)))"
-    )
+    // fx23 (critic r2-A): the one call in that file. A second one could carry a forged verdict past the shape below.
+    expect(ipc.match(/authority\.setMode\(/g)).toHaveLength(1)
+    expect(ipc.match(/\bconst ok = gesture\(event, input\)/g)).toHaveLength(1)
+    expect(ipc).not.toMatch(/\bok = (?!gesture\()/)
+
+    // fx20 judges the click first and may refuse a project folder before the call; the verdict passed is still main's.
+    const from = ipc.indexOf("ipcMain.handle('iclone:permissions:set-mode'")
+    const next = ipc.indexOf('ipcMain.handle(', from + 1)
+    const handler = ipc.slice(from, next === -1 ? undefined : next)
+
+    expect(
+      handler.startsWith(
+        "ipcMain.handle('iclone:permissions:set-mode', async (event, input) => {\n    const ok = gesture(event, input)\n"
+      )
+    ).toBe(true)
+    expect(handler.indexOf('const result = await authority.setMode(input, ok, sender?.id)\n')).toBeGreaterThan(-1)
   })
 
   it('the agent socket verb has no way to set a mode or a grant', () => {

@@ -3,8 +3,9 @@
 // The gate reads every non-test source under electron/ with the TypeScript compiler API and enumerates:
 // - every app.on / app.once / prependListener handler for 'will-quit', 'before-quit' and 'quit';
 // - every long-lived resource the main process creates: spawn/fork (child_process, utilityProcess), fs.watch /
-//   chokidar watchers, createServer (http/net/https), setInterval timers and the Market window's ACP watch
-//   (initAcpWatch).
+//   chokidar watchers, createServer (http/net/https), setInterval timers, the Market window's ACP watch
+//   (initAcpWatch) and FSEvents streams (any `.watch(` in a file bound to the `fsevents` module or to its binding,
+//   iclone-confinement/hardlinks-fsevents.ts), and worker threads (`new Worker(`, v0.0.7 CF1).
 // Each must match an entry below: either registered in the teardown registry (the named registerTeardown call must be
 // in that file AND reached: at statement level in its function or module body, with nothing conditional on the way;
 // a try block is allowed, a branch is not), or on the commented allow-list with its reason. A new quit handler or a new
@@ -56,7 +57,7 @@ describe('the teardown registry', () => {
 
 // --- The structural gate ----------------------------------------------------------------------------------------------
 
-type Kind = 'acp-watch' | 'interval' | 'server' | 'spawn' | 'watch'
+type Kind = 'acp-watch' | 'fsevents' | 'interval' | 'server' | 'spawn' | 'watch' | 'worker'
 
 interface Entry {
   n: number
@@ -120,6 +121,37 @@ const RESOURCES: Record<string, Partial<Record<Kind, Entry>>> = {
   'iclone-compat/watch.ts': {
     interval: { n: 1, teardown: ['iclone-compat.ts#compat'] }
   },
+  // v0.0.7 FSEV: every stream (root + the shared canary folder, one stream each) is started by the addon here; quit
+  // closes every source (its streams, pending barriers and nudge timers, the canary folder) and every guard its own;
+  // the guard's stop also clears its background-scan timers (setTimeout: not counted here).
+  'iclone-confinement/hardlinks-fsevents.ts': {
+    fsevents: {
+      n: 1,
+      teardown: [
+        'iclone-confinement/hardlinks-fsevents.ts#fsevents canary streams',
+        'iclone-confinement/hardlinks.ts#hardlink guards'
+      ]
+    }
+  },
+  'iclone-confinement/hardlinks.ts': {
+    fsevents: { n: 1, teardown: ['iclone-confinement/hardlinks.ts#hardlink guards'] }
+  },
+  // v0.0.7 CF1: the F7 guard's full scan, one worker thread per scan (the bundled script or the TypeScript source);
+  // quit terminates every one still running, and a guard's close aborts its own.
+  'iclone-confinement/hardlinks-walker.ts': {
+    worker: { n: 2, teardown: ['iclone-confinement/hardlinks-walker.ts#hardlink walk workers'] }
+  },
+  'iclone-confinement/launcher-live-harness.ts': {
+    spawn: { n: 1, why: 'live-test harness: imported only by *.live.test.ts, never by the app' }
+  },
+  'iclone-confinement/launcher.ts': {
+    spawn: { n: 1, teardown: ['main/iclone-gate.ts#confinement launcher'] }
+  },
+  // CF7 round 2: the perf gates' block meter keeps a 1 ms ticker beside its histogram for the stall timestamps
+  // (gate-helpers.ts startBlockMeter), cleared by `stop()`; imported only by electron/perf-v007/*.perf.test.ts.
+  'perf-v007/gate-helpers.ts': {
+    interval: { n: 1, why: 'perf gate meter: cleared by stop(); never imported by the app' }
+  },
   'iclone-confinement/live-harness.ts': {
     spawn: { n: 2, why: 'confinement: the log stream is stopped by main.ts#confinement; the rest are bounded probes' }
   },
@@ -132,6 +164,10 @@ const RESOURCES: Record<string, Partial<Record<Kind, Entry>>> = {
   'iclone-confinement/refusals.ts': {
     spawn: { n: 2, why: 'confinement: the log stream is stopped by main.ts#confinement; the rest are bounded probes' }
   },
+  'iclone-confinement/runtime-live-harness.ts': {
+    interval: { n: 1, why: 'live-test harness: imported only by *.live.test.ts, never by the app' },
+    spawn: { n: 2, why: 'live-test harness: imported only by *.live.test.ts, never by the app' }
+  },
   'iclone-it.ts': {
     server: { n: 1, teardown: ['iclone-it.ts#it server'] }
   },
@@ -140,6 +176,10 @@ const RESOURCES: Record<string, Partial<Record<Kind, Entry>>> = {
   },
   'iclone-pane-bus/ipc.ts': {
     server: { n: 1, teardown: ['iclone-pane-bus/ipc.ts#pane bus'] }
+  },
+  // PERMFIX: the periodic shadow re-verify (and its back-off restart); the log itself stays open for later stops.
+  'iclone-permissions/audit.ts': {
+    interval: { n: 1, teardown: ['iclone-permissions/audit.ts#permission audit timers'] }
   },
   'iclone-permissions/ipc.ts': {
     interval: { n: 1, why: 'in-process timer (unref or cleared by its owner); holds no OS resource past the process' }
@@ -299,6 +339,9 @@ function scan(): Scan {
     const text = fs.readFileSync(full, 'utf8')
     const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true)
     const fsWatchImported = /import \{[^}]*\bwatch\b[^}]*\} from '(node:)?fs'|from 'chokidar'/.test(text)
+    const fseventsBound = /\(['"]fsevents['"]\)|from ['"]fsevents['"]|from '\.\/hardlinks-fsevents'/.test(text)
+    // v0.0.7 FSEV: our own addon starts a stream with `<addon>.start(` (iclone-fsevents.ts).
+    const addonBound = /from '\.\/iclone-fsevents'/.test(text)
 
     const add = (kind: Kind) => {
       const counts = (out.resources[file] ??= {})
@@ -307,6 +350,10 @@ function scan(): Scan {
     }
 
     const visit = (node: ts.Node) => {
+      if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === 'Worker') {
+        add('worker')
+      }
+
       if (ts.isCallExpression(node)) {
         const { object, name } = calleeName(node)
         const first = node.arguments[0]
@@ -334,6 +381,10 @@ function scan(): Scan {
           (object === 'fs' || object === 'chokidar' || (object === '' && fsWatchImported))
         ) {
           add('watch')
+        } else if (name === 'watch' && fseventsBound && object !== '') {
+          add('fsevents')
+        } else if (name === 'start' && addonBound && object !== '') {
+          add('fsevents')
         } else if (name === 'createServer') {
           add('server')
         } else if (name === 'setInterval') {

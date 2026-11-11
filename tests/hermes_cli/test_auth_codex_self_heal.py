@@ -19,8 +19,9 @@ import pytest
 import hermes_cli.auth as auth
 import hermes_cli.auth_codex as auth_codex
 from hermes_cli.auth import AuthError, _refresh_codex_auth_tokens, resolve_codex_runtime_credentials
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
-STALE = {"access_token": "stale-access", "refresh_token": "stale-refresh"}
+STALE = {"access_token": chatgpt_jwt("stale"), "refresh_token": "stale-refresh"}
 
 
 def test_self_heals_on_stale_refresh_token(monkeypatch):
@@ -81,7 +82,7 @@ def test_self_heals_missing_singleton_access_token_from_codex_cli(tmp_path, monk
     }))
     (codex_home / "auth.json").write_text(json.dumps({
         "tokens": {
-            "access_token": "fresh-access",
+            "access_token": chatgpt_jwt("fresh-access"),
             "refresh_token": "fresh-refresh",
         },
     }))
@@ -90,11 +91,11 @@ def test_self_heals_missing_singleton_access_token_from_codex_cli(tmp_path, monk
 
     resolved = resolve_codex_runtime_credentials()
 
-    assert resolved["api_key"] == "fresh-access"
+    assert resolved["api_key"] == chatgpt_jwt("fresh-access")
     assert resolved["source"] == "hermes-auth-store"
     stored = json.loads((hermes_home / "auth.json").read_text())
     tokens = stored["providers"]["openai-codex"]["tokens"]
-    assert tokens["access_token"] == "fresh-access"
+    assert tokens["access_token"] == chatgpt_jwt("fresh-access")
     assert tokens["refresh_token"] == "fresh-refresh"
 
 

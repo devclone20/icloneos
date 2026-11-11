@@ -144,7 +144,27 @@ export function getBaseColors(skinName: string, mode: 'light' | 'dark'): Desktop
   return seed.darkColors ? seed.colors : synthLightColors(seed)
 }
 
-function deriveTheme(skinName: string, mode: 'light' | 'dark'): DesktopTheme {
+/**
+ * The skin actually rendered for a stored skin + resolved mode.
+ *
+ * The iclone skins are not accents over a mode: each IS a brightness, and the
+ * CSS keys its glass, tint and ink on `data-hermes-theme`. Mode is what the
+ * user flips for light (Settings, Shift+X, `system`), so mode decides: light
+ * renders the family's light skin, dark leaves the stored skin as it is (the
+ * light skin keeps its light palette there, and `renderedModeFor` drops `.dark`
+ * to match, as before). Without
+ * this, light mode on `iclone-natural`/`iclone-dark` dropped `.dark` while the
+ * dark skin's rules still applied — dark text on dark glass. Stored values are
+ * never rewritten, so flipping back to dark returns the skin the user picked.
+ */
+const ICLONE_LIGHT_SKIN = 'iclone-light'
+const ICLONE_DARK_SKINS = new Set(['iclone-natural', 'iclone-dark'])
+
+const renderedSkinFor = (skinName: string, mode: 'light' | 'dark'): string =>
+  mode === 'light' && ICLONE_DARK_SKINS.has(skinName) ? ICLONE_LIGHT_SKIN : skinName
+
+function deriveTheme(storedSkin: string, mode: 'light' | 'dark'): DesktopTheme {
+  const skinName = renderedSkinFor(storedSkin, mode)
   const seed = resolveTheme(skinName) ?? icloneNaturalTheme
 
   return {

@@ -11,12 +11,27 @@
  */
 import { randomUUID } from 'node:crypto'
 
-import { F2_LOOSENING_ENABLED, levelOffered } from '../../src/iclone-shared/permissions'
+import { oneShotReadable } from '../../src/iclone-shared/one-shot-text'
+import {
+  type ChoiceScope,
+  F2_LOOSENING_ENABLED,
+  levelOffered,
+  type PermissionModeResetView
+} from '../../src/iclone-shared/permissions'
 import type { ConsentPermissionKey, ConsentRecord } from '../iclone-consent'
 import type { DoorPermission, PermissionDoorOutcome } from '../iclone-consent-door'
 
-import type { AuditAgent, AuditAnswer, AuditLog, AuditRecord } from './audit'
-import { ceilingsFrom, type PolicyPathsInput, projectRootOf, protectedPaths, secretPaths } from './classify-policy'
+import { type AuditAgent, type AuditAnswer, type AuditLog, type AuditRecord, modeLayerKey } from './audit'
+import {
+  ceilingsFrom,
+  CREDENTIAL_WRITE_FLOOR,
+  credentialReadFloor,
+  credentialWriteFloor,
+  type PolicyPathsInput,
+  projectRootOf,
+  protectedPaths,
+  secretPaths
+} from './classify-policy'
 import {
   clampUnsealed,
   coverFunctions,
@@ -37,14 +52,18 @@ import {
   type ActionClass,
   type ActionFacts,
   type Ceiling,
+  CREDENTIAL_READ_FLOOR,
   DEFAULT_CEILING_KEY,
+  DEFAULT_STANDING_MODE,
   grantScopesFor,
   isActionClass,
+  isNarrowing,
   isPermissionMode,
   type ModeScope,
   type PermissionMode
 } from './modes'
 import { buildPolicyBody, type MintedSpawnKey, type PolicySigner } from './policy-file'
+import { modeFromRecord } from './store'
 import type { FunctionGrant, Grant, IntegrityFinding, ModeRecord, PermissionStore } from './store'
 
 /** An `Allow once` that arrived after the plugin stopped waiting is held for the agent's retry this long. */
@@ -79,6 +98,14 @@ interface PluginCall {
   floor: string | null
   ceilingKey: string | null
   project: string | null
+  /** F50, S5: the project of the session's own window. A workdir or a path the agent names never selects a mode. */
+  sessionProject?: string | null
+  /** G-98 F42: the folder the plugin says this plain shell command runs in, when it can run once outside. */
+  oneShotCwd?: string | null
+  /** G2 A5: the exact file the plugin says this write lands on, when no folder may open for it. */
+  oneFilePath?: string | null
+  /** G23-W2: the link the agent named, when `oneFilePath` is its real target. */
+  oneFileLink?: string | null
   lineage: string[]
   agent: AuditAgent
   reason: string
@@ -102,6 +129,9 @@ interface AskResult {
   allowed: boolean
   grantId: string | null
   reason: string
+  /** G-98 F42: main recorded this exact command for one run outside the Seatbelt. */
+  oneShot?: boolean
+  oneFile?: boolean
 }
 
 /** The answer to `perm ask`: decided now, or on the sheet (then `perm await <askId>`). */
@@ -109,7 +139,7 @@ type AskStart = ({ state: 'decided' } & AskResult) | { state: 'pending'; askId: 
 
 type AskAwait = ({ state: 'decided' } & AskResult) | { state: 'unknown' }
 
-type SetModeRequest = { mode: PermissionMode; scope: ModeScope; key: string | null }
+type SetModeRequest = { mode: PermissionMode; scope: ChoiceScope; key: string | null }
 
 type SetFunctionLevelRequest = { fn: PermissionFunction; level: FunctionLevel }
 
@@ -118,7 +148,7 @@ type SetFunctionLevelResult =
   | { ok: false; error: 'confirm' | 'gesture' | 'invalid'; message: string }
 
 type SetModeResult =
-  | { ok: true; mode: PermissionMode; scope: ModeScope }
+  | { ok: true; mode: PermissionMode; scope: ChoiceScope }
   | { ok: false; error: 'confirm' | 'gesture' | 'invalid'; message: string }
 
 /** Whether the gate in each running Hermes is proven loaded and answering. */
@@ -139,7 +169,7 @@ interface PermissionState {
   functions: FunctionLevels
   fnGrants: FunctionGrant[]
   ceilings: Record<string, Ceiling>
-  chain: { ok: boolean; records: number; gaps: number }
+  chain: { ok: boolean; records: number; gaps: number; verifying?: true }
   /**
    * A-1: every permission state file that is not in force as written — refused as tampered, deleted, or unverified
    * (legacy / unsealed-written) — with what the store did about it implied by the problem (store.ts). Empty when all
@@ -149,6 +179,7 @@ interface PermissionState {
   /** The project the window has open, resolved the way the plugin resolves it (git root realpath). */
   project: string | null
   enforcement: EnforcementState
+  modeReset: PermissionModeResetView[]
 }
 
 interface SpawnRecord {
@@ -166,12 +197,15 @@ interface AuthorityDeps {
   audit: AuditLog
   signer: PolicySigner
   door: {
-    askPermission: (
+    /** fx17 (lens4-pass M2): the answer with the door's own word on whether the sheet displayed the folder. */
+    askPermissionShown: (
       slug: string,
       permission: DoorPermission,
       key: ConsentPermissionKey,
       reason: string
-    ) => Promise<PermissionDoorOutcome>
+    ) => Promise<{ outcome: PermissionDoorOutcome; shown: boolean }>
+    /** F40: answers once every ask on the sheet that Ignore now covers (`stillAsked` false). */
+    releaseAsks?: (stillAsked: (permission: DoorPermission) => boolean) => void
   } | null
   consent: () => ConsentRecord | null
   paths: PolicyPathsInput
@@ -197,19 +231,58 @@ interface AuthorityDeps {
    */
   keysSealed: boolean
   now?: () => Date
+  /** fx13 (D13): what the confinement launcher learns from an allowed ask — the folder the ask named and how the
+   *  user answered, so the launcher lifts an asking cell for every run in that folder for a time; `shown` says the
+   *  sheet printed the folder, which is what makes it one the user named (lens3-policy H3). Never the command text:
+   *  the launcher cannot verify which command runs (H1). Absent (tests of the authority alone): no pass, and the
+   *  launcher narrows. */
+  /** fx20 (lens5 H2): the folder an ask may name to the user, judged when it is asked (its own spelling, never the home,
+   *  the app's data or a `.git`); null: the sheet names no folder and nothing is listed. `same` says at the answer
+   *  whether it is still that folder. Absent (tests of the authority alone): the ask's folder as named. */
+  askFolder?: (project: string | null) => { project: string; same: () => boolean } | null
+  /** G-98 F42: can this approved shell command run once outside the Seatbelt, and the record of the answer. */
+  /** G28: the Seatbelt is off for this launch's runtimes. Absent reads as on, where the kernel stands before the list. */
+  seatbeltOff?: () => boolean
+  oneShot?: {
+    available: (cwd: string) => boolean
+    issue: (command: string, cwd: string) => boolean
+    fileAvailable?: (file: string, ask?: { link?: string | null; ignore?: boolean }) => boolean
+    /** G23: `ignore`: main itself decided, from the mode it holds, with no sheet. */
+    /** G26: the real file behind a link, seen from main: the runtime's profile refuses it the stat. */
+    fileLinkTarget?: (file: string) => string | null
+    issueFile?: (file: string, by?: 'ignore', link?: string | null) => boolean
+    /** G23-W2: one read of one file, its own kind of row. */
+    issueRead?: (file: string, by?: 'ignore', link?: string | null) => boolean
+    /** G23: the sheet adds a line: this file runs later with the owner's access, or holds keys. */
+    fileRuns?: (file: string) => boolean
+  }
+  pass?: (pass: {
+    project: string | null
+    /** fx17 (lens4-pass M1): the class the user allowed; the launcher lifts project writes from Wp or X, the
+     *  network from N or X, never one from the other. */
+    cls: ActionClass
+    scope: 'once' | 'project' | 'session' | 'standing'
+    shown: boolean
+    /** fx19: the grant this answer made, when it made one (none for a one-time allow). */
+    grantId?: string | null
+  }) => void
 }
 
 function parseSetMode(input: unknown): SetModeRequest | null {
   const raw = input && typeof input === 'object' ? (input as Record<string, unknown>) : {}
   const scope = raw.scope ?? 'standing'
 
-  if (!isPermissionMode(raw.mode) || !['project', 'session', 'standing'].includes(scope as string)) {
+  if (!isPermissionMode(raw.mode) || !['new-session', 'project', 'session', 'standing'].includes(scope as string)) {
     return null
   }
 
   const key = typeof raw.key === 'string' && raw.key.length > 0 && raw.key.length <= 4096 ? raw.key : null
 
-  return { mode: raw.mode, scope: scope as ModeScope, key: scope === 'standing' ? null : key }
+  return {
+    mode: raw.mode,
+    scope: scope as ChoiceScope,
+    key: scope === 'standing' || scope === 'new-session' ? null : key
+  }
 }
 
 function parseSetFunctionLevel(input: unknown): SetFunctionLevelRequest | null {
@@ -220,6 +293,9 @@ function parseSetFunctionLevel(input: unknown): SetFunctionLevelRequest | null {
     ? { fn: raw.fn, level: raw.level }
     : null
 }
+
+/** F40, L2: how long a session counts as running for what asks outside a tool call. */
+const RECENT_CALL_MS = 120_000
 
 const ceilingConsentKey = (cls: ActionClass, named: string | null): ConsentPermissionKey =>
   (named ?? DEFAULT_CEILING_KEY[cls] ?? 'fileWriting') as ConsentPermissionKey
@@ -262,6 +338,34 @@ function fnLevelReason(change: {
     : 'changed at equal strictness: nothing wider in force'
 }
 
+/** One layer of a mode record: the standing mode, or a project's or a session's (absent: not set). */
+function layerOf(record: ModeRecord, scope: ModeScope, key: string | null): PermissionMode | undefined {
+  if (scope === 'standing') {
+    return record.standing
+  }
+
+  const layer = scope === 'project' ? record.projects : record.sessions
+
+  return key !== null && Object.hasOwn(layer, key) ? layer[key] : undefined
+}
+
+/** A copy of `record` with one layer set to `mode`, or taken off (undefined). */
+function withLayer(
+  record: ModeRecord,
+  scope: ModeScope,
+  key: string | null,
+  mode: PermissionMode | undefined
+): ModeRecord {
+  if (scope === 'standing') {
+    return mode === undefined ? record : { ...record, standing: mode }
+  }
+
+  const field = scope === 'project' ? 'projects' : 'sessions'
+  const layer = Object.fromEntries(Object.entries(record[field]).filter(([name]) => name !== key))
+
+  return { ...record, [field]: mode === undefined || key === null ? layer : { ...layer, [key]: mode } }
+}
+
 export function createPermissionAuthority(deps: AuthorityDeps) {
   const now = deps.now ?? (() => new Date())
 
@@ -271,6 +375,41 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
 
   const sealedAtLaunch = deps.keysSealed
   const sealed = () => sealedAtLaunch
+
+  // fx47, the owner's "with Ignore on, the agent still asks": the Keychain setting is off by default, so an unsealed run
+  // is the ordinary run, and it pinned every mode to Manual. Disk cannot be trusted without the sealed key, but main's
+  // memory can: a mode chosen by the owner's own gesture in this run is in force until the app quits. Nothing on disk
+  // reaches this record, so a forged or older mode.json widens nothing, and the next launch starts at Manual.
+  const liveModes: Pick<ModeRecord, 'projects' | 'sessions' | 'standing'> = {
+    standing: DEFAULT_STANDING_MODE,
+    projects: {},
+    sessions: {}
+  }
+
+  /**
+   * Permfix (L3-3): a layer whose broadening is not yet on stable storage AND in the audit reads as it was before, for
+   * the gate, the bar and every publish (a spawn start, a grant click) — in a sealed run the disk already holds the new
+   * file. Also a layer whose broadening failed and could not be rolled back: pinned at its old mode for this run.
+   */
+  const heldBack = new Map<string, { scope: ModeScope; key: string | null; previous: PermissionMode | undefined }>()
+  const layerKey = modeLayerKey
+
+  /** The one record of modes in force: the gate (modeFor), payments (modeOfCaller), the policy the plugin reads, the bar. */
+  const modesInForce = (): ModeRecord => {
+    const read = deps.store.readMode()
+    let record: ModeRecord = sealed() ? read : { ...read, ...liveModes }
+
+    for (const held of heldBack.values()) {
+      record = withLayer(record, held.scope, held.key, held.previous)
+    }
+
+    return record
+  }
+
+  const effectiveOf = (query: Parameters<typeof deps.store.effective>[0]) => modeFromRecord(modesInForce(), query)
+
+  // fx47: the parents a session named on its calls, so a drain and the bar read a session whose id compaction changed.
+  const chains = new Map<string, string[]>()
   const lateOnce = new Map<string, number>()
   const pendingAsks = new Map<string, { askId: string; result: Promise<AskResult> }>()
 
@@ -306,12 +445,15 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
   }
 
   const publish = () => {
-    const record = deps.store.readMode()
+    const record = modesInForce()
 
     deps.signer.publish(
       buildPolicyBody({
-        // Without a sealed key nothing is wider than Manual: no standing, project or session mode, no grant.
-        mode: sealed() ? record : { ...record, standing: 'manual', projects: {}, sessions: {} },
+        // Without a sealed key: this run's own modes (fx47), no grant, nothing read back from disk.
+        mode: record,
+        // fx19, fx20 (lens5 H1): the folders are not modes. The keychain setting is off by default, so unsealed is the
+        // ordinary run, and "Allow this folder" must reach the launcher there too; it lists the folder and nothing else.
+        folders: record.folders ?? [],
         grants: sealed() ? deps.store.readGrants() : [],
         ceilings: ceilingsFrom(deps.consent()),
         protectedPaths: protectedPaths(deps.paths),
@@ -325,10 +467,54 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
     )
   }
 
-  const modeFor = (call: Pick<PluginCall, 'agent' | 'lineage' | 'project'>): PermissionMode =>
-    sealed()
-      ? deps.store.effective({ sessionId: call.agent.session_id, lineage: call.lineage, project: call.project })
-      : 'manual'
+  let ignoreAlertUp = false
+
+  // F40, L2: what asks outside a tool call (payments, the consent verb) carries no session id, yet always follows a
+  // shell or tool call of the session that wants it. So it reads the sessions seen in the last two minutes: Ignore only
+  // when every one of them is in Ignore. Two sessions at once, one of them not, asks: never allows on another's mode.
+  const recentCalls = new Map<string, { at: number; query: Parameters<typeof deps.store.effective>[0] }>()
+
+  /** S6: every call the gate reports, asked or decided alone, keeps its session live and its own query for it. */
+  const noteCall = (call: Pick<PluginCall, 'agent' | 'lineage' | 'project' | 'sessionProject'>) => {
+    const project = call.sessionProject === undefined ? call.project : call.sessionProject
+    const query = { sessionId: call.agent.session_id, lineage: call.lineage, project }
+    const at = Date.now()
+
+    for (const [sessionId, seen] of recentCalls) {
+      if (at - seen.at > RECENT_CALL_MS) {
+        recentCalls.delete(sessionId)
+      }
+    }
+
+    if (call.agent.session_id) {
+      recentCalls.set(call.agent.session_id, { at, query })
+    }
+
+    if (call.agent.session_id && call.lineage?.length) {
+      chains.set(call.agent.session_id, call.lineage)
+    }
+
+    return query
+  }
+
+  const modeFor = (call: Pick<PluginCall, 'agent' | 'lineage' | 'project' | 'sessionProject'>): PermissionMode =>
+    effectiveOf(noteCall(call))
+
+  /** What the bar reads: a session compaction renamed shows the mode it inherits, on the id the window now holds. */
+  const modesShown = (): ModeRecord => {
+    const record = modesInForce()
+    const sessions = { ...record.sessions }
+
+    for (const [tip, chain] of chains) {
+      const from = chain.find(sid => Object.hasOwn(record.sessions, sid))
+
+      if (from && !Object.hasOwn(sessions, tip)) {
+        sessions[tip] = record.sessions[from]
+      }
+    }
+
+    return { ...record, sessions }
+  }
 
   const ceilingFor = (call: Pick<PluginCall, 'ceilingKey' | 'cls'>): Ceiling | undefined => {
     const key = call.ceilingKey ?? DEFAULT_CEILING_KEY[call.cls]
@@ -362,6 +548,68 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
     return result.duplicate ? null : result.record
   }
 
+  /** G2 A5: the one file, by its exact path, where the rule refuses any folder. */
+  const oneFileRoute = (call: PluginCall, mode: PermissionMode): string | null =>
+    (call.tool === 'write_file' || call.tool === 'patch' || call.tool === 'read_file') &&
+    mode !== 'plan' &&
+    call.oneFilePath &&
+    deps.oneShot?.fileAvailable?.(call.oneFilePath, { link: call.oneFileLink ?? null, ignore: mode === 'ignore' })
+      ? call.oneFilePath
+      : null
+
+  /**
+   * G26: where the kernel refuses the runtime a stat it names a link as if it were the file. Main sees the disk: the sheet and
+   * the row take the real target and name both. A link that cannot take the route stays as named: the launcher refuses it in words.
+   */
+  const withLinkSeen = (call: PluginCall, mode: PermissionMode): PluginCall => {
+    const link = call.oneFilePath
+
+    if (!link || call.oneFileLink) {
+      return call
+    }
+
+    const target = deps.oneShot?.fileLinkTarget?.(link)
+
+    return target && target !== link && deps.oneShot?.fileAvailable?.(target, { link, ignore: mode === 'ignore' })
+      ? { ...call, oneFilePath: target, oneFileLink: link }
+      : call
+  }
+
+  const credentialWrite = (call: PluginCall): string | null =>
+    credentialWriteFloor(call.tool, `${call.target}, ${call.oneFilePath ?? ''}`, deps.paths.home)
+
+  /** G28: the runtime's word or main's own judge, as for a write. */
+  const onCredentialRead = (call: PluginCall): boolean =>
+    call.floor === CREDENTIAL_READ_FLOOR ||
+    !!credentialReadFloor(call.tool, call.target, deps.paths.home, () => deps.seatbeltOff?.() ?? false)
+
+  const credentialFloor = (call: PluginCall): string | null =>
+    credentialWrite(call) ?? (onCredentialRead(call) ? CREDENTIAL_READ_FLOOR : null)
+
+  /** G25: main's own judge covers the file tools; the runtime's word adds any other tool that writes a path, like text_to_speech. */
+  const onCredentialList = (call: PluginCall): boolean =>
+    call.floor === CREDENTIAL_WRITE_FLOOR || !!credentialWrite(call)
+
+  /** G23-W2: a read takes a read row, a write a write row, and one answer for a patch covers both of its steps. */
+  const issueOneFile = (call: PluginCall, file: string, by?: 'ignore'): boolean => {
+    const link = call.oneFileLink ?? null
+
+    if (call.tool === 'read_file') {
+      return deps.oneShot?.issueRead?.(file, by, link) ?? false
+    }
+
+    const written = deps.oneShot?.issueFile?.(file, by, link) ?? false
+
+    if (written && call.tool === 'patch') {
+      deps.oneShot?.issueRead?.(file, by, link)
+    }
+
+    return written
+  }
+
+  const oneFileWords = (call: PluginCall, file: string, how: string): string =>
+    `${call.tool === 'read_file' ? 'read' : 'written'} once outside the Seatbelt ${how}: ${file}${call.oneFileLink ? ` (through the link ${call.oneFileLink})` : ''}`
+
   async function askUser(
     call: PluginCall,
     mode: PermissionMode,
@@ -376,32 +624,73 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
     const fnGrant = !!winner?.fn && winner.level === 'askOnce' && !winner.unread
 
     // A Hermes approval is answered `once` only (§2): the app never hands Hermes a session or permanent allow.
-    const scopes = sealed()
-      ? call.pid > 0
-        ? (fnScopes ?? grantScopesFor(call.cls)).filter(scope => scope !== 'project' || call.project)
-        : (['once'] as const)
-      : (['once'] as const)
+    // fx20 (lens5 H2): `call.project` is the runtime's text. The sheet shows it only if it is a folder's own spelling,
+    // and what the user's answer names is that folder, compared by identity when the answer comes.
+    const folder = deps.askFolder
+      ? deps.askFolder(call.project)
+      : call.project
+        ? { project: call.project, same: () => true }
+        : null
 
-    const outcome: PermissionDoorOutcome = deps.door
-      ? await deps.door.askPermission(
+    // G2 A5: the one file, by its exact path, where the rule refuses any folder. Same binding as the command below.
+    const outsideFile = oneFileRoute(call, mode)
+
+    // G24: this answer is about one file. A grant from it would be for a whole class of writes.
+    const scopes =
+      sealed() && !outsideFile && !onCredentialList(call) && !onCredentialRead(call)
+        ? call.pid > 0
+          ? (fnScopes ?? grantScopesFor(call.cls)).filter(scope => scope !== 'project' || folder)
+          : (['once'] as const)
+        : (['once'] as const)
+
+    // G-98 F42: only the shell tool's own text, whole, and only where a launcher can run it. The sheet says so before
+    // the click; the answer records exactly the text it showed, never one the runtime sends later.
+    // S1: a text with something a person cannot read is not offered outside the Seatbelt at all.
+    const outsideOnce =
+      call.tool === 'terminal' &&
+      call.oneShotCwd &&
+      oneShotReadable(call.target) &&
+      deps.oneShot?.available(call.oneShotCwd)
+        ? call.oneShotCwd
+        : null
+
+    const doorAnswer: { outcome: PermissionDoorOutcome; shown: boolean; read?: string | null } = deps.door
+      ? await deps.door.askPermissionShown(
           slug,
           {
             cls: call.cls,
             tool: call.tool,
             target: call.target,
             mode,
-            project: call.project,
+            project: folder?.project ?? null,
             session: call.agent.session_id,
             subagent: call.agent.subagent_id,
-            scopes
+            scopes,
+            outsideOnce,
+            outsideFile,
+            outsideFileRead: call.tool === 'read_file',
+            outsideFileLink: outsideFile ? (call.oneFileLink ?? null) : null,
+            outsideFileRuns:
+              !!outsideFile &&
+              call.tool !== 'read_file' &&
+              [outsideFile, call.oneFileLink].some(file => !!file && deps.oneShot?.fileRuns?.(file) === true),
+            credentialFile: onCredentialList(call),
+            credentialRead: onCredentialRead(call),
+            keychainOff: !sealed()
           },
           ceilingConsentKey(call.cls, call.ceilingKey),
           call.reason
         )
-      : 'busy'
+      : { outcome: 'busy', shown: false }
 
-    const answer: AuditAnswer =
+    const outcome = doorAnswer.outcome
+
+    const heard: AuditAnswer =
       outcome === 'busy' || outcome === 'withdrawn' ? 'deny' : outcome === 'timeout' ? 'timeout' : outcome
+
+    const answeredFolder = folder?.same() ? folder.project : null
+    // An allow for "this project" when the project is no longer what the sheet showed covers this one call, no folder.
+    const answer: AuditAnswer = heard === 'project' && !answeredFolder ? 'once' : heard
 
     if (answer === 'timeout') {
       deps.audit.append({
@@ -425,7 +714,7 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
         fn: winner.fn,
         scope: answer,
         sessionId: answer === 'session' ? call.agent.session_id : null,
-        project: answer === 'project' ? call.project : null
+        project: answer === 'project' ? answeredFolder : null
       })
 
       grantId = grant.id
@@ -447,7 +736,7 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
         cls: call.cls,
         scope: answer,
         sessionId: answer === 'session' ? call.agent.session_id : null,
-        project: answer === 'project' ? call.project : null,
+        project: answer === 'project' ? answeredFolder : null,
         source: 'prompt'
       })
 
@@ -467,6 +756,33 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
       grantId = `once-${asked?.id ?? randomUUID()}`
     }
 
+    if (answer === 'once' || answer === 'project' || answer === 'session' || answer === 'standing') {
+      // fx13 (D13): every allowed answer, `once` included, is a pass for the folder the ask named and a time — never
+      // for the command text, which the launcher cannot verify (lens3-policy H1). The folder counts as one the user
+      // named only when the door says its sheet showed it (H3; fx17 M2: the door's own word, not that a door exists).
+      // The pass carries the class the user allowed (fx17 M1).
+      deps.pass?.({
+        project: answeredFolder,
+        cls: call.cls,
+        scope: answer,
+        shown: doorAnswer.shown && answeredFolder !== null,
+        grantId: answer === 'once' ? null : grantId
+      })
+    }
+
+    const allowedAnswer = answer === 'once' || answer === 'project' || answer === 'session' || answer === 'standing'
+
+    // S1: the row is the hash of what the sheet showed. An Allow from a sheet that did not show this whole text stays an
+    // Allow, and the command stays confined.
+    const oneShot =
+      allowedAnswer &&
+      outsideOnce !== null &&
+      doorAnswer.read === call.target &&
+      (deps.oneShot?.issue(doorAnswer.read, outsideOnce) ?? false)
+
+    const oneFile =
+      allowedAnswer && outsideFile !== null && doorAnswer.read === call.target && issueOneFile(call, outsideFile)
+
     deps.audit.append({
       src: 'door',
       kind: 'answer',
@@ -484,7 +800,11 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
           ? 'too many permission requests are already waiting'
           : outcome === 'withdrawn'
             ? 'withdrawn'
-            : null
+            : oneShot
+              ? `allowed to run once outside the Seatbelt, in ${outsideOnce}`
+              : oneFile && (call.tool === 'read_file' || call.oneFileLink)
+                ? oneFileWords(call, outsideFile ?? '', 'as you allowed')
+                : null
     })
 
     return answer === 'deny'
@@ -493,7 +813,13 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
           grantId: null,
           reason: outcome === 'busy' ? 'too many permission requests are waiting' : 'the owner denied it'
         }
-      : { allowed: true, grantId, reason: `allowed (${answer})` }
+      : {
+          allowed: true,
+          grantId,
+          reason: `allowed (${answer})`,
+          ...(oneShot ? { oneShot: true } : {}),
+          ...(oneFile ? { oneFile: true } : {})
+        }
   }
 
   const sweepAsks = () => {
@@ -555,6 +881,233 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
     }
 
     return states.includes('not-enforced') ? 'not-enforced' : states.includes('starting') ? 'starting' : 'enforced'
+  }
+
+  /** S11: the choice made in an empty chat, by window, from the click. In memory only: it never outlives main or the window. */
+  const windowChoices = new Map<number, { mode: PermissionMode; at: number }>()
+
+  /** The one call of the store's mode writer (lock.test): every mode written, whichever way it was chosen. */
+  const writeLayer = (mode: PermissionMode | null, scope: ModeScope, key: string | null, flush: 'deferred' | 'now') =>
+    deps.store.writeMode(mode, scope, key, flush)
+
+  /** Unsealed, main's own memory is the record in force (fx47); sealed, the file is. */
+  const setLive = (mode: PermissionMode, scope: ModeScope, key: string | null) => {
+    if (sealed()) {
+      return
+    }
+
+    if (scope === 'standing') {
+      liveModes.standing = mode
+    } else if (scope === 'project') {
+      liveModes.projects[key as string] = mode
+    } else {
+      liveModes.sessions[key as string] = mode
+    }
+  }
+
+  /** B2-m1: the layers the sealed launch narrowed for want of a mode_set, until the owner chooses each again. */
+  const modeResets = new Map<string, PermissionModeResetView>()
+
+  const recordModeSet = (mode: PermissionMode, scope: ModeScope, key: string | null) => {
+    const record = deps.audit.append({ src: 'main', kind: 'mode_set', mode, scope, gesture: true, reason: key })
+
+    modeResets.delete(layerKey(scope, key))
+
+    return record
+  }
+
+  /**
+   * A sealed launch trusts mode.json only as far as the audit does. A broadening whose flush AND roll-back both failed
+   * leaves the broader file with no `mode_set` line (the line follows the flush); the next launch must not read it.
+   * A layer broader than its last durable `mode_set` (or than the narrowest default when it has none) is pinned to
+   * that audited mode, the file is put back when the disk lets it, and the reason is recorded.
+   */
+  const distrustUnauditedBroadening = (): void => {
+    if (!sealed()) {
+      return
+    }
+
+    const disk = deps.store.readMode()
+
+    const layers: { scope: ModeScope; key: string | null; mode: PermissionMode }[] = [
+      { scope: 'standing', key: null, mode: disk.standing },
+      ...Object.entries(disk.projects).map(([key, mode]) => ({ scope: 'project' as const, key, mode })),
+      ...Object.entries(disk.sessions).map(([key, mode]) => ({ scope: 'session' as const, key, mode }))
+    ]
+
+    // B2-m2: the newest durable mode_set per layer was gathered by the audit's own open pass: no read here.
+    const audited = deps.audit.lastModeSets()
+
+    for (const { scope, key, mode } of layers) {
+      const id = layerKey(scope, key)
+      const trusted = audited.get(id) ?? (scope === 'standing' ? DEFAULT_STANDING_MODE : undefined)
+
+      if (trusted !== undefined && isNarrowing(trusted, mode)) {
+        continue
+      }
+
+      heldBack.set(id, { scope, key, previous: trusted })
+
+      try {
+        if (writeLayer(trusted ?? null, scope, key, 'now').ok) {
+          heldBack.delete(id)
+        }
+      } catch {
+        // the pin above keeps the audited mode in force for this run
+      }
+
+      const refused = deps.audit.append({
+        src: 'main',
+        kind: 'mode_refused',
+        mode,
+        scope,
+        gesture: false,
+        reason: `mode.json held ${mode} for ${scope}${key === null ? '' : ` ${key}`} with no recorded mode_set; ${trusted ?? 'no mode'} stays in force`
+      })
+
+      // B2-m1: the owner is told once (state().modeReset), until he chooses that layer again or dismisses it.
+      modeResets.set(id, { id: refused.id, scope, key, was: mode, now: trusted ?? null })
+    }
+  }
+
+  distrustUnauditedBroadening()
+
+  /**
+   * Permfix (L2, L3): mode changes run one at a time, in the order main accepted them, so what is in force, the audit
+   * and the policy follow the clicks whatever order the flushes finish in.
+   */
+  let modeChanges: Promise<unknown> = Promise.resolve()
+
+  const serially = <T>(step: () => Promise<T>): Promise<T> => {
+    const run = modeChanges.then(step, step)
+
+    modeChanges = run.catch(() => undefined)
+
+    return run
+  }
+
+  type Settled = { ok: true } | { ok: false; refused: boolean; message: string }
+
+  /**
+   * The file, the live record when unsealed, and the audit line: every mode written, whichever way it was chosen.
+   * `now` (the held choice): durable before it returns, in force and recorded at once.
+   *
+   * `deferred` (setMode), NARROW-FIRST (L3-1, L3-2, L3-3): mode.json is renamed at once and flushed in the thread pool.
+   *  - A narrowing (isNarrowing over MODE_TABLE) is in force and published right after the rename; its audit line
+   *    follows the flush. A failed flush keeps the narrower mode (fail closed) and tells the window it was not saved.
+   *  - Anything else is held back: the layer reads as before until the flush AND the mode_set line are done, then it
+   *    is in force. A failed flush is rolled back on disk and refused; nothing ever published it.
+   * Whatever happens, the policy is published from the record in force once the change settles (`finally`).
+   */
+  const writeInForce = (
+    mode: PermissionMode,
+    scope: ModeScope,
+    key: string | null,
+    flush: 'deferred' | 'now'
+  ): { ok: true; settled: Promise<Settled> } | { ok: false; error: string } => {
+    if (flush === 'now') {
+      const written = writeLayer(mode, scope, key, 'now')
+
+      if (!written.ok) {
+        return written
+      }
+
+      setLive(mode, scope, key)
+      recordModeSet(mode, scope, key)
+
+      return { ok: true, settled: Promise.resolve({ ok: true }) }
+    }
+
+    const layer = layerKey(scope, key)
+    const previous = layerOf(modesInForce(), scope, key)
+    const narrowing = previous !== undefined && isNarrowing(previous, mode)
+    const pinned = heldBack.get(layer)
+
+    if (!narrowing) {
+      heldBack.set(layer, { scope, key, previous })
+    }
+
+    let written: ReturnType<typeof writeLayer>
+
+    try {
+      written = writeLayer(mode, scope, key, 'deferred')
+    } catch (error) {
+      restoreHold(layer, pinned)
+      throw error
+    }
+
+    if (!written.ok) {
+      restoreHold(layer, pinned)
+
+      return written
+    }
+
+    if (narrowing) {
+      heldBack.delete(layer)
+      setLive(mode, scope, key)
+      publish()
+    }
+
+    const durable = written.durable
+
+    const settle = async (): Promise<Settled> => {
+      try {
+        let flushed = true
+
+        try {
+          await durable
+        } catch {
+          flushed = false
+        }
+
+        if (narrowing) {
+          recordModeSet(mode, scope, key)
+
+          return flushed
+            ? { ok: true }
+            : {
+                ok: false,
+                refused: false,
+                message: `${mode} is in force now but could not be saved to disk; it may not survive a restart.`
+              }
+        }
+
+        if (flushed) {
+          try {
+            recordModeSet(mode, scope, key)
+            setLive(mode, scope, key)
+            heldBack.delete(layer)
+
+            return { ok: true }
+          } catch {
+            // the audit could not record it: never in force unrecorded, rolled back below
+          }
+        }
+
+        try {
+          if (writeLayer(previous ?? null, scope, key, 'now').ok) {
+            restoreHold(layer, pinned)
+          }
+        } catch {
+          // the disk keeps the unsaved file; the layer stays pinned at its old mode for this run
+        }
+
+        return { ok: false, refused: true, message: `${mode} could not be saved to disk; the mode was not changed.` }
+      } finally {
+        publish()
+      }
+    }
+
+    return { ok: true, settled: settle() }
+  }
+
+  /** Back to the hold this layer had before the change (a pin from an earlier failed roll-back stays). */
+  const restoreHold = (layer: string, pinned: ReturnType<typeof heldBack.get>) => {
+    if (pinned) {
+      heldBack.set(layer, pinned)
+    } else {
+      heldBack.delete(layer)
+    }
   }
 
   return {
@@ -649,8 +1202,18 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
         reason: `${Math.max(1, lines)} ${what} from Hermes${pid > 0 ? ` pid ${pid}` : ''} could not be verified and were not recorded`
       })
     },
+    /**
+     * S6: the mode for what asks outside a tool call (payments, the consent verb), of the session that called. A caller
+     * with no session, one main never saw, or one with no call in the window is not known to be in any mode: Manual, it
+     * asks. Never read from another session.
+     */
+    modeOfCaller(sessionId: null | string): PermissionMode {
+      const seen = sessionId === null ? undefined : recentCalls.get(sessionId)
+
+      return seen && Date.now() - seen.at <= RECENT_CALL_MS ? effectiveOf(seen.query) : 'manual'
+    },
     /** The ONLY route to mode.json. `gestureOk` is main's own verdict (gesture.ts), never the renderer's claim. */
-    async setMode(input: unknown, gestureOk: boolean): Promise<SetModeResult> {
+    async setMode(input: unknown, gestureOk: boolean, windowId?: number): Promise<SetModeResult> {
       const request = parseSetMode(input)
 
       const refuse = (error: 'confirm' | 'gesture' | 'invalid', message: string): SetModeResult => {
@@ -667,49 +1230,174 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
       }
 
       if (!gestureOk) {
-        return refuse('gesture', 'A permission mode changes only from your own click in icloneOS.')
+        return refuse('gesture', 'A permission mode changes only from your own click or key in icloneOS.')
       }
 
       if (!request) {
         return refuse('invalid', 'Unknown permission mode or scope.')
       }
 
-      if (request.mode === 'ignore' && request.scope === 'standing') {
-        return refuse('invalid', 'Ignore permissions cannot be the standing default.')
+      // S11: a choice for the session a window starts belongs to a window. With none behind the call there is nothing to hold it for.
+      if (request.scope === 'new-session' && windowId === undefined) {
+        return refuse('invalid', 'A choice for a new chat is made from a window.')
       }
 
-      if (request.mode === 'ignore') {
+      // F40 detail: the native alert once, then one touch. The acknowledgement lives in main's own record.
+      if (request.mode === 'ignore' && !deps.store.ignoreAcknowledged()) {
+        // One alert for one change. A second click while it is up gets no second alert and changes nothing.
+        if (ignoreAlertUp) {
+          return refuse('confirm', 'The system dialog for Ignore permissions is already open.')
+        }
+
         let confirmed = false
+
+        ignoreAlertUp = true
 
         try {
           confirmed = deps.confirmIgnore ? await deps.confirmIgnore(request) : false
         } catch {
           confirmed = false
+        } finally {
+          ignoreAlertUp = false
         }
 
         if (!confirmed) {
           return refuse('confirm', 'Ignore permissions was not confirmed on the system dialog.')
         }
+
+        deps.store.acknowledgeIgnore()
       }
 
-      const key = request.scope === 'project' && request.key ? projectRootOf(request.key) : request.key
-      const written = deps.store.writeMode(request.mode, request.scope, key)
+      const result = await serially(async (): Promise<SetModeResult> => {
+        if (request.scope === 'new-session') {
+          windowChoices.set(windowId as number, { mode: request.mode, at: Date.now() })
+          deps.audit.append({
+            src: 'main',
+            kind: 'mode_set',
+            mode: request.mode,
+            scope: 'new-session',
+            gesture: true,
+            reason: `held for window ${windowId}`
+          })
+          publish()
 
-      if (!written.ok) {
-        return refuse('invalid', written.error)
+          return { ok: true, mode: request.mode, scope: 'new-session' }
+        }
+
+        const key = request.scope === 'project' && request.key ? projectRootOf(request.key) : request.key
+        const written = writeInForce(request.mode, request.scope, (key as string | null) ?? null, 'deferred')
+
+        if (!written.ok) {
+          return refuse('invalid', written.error)
+        }
+
+        const settled = await written.settled
+
+        if (!settled.ok) {
+          return settled.refused
+            ? refuse('invalid', settled.message)
+            : { ok: false, error: 'invalid', message: settled.message }
+        }
+
+        // A8: an explicit change of what new chats default to, from this window, replaces what it was holding.
+        if (request.scope !== 'session' && windowId !== undefined) {
+          windowChoices.delete(windowId)
+        }
+
+        return { ok: true, mode: request.mode, scope: request.scope }
+      })
+
+      // F40: "stops everything" includes what is waiting on the sheet right now. A floor never reaches the sheet. Only
+      // once Ignore is durable, recorded and in force; each ask is judged by the mode in force now, so a narrowing
+      // queued behind this change keeps its asks.
+      if (result.ok && result.scope !== 'new-session' && result.mode === 'ignore') {
+        deps.door?.releaseAsks?.(
+          permission =>
+            effectiveOf({
+              sessionId: permission.session,
+              lineage:
+                (permission.session && chains.get(permission.session)) ||
+                (permission.session ? [permission.session] : []),
+              project: permission.project
+            }) !== 'ignore'
+        )
       }
 
+      return result
+    },
+    /**
+     * S11: the session a window started takes the choice main holds for that window. The gesture was judged at the
+     * choice; this call adds nothing to it: the mode comes from main, the choice is single use, it needs real input to
+     * that window since the choice, and it lands only on a session with no mode that has not run.
+     */
+    claimWindowChoice(input: {
+      windowId: number | undefined
+      sessionId: unknown
+      inputAt: number
+    }): { ok: true; mode: PermissionMode } | { ok: false } {
+      const held = input.windowId === undefined ? undefined : windowChoices.get(input.windowId)
+      const { sessionId } = input
+
+      if (!held || typeof sessionId !== 'string' || sessionId.length === 0 || sessionId.length > 4096) {
+        return { ok: false }
+      }
+
+      const refused = (reason: string) => {
+        deps.audit.append({
+          src: 'main',
+          kind: 'mode_refused',
+          mode: held.mode,
+          scope: 'new-session',
+          gesture: false,
+          reason
+        })
+
+        return { ok: false } as const
+      }
+
+      if (input.inputAt <= held.at) {
+        return refused('A held choice is taken only after your own input to that window.')
+      }
+
+      if (
+        Object.hasOwn(modesInForce().sessions, sessionId) ||
+        heldBack.has(layerKey('session', sessionId)) ||
+        chains.has(sessionId) ||
+        recentCalls.has(sessionId)
+      ) {
+        return refused('A held choice lands only on the session the window starts.')
+      }
+
+      windowChoices.delete(input.windowId as number)
+
+      if (!writeInForce(held.mode, 'session', sessionId, 'now').ok) {
+        return refused('The held choice could not be written.')
+      }
+
+      publish()
+
+      return { ok: true, mode: held.mode }
+    },
+    /** S11: what main holds for this window, for its own selector. Null for any other. */
+    windowChoice(windowId: number | undefined): PermissionMode | null {
+      return (windowId !== undefined && windowChoices.get(windowId)?.mode) || null
+    },
+    /** S11: the window closed. Its choice goes with it. */
+    dropWindowChoice(windowId: number): void {
+      windowChoices.delete(windowId)
+    },
+    /** fx20 (lens5 H1): "Allow this folder" and its Remove: the store's folder list, never a mode. After the gesture. */
+    setFolder(folder: string, listed: boolean): void {
+      deps.store.writeFolder(folder, listed)
       deps.audit.append({
         src: 'main',
         kind: 'mode_set',
-        mode: request.mode,
-        scope: request.scope,
+        mode: null,
+        scope: listed ? 'folder listed' : 'folder removed',
         gesture: true,
-        reason: key
+        reason: folder
       })
       publish()
-
-      return { ok: true, mode: request.mode, scope: request.scope }
     },
     /**
      * V3-F2 — the ONLY route to functions.json. A lowering is immediate; a raise needs main's own gesture verdict AND
@@ -740,11 +1428,8 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
       }
 
       // R2-m5: a raise only when the new level is laxer than the row resolves to today, under every mode in effect.
-      const record = deps.store.readMode()
-
-      const inEffect = sealed()
-        ? [record.standing, ...Object.values(record.projects), ...Object.values(record.sessions)]
-        : (['manual'] as PermissionMode[])
+      const record = modesInForce()
+      const inEffect = [record.standing, ...Object.values(record.projects), ...Object.values(record.sessions)]
 
       // Unsealed, a level the clamp cuts back is stored UNCONFIRMED: no dialog was shown, so a later sealed launch keeps
       // it at Manual until the raise is confirmed. Sealed, every write that gets past the dialog is confirmed.
@@ -894,6 +1579,8 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
     },
     /** A decision the plugin made locally from the signed policy (A or R!): recorded once, never re-decided. */
     recordDecision(decision: PluginDecision): AuditRecord | null {
+      noteCall(decision)
+
       return sourced(decision, {
         ...base(decision, decision.mode),
         ...(decision.fn ? { fn: decision.fn } : {}),
@@ -903,23 +1590,27 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
       })
     },
     /** The plugin's ask (Q). Main decides again from its own state; only a real ask reaches the sheet. */
-    ask(call: PluginCall, slug: string): AskStart {
+    ask(fromRuntime: PluginCall, slug: string): AskStart {
       sweepAsks()
 
-      const mode = modeFor(call)
+      const mode = modeFor(fromRuntime)
+      const call = withLinkSeen(fromRuntime, mode)
       const key = callKey(call)
       const lateUntil = lateOnce.get(key)
+
+      // fx32p: a "this project" grant names the folder the sheet showed, the repository's root for a folder inside one.
+      const grantProject = deps.askFolder?.(call.project)?.project ?? call.project
 
       const grant = sealed()
         ? deps.store.matchGrant(call.cls, {
             sessionId: call.agent.session_id,
             lineage: call.lineage,
-            project: call.project
+            project: grantProject
           })
         : null
 
       const lateGrant = !!lateUntil && lateUntil > now().getTime()
-      const query = { sessionId: call.agent.session_id, lineage: call.lineage, project: call.project }
+      const query = { sessionId: call.agent.session_id, lineage: call.lineage, project: grantProject }
       const fnGrants = new Map<PermissionFunction, FunctionGrant | null>()
 
       const fnGrant = (fn: PermissionFunction): FunctionGrant | null => {
@@ -936,7 +1627,7 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
         mode,
         cls: call.cls,
         facts: call.facts,
-        floor: call.floor,
+        floor: call.floor ?? credentialFloor(call),
         ceiling: ceilingFor(call),
         classGranted: !!grant && call.cls !== '$',
         onceGranted: lateGrant,
@@ -955,7 +1646,7 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
             deps.store.matchGrant(part.cls, {
               sessionId: call.agent.session_id,
               lineage: call.lineage,
-              project: call.project
+              project: grantProject
             }) !== null,
           fns: part.fns
         })),
@@ -966,7 +1657,11 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
 
       const fnFields = decision.fn ? { fn: decision.fn, level: decision.level } : {}
 
-      if (decision.outcome !== 'ask') {
+      // G23: no grant or level opens this file's folder, so outside Ignore an allow here still means one sheet and one row.
+      const route = decision.outcome === 'allow' ? oneFileRoute(call, mode) : null
+      const lateAllow = decision.by === 'once'
+
+      if (decision.outcome !== 'ask' && !(route && mode !== 'ignore' && !lateAllow)) {
         if (lateGrant && decision.by === 'once') {
           lateOnce.delete(key)
         }
@@ -983,18 +1678,29 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
         const refusedBy =
           decision.rule === 'function' && decision.fn ? `${decision.fn} is set to ${decision.level}` : null
 
+        // Main's own word on the mode, never the runtime's: this row is what lets the launcher write. A late Allow already
+        // has its row, from the sheet.
+        const issuedInIgnore = !!route && mode === 'ignore' && issueOneFile(call, route, 'ignore')
+        const oneFile = issuedInIgnore || (!!route && lateAllow)
+
         sourced(call, {
           ...base(call, mode),
           ...fnFields,
           kind: decision.outcome === 'allow' ? 'use' : 'refuse',
           grant_id: grantId,
-          reason: decision.outcome === 'refuse' ? `${decision.rule}: ${call.floor ?? refusedBy ?? mode}` : call.reason
+          reason:
+            decision.outcome === 'refuse'
+              ? `${decision.rule}: ${call.floor ?? call.parts?.find(part => part.floor)?.floor ?? refusedBy ?? mode}`
+              : issuedInIgnore
+                ? oneFileWords(call, route ?? '', 'in Ignore permissions')
+                : call.reason
         })
 
         return {
           state: 'decided',
           allowed: decision.outcome === 'allow',
           grantId,
+          ...(oneFile ? { oneFile: true } : {}),
           reason:
             decision.outcome === 'allow'
               ? 'allowed'
@@ -1119,20 +1825,29 @@ export function createPermissionAuthority(deps: AuthorityDeps) {
       return askUser(call, mode, slug, asked).then(result => (result.allowed ? 'once' : 'deny'))
     },
     state(dir?: unknown): PermissionState {
-      const chain = deps.audit.verify()
+      // V-2: the maintained verification (audit.ts `health`), never a walk of the whole log on a read. A record changed
+      // on disk is verified again there and reads RED here exactly as the full verifier reports it.
+      const chain = deps.audit.health()
 
       return {
         sealed: sealed(),
         unconfirmed: [...deps.store.readUnconfirmed()].sort(),
-        mode: deps.store.readMode(),
+        mode: modesShown(),
         grants: deps.store.readGrants(),
         functions: deps.store.readFunctionLevels(),
         fnGrants: deps.store.readFnGrants(),
         ceilings: ceilingsFrom(deps.consent()),
-        chain: { ok: chain.ok, records: chain.records, gaps: chain.gaps },
+        chain: {
+          ok: chain.ok,
+          records: chain.records,
+          gaps: chain.gaps,
+          // Only while the chain is being verified again from disk (RED until it is): absent otherwise.
+          ...(chain.verifying ? { verifying: true } : {})
+        },
         integrity: deps.store.integrity(),
         project: typeof dir === 'string' && dir.length > 0 && dir.length <= 4096 ? projectRootOf(dir) : null,
-        enforcement: enforcement()
+        enforcement: enforcement(),
+        modeReset: [...modeResets.values()]
       }
     },
     /** For the soak and the pane: is a given spawn attested? */
@@ -1227,6 +1942,10 @@ export function parsePluginCall(value: unknown): PluginCall | null {
     floor: text(raw.floor, 200),
     ceilingKey: text(raw.ceilingKey, 64),
     project: text(raw.project),
+    oneShotCwd: text(raw.oneShotCwd),
+    oneFilePath: text(raw.oneFilePath),
+    oneFileLink: text(raw.oneFileLink),
+    ...('sessionProject' in raw ? { sessionProject: text(raw.sessionProject) } : {}),
     lineage: lineage.slice(0, LINEAGE_MAX),
     agent: {
       inft: text(agent.inft, 200),

@@ -137,3 +137,15 @@ describe('every install failure class has a diagnosis and one fix (RTB-6)', () =
     expect(diagnoseInstallFailure({ log: ['ssl.SSLError: [SSL: CERTIFICATE_VERIFY_FAILED]'] }).class).toBe('network')
   })
 })
+
+describe('a settings file that stops the install', () => {
+  it('is its own class and never sends the owner to Repair, which reaches the same stage', () => {
+    const found = diagnoseInstallFailure({
+      error: "Your .env is a link to a file outside the agent's home (/x), and the agent's sandbox cannot read outside its home, so the install did not finish. Replace the link with a plain file, then try again: (umask 077)",
+      stage: 'config'
+    })
+
+    expect(found.class).toBe('homeSettings')
+    expect(found.fix).toBe('retry')
+  })
+})

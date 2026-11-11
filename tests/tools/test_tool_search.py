@@ -163,8 +163,8 @@ class TestClassification:
         assert mcp_name not in names
         assert BRIDGE_TOOL_NAMES <= names
         assert {"terminal", "memory"} <= names
-        # computer_use IS in the curated defer set → behind the bridge.
-        assert "computer_use" not in names
+        # Ruling R2: computer_use is offered directly, once available; a deferred MCP capability still goes behind the bridge.
+        assert "computer_use" in names
 
 
 

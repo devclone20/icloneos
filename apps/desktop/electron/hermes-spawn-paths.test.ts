@@ -764,13 +764,13 @@ const WHY = {
   compat:
     'iclone-compat adoption tooling: the repo’s own spec script under system python3 -B, on a checkout; not Hermes',
   confinement:
-    'V3-G confinement machinery: sandbox-exec / container / log / ps / getconf probes and the confined shell the agent’s tool calls run in',
+    'confinement machinery: sandbox-exec / container / log / ps / getconf probes, the confined shell the agent’s tool calls run in, and the launcher main starts outside any sandbox to start them (runtime python -I -S, the plugin’s launcher script, five env variables, no key): not Hermes',
   doctor:
     'Doctor diagnostics and fix steps: system tools, `python --version`, `hermes doctor` read-only and `hermes config set …`; one-shots, no agent loop',
   gate: 'the gate’s own armed probe (`-s -P -c`, lock flags only, no key, os._exit): no agent loop',
   git: 'git / gh one-shots on a repository (status, log, diff, ls-remote, worktree, clone, archive, PR): not Hermes',
   harness:
-    'test-only harnesses (only test code calls them): the confinement live world; V3-RT asking an interpreter its version before rebuilding the pinned artifact',
+    'test-only harnesses (only test code calls them): the confinement live world; V3-RT asking an interpreter its version before rebuilding the pinned artifact; the v0.0.7 PERF gates building their throwaway fixture (node scripts/perf-v007/make-fixture.mjs, outside the main.ts/preload.ts bundle graph)',
   install:
     'the first-run / repair installer stages (install.sh / install.ps1, --non-interactive: setup and gateway install are skipped)',
   probe:
@@ -804,9 +804,17 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
   ],
   compat: ['iclone-compat/adoption.ts upstreamDay 328154dfe10a'],
   confinement: [
-    'iclone-confinement/backend-seatbelt.ts spawn 848f4aad4a65',
+    'iclone-confinement/backend-seatbelt.ts spawn fc31122a8ff0',
+    // CF1: the F7 guard's full-scan worker thread: the bundled walk script read from beside the main bundle, or the
+    // TypeScript source beside it; it runs only hardlinks-walk.ts (node:fs), with an empty env, and posts records.
+    // I7 (F-8): both carry resourceLimits, the heap cap (WALK_WORKER_HEAP_MB); it only bounds the worker's own heap.
+    'iclone-confinement/hardlinks-walker.ts startWalkWorker 93b2bbc4061c',
+    'iclone-confinement/hardlinks-walker.ts startWalkWorker d9900039f3c3',
+    // FSEV: the F7 guard's own FSEvents addon, by one of two fixed paths (iclone-fsevents.ts addonCandidates).
+    'iclone-confinement/iclone-fsevents.ts loadIcloneFsevents 4ad2963c3c82',
+    'iclone-confinement/index.ts ensureLauncher ec934a6a8628',
     'iclone-confinement/index.ts xcrunCacheFile cbfdec72e4bb',
-    'iclone-confinement/ipc.ts registerConfinement 2a82bb9a548a',
+    'iclone-confinement/launcher.ts launch 5d6fa468688f',
     'iclone-confinement/probe.ts probeContainer 46034aa8f4fe',
     'iclone-confinement/probe.ts probeSeatbelt b06b79a783da',
     'iclone-confinement/probe.ts probeSeatbelt b135d4665680',
@@ -847,7 +855,7 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-compat/runtime-git.ts repoGit d2dc5ebecaa2',
     'iclone-compat/runtime-git.ts runtimeInstallTip 20763f9ff2bd',
     'iclone-ownership.ts archive b7fa7171076e',
-    'iclone-ownership.ts runGh c92c85fdec69',
+    'iclone-ownership.ts runGh c6875145d235',
     'iclone-pane-remote/probe.ts branchOf 7b9b8b453317',
     'iclone-updates.ts git d14653fa0201',
     'lib/git.ts runGit 7f44c977b1e0',
@@ -858,16 +866,26 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-confinement/live-harness.ts createLiveWorld 4e8065348828',
     'iclone-runtime-integrity.test-helpers.ts canBuildPinnedArtifact fb0094303dd8',
     'iclone-runtime-integrity.test-helpers.ts runtimeFixture efa4a6634f5a',
-    'iclone-confinement/live-harness.ts runPlain 522fcb9408a0'
+    'iclone-confinement/live-harness.ts runPlain 522fcb9408a0',
+    'iclone-confinement/runtime-live-harness.ts collectDenials f8437cdf6a53',
+    'iclone-confinement/runtime-live-harness.ts createRuntimeWorld 5461c4e23f90',
+    'iclone-confinement/runtime-live-harness.ts packagedRuntime dcd4fc633008',
+    'iclone-confinement/runtime-live-harness.ts pmEnvironment edc4bf7ad818',
+    'iclone-confinement/runtime-live-harness.ts spawnRun 060f107eb239',
+    'iclone-confinement/launcher-live-harness.ts createLauncherWorld c29d0a8ee7e6',
+    'iclone-confinement/launcher-live-harness.ts createLauncherWorld f745bfa9cf5a',
+    'iclone-confinement/launcher-live-harness.ts run b94e08beadd0',
+    'perf-v007/gate-helpers.ts makeFixture e16f5e206ba0'
   ],
-  install: ['bootstrap-runner.ts spawnBash 15c5a3f0c653', 'bootstrap-runner.ts spawnPowerShell fe408f5ca09a'],
+  install: ['bootstrap-runner.ts spawnBash 1ab403662ca8', 'bootstrap-runner.ts spawnPowerShell fe408f5ca09a'],
   probe: [
     'main/executables.ts findSystemPython 1737b10074ff',
+    'main/iclone-gate.ts runtimeFacts 0e1a1b7fe2d0',
     'main/managed-ssh-update.ts spawnPoolBackend 6e63cde75e03',
     'main/start-hermes.ts connectionPromise 82a5b4c26962',
     'main/updates.ts isActiveRuntimeUsable 76496a28bbee',
-    'main/updates.ts resolveHermesBackend d111ba4ee0d3',
     'main/updates.ts resolveHermesBackend b594a284f6c9',
+    'main/updates.ts resolveHermesBackend d111ba4ee0d3',
     'windows-hermes-path.ts resolveVenvHermesCommand 4c8b69b9010a'
   ],
   pty: [
@@ -886,6 +904,8 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'ssh-connection.ts runSsh a04afb368a49'
   ],
   system: [
+    // F43: /usr/bin/osascript with a fixed JXA preflight, env only PATH=/usr/bin:/bin, 4 s cap, read-only: nothing from the renderer.
+    'main/setup-ipc.ts freshScreenStatus 4cd1c91a97a7',
     // V3-RT-B r2: one `/bin/ps` of the process table (no shell) — the install watchdog's CPU-time probe.
     'install-liveness.ts sampleTreeCpu 0477ad2ee9dc',
     'backend-claim.ts processStartMarker 4fb75fef0a94',
@@ -927,8 +947,6 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'venv-blocker-scan.ts stopSafeVenvBlockers 080e9420e569'
   ],
   forward: [
-    'iclone-diagnostics-file.ts read f21bcae69f63',
-    'iclone-doctor-main.ts read f20007f49164',
     'agent-update.ts ensureFullPreUpdateBackup eaa6ff34ed3c',
     'backend-claim.ts execText 98361ea0d7e6',
     'backend-probes.ts canImportHermesCli 14cae9cb73b8',
@@ -944,12 +962,15 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'git-review-ops.ts reviewShipInfo 70a9c1cd49c8',
     'git-review-ops.ts runGh 0b9ddc0ea7ea',
     'iclone-claude-code.ts defaultExec 54a2db43ddf8',
-    'iclone-confinement/index.ts createConfinement 61a4fb61e491',
-    'iclone-confinement/members.ts createMemberProbe 59e66abea64b',
+    'iclone-confinement/index.ts currentProbe 33f9ebbd19c1',
+    'iclone-confinement/launcher.ts spawn 1c878270cf35',
+    'iclone-confinement/members.ts createMemberProbe 7c2d9d18a0d6',
     'iclone-confinement/probe.ts runFile 755ad63d84db',
+    'iclone-diagnostics-file.ts read f21bcae69f63',
     'iclone-doctor-checks.ts execAbsolute 45b7f816b7d7',
     'iclone-doctor-checks.ts interpreterVersion a5abcdd7d2ec',
     'iclone-doctor-fixes.ts runStep 40ba0f99e98d',
+    'iclone-doctor-main.ts read f20007f49164',
     'iclone-hermes-plugins.ts ensureIcloneHermesPlugins eebc30c36c1c',
     'iclone-ownership.ts applyDeactivation 358a50fc6e98',
     'iclone-ownership.ts applyDeactivation e0259db21478',
@@ -959,9 +980,10 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-pane-remote/probe.ts runFile 3a4016461683',
     'main/executables.ts backendSupportsServe 0d1c893b6526',
     'main/executables.ts getBackendArgsForRuntime bcacf7675e2c',
+    'main/iclone-gate.ts prepareHermesSpawn 7cfe24a437c3',
     'main/iclone-gate.ts probe 40c9200fcb97',
     'shell-path.ts runProbe b136afc56cc8',
-    'update-runtime-align.ts ensureCuratedRuntimeConfig f7223e5d499f',
+    'update-runtime-align.ts ensureCuratedRuntimeConfig af753e2675ff',
     'update-runtime-align.ts spawnCapped 05d3a399ed9a',
     'updater-process.ts spawnUpdaterProcess 079cebda2add'
   ],
@@ -978,6 +1000,8 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     // V3-RT-B RTB-6: a fixed macOS Settings pane (Network / Storage) for an install fix, from a closed enum.
     'main/agent-runtime-status.ts openAgentRuntimeFix 207102cfebbd',
     // V3-ON: the Set up step opens the Privacy / Notifications pane its row names — URLs fixed in iclone-setup.ts.
+    // F43: CuaDriver's own two Privacy panes, from a closed table behind Object.hasOwn: the renderer names a key, never a URL.
+    'iclone-setup.ts actOnSetupSystemItem 43456230c51f',
     'iclone-setup.ts actOnSetupSystemItem 5a04eef0f056',
     'main.ts openExternal b294026502a3',
     'main.ts openFile d08ce94bb111',
@@ -1300,3 +1324,4 @@ export function supportsServe(backend: { command: string }) { const prefix = ['-
     expect(key(`const bin = '/rt/venv/bin/python'\nspawn(bin, ['status'])`)).not.toBe(base)
   })
 })
+

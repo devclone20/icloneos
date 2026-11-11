@@ -73,6 +73,7 @@ export const install: Translations['install'] = {
   recovery: {
     diagnosis: {
       cancelled: '安装已取消。',
+      homeSettings: 'The install stopped at one of your settings files.',
       disk: '磁盘可用空间不足，无法完成安装。',
       integrity: '下载的文件与预期指纹不符，因此未被使用。',
       interpreter: '缺少智能代理所需的 Python 解释器。',

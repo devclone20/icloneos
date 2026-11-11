@@ -16,6 +16,7 @@ import pytest
 
 import hermes_cli.auth as auth_mod
 import hermes_cli.auth_codex as auth_codex
+from tests.chatgpt_token_fixture import chatgpt_jwt
 from hermes_cli.auth import (
     AuthError,
     _codex_usage_probe_url,
@@ -34,6 +35,7 @@ def _clear_probe_cache():
 
 
 def _jwt(claims: dict) -> str:
+    claims = {"iss": "https://auth.openai.com", **claims}  # a real ChatGPT token names its issuer
     def _part(payload: dict) -> str:
         raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -147,7 +149,7 @@ def _exhausted_pool_store(now=None):
                     "auth_type": "oauth",
                     "priority": 0,
                     "source": "device_code",
-                    "access_token": "tok-quota",
+                    "access_token": chatgpt_jwt("tok-quota"),
                     "last_status": "exhausted",
                     "last_status_at": now,
                     "last_error_code": 429,
@@ -206,7 +208,7 @@ def _pool_only_rate_limited_store(now=None):
                     "auth_type": "oauth",
                     "priority": 0,
                     "source": "device_code",
-                    "access_token": "tok-quota",
+                    "access_token": chatgpt_jwt("tok-quota"),
                     "last_status": "exhausted",
                     "last_status_at": now,
                     "last_error_code": 429,
@@ -235,7 +237,7 @@ def test_resolver_recovers_when_probe_confirms_reset(tmp_path, monkeypatch):
     )
 
     resolved = resolve_codex_runtime_credentials()
-    assert resolved["api_key"] == "tok-quota"
+    assert resolved["api_key"] == chatgpt_jwt("tok-quota")
     assert resolved["source"] == "credential_pool"
 
     store = json.loads((hermes_home / "auth.json").read_text())
@@ -250,13 +252,13 @@ def test_resolver_selects_entry_with_expired_millisecond_reset(tmp_path, monkeyp
     now = time.time()
     store = _pool_only_rate_limited_store(now)
     main = store["credential_pool"]["openai-codex"][0]
-    main["access_token"] = "tok-main"
+    main["access_token"] = chatgpt_jwt("tok-main")
     main["last_error_reset_at"] = (now - 3600) * 1000
     reserve = dict(main)
     reserve.update(
         {
             "id": "cred-reserve",
-            "access_token": "tok-reserve",
+            "access_token": chatgpt_jwt("tok-reserve"),
             "priority": 1,
             "last_error_reset_at": now + 886,
         }
@@ -270,7 +272,7 @@ def test_resolver_selects_entry_with_expired_millisecond_reset(tmp_path, monkeyp
 
     resolved = resolve_codex_runtime_credentials()
 
-    assert resolved["api_key"] == "tok-main"
+    assert resolved["api_key"] == chatgpt_jwt("tok-main")
     assert resolved["source"] == "credential_pool"
 
 

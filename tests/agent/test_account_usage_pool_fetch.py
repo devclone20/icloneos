@@ -93,6 +93,8 @@ def test_read_only_fetch_routes_to_entries_own_host_and_parses(monkeypatch, tmp_
                             "read-only per-credential fetch must never consult the singleton resolver")))
     token = _codex_jwt("acct-9", "user-9")
     with _LoopbackUsageServer() as server:
+        # A login reaches a proxy only when HERMES_CODEX_BASE_URL names it (R43 b): this is that proxy.
+        monkeypatch.setenv("HERMES_CODEX_BASE_URL", server.url)
         server.responses[token] = (200, _usage_payload(session_used=44.0))
         snapshot = fetch_account_usage(
             "openai-codex", base_url=server.url, api_key=token, read_only=True, identity_id="codex:acct-9:user-9")
@@ -119,6 +121,8 @@ def test_read_only_401_raises_and_never_retries_with_rotation(monkeypatch, tmp_p
 
     token = _codex_jwt("acct-1", "user-1")
     with _LoopbackUsageServer() as server:
+        # A login reaches a proxy only when HERMES_CODEX_BASE_URL names it (R43 b): this is that proxy.
+        monkeypatch.setenv("HERMES_CODEX_BASE_URL", server.url)
         server.responses[token] = (401, {"error": "unauthorized"})
         monkeypatch.setattr(account_usage, "_resolve_codex_usage_credentials",
                             lambda base_url, api_key, **kw: (api_key, base_url, None))
@@ -176,6 +180,8 @@ def test_read_only_fetch_remembered_under_identity_slot(monkeypatch, tmp_path):
     _snapshots.clear()
     token = _codex_jwt("acct-7", "user-7")
     with _LoopbackUsageServer() as server:
+        # A login reaches a proxy only when HERMES_CODEX_BASE_URL names it (R43 b): this is that proxy.
+        monkeypatch.setenv("HERMES_CODEX_BASE_URL", server.url)
         server.responses[token] = (200, _usage_payload(session_used=66.0))
         fetch_account_usage("openai-codex", base_url=server.url, api_key=token,
                             read_only=True, identity_id="codex:acct-7:user-7")

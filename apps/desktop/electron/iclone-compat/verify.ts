@@ -1,4 +1,4 @@
-// Contract verification (RESUME/contracts/P4_upstream.md §3.2 verdict, §3.4 rules): the app's consumer lock against one
+// Contract verification (the P4 upstream contract §3.2 verdict, §3.4 rules): the app's consumer lock against one
 // or more provider specs (served.py spec@1). Pure and synchronous; the CLI at the bottom is the gate's E4 entry point.
 import fs from 'node:fs'
 import path from 'node:path'

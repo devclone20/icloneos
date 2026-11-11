@@ -26,7 +26,7 @@ def _wire(monkeypatch, commands):
     monkeypatch.delenv("AGENT_BROWSER_PROFILE", raising=False)
     monkeypatch.setattr(browser, "_is_camofox_mode", lambda: False)
     monkeypatch.setattr(browser, "_blocked_private_page_action", lambda *a: None)
-    monkeypatch.setattr(session, "_browser_command_preflight", lambda: {"browser_cmd": "agent-browser"})
+    monkeypatch.setattr(session, "_browser_command_preflight", lambda *_: {"browser_cmd": "agent-browser"})
     monkeypatch.setattr(session, "_get_session_info", lambda *a: {"session_name": "review", "cdp_url": None, "features": {"local": True}})
     monkeypatch.setattr(session._cloud, "_get_browser_engine", lambda: "chrome")
     monkeypatch.setattr(session._cloud, "_is_headed_mode", lambda: True)

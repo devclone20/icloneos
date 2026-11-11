@@ -129,6 +129,19 @@ def install_cua_driver(upgrade: bool = False, show_installer_progress: bool = Tr
 
     if not binary:
         return _fail("    PM did not select a usable cua-driver executable.")
+    from tools.computer_use.cua_backend_driver import _door_module
+
+    if binary == _door_module().COMMAND:
+        # G2 A3: the Seatbelt on: this process may not exec a driver or lsregister. The launcher's signature check is
+        # what decides, and it starts the app by path, so nothing needs registering.
+        from tools.computer_use.permissions import _door_finds_driver
+
+        seen: dict = {}
+        if not _door_finds_driver(binary, seen):
+            return _fail(f"    {seen.get('error') or _door_module().ABSENT}")
+        if show_installer_progress:
+            _print_success("    cua-driver ready: signed, and the launcher can reach it.")
+        return True
     _CUA_DRIVER_CONTRACT_CACHE.clear()
     contract = _cua_driver_contract_status(binary)
     if not contract.get("ready"):

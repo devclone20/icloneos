@@ -1,5 +1,5 @@
 /* iclone design tokens — the one home of raw values (plan AD8), written on the
-   frozen scale (RESUME/contracts/P5_scale.md, gates/P5/scale.json).
+   frozen scale (the P5 scale contract).
    L0 primitives  hues, the shared alpha ladder, radius, elevation and stroke
                   geometry, blur, type, motion. The only raw values.
    L1 semantic    the 30 roles, one block per skin plus the field variants,
@@ -128,6 +128,8 @@
   --ic-focus-ring: color-mix(in srgb, var(--ic-gold-500) var(--ic-a25), transparent);
   --ic-danger: var(--ic-red-200);
   --ic-danger-soft: color-mix(in srgb, var(--ic-rose-500) var(--ic-a14), transparent);
+  /* Danger as running text on --ic-danger-soft, where --ic-danger alone is 3.18:1 on paper (callout-contrast.test.tsx). */
+  --ic-danger-ink: color-mix(in srgb, var(--ic-danger) var(--ic-a60), var(--ic-text-1));
   --ic-success: var(--ic-green-400);
   --ic-success-soft: color-mix(in srgb, var(--ic-green-300) var(--ic-a14), transparent);
   --ic-warning: var(--ic-amber-300);

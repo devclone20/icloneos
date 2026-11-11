@@ -75,7 +75,8 @@ def ask(argv):
     if home is None:
         return NOT_AVAILABLE, json.dumps({"kind": "refused", "reason": "not_ready",
                                           "detail": "this session's profile folder cannot be read"}) + "\n", ""
-    line = json.dumps({"v": PROTOCOL, "token": token, "home": home, "argv": argv}) + "\n"
+    line = json.dumps({"v": PROTOCOL, "token": token, "home": home, "argv": argv,
+                       "session": os.environ.get("HERMES_SESSION_ID")}) + "\n"
     del token
     try:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as conn:

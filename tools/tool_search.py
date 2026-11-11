@@ -586,6 +586,19 @@ def resolve_underlying_call(args: Dict[str, Any]) -> Tuple[Optional[str], Dict[s
     return name, raw_args, None
 
 
+def tool_not_in_session(args: Any, tool_defs: Iterable[Dict[str, Any]]) -> Optional[str]:
+    """``tool_call`` named one real tool that this session does not hold. "Call it directly" (:func:`not_deferrable_error`,
+    which knows no session) would send the model to a tool it does not have, so it gets the scope's own answer."""
+    entries, err = normalize_tool_call_entries(args)
+    defs = list(tool_defs or [])
+    if err or len(entries) != 1 or not defs:
+        return None
+    name = entries[0]["name"]
+    if (name not in _core_tool_names() and _registry_entry(name) is None) or name in set(_tool_def_names(defs)):
+        return None
+    return out_of_scope_reason(name) or f"'{name}' is not available in this session. Use tool_search to find tools you can call."
+
+
 __all__ = [
     "TOOL_SEARCH_NAME", "TOOL_DESCRIBE_NAME", "TOOL_CALL_NAME", "BRIDGE_TOOL_NAMES",
     "ToolSearchConfig", "CatalogEntry", "AssemblyResult", "load_config", "is_deferrable_tool_name",

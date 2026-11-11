@@ -140,17 +140,49 @@ const kinds = (l: ReturnType<typeof ledger>) => l.read().records.map(record => r
 const leftovers = () => fs.readdirSync(path.dirname(file)).filter(name => name.endsWith('.tmp'))
 
 describe('crash safety (M-D)', () => {
-  it('a kill before the rename leaves the old ledger whole; the next start drops the temp file and writes on', () => {
+  // L4-04: an append no longer replaces the file, so the kill that matters is the one before the record's write. A
+  // kill before a rename (the torn recovery and Repair still replace the file) leaves a temp file: the next case.
+  it('a kill before the append leaves the old ledger whole; the next start writes on', () => {
     const l = ledger()
 
     l.append({ kind: 'online', gesture: true })
 
     const before = fs.readFileSync(file, 'utf8')
+    const headBefore = fs.readFileSync(headFileOf(file), 'utf8')
 
     const killed = createLedger({
       file,
-      beforeRename: () => {
+      beforeAppend: () => {
         throw new Error('SIGKILL')
+      }
+    })
+
+    expect(killed.append({ kind: 'decline', jobId: '7' })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8')).toBe(before)
+    expect(fs.readFileSync(headFileOf(file), 'utf8')).toBe(headBefore)
+    expect(leftovers()).toHaveLength(0)
+
+    const next = ledger()
+
+    expect(next.append({ kind: 'decline', jobId: '7' })).not.toBeNull()
+    expect(next.read()).toMatchObject({ ok: true })
+    expect(kinds(next)).toEqual(['online', 'decline'])
+  })
+
+  it('a kill before a whole-file rename (the torn recovery) leaves the old ledger whole; the next start drops the temp file', () => {
+    const l = ledger()
+
+    l.append({ kind: 'online', gesture: true })
+    fs.appendFileSync(file, '{"v":1,"seq":2,')
+
+    const before = fs.readFileSync(file, 'utf8')
+
+    const killed = createLedger({
+      file,
+      beforeRename: (_temp, target) => {
+        if (target === file) {
+          throw new Error('SIGKILL')
+        }
       }
     })
 
@@ -163,7 +195,7 @@ describe('crash safety (M-D)', () => {
     expect(leftovers()).toHaveLength(0)
     expect(next.append({ kind: 'decline', jobId: '7' })).not.toBeNull()
     expect(next.read()).toMatchObject({ ok: true })
-    expect(kinds(next)).toEqual(['online', 'decline'])
+    expect(kinds(next)).toEqual(['online', 'gap', 'decline'])
   })
 
   it('a kill between the ledger rename and the head write loses nothing; the next write heals the head', () => {
@@ -363,5 +395,49 @@ describe('K28 n1: the crash window is exactly one record', () => {
     const gap = createLedger({ file }).repair()
 
     expect(gap?.note).toContain('records 3..5 are unverified')
+  })
+})
+
+describe('L4-04: the one-line append keeps the chain as strong as a whole-file rewrite', () => {
+  it('appends in order, one line each; the cached read equals the file read from genesis', async () => {
+    const l = ledger()
+    const sizes: number[] = []
+
+    for (let i = 0; i < 30; i += 1) {
+      expect(l.append({ kind: i % 2 ? 'decline' : 'offer', jobId: String(i) })?.seq).toBe(i + 1)
+      sizes.push(fs.statSync(file).size)
+    }
+
+    expect(sizes.every((size, i) => i === 0 || size > sizes[i - 1])).toBe(true)
+    expect(l.read()).toEqual(readLedger(file))
+    expect(JSON.parse(fs.readFileSync(headFileOf(file), 'utf8'))).toMatchObject({ seq: 30 })
+    await l.flush()
+  })
+
+  it('a record tampered after a cached read is caught, and nothing is appended after it', () => {
+    const l = ledger()
+
+    l.append({ kind: 'level', level: 'L1', gesture: true })
+    l.append({ kind: 'earn', jobId: '5', micros: 1 })
+    l.append({ kind: 'offer', jobId: '6' })
+    expect(l.read().ok).toBe(true)
+
+    const tampered = fs.readFileSync(file, 'utf8').replace('"micros":1,', '"micros":9,')
+
+    fs.writeFileSync(file, tampered)
+    expect(l.read()).toMatchObject({ ok: false, problem: 'line', brokenAt: 2 })
+    expect(levelOf(l.read())).toBe('L0')
+    expect(l.append({ kind: 'approve', jobId: '6' })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8')).toBe(tampered)
+  })
+
+  it('a write between the verify and the append is not appended after', () => {
+    const l = ledger()
+
+    l.append({ kind: 'online', gesture: true })
+    expect(l.read().ok).toBe(true)
+    fs.appendFileSync(file, 'garbage\n')
+    expect(l.append({ kind: 'offline' })).toBeNull()
+    expect(fs.readFileSync(file, 'utf8').endsWith('garbage\n')).toBe(true)
   })
 })

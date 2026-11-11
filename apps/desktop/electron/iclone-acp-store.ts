@@ -24,8 +24,8 @@ export function isSafeSlug(slug: unknown): slug is string {
 }
 
 /** Write `data` to `file` through a sibling tmp file and one rename (lib/atomic-write); owner-only by default. */
-export function writeFileAtomic(file: string, data: string, mode = 0o600): void {
-  writeFileAtomicSync(file, data, { mode, dirMode: 0o700 })
+export function writeFileAtomic(file: string, data: string, mode = 0o600, durable = true): void {
+  writeFileAtomicSync(file, data, { mode, dirMode: 0o700, durable })
 }
 
 /** A JSON file that validates, or null (missing, unreadable, malformed, wrong shape). */

@@ -23,6 +23,8 @@ export interface AppNotification {
   title?: string
   message: string
   detail?: string
+  /** Outlives clearNotifications: for a reason the reconnect's own transcript reload must not wipe. */
+  survivesClear?: boolean
   action?: NotificationAction
   onDismiss?: () => void
   createdAt: number
@@ -38,6 +40,8 @@ export interface NotificationInput {
   title?: string
   message: string
   detail?: string
+  /** Outlives clearNotifications: for a reason the reconnect's own transcript reload must not wipe. */
+  survivesClear?: boolean
   action?: NotificationAction
   onDismiss?: () => void
   durationMs?: number
@@ -167,6 +171,7 @@ export function notify(input: NotificationInput): string {
     title: input.title,
     message: input.message,
     detail: input.detail,
+    survivesClear: input.survivesClear,
     action: input.action,
     onDismiss: input.onDismiss,
     createdAt: Date.now(),
@@ -209,15 +214,17 @@ export function dismissNotification(id: string) {
 }
 
 export function clearNotifications() {
-  for (const timer of timers.values()) {
-    window.clearTimeout(timer)
+  const all = $notifications.get()
+  const cleared = all.filter(item => !item.survivesClear)
+
+  for (const item of cleared) {
+    window.clearTimeout(timers.get(item.id))
+    timers.delete(item.id)
   }
 
-  timers.clear()
-  const all = $notifications.get()
-  $notifications.set([])
+  $notifications.set(all.filter(item => item.survivesClear))
 
-  for (const item of all) {
+  for (const item of cleared) {
     item.onDismiss?.()
   }
 }

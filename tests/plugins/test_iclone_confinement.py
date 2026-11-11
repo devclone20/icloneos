@@ -20,6 +20,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN_DIR = ROOT / "plugins" / "iclone-confinement"
+from hermes_cli import iclone_policy_env  # noqa: E402
+
 PKG = "hermes_plugins.iclone_confinement"
 LIVE = platform.system() == "Darwin" and os.path.exists("/usr/bin/sandbox-exec")
 
@@ -42,6 +44,8 @@ def _load(env: dict | None = None):
         sys.modules["hermes_plugins"] = ns
     saved = {k: os.environ.get(k) for k in (env or {})}
     os.environ.update(env or {})
+    # The plugin reads main's hand-over from the exec copy: here that copy is what this load was given.
+    iclone_policy_env._reset_for_tests({k: v for k, v in os.environ.items() if k.startswith("ICLONE_")})
     try:
         spec = importlib.util.spec_from_file_location(PKG, PLUGIN_DIR / "__init__.py", submodule_search_locations=[str(PLUGIN_DIR)])
         mod = importlib.util.module_from_spec(spec)
@@ -50,11 +54,26 @@ def _load(env: dict | None = None):
         spec.loader.exec_module(mod)
         return mod
     finally:
+        iclone_policy_env._reset_for_tests()
         for k, v in saved.items():
             if v is None:
                 os.environ.pop(k, None)
             else:
                 os.environ[k] = v
+
+
+def _load_permissions_for_fx19():
+    """iclone-permissions' module-level helpers beside a loaded confinement plugin; nothing of its hook runs."""
+    name = "hermes_plugins.iclone_permissions"
+    for loaded in [n for n in sys.modules if n.startswith(name)]:
+        del sys.modules[loaded]
+    folder = ROOT / "plugins" / "iclone-permissions"
+    spec = importlib.util.spec_from_file_location(name, folder / "__init__.py", submodule_search_locations=[str(folder)])
+    mod = importlib.util.module_from_spec(spec)
+    mod.__package__ = name
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _sub(mod, name: str):
@@ -145,6 +164,38 @@ class TestCore:
         assert core.acceptable_project_root(str(home / "dev" / "app"), index)
         for bad in ["/", str(tmp_path), str(home), str(home / "Library" / "x"), str(home / ".ssh"), "rel", None]:
             assert not core.acceptable_project_root(bad, index), bad
+
+    def test_fx18_a_refused_root_says_which_rule_and_the_bool_is_the_same_rule(self, tmp_path):
+        home = tmp_path / "home"
+        (home / "dev" / "app").mkdir(parents=True)
+        core, index = self.index(tmp_path, home)
+        assert core.project_root_refusal(str(home / "dev" / "app"), index) is None
+        assert "home folder" in core.project_root_refusal(str(home), index)
+        assert "home folder" in core.project_root_refusal(str(tmp_path), index)
+        assert "~/Library" in core.project_root_refusal(str(home / "Library" / "x"), index)
+        assert "denies" in core.project_root_refusal(str(home / ".ssh"), index)
+        assert ".git" in core.project_root_refusal(str(home / "dev" / "app" / ".git" / "hooks"), index)
+        assert "absolute" in core.project_root_refusal("rel", index)
+        for folder in [str(home / "dev" / "app"), str(home), "rel", None]:
+            assert core.acceptable_project_root(folder, index) == (core.project_root_refusal(folder, index) is None)
+
+    def test_fx18_f3_the_scratch_git_config_is_seeded_once_with_the_two_values_only(self, tmp_path, monkeypatch):
+        core = _sub(_load({**ACTIVE_ENV, "ICLONE_GIT_USER_NAME": 'Alex "Q" Rider\n', "ICLONE_GIT_USER_EMAIL": "a@example.invalid"}), "core")
+        assert "ICLONE_GIT_USER_NAME" not in os.environ and "ICLONE_GIT_USER_EMAIL" not in os.environ
+        scratch = tmp_path / "scratch"
+        scratch.mkdir()
+        path = core.seed_scratch_git_config(str(scratch))
+        text = (scratch / ".gitconfig").read_text()
+        assert path == str(scratch / ".gitconfig")
+        assert text == '[user]\n\tname = "Alex \\"Q\\" Rider"\n\temail = "a@example.invalid"\n'
+        assert oct(os.stat(path).st_mode & 0o777) == "0o600"
+        # The agent's own `git config --global` lands in this file: a second environment never overwrites it.
+        (scratch / ".gitconfig").write_text("[user]\n\tname = agent\n")
+        assert core.seed_scratch_git_config(str(scratch)) == path
+        assert (scratch / ".gitconfig").read_text() == "[user]\n\tname = agent\n"
+        # No identity in main's config: nothing is written, and git's own fallback is what the commit gets.
+        core.trust_git_identity("", "")
+        assert core.seed_scratch_git_config(str(tmp_path / "other")) is None and not (tmp_path / "other" / ".gitconfig").exists()
 
     def test_git_root(self, tmp_path):
         core = _sub(_load(ACTIVE_ENV), "core")
@@ -478,15 +529,21 @@ class TestCore:
         monkeypatch.setenv("ICLONE_CONFINEMENT_ACK", str(ack))
         mod = _load(ACTIVE_ENV)
         mod.register(FakeCtx())
-        assert json.loads(ack.read_text()) == {"pid": os.getpid(), "backend": "iclone_seatbelt"}
-        assert ack.stat().st_mode & 0o777 == 0o600
+        # G22 B1: one acknowledgement per runtime process, beside the path main named: a second runtime never overwrites it.
+        own = ack.with_name(f"hermes-ack.{os.getpid()}.json")
+        assert not ack.exists()
+        body = json.loads(own.read_text())
+        assert {k: body[k] for k in ("v", "pid", "backend")} == {"v": 2, "pid": os.getpid(), "backend": "iclone_seatbelt"}
+        # whether the agent's commands can run, as this Mac answers it (test_iclone_launcher.py holds both answers)
+        assert set(body["commands"]) == {"available", "reason"} and isinstance(body["commands"]["available"], bool)
+        assert own.stat().st_mode & 0o777 == 0o600
 
     def test_f5_an_inert_plugin_acknowledges_nothing(self, tmp_path, monkeypatch):
         ack = tmp_path / "hermes-ack.json"
         monkeypatch.delenv("ICLONE_CONFINEMENT", raising=False)
         monkeypatch.setenv("ICLONE_CONFINEMENT_ACK", str(ack))
         _load().register(FakeCtx())
-        assert not ack.exists()
+        assert not ack.parent.exists() or not list(ack.parent.glob("hermes-ack*"))
 
 
 class _Policy:
@@ -517,6 +574,24 @@ def _body(standing, grants=(), ceilings=None):
             "ceilingKey": {"N": "webBrowsing", "Wp": "fileWriting"}, "grants": list(grants)}
 
 
+class TestConfinedRuntimeShell:
+    """Inside the runtime profile access(2) says no to a shell the runtime may not exec, so the plugin names /bin/bash
+    by its path: the launcher outside the sandbox is what execs it."""
+
+    def test_confined_the_shell_is_bin_bash_by_path(self, monkeypatch):
+        seatbelt = _sub(_load(ACTIVE_ENV), "seatbelt")
+        monkeypatch.setenv("ICLONE_RUNTIME_CONFINED", "1")
+        monkeypatch.setenv("ICLONE_CONFINEMENT_LAUNCHER", "/run/launcher.sock")
+        monkeypatch.setattr(seatbelt, "_find_bash", lambda: pytest.fail("the confined runtime never asks which()"))
+        assert seatbelt._shell() == "/bin/bash"
+
+    def test_unconfined_hermes_own_lookup_decides(self, monkeypatch):
+        seatbelt = _sub(_load(ACTIVE_ENV), "seatbelt")
+        monkeypatch.delenv("ICLONE_RUNTIME_CONFINED", raising=False)
+        monkeypatch.setattr(seatbelt, "_find_bash", lambda: "/opt/bash")
+        assert seatbelt._shell() == "/opt/bash"
+
+
 class TestGrantParams:
     @pytest.mark.parametrize("mode,net,write", [
         ("ignore", "1", "1"),       # Ignore keeps confinement on (owner D2): only the asks are skipped
@@ -536,16 +611,19 @@ class TestGrantParams:
         assert core.grant_params("s1", "/p")["NET"] == "1"
         assert core.grant_params("other", "/p")["NET"] == "0"
 
-    def test_the_switch_off_closes_it_even_in_ignore(self, monkeypatch):
+    def test_ignore_lifts_a_switch_off_and_every_other_mode_keeps_it(self, monkeypatch):
+        # The owner's rule (scope-g98 L2): Ignore all lifts an explicit Privacy switch OFF, and its alert says so.
         core = _sub(_load(ACTIVE_ENV), "core")
         _install_v3f(monkeypatch, _body("ignore", ceilings={"webBrowsing": "off", "fileWriting": "off"}))
+        assert core.grant_params("s1", "/p") == {"NET": "1", "WRITE_PROJECT": "1"}
+        _install_v3f(monkeypatch, _body("manual", ceilings={"webBrowsing": "off", "fileWriting": "off"}))
         assert core.grant_params("s1", "/p") == {"NET": "0", "WRITE_PROJECT": "0"}
 
     def test_without_v3f_no_network(self, monkeypatch):
         core = _sub(_load(ACTIVE_ENV), "core")
         for name in [n for n in sys.modules if n.endswith("iclone_permissions")]:
             monkeypatch.delitem(sys.modules, name)
-        assert core.grant_params("s1", "/p") == {"NET": "0", "WRITE_PROJECT": "1"}
+        assert core.grant_params("s1", "/p") == {"NET": "0", "WRITE_PROJECT": "0"}
 
 
 CONTAINER_DETECT = json.loads((PLUGIN_DIR / "tests" / "fixtures" / "container_detect.json").read_text())
@@ -913,12 +991,22 @@ class TestContainerVerdictG3:
 MINI_PROFILE = """(version 1)
 (deny default (with message "iclone-confined:project"))
 (allow process-fork)
-(allow process-exec (subpath "/bin") (subpath "/usr") (subpath "/System"))
+(allow process-exec (subpath "/bin") (subpath "/usr") (subpath "/System") (subpath "/Library/Developer"))
 (allow signal (target same-sandbox))
 (allow sysctl-read)
 (allow file-read* (subpath "/bin") (subpath "/usr") (subpath "/System") (subpath "/private/var/db/dyld") (subpath "/dev") (literal "/") (subpath "/private/etc"))
-(allow file-read-metadata (literal "/private") (literal "/private/var") (literal "/var") (literal "/etc") (literal "/tmp") (literal "/Users"))
+(allow file-read* (subpath "/Library/Developer") (literal "/Library") (regex #"^/private/var/db/xcode_select_link"))
+(allow file-read-metadata (literal "/private") (literal "/private/var") (literal "/private/tmp") (literal "/var") (literal "/etc") (literal "/tmp") (literal "/Users"))
 (allow file-read-metadata (regex #"^/private/var/folders"))
+(allow file-read-metadata (regex #"^/private/tmp/ih\.[^/]+(/pytest-of-[^/]+(/pytest-[0-9]+(/[^/]+)?)?)?$"))
+(define (iclone-ancestors p)
+  (let loop ((s p) (acc (quote ())))
+    (if (or (string=? s "") (string=? s "/")) acc
+      (let find ((i (- (string-length s) 1)))
+        (if (char=? (string-ref s i) #\\/)
+          (loop (substring s 0 i) (cons (literal s) acc))
+          (find (- i 1)))))))
+(allow file-read-metadata (apply require-any (cons (literal "/") (iclone-ancestors (param "PROJECT_ROOT")))))
 (allow file-read* (subpath (param "PROJECT_ROOT")) (subpath (param "SCRATCH")))
 (allow file-write* (subpath (param "SCRATCH")))
 (if (equal? (param "WRITE_PROJECT") "1") (allow file-write* (subpath (param "PROJECT_ROOT"))))
@@ -971,6 +1059,9 @@ class TestSeatbeltLive:
 
     def test_reads_and_writes_the_project_refuses_outside(self, tmp_path, monkeypatch):
         root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        # fx7: without V3-F there is no policy and no project write; this row proves the sandbox, so the policy's
+        # answer is given (the launcher's own reading of the policy is proven in test_iclone_launcher).
+        monkeypatch.setattr(sys.modules[type(env).__module__].core, "grant_params", lambda s, p, w=None: {"NET": "0", "WRITE_PROJECT": "1"})
         assert env.project_root == str(project)
         ok = env.execute("echo made > made.txt && cat README")
         assert ok["returncode"] == 0 and "inside" in ok["output"]
@@ -998,6 +1089,17 @@ class TestSeatbeltLive:
         assert "outside-secret" not in json.dumps([m.__dict__ for m in found.matches]) + str(found.files)
         assert files._read_exact_bytes(str(root / "outside.txt"))[0] in (None, b"")
 
+    def test_a_refusal_before_the_launcher_reaches_the_agent_as_text(self, tmp_path, monkeypatch):
+        """The confined runtime may not start a shell itself: a refusal (here, the launcher socket is missing) is said
+        by the runtime's own interpreter, status 126, and recorded as a refusal before start."""
+        root, _, _, _, env = self.world(tmp_path, monkeypatch)
+        monkeypatch.setenv("ICLONE_RUNTIME_CONFINED", "1")
+        monkeypatch.setenv("ICLONE_CONFINEMENT_LAUNCHER", str(root / "run" / "launcher.sock"))
+        monkeypatch.setenv("ICLONE_LAUNCHER_JOURNAL_DIR", str(root / "run"))
+        out = env.execute("echo never")
+        assert out["returncode"] == 126
+        assert "Refused by icloneOS confinement:" in out["output"] and "never" not in out["output"].split(":")[-1]
+
     def test_the_marker_is_visible_in_ps_for_the_whole_run(self, tmp_path, monkeypatch):
         _, _, _, sha, env = self.world(tmp_path, monkeypatch)
         proc = env._run_bash("/bin/sleep 2")
@@ -1008,11 +1110,267 @@ class TestSeatbeltLive:
         finally:
             proc.kill()
 
+    def test_a_call_hermes_marks_as_its_own_is_said_to_the_launcher_as_housekeeping(self, tmp_path, monkeypatch):
+        """The TUI gateway's path-completion listing runs in the session's own environment each turn, inside
+        ``unmetered_backend_calls`` (Hermes' word at the call that this is its own work, not the user's). That word,
+        and only that word, makes the run housekeeping to the launcher; the same environment's next command is the
+        agent's again."""
+        from hermes_cli.observability.shared_metrics_loop import unmetered_backend_calls
+        _, _, _, _, env = self.world(tmp_path, monkeypatch)
+        seatbelt = sys.modules[type(env).__module__]
+        core = seatbelt.core
+        seen = []
+
+        class FakePopen:
+            def __init__(self, args, **kwargs):
+                seen.append(dict(kwargs["env"]))
+                self.pid = os.getpid()
+
+        monkeypatch.setattr(seatbelt, "_ConfinedPopen", FakePopen)
+        env._run_bash("true")
+        with unmetered_backend_calls():
+            env._run_bash("true")
+        env._run_bash("true")
+        assert [e.get(core.ORIGIN_ENV) for e in seen] == [None, core.ORIGIN_RUNTIME, None]
+
     def test_a_cd_never_moves_the_writable_project(self, tmp_path, monkeypatch):
         root, project, _, _, env = self.world(tmp_path, monkeypatch)
         env.execute(f"cd {root}")
         result = env.execute("echo x > moved.txt")
         assert result["returncode"] != 0 and not (root / "moved.txt").exists()
+
+    # --- fx18 (F1): the project is the request's folder, by the same rule, never wider --------------------------
+
+    def other_project(self, root):
+        other = root / "opened"
+        (other / ".git").mkdir(parents=True)
+        (other / "readme.txt").write_text("opened-readme\n")
+        return other
+
+    def test_fx18_f1_a_workdir_in_another_folder_confines_the_run_to_that_folder(self, tmp_path, monkeypatch):
+        """proof-app step 4: the terminal tool's ``workdir`` names a folder the window did not open. Reads there
+        work (the launcher, not the runtime, narrows writes); the window's project is no longer the run's."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        seen = []
+        seatbelt = sys.modules[type(env).__module__]
+        real = seatbelt.SeatbeltEnvironment.sandbox_argv
+
+        def spy(self_, bash_args, session_id, project_=None):
+            argv = real(self_, bash_args, session_id, project_)
+            seen.append(next(a for a in argv if a.startswith("PROJECT_ROOT=")))
+            return argv
+
+        monkeypatch.setattr(seatbelt.SeatbeltEnvironment, "sandbox_argv", spy)
+        read = env.execute("cat readme.txt", cwd=str(other))
+        assert read["returncode"] == 0 and "opened-readme" in read["output"], read
+        assert seen[-1] == f"PROJECT_ROOT={os.path.realpath(other)}"
+        assert env.project_root == str(project)
+        again = env.execute("cat README", cwd=str(project))
+        assert again["returncode"] == 0 and "inside" in again["output"]
+        assert seen[-1] == f"PROJECT_ROOT={project}"
+
+    def test_fx18_f1_without_the_launcher_another_folder_is_never_writable(self, tmp_path, monkeypatch):
+        """Never widen: with no launcher to list folders, a run in another folder has no project writes whatever the
+        mode says; the window's own project keeps them."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        monkeypatch.setattr(sys.modules[type(env).__module__].core, "grant_params", lambda s, p, w=None: {"NET": "0", "WRITE_PROJECT": "1"})
+        write = env.execute("echo x > made.txt", cwd=str(other))
+        assert write["returncode"] != 0 and not (other / "made.txt").exists()
+        ok = env.execute("echo x > made.txt", cwd=str(project))
+        assert ok["returncode"] == 0 and (project / "made.txt").exists()
+
+    def test_fx18_f1_a_cd_that_leaves_the_project_is_explained_and_the_next_command_follows_it(self, tmp_path, monkeypatch):
+        """``cd <other> && cat readme.txt`` in one command: the cd cannot be seen in advance, so the run is confined
+        to the window's project and fails; its output says so and what happens next. The session's cwd moved, so
+        the next command is confined to ``other`` and the read works."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        moved = env.execute(f"cd {other} && cat readme.txt")
+        assert moved["returncode"] != 0 and "opened-readme" not in moved["output"]
+        assert f"icloneOS: this command moved from {project} to {os.path.realpath(other)}" in moved["output"]
+        assert "A read there is refused too." in moved["output"]  # fx22 (F-e)
+        assert "otherwise that command runs read-only and says so" in moved["output"]
+        assert "read-only until" not in moved["output"]
+        assert env.cwd == str(other)
+        after = env.execute("cat readme.txt")
+        assert after["returncode"] == 0 and "opened-readme" in after["output"], after
+
+    def test_fx18_f1_a_refused_folder_keeps_the_window_project_and_says_which_rule(self, tmp_path, monkeypatch):
+        """A ``cd`` into the home folder: never a project (acceptable_project_root), so the run stays confined to
+        the window's project, and the output names the rule instead of a bare EPERM."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        home = root / "home"
+        (home / "secret.txt").write_text("home-secret\n")
+        read = env.execute("cat secret.txt", cwd=str(home))
+        assert read["returncode"] != 0 and "home-secret" not in read["output"]
+        assert f"icloneOS: this command ran confined to {project} because {home} cannot be a project folder (it is your home folder" in read["output"]
+        # A success is told nothing: the file tools parse the output of their own runs.
+        quiet = env.execute("true", cwd=str(home))
+        assert quiet["returncode"] == 0 and "icloneOS:" not in quiet["output"]
+
+    def test_fx18_f1_a_folder_the_runtime_cannot_list_is_scanned_by_the_launcher_not_refused_here(self, tmp_path, monkeypatch):
+        """proof-app (fx18 run): the confined runtime cannot list a sibling folder main did not open, so its own
+        hard-link scan refused the run ("cannot scan ... fix its permissions", false). Through the launcher the
+        scan is the launcher's: this runtime skips it for that folder only, and only through the launcher."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        seatbelt = sys.modules[type(env).__module__]
+        core = seatbelt.core
+        scanned = []
+        monkeypatch.setattr(core, "check_hardlinks", lambda index, r, cls=None: scanned.append(r))
+        monkeypatch.setattr(seatbelt.SeatbeltEnvironment, "runtime_can_list", lambda self_, p: p != os.path.realpath(other))
+        monkeypatch.setattr(core, "runtime_confined", lambda: True)
+        monkeypatch.setattr(core, "via_launcher", lambda argv: argv)  # the launcher itself is proven in test_iclone_launcher
+        argv = env.sandbox_argv(["/bin/sh", "-c", "true"], None, os.path.realpath(other))
+        assert f"PROJECT_ROOT={os.path.realpath(other)}" in argv and scanned == [env._scratch]
+        env.sandbox_argv(["/bin/sh", "-c", "true"], None, str(project))
+        assert scanned[-2:] == [str(project), env._scratch]
+        # Without a launcher nothing else scans: the runtime's own scan runs and refuses as before.
+        monkeypatch.setattr(core, "runtime_confined", lambda: False)
+        env.sandbox_argv(["/bin/sh", "-c", "true"], None, os.path.realpath(other))
+        assert scanned[-2] == os.path.realpath(other)
+
+    def test_fx18_f1_a_reported_cwd_the_runtime_cannot_stat_is_kept(self, tmp_path, monkeypatch):
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        unreadable = str(root / "opened")
+        real_stat = os.stat
+
+        def stat(path, *a, **k):
+            if path == unreadable:
+                raise PermissionError(1, "Operation not permitted", path)
+            return real_stat(path, *a, **k)
+
+        monkeypatch.setattr(os, "stat", stat)
+        result = {"output": f"x\n{env._cwd_marker}{unreadable}{env._cwd_marker}\n"}
+        env._extract_cwd_from_output(result)
+        assert env.cwd == unreadable and result["cwd"] == unreadable and result["cwd_observed"] is True
+        gone = {"output": f"x\n{env._cwd_marker}{root / 'nowhere'}{env._cwd_marker}\n"}
+        env._extract_cwd_from_output(gone)
+        assert env.cwd == unreadable and "cwd" not in gone
+
+    def test_fx18_a_refusal_is_recorded_with_the_agents_command_not_the_wrapper(self, tmp_path, monkeypatch):
+        root, _, _, _, env = self.world(tmp_path, monkeypatch)
+        monkeypatch.setenv("ICLONE_RUNTIME_CONFINED", "1")
+        monkeypatch.setenv("ICLONE_CONFINEMENT_LAUNCHER", str(root / "run" / "launcher.sock"))
+        monkeypatch.setenv("ICLONE_LAUNCHER_JOURNAL_DIR", str(root / "run"))
+        env.execute("cat readme.txt")
+        row = json.loads((root / "run" / "refused.jsonl").read_text().splitlines()[-1])
+        assert row["command"] == "cat readme.txt"
+
+    def test_fx19_the_plugin_names_the_folder_seatbelt_confines(self, tmp_path, monkeypatch):
+        """The sheet's "In folder", the pass and the launcher's root are one folder, for every kind of request."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        seatbelt = sys.modules[type(env).__module__]
+        perms = _load_permissions_for_fx19()
+        monkeypatch.setenv("TERMINAL_CWD", project)
+        monkeypatch.setattr(sys.modules[PKG], "ACTIVE", True)
+        nested = os.path.join(other, "sub", "deep")
+        os.makedirs(nested)
+        refused = os.environ["HOME"]
+        for folder in (project, other, nested, refused):
+            token = seatbelt._REQUEST.set({"cwd": folder})
+            try:
+                want = env.request_project()[0]
+            finally:
+                seatbelt._REQUEST.reset(token)
+            assert perms._confined_project(folder, "default", "classify-said") == want, folder
+        assert perms._confined_project(other, "default", "classify-said") == os.path.realpath(other)
+        assert perms._confined_project(refused, "default", "classify-said") == os.path.realpath(project)
+        monkeypatch.setattr(sys.modules[PKG], "ACTIVE", False)
+        assert perms._confined_project(other, "default", "classify-said") == "classify-said"
+
+    def test_fx19_the_call_follows_workdir_and_only_the_terminal_has_one(self, tmp_path, monkeypatch):
+        perms = _load_permissions_for_fx19()
+        monkeypatch.setattr(perms, "_cwd_for", lambda task_id: str(tmp_path))
+        assert perms._request_folder("terminal", {"workdir": "/x/opened", "command": "ls"}, "t") == "/x/opened"
+        assert perms._request_folder("terminal", {"workdir": "opened"}, "t") == os.path.join(str(tmp_path), "opened")
+        assert perms._request_folder("terminal", {"command": "ls"}, "t") == str(tmp_path)
+        assert perms._request_folder("terminal", {"workdir": "  "}, "t") == str(tmp_path)
+        assert perms._request_folder("write_file", {"workdir": "/x/opened"}, "t") == str(tmp_path)
+
+    def test_fx19_a_failed_cd_says_only_what_is_true(self, tmp_path, monkeypatch):
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        note = env.explain_after_run({"project": str(project), "cwd": str(project), "refused": None},
+                                     {"returncode": 1, "cwd": str(other), "cwd_observed": True})
+        assert "workdir=" in note and "does not carry over to your next message" in note
+        assert "cannot write" in note
+        assert "were refused" not in note, "a run can fail for its own reason: the note must not claim a refusal"
+        assert "the next command" not in note
+
+    def test_fx20_f4_a_run_that_exits_0_outside_its_project_is_told_and_one_inside_is_not(self, tmp_path, monkeypatch):
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        request = {"project": str(project), "cwd": str(project), "refused": None}
+        note = env.explain_after_run(request, {"returncode": 0, "cwd": str(other), "cwd_observed": True})
+        assert note and "cannot write" in note and "does not carry over to your next message" in note
+        assert "read-only until" not in note
+        assert env.explain_after_run(request, {"returncode": 0, "cwd": str(project), "cwd_observed": True}) is None
+        # A folder refused as a project, on a run that worked anyway, says nothing: only a failure is explained by it.
+        refused = {**request, "refused": "it is the home folder"}
+        assert env.explain_after_run(refused, {"returncode": 0, "cwd": str(project), "cwd_observed": True}) is None
+
+    def test_fx18_f1_the_launcher_is_told_the_requests_folder_and_the_stub_never_forwards_it(self, tmp_path, monkeypatch):
+        """proof-app (fx18 run 2): the stub died in os.getcwd() under the runtime profile for a sibling folder. The
+        runtime says the folder in ICLONE_RUN_CWD; Popen keeps a folder the runtime can use; the stub pops it."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = self.other_project(root)
+        seatbelt = sys.modules[type(env).__module__]
+        monkeypatch.setattr(seatbelt.core, "runtime_confined", lambda: True)
+        monkeypatch.setattr(seatbelt.core, "via_launcher", lambda argv: argv)
+        seen = []
+
+        class FakePopen:
+            def __init__(self, args, **kwargs):
+                seen.append((kwargs["cwd"], kwargs["env"].get("ICLONE_RUN_CWD")))
+                self.pid = os.getpid()
+
+        monkeypatch.setattr(seatbelt, "_ConfinedPopen", FakePopen)
+        token = seatbelt._REQUEST.set({"cwd": str(other), "project": None, "refused": None, "command": "true"})
+        try:
+            env._run_bash("true")
+        finally:
+            seatbelt._REQUEST.reset(token)
+        assert seen == [(str(project), str(other))]
+        # fx24: a model's workdir may be spelled freely; the launcher, which refuses other spellings, is told one.
+        seen.clear()
+        token = seatbelt._REQUEST.set({"cwd": f"{other}/sub/../", "project": None, "refused": None, "command": "true"})
+        try:
+            env._run_bash("true")
+        finally:
+            seatbelt._REQUEST.reset(token)
+        assert seen == [(str(project), str(other))]
+        stub = (Path(seatbelt.__file__).parent / "stub.py").read_text()
+        assert 'env.pop("ICLONE_RUN_CWD", "")' in stub and '"cwd": cwd' in stub and "except OSError" in stub
+
+    def test_fx18_f1_the_cwd_marker_survives_a_folder_getcwd_cannot_read(self, tmp_path, monkeypatch):
+        root, _, _, _, env = self.world(tmp_path, monkeypatch)
+        script = env._wrap_command("true", str(root))
+        assert 'pwd -P 2>/dev/null || printf %s "$PWD"' in script and script.count("$PWD") == 1
+
+    def test_fx18_f3_a_confined_commit_carries_the_users_identity_and_git_config_global_works_in_scratch(self, tmp_path, monkeypatch):
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        core = sys.modules[type(env).__module__].core
+        monkeypatch.setattr(core, "grant_params", lambda s, p, w=None: {"NET": "0", "WRITE_PROJECT": "1"})
+        core.trust_git_identity("Proof Person", "proof@example.invalid")
+        # The identity is seeded when the environment is made (a fresh one, as the runtime makes it per session).
+        seatbelt = sys.modules[type(env).__module__]
+        env = seatbelt.SeatbeltEnvironment(cwd=str(project), timeout=20, cls="project", index=env._index, task_id="t-git")
+        # The developer tools' own git: /usr/bin/git is a shim that writes an xcrun cache the sandbox refuses.
+        git = "/Library/Developer/CommandLineTools/usr/bin/git"
+        if not os.path.exists(git):
+            pytest.skip("the developer tools' git is not installed")
+        init = env.execute(f"{git} init -q . && {git} add README && {git} commit -q -m first && {git} log -1 --format=%an/%ae")
+        assert init["returncode"] == 0, init
+        assert "Proof Person/proof@example.invalid" in init["output"]
+        # The copy's advice holds: `git config --global` writes the session's own file, in scratch, not ~/.gitconfig.
+        changed = env.execute(f"{git} config --global user.name Agent && {git} commit -q --allow-empty -m second && {git} log -1 --format=%an")
+        assert changed["returncode"] == 0 and "Agent" in changed["output"], changed
+        assert "Agent" in (Path(env._scratch) / ".gitconfig").read_text()
+        assert not (root / "home" / ".gitconfig").exists()
 
     def test_a_changed_profile_is_refused_not_run(self, tmp_path, monkeypatch):
         _, _, profiles, _, env = self.world(tmp_path, monkeypatch)

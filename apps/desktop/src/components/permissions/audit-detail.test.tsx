@@ -144,7 +144,7 @@ const ROWS: readonly [string, AuditRecordView, string | undefined][] = [
   [
     'mode_refused · Ignore as the standing default',
     rec({ kind: 'mode_refused', mode: 'ignore', reason: 'Ignore permissions cannot be the standing default.' }),
-    'Ignorar permissões não pode ser a predefinição em todo o lado'
+    'Recusado por uma versão anterior: Ignorar permissões não podia então ser a predefinição'
   ],
   [
     'mode_refused · not confirmed',

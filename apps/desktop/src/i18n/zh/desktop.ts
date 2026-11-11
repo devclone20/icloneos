@@ -1,3 +1,4 @@
+import { aiRecordCopy } from '../en/ai-record'
 import type { Translations } from '../types'
 
 export const desktop: Translations['desktop'] = {
@@ -25,6 +26,13 @@ export const desktop: Translations['desktop'] = {
   readOnlyTranscriptBody:
     '尚无已连接的后端认领这个较早的会话，因此它以只读记录方式打开。历史记录完好；在有后端认领之前无法发送消息。',
   readOnlyTranscriptSendBlocked: '该会话目前以只读记录方式打开——发送已禁用。',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: '无法加载此会话',
   resumeStrandedBody: '与此会话的连接失败，自动重试已停止。请确认网关正在运行，然后重试。',
   resumeRetry: '重试',
@@ -162,6 +170,7 @@ export const desktop: Translations['desktop'] = {
       thisInft: '这个 iNFT'
     },
     tools: {
+      ...aiRecordCopy,
       walletBalances: '钱包 — 余额',
       walletSignIn: '钱包 — 使用 Privy 登录',
       browserOff: '浏览器：不可见 — 点击观看智能体工作（会重启智能体；进行中的回合会丢失）',
@@ -169,9 +178,14 @@ export const desktop: Translations['desktop'] = {
       browserUnknown: '浏览器可见性 — 无法读取设置；点击重试',
       browserWorking: '正在切换浏览器模式并重启智能体…',
       recordOff:
-        '录制已关闭 — 点击让智能体录制其浏览过程（内置浏览器将每次会话的视频保存到其录制文件夹；Browser-Use CLI 将帧记录到其工作区）',
-      recordOn: '录制已开启 — 智能体正在录制它在浏览器中的操作。点击停止。',
+        '录制已关闭。点击让智能体录制它在浏览器中的操作，视频保存到 Movies/icloneOS Recordings。',
+      recordCapturing: '正在录制浏览器——点击停止并将视频保存到 Movies/icloneOS Recordings。',
+      recordShowFile: '在访达中显示',
+      recordStopRanOut:
+        '运行时重启前，浏览器视频未能保存完成。无法确认是否已保存：请检查 Movies/icloneOS Recordings。文件可能不完整。',
+      recordOn: '录制已开启，尚未捕获 — 智能体将从打开的下一个页面开始录制它在浏览器中的操作。点击关闭。',
       recordUnknown: '浏览器录制 — 无法读取设置；点击重试',
+      recordSaving: '正在保存浏览器视频。可能需要约半分钟，最多一分钟。',
       recordWorking: '正在切换录制…',
       themeCycle: (natural, dark, light) => `主题 — ${natural} · ${dark} · ${light}`,
       themeNatural: '自然',

@@ -34,8 +34,9 @@ _PROPERTIES: Dict[str, Any] = {
             "focus_app",
         ],
         "description": (
-            "Which action to perform. `capture` is free (no side effects). All other actions "
-            "require approval unless auto-approved. Use `set_value` for select/popup elements and "
+            "Which action to perform. `capture` changes nothing, but it shows the screen, so it asks like "
+            "the others: in Manual every action asks, and the ask names the key, text or click and "
+            "the app; in Ignore nothing asks. Use `set_value` for select/popup elements and "
             "sliders — it selects the matching option directly without opening the native menu (no "
             "focus steal)."
         ),
@@ -53,7 +54,8 @@ _PROPERTIES: Dict[str, Any] = {
     "app": {
         "type": "string",
         "description": (
-            "Optional. Limit capture/action to one app (name e.g. 'Safari', or bundle ID). Omitted "
+            "Optional. Limit capture/action to one app: its bundle ID (com.apple.calculator) or its name as "
+            "this Mac shows it, in the Mac's language. Omitted "
             "= frontmost window. app='screen' = composited full-screen grab (image only, no "
             "clickable elements); app='desktop' = the OS desktop/shell surface (wallpaper, icons, "
             "taskbar) with its elements."

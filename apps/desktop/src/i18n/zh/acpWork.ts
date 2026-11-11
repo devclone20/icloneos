@@ -95,6 +95,7 @@ export const acpWork: AcpWorkTranslations = {
   },
   chainGaps: count => `有 ${count} 次写入被中断或修复，账本已逐一记下缺口。`,
   chainBroken: '工作账本校验失败。',
+  chainVerifying: '正在校验工作账本…',
   errors: {
     gesture: '这需要你本人的点击。',
     invalid: '该任务已不再是待处理的报价。',

@@ -16,6 +16,10 @@
  *
  * Files the manifest does not list (the venv, node_modules, caches, launchers) are not the runtime's source and are
  * ignored. Every refusal is an IcloneGateError (`[iclone-gate]`): the caller spawns nothing.
+ *
+ * L4-01: the whole check is asynchronous and bounded (iclone-runtime-digest.ts): no file is read or hashed on the main
+ * thread in one piece, and a file whose stamp (dev, ino, size, mode, mtime, ctime) is unchanged since it was last
+ * hashed is not read again. What is checked, and when, is unchanged.
  */
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
@@ -25,6 +29,16 @@ import { extractTarball } from './bootstrap-runner'
 import { IcloneGateError } from './iclone-hermes-plugins'
 import { readManagedStamp, refreshStampAppVersion, RUNTIME_MANIFEST_FILE } from './iclone-managed-runtime'
 import { checkRuntimeDependencies, unlistedRuntimeFiles } from './iclone-runtime-closed'
+import type {
+  DigestCache} from './iclone-runtime-digest';
+import {
+  fileDigest,
+  forEachBounded,
+  linkDigest,
+  lstatEntry,
+  runtimeDigests,
+  sha256Hex
+} from './iclone-runtime-digest'
 
 export { RUNTIME_MANIFEST_FILE }
 export const RUNTIME_SOURCE_MARKER = '.iclone-source.json'
@@ -53,7 +67,7 @@ export interface IntegrityPin {
   tarballSha256: string
 }
 
-const sha256 = (data: Buffer | string) => createHash('sha256').update(data).digest('hex')
+const sha256 = sha256Hex
 
 /** A manifest path is relative, forward-slashed and never climbs out of the runtime. */
 function safeRelPath(rel: string): boolean {
@@ -148,79 +162,85 @@ export interface TreeCheck {
 /**
  * Hashes every manifest file under `root`. A file must be a regular file (a link only where the manifest has a link),
  * with the manifest's size, exec bit and sha256; no directory on its way may be a link (a linked directory could hold
- * the same bytes today and others tomorrow).
+ * the same bytes today and others tomorrow). L4-01: asynchronous and bounded; with `digests`, a file whose stamp is
+ * unchanged since that cache hashed it is not read again (its kind, size and mode are still taken from a fresh lstat).
  */
-export function verifyRuntimeTree(root: string, manifest: RuntimeManifest, now: () => number = Date.now): TreeCheck {
+export async function verifyRuntimeTree(
+  root: string,
+  manifest: RuntimeManifest,
+  now: () => number = Date.now,
+  digests: DigestCache | null = null
+): Promise<TreeCheck> {
   const started = now()
   const changed: string[] = []
   const missing: string[] = []
-  const dirs = new Map<string, boolean>()
+  const dirs = new Map<string, Promise<boolean>>()
 
-  const dirOk = (rel: string): boolean => {
+  const dirOk = (rel: string): Promise<boolean> => {
     if (!rel) {
-      return true
+      return Promise.resolve(true)
     }
 
-    const cached = dirs.get(rel)
+    let known = dirs.get(rel)
 
-    if (cached !== undefined) {
-      return cached
+    if (!known) {
+      const parent = path.posix.dirname(rel)
+
+      known = dirOk(parent === '.' ? '' : parent).then(
+        async ok => ok && Boolean((await lstatEntry(path.join(root, rel)))?.isDirectory())
+      )
+      dirs.set(rel, known)
     }
 
-    let ok = dirOk(path.posix.dirname(rel) === '.' ? '' : path.posix.dirname(rel))
-
-    if (ok) {
-      try {
-        ok = fs.lstatSync(path.join(root, rel)).isDirectory()
-      } catch {
-        ok = false
-      }
-    }
-
-    dirs.set(rel, ok)
-
-    return ok
+    return known
   }
 
-  for (const [rel, mode, size, digest] of manifest.entries) {
+  await forEachBounded(manifest.entries, async ([rel, mode, size, digest]) => {
     const parent = path.posix.dirname(rel)
 
-    if (!dirOk(parent === '.' ? '' : parent)) {
+    if (!(await dirOk(parent === '.' ? '' : parent))) {
       missing.push(rel)
 
-      continue
+      return
     }
 
     const file = path.join(root, rel)
-    let st: fs.Stats
+    const st = await lstatEntry(file)
 
-    try {
-      st = fs.lstatSync(file)
-    } catch {
+    if (!st) {
       missing.push(rel)
 
-      continue
+      return
     }
 
     try {
       if (mode === 'link') {
-        if (!st.isSymbolicLink() || sha256(fs.readlinkSync(file)) !== digest) {
+        if (!st.isSymbolicLink() || (await linkDigest(file)) !== digest) {
           changed.push(rel)
         }
       } else if (
         !st.isFile() ||
-        st.size !== size ||
-        ((st.mode & 0o111) !== 0) !== (mode === '755') ||
-        sha256(fs.readFileSync(file)) !== digest
+        st.size !== BigInt(size) ||
+        ((st.mode & 0o111n) !== 0n) !== (mode === '755') ||
+        (await fileDigest(file, st, digests)) !== digest
       ) {
         changed.push(rel)
       }
     } catch {
       changed.push(rel)
     }
-  }
+  })
 
-  return { changed, missing, ms: now() - started, ok: changed.length === 0 && missing.length === 0 }
+  // Manifest order, whatever order the bounded workers finished in.
+  const order = new Map(manifest.entries.map((row, index) => [row[0], index]))
+  const byManifest = (x: string, y: string) => (order.get(x) as number) - (order.get(y) as number)
+
+  return {
+    changed: changed.sort(byManifest),
+    missing: missing.sort(byManifest),
+    ms: now() - started,
+    ok: changed.length === 0 && missing.length === 0
+  }
 }
 
 export type RuntimeOwnership =
@@ -328,7 +348,7 @@ async function repairFiles(options: {
       one.entries = [row]
       one.files = 1
 
-      if (!verifyRuntimeTree(stage, one).ok) {
+      if (!(await verifyRuntimeTree(stage, one)).ok) {
         throw new Error(`the bundled copy of ${rel} does not match the manifest`)
       }
 
@@ -363,18 +383,18 @@ async function repairFiles(options: {
       fs.renameSync(path.join(stage, rel), target)
     }
   } finally {
-    fs.rmSync(stage, { force: true, recursive: true })
+    await fs.promises.rm(stage, { force: true, recursive: true })
   }
 }
 
 /** Stage folders of a repair that died half-way (any process). */
-export function sweepRepairStages(root: string): void {
+export async function sweepRepairStages(root: string): Promise<void> {
   const parent = path.dirname(root)
 
   try {
-    for (const name of fs.readdirSync(parent)) {
+    for (const name of await fs.promises.readdir(parent)) {
       if (name.startsWith(REPAIR_PREFIX)) {
-        fs.rmSync(path.join(parent, name), { force: true, recursive: true })
+        await fs.promises.rm(path.join(parent, name), { force: true, recursive: true })
       }
     }
   } catch {
@@ -442,34 +462,38 @@ const RUNTIME_PACKAGE = 'hermes_cli'
  * than the verified tree itself — a `hermes_cli/__init__.py` anywhere below `<root>/.iclone-deps` (PM's build
  * snapshots, a stray environment). Links are not followed. Paths are the copies' package folders.
  */
-export function runtimeCopiesOutsideTree(root: string): string[] {
-  const deps = path.join(root, '.iclone-deps')
+export async function runtimeCopiesOutsideTree(root: string): Promise<string[]> {
   const found: string[] = []
-  const stack = fs.existsSync(deps) ? [deps] : []
+  let level = (await lstatEntry(path.join(root, '.iclone-deps')))?.isDirectory() ? [path.join(root, '.iclone-deps')] : []
 
-  while (stack.length > 0) {
-    const dir = stack.pop() as string
-    let entries: fs.Dirent[]
+  while (level.length > 0) {
+    const below: string[] = []
 
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true })
-    } catch {
-      continue
-    }
+    await forEachBounded(level, async dir => {
+      let entries: fs.Dirent[]
 
-    for (const entry of entries) {
-      if (!entry.isDirectory() || entry.isSymbolicLink()) {
-        continue
+      try {
+        entries = await fs.promises.readdir(dir, { withFileTypes: true })
+      } catch {
+        return
       }
 
-      const child = path.join(dir, entry.name)
+      for (const entry of entries) {
+        if (!entry.isDirectory()) {
+          continue
+        }
 
-      if (entry.name === RUNTIME_PACKAGE && fs.existsSync(path.join(child, '__init__.py'))) {
-        found.push(child)
-      } else {
-        stack.push(child)
+        const child = path.join(dir, entry.name)
+
+        if (entry.name === RUNTIME_PACKAGE && (await lstatEntry(path.join(child, '__init__.py')))) {
+          found.push(child)
+        } else {
+          below.push(child)
+        }
       }
-    }
+    })
+
+    level = below
   }
 
   return found.sort()
@@ -480,12 +504,14 @@ export function runtimeCopiesOutsideTree(root: string): string[] {
  * root files, nor below `.iclone-deps`) is removed before Python starts — a planted `sitecustomize.py`, a module named
  * like the standard library, a `.so` beside a verified `.py`, a `.pyc` the manifest does not list.
  */
-function removeUnlistedFiles(root: string, manifest: RuntimeManifest, log: (line: string) => void): void {
-  const extra = unlistedRuntimeFiles(root, new Set(manifest.entries.map(row => row[0])))
+async function removeUnlistedFiles(
+  root: string,
+  manifest: RuntimeManifest,
+  log: (line: string) => void
+): Promise<void> {
+  const extra = await unlistedRuntimeFiles(root, new Set(manifest.entries.map(row => row[0])))
 
-  for (const rel of extra) {
-    fs.rmSync(path.join(root, rel), { force: true })
-  }
+  await forEachBounded(extra, rel => fs.promises.rm(path.join(root, rel), { force: true }))
 
   if (extra.length > 0) {
     log(`${RUNTIME_INTEGRITY_TAG} removed ${extra.length} file(s) the manifest does not list: ${listSome(extra)}`)
@@ -493,8 +519,8 @@ function removeUnlistedFiles(root: string, manifest: RuntimeManifest, log: (line
 }
 
 /** M1: the dependency environment against its install-time record (unlisted files removed; a change refuses). */
-function enforceDependencies(root: string, log: (line: string) => void): void {
-  const deps = checkRuntimeDependencies(root)
+async function enforceDependencies(root: string, digests: DigestCache, log: (line: string) => void): Promise<void> {
+  const deps = await checkRuntimeDependencies(root, { digests })
 
   if (deps.removed.length > 0) {
     log(
@@ -512,9 +538,9 @@ function enforceDependencies(root: string, log: (line: string) => void): void {
 }
 
 /** Removes the copies runtimeCopiesOutsideTree finds (a copy is never run, whatever made it). */
-function removeRuntimeCopies(root: string, log: (line: string) => void): void {
-  for (const copy of runtimeCopiesOutsideTree(root)) {
-    fs.rmSync(copy, { force: true, recursive: true })
+async function removeRuntimeCopies(root: string, log: (line: string) => void): Promise<void> {
+  for (const copy of await runtimeCopiesOutsideTree(root)) {
+    await fs.promises.rm(copy, { force: true, recursive: true })
     log(`${RUNTIME_INTEGRITY_TAG} removed an unverified copy of the runtime package: ${path.relative(root, copy)}`)
   }
 }
@@ -524,6 +550,8 @@ export async function ensureRuntimeIntegrity(options: {
    *  sha keeps its tree; the version in the stamp is information only — lead ruling). */
   appVersion?: string
   bundleDir: null | string
+  /** L4-01: the digests a file's unchanged stamp is trusted from (the process's own by default; tests pass a fresh one). */
+  digests?: DigestCache
   extract?: Extract
   log: (line: string) => void
   now?: () => number
@@ -535,6 +563,7 @@ export async function ensureRuntimeIntegrity(options: {
 }): Promise<IntegrityReport> {
   const { bundleDir, log, pin, root } = options
   const now = options.now ?? Date.now
+  const digests = options.digests ?? runtimeDigests
   const started = now()
 
   if (!options.packaged) {
@@ -566,14 +595,14 @@ export async function ensureRuntimeIntegrity(options: {
     throw new IcloneGateError(`${what}. Use Repair install to install the runtime this release ships.`)
   }
 
-  const check = verifyRuntimeTree(root, manifest, now)
+  const check = await verifyRuntimeTree(root, manifest, now, digests)
 
   if (check.ok) {
     if (owner.kind === 'managed') {
       refreshManagedTree(root, bundleDir, options.appVersion, log)
-      removeRuntimeCopies(root, log)
-      removeUnlistedFiles(root, manifest, log)
-      enforceDependencies(root, log)
+      await removeRuntimeCopies(root, log)
+      await removeUnlistedFiles(root, manifest, log)
+      await enforceDependencies(root, digests, log)
     }
 
     log(
@@ -599,7 +628,7 @@ export async function ensureRuntimeIntegrity(options: {
   log(
     `${RUNTIME_INTEGRITY_TAG} runtime differs from this release's manifest (${detail}); repairing from the app bundle`
   )
-  sweepRepairStages(root)
+  await sweepRepairStages(root)
 
   try {
     await repairFiles({ bad, bundleDir, extract: options.extract ?? extractRuntimeTarball, manifest, pin, root })
@@ -607,7 +636,7 @@ export async function ensureRuntimeIntegrity(options: {
     throw new IcloneGateError(`the agent runtime could not be repaired (${(error as Error).message})`)
   }
 
-  const after = verifyRuntimeTree(root, manifest, now)
+  const after = await verifyRuntimeTree(root, manifest, now, digests)
 
   if (!after.ok) {
     throw new IcloneGateError(
@@ -616,10 +645,36 @@ export async function ensureRuntimeIntegrity(options: {
   }
 
   refreshManagedTree(root, bundleDir, options.appVersion, log)
-  removeRuntimeCopies(root, log)
-  removeUnlistedFiles(root, manifest, log)
-  enforceDependencies(root, log)
+  await removeRuntimeCopies(root, log)
+  await removeUnlistedFiles(root, manifest, log)
+  await enforceDependencies(root, digests, log)
   log(`${RUNTIME_INTEGRITY_TAG} repaired ${bad.length} file(s) from the app bundle: ${listSome(bad)}`)
 
   return { action: 'repaired', files: manifest.files, ms: now() - started, repaired: bad }
+}
+
+/**
+ * L4-01 prewarm: reads and hashes the app's managed runtime and its Python environment into `digests` and changes
+ * NOTHING (no repair, no removal, no stamp refresh), so it may run at app start beside an install. It decides nothing
+ * either: every spawn still runs ensureRuntimeIntegrity, which then only lstat()s the files this pass hashed. Returns
+ * the number of files it hashed (0 when there is no recorded managed runtime to warm).
+ */
+export async function warmRuntimeDigests(options: {
+  bundleDir: null | string
+  digests?: DigestCache
+  pin: IntegrityPin
+  root: string
+}): Promise<number> {
+  const digests = options.digests ?? runtimeDigests
+  const loaded = loadBundledManifest(options.bundleDir, options.pin)
+
+  if ('error' in loaded || runtimeOwnership(options.root, options.pin).kind !== 'managed') {
+    return 0
+  }
+
+  const before = digests.hashedFiles
+  await verifyRuntimeTree(options.root, loaded.manifest, Date.now, digests)
+  await checkRuntimeDependencies(options.root, { digests, sweep: false })
+
+  return digests.hashedFiles - before
 }

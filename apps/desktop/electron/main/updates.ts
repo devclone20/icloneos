@@ -17,6 +17,7 @@ import { readAndConsumeHandoffResult } from '../handoff-result'
 import { type FreshDependencyInstall, isRecordedInstall, sealRuntimeDependencies } from '../iclone-runtime-closed'
 import { isolatePythonEnv } from '../iclone-spawn-env'
 import { readJsonFileSync } from '../lib/fs-json'
+import { copyFileFromRoot, readHeaderInRoot, unlinkInRoot } from '../lib/no-follow-fs'
 import { codePathEnv } from '../packaged-env'
 import {
   compareApiUrl,
@@ -605,14 +606,11 @@ export function preflightStateDb(hermesHome: string, rememberLog: (chunk: string
   }
 
   try {
-    const stat = fs.statSync(stateDbPath)
+    // The runtime can plant any name here and this process is not confined: a link must not choose what is copied.
+    const stat = fs.lstatSync(stateDbPath)
 
     if (stat.size > 100) {
-      const fd = fs.openSync(stateDbPath, 'r')
-      const header = Buffer.alloc(16)
-
-      fs.readSync(fd, header, 0, 16, 0)
-      fs.closeSync(fd)
+      const header = readHeaderInRoot(hermesHome, stateDbPath, 16)
 
       const expectedHeader = Buffer.from('SQLite format 3\0')
       const headerOk = header.equals(expectedHeader)
@@ -635,8 +633,8 @@ export function preflightStateDb(hermesHome: string, rememberLog: (chunk: string
       const emergencyPath = path.join(hermesHome, `state.db.pre-update-emergency-${ts}.bak`)
 
       try {
-        fs.copyFileSync(stateDbPath, emergencyPath)
-        const emergStat = fs.statSync(emergencyPath)
+        copyFileFromRoot(hermesHome, stateDbPath, emergencyPath)
+        const emergStat = fs.lstatSync(emergencyPath)
 
         rememberLog(`[updates] emergency state.db backup: ${emergencyPath} ` + `(${emergStat.size} bytes)`)
 
@@ -656,7 +654,7 @@ export function preflightStateDb(hermesHome: string, rememberLog: (chunk: string
 
           for (const old of backups.slice(2)) {
             try {
-              fs.unlinkSync(path.join(hermesHome, old))
+              unlinkInRoot(hermesHome, path.join(hermesHome, old))
             } catch {
               void 0
             }

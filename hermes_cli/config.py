@@ -49,7 +49,7 @@ from hermes_constants import get_hermes_home, get_process_hermes_home  # noqa: F
 from utils import atomic_replace, fast_safe_load, file_signature, mkstemp_beside
 from hermes_cli.config_read_errors import (
     _CONFIG_PARSE_FAILURES, _FIX_PERMS, _FIX_YAML, FailedConfigRead, _backups_dir_display,
-    _refuse_failed_read, _refuse_overwrite, _warn_config_parse_failure, _yaml_error_details,
+    describe_unreadable_config, _refuse_failed_read, _refuse_overwrite, _warn_config_parse_failure, _yaml_error_details,
     _yaml_error_location)
 
 logger = logging.getLogger(__name__)
@@ -453,6 +453,10 @@ def require_parseable_user_config(*, ignore_user_config: bool = False) -> None:
             data = fast_safe_load(f)
     except FileNotFoundError:
         return
+    except OSError as exc:
+        message = f"Hermes stopped. {describe_unreadable_config(config_path, exc)} Details: {exc}"
+        logger.error(message)
+        raise InvalidUserConfigError(message) from exc
     except Exception as exc:
         parse_error = exc
     else:
@@ -2159,6 +2163,9 @@ def apply_terminal_config_to_env(
     dashboard PTY, gateway workers); this gives those launch paths the same bridge as the CLI
     without importing ``cli.py``. Explicit keys in the user's raw ``terminal`` section override
     matching env values; merged defaults only backfill missing env vars."""
+    # iclone-seam: fx35 — while confined the exec-time backend survives every path through this bridge.
+    from hermes_cli.iclone_policy_env import settle_backend
+
     target = os.environ if env is None else env
 
     raw_terminal_cfg = read_raw_config().get("terminal")
@@ -2169,6 +2176,7 @@ def apply_terminal_config_to_env(
     cfg = config if config is not None else load_config_readonly()
     terminal_cfg = cfg.get("terminal", {}) if isinstance(cfg, dict) else {}
     if not isinstance(terminal_cfg, dict):
+        settle_backend(target)
         return target
 
     # A caller-supplied config is its own source of explicit keys; otherwise only keys present
@@ -2199,6 +2207,7 @@ def apply_terminal_config_to_env(
                 value = os.path.expanduser(value)
         if (should_override and cfg_key in explicit_keys) or env_var not in target:
             target[env_var] = _terminal_env_value(value)
+    settle_backend(target)
     return target
 
 
@@ -2211,6 +2220,9 @@ def _load_config_cache_sig(config_path: Path) -> Tuple[Optional[Tuple[int, int, 
         user_sig: Optional[Tuple[int, int, int, int]] = file_signature(st)
     except FileNotFoundError:
         user_sig = None
+    except OSError:
+        # It exists and cannot be asked (a sandbox denial on a link's target): the read below reports it, never "no file".
+        user_sig = (0, 0, 0, 0)
     managed_dir = managed_scope.get_managed_dir()
     try:
         mst = (managed_dir / "config.yaml").stat() if managed_dir else None
@@ -2871,8 +2883,10 @@ def reload_env() -> int:
         if key in os.environ:
             del os.environ[key]
             count += 1
+    from hermes_cli.iclone_policy_env import settle_backend  # iclone-seam: fx35b — a bridge like the others
     from hermes_cli.iclone_sinks import reseal_environ  # iclone-seam: v3fx-sinks — THE env seal (ruling 57.4, r7)
 
+    settle_backend(os.environ)
     reseal_environ()
     return count
 

@@ -62,6 +62,7 @@ import { EngineFallbackBanner } from './engine-fallback-banner'
 import { type DroppedFile, partitionDroppedFiles } from './hooks/use-composer-actions'
 import { type DragKind, useFileDropZone } from './hooks/use-file-drop-zone'
 import { shouldShowIntro } from './intro-visibility'
+import { ModeResetBanner } from './mode-reset-banner'
 import { ProfileTag } from './profile-tag'
 import { ProviderBlockBanner } from './provider-block-banner'
 import { isRouteSessionMismatch } from './route-session-state'
@@ -697,6 +698,7 @@ const ChatViewContent = memo(function ChatViewContent({
             states stay mounted here, so dock⇄float never remounts the editor. */}
         {showChatBar && <ProviderBlockBanner />}
         {showChatBar && <EngineFallbackBanner />}
+        {showChatBar && <ModeResetBanner />}
         {showChatBar && (
           <Suspense fallback={<ChatBarFallback />}>
             <ChatBar

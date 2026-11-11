@@ -26,6 +26,13 @@ export const desktop: TranslationOverrides['desktop'] = {
   readOnlyTranscriptBody:
     'この古いチャットを所有するバックエンドがまだ接続されていないため、読み取り専用のトランスクリプトとして開きました。履歴は無事です。バックエンドが所有を認識するまで送信は無効です。',
   readOnlyTranscriptSendBlocked: 'このチャットは読み取り専用トランスクリプトとして開いています。送信は無効です。',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: 'このセッションを読み込めませんでした',
   resumeStrandedBody:
     'このセッションへの接続に失敗し、自動再試行も停止しました。ゲートウェイが実行中か確認してから、もう一度お試しください。',
@@ -179,9 +186,14 @@ export const desktop: TranslationOverrides['desktop'] = {
       browserUnknown: 'ブラウザの表示 — 設定を読み取れませんでした。クリックして再試行',
       browserWorking: 'ブラウザモードを切り替え、エージェントを再起動しています…',
       recordOff:
-        '録画オフ — クリックするとエージェントにブラウジングの録画を依頼します（内蔵ブラウザはセッションごとの動画を録画フォルダに保存し、Browser-Use CLI はフレームをワークスペースに記録します）',
-      recordOn: '録画オン — エージェントはブラウザでの操作を録画しています。クリックして停止。',
+        '録画オフ。クリックすると、エージェントにブラウザーでの操作の録画を依頼します。動画は Movies/icloneOS Recordings に保存されます。',
+      recordOn: '録画オン、まだキャプチャしていません — エージェントは次に開くページからブラウザでの操作を録画します。クリックしてオフ。',
+      recordCapturing: 'ブラウザを録画中 — クリックすると停止し、動画を Movies/icloneOS Recordings に保存します。',
+      recordShowFile: 'Finderで表示',
+      recordStopRanOut:
+        'ランタイムの再起動前にブラウザの動画の保存が完了しませんでした。保存は確認できていません。Movies/icloneOS Recordings を確認してください。ファイルが不完全な場合があります。',
       recordUnknown: 'ブラウザ録画 — 設定を読み取れませんでした。クリックして再試行',
+      recordSaving: 'ブラウザーの動画を保存しています。30秒ほどかかることがあり、最大で1分です。',
       recordWorking: '録画を切り替えています…',
       themeCycle: (natural, dark, light) => `テーマ — ${natural} · ${dark} · ${light}`,
       themeNatural: 'ナチュラル',

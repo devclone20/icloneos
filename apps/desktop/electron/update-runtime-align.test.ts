@@ -124,7 +124,12 @@ describe('ensureCuratedRuntimeConfig (R1.runtime.config)', () => {
       'updates.check',
       'false'
     ])
-    expect(opts.env).toEqual({ HERMES_HOME: '/home/.hermes', PYTHONDONTWRITEBYTECODE: '1', SEALED: '1' })
+    expect(opts.env).toEqual({
+      HERMES_HOME: '/home/.hermes',
+      HERMES_HOME_NO_LINKS: '1',
+      PYTHONDONTWRITEBYTECODE: '1',
+      SEALED: '1'
+    })
     expect(sealEnv).toHaveBeenCalledTimes(1)
 
     const src = readMainProcessSource(__dirname)

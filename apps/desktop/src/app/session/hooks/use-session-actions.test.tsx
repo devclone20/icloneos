@@ -3590,6 +3590,49 @@ describe('openNewSessionTile workspace target', () => {
     expect(createParams).not.toHaveProperty('cwd')
   })
 })
+describe('A8: a tile takes the held choice only from a window showing it', () => {
+  const claim = vi.fn(async () => ({ ok: true }))
+
+  afterEach(() => {
+    cleanup()
+    Reflect.deleteProperty(window, 'hermesDesktop')
+    claim.mockClear()
+  })
+
+  const openTile = async (selectedStoredSessionId: null | string) => {
+    Object.assign(window, { hermesDesktop: { icloneConsent: { permissions: { claimWindowChoice: claim } } } })
+
+    const requestGateway = vi.fn(async (method: string) =>
+      method === 'session.create' ? ({ session_id: 'runtime-t', stored_session_id: 'tile-stored' } as never) : ({} as never)
+    )
+
+    let handle: HarnessHandle | null = null
+    render(
+      <Harness
+        onReady={h => (handle = h)}
+        requestGateway={requestGateway}
+        selectedStoredSessionId={selectedStoredSessionId}
+      />
+    )
+    await waitFor(() => expect(handle).not.toBeNull())
+    await act(async () => {
+      await handle!.openNewSessionTile('right', { cwd: null, listed: false })
+    })
+  }
+
+  it('with an old chat open, nothing shows the hold, so the new tile takes the Setting and the hold stays', async () => {
+    await openTile('old-chat')
+
+    expect(claim).not.toHaveBeenCalled()
+  })
+
+  it('with the empty chat in front, the selector shows the hold, and the new tile takes it', async () => {
+    await openTile(null)
+
+    expect(claim).toHaveBeenCalledWith('tile-stored')
+  })
+})
+
 describe('selectSidebarItem', () => {
   it('fronts the workspace pane when navigating to a sidebar route (issue #72602)', async () => {
     const navigate = vi.fn()

@@ -85,6 +85,8 @@ hermes_cli/web_dist/
 # Cross-process web UI build lock (flock target, always empty)
 .web_ui_build.lock
 apps/desktop/build/
+# FSEV: the iclone_fsevents addon as built (scripts/build-iclone-fsevents.mjs; its bytes are pinned in PIN.json)
+apps/desktop/native/iclone-fsevents/build/
 # R11: the pinned Hermes runtime bundle (scripts/fetch-runtime-pin.mjs) and the icloneOS Web build output
 apps/desktop/build/hermes-runtime/
 apps/desktop/dist-web/

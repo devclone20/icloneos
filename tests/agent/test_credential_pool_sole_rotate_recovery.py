@@ -15,6 +15,8 @@ import json
 import time
 from dataclasses import replace
 
+from tests.chatgpt_token_fixture import chatgpt_jwt
+
 
 def _entry(idx: int, *, token: str, refresh: str) -> dict:
     return {
@@ -68,7 +70,7 @@ def _mark(pool, credential_id: str):
 
 
 def test_revived_sole_entry_is_no_recovery(tmp_path, monkeypatch):
-    pool = _load(tmp_path, monkeypatch, [_entry(1, token="tok-a", refresh="rf-a")])
+    pool = _load(tmp_path, monkeypatch, [_entry(1, token=chatgpt_jwt("account-a"), refresh="rf-a")])
     pool._sync_entry_from_auth_store = lambda entry: _revive_entry(pool, entry)
 
     assert _mark(pool, "codex-1") is None
@@ -77,7 +79,7 @@ def test_revived_sole_entry_is_no_recovery(tmp_path, monkeypatch):
 def test_multi_entry_pool_still_rotates_to_healthy_sibling(tmp_path, monkeypatch):
     pool = _load(
         tmp_path, monkeypatch,
-        [_entry(1, token="tok-a", refresh="rf-a"), _entry(2, token="tok-b", refresh="rf-b")],
+        [_entry(1, token=chatgpt_jwt("account-a"), refresh="rf-a"), _entry(2, token=chatgpt_jwt("account-b"), refresh="rf-b")],
     )
     pool._sync_entry_from_auth_store = lambda entry: entry
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Provider spec of the Hermes runtime at one revision (RESUME/contracts/P4_upstream.md decision 6, spec@1).
+"""Provider spec of the Hermes runtime at one revision (the P4 upstream contract decision 6, spec@1).
 
   python3 -B iclone/contract/served.py --runtime <checkout> --out <spec.json> [--lock <runtime.lock.json>]
   python3 -B iclone/contract/served.py --repo <app repo> --rev <rev> --out <spec.json> [--lock <runtime.lock.json>]

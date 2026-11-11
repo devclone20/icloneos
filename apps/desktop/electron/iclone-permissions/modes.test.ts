@@ -6,12 +6,12 @@ import { describe, expect, it } from 'vitest'
 import {
   ACTION_CLASSES,
   type ActionFacts,
+  CREDENTIAL_READ_FLOOR,
   decide,
   DEFAULT_CEILING_KEY,
   effectiveMode,
   grantScopesFor,
   MODE_TABLE,
-  modeAllowedAt,
   PERMISSION_MODES,
   type PermissionMode
 } from './modes'
@@ -41,8 +41,8 @@ describe('the full table (§1), 5 × 10', () => {
 
   it('reads exactly as the contract table', () => {
     // order: R Wp Wo X N $ M S I D — a=allow q=ask r=refuse
-    expect(row('ignore', lenient)).toBe('aaaaaqaqaa')
-    expect(row('ignore', strict)).toBe('aaaaaqaqqq')
+    expect(row('ignore', lenient)).toBe('aaaaaaaaaa')
+    expect(row('ignore', strict)).toBe('aaaaaaaaaa')
     expect(row('manual', lenient)).toBe('aqqqqqqqqq')
     expect(row('automatic', lenient)).toBe('aaqaaqqqqq')
     expect(row('automatic', strict)).toBe('aaqqaqqqqq')
@@ -51,8 +51,8 @@ describe('the full table (§1), 5 × 10', () => {
     expect(row('acceptEdits', lenient)).toBe('aaqqqqqqqq')
   })
 
-  it('spend and system permissions are never a plain allow in any mode', () => {
-    for (const mode of PERMISSION_MODES) {
+  it('spend and system permissions are never a plain allow in any mode but Ignore (F40, the owner)', () => {
+    for (const mode of PERMISSION_MODES.filter(one => one !== 'ignore')) {
       expect(decide({ mode, cls: '$', facts: {}, ceiling: 'on' }).outcome).not.toBe('allow')
       expect(decide({ mode, cls: 'S', facts: {}, ceiling: 'on' }).outcome).not.toBe('allow')
     }
@@ -67,7 +67,7 @@ describe('the floor and the ceilings', () => {
           mode,
           cls: 'X',
           facts: { dangerous: false },
-          floor: 'hardline: rm -rf ~',
+          floor: 'hardline: total destruction, rm -rf ~',
           ceiling: 'on',
           granted: true
         })
@@ -78,8 +78,8 @@ describe('the floor and the ceilings', () => {
     }
   })
 
-  it('a switch OFF refuses its class in every mode; ON lets the mode decide', () => {
-    for (const mode of PERMISSION_MODES) {
+  it('a switch OFF refuses its class in every mode but Ignore (F40, the owner); ON lets the mode decide', () => {
+    for (const mode of PERMISSION_MODES.filter(one => one !== 'ignore')) {
       expect(decide({ mode, cls: 'Wp', facts: { inProject: true }, ceiling: 'off', granted: true }).outcome).toBe(
         'refuse'
       )
@@ -89,13 +89,13 @@ describe('the floor and the ceilings', () => {
   })
 
   it('undecided turns an allow into an ask (read stays an allow), and a grant still lifts it', () => {
-    expect(decide({ mode: 'ignore', cls: 'X', facts: { dangerous: false }, ceiling: 'undecided' })).toMatchObject({
+    expect(decide({ mode: 'automatic', cls: 'X', facts: { dangerous: false }, ceiling: 'undecided' })).toMatchObject({
       outcome: 'ask',
       rule: 'ceiling'
     })
     expect(decide({ mode: 'ignore', cls: 'R', ceiling: 'undecided' }).outcome).toBe('allow')
     expect(
-      decide({ mode: 'ignore', cls: 'X', facts: { dangerous: false }, ceiling: 'undecided', granted: true }).outcome
+      decide({ mode: 'automatic', cls: 'X', facts: { dangerous: false }, ceiling: 'undecided', granted: true }).outcome
     ).toBe('allow')
   })
 
@@ -108,13 +108,62 @@ describe('the floor and the ceilings', () => {
   })
 })
 
+describe('G28: what asks outside total destruction', () => {
+  it.each([
+    'hardline: system shutdown/reboot',
+    'hardline: kill all processes',
+    'hardline: fork bomb',
+    'privilege: system permissions are granted by you in System Settings',
+    'confinement: this stops icloneOS, the agent runtime or your whole login session'
+  ])('%s asks, Plan refuses, Ignore runs', floor => {
+    for (const mode of ['manual', 'automatic', 'acceptEdits'] as const) {
+      expect(decide({ mode, cls: 'X', floor, granted: true })).toMatchObject({ outcome: 'ask', rule: 'floor' })
+    }
+
+    expect(decide({ mode: 'plan', cls: 'X', floor })).toMatchObject({ outcome: 'refuse', rule: 'mode' })
+    expect(decide({ mode: 'ignore', cls: 'X', floor })).toMatchObject({ outcome: 'allow' })
+  })
+
+  it('g28b: a command the gate cannot read beside a payment binary still refuses outside Ignore', () => {
+    const floor = 'confinement: a command this gate cannot read sits beside a payment binary'
+
+    for (const mode of ['manual', 'automatic', 'acceptEdits', 'plan'] as const) {
+      expect(decide({ mode, cls: '$', floor, granted: true })).toMatchObject({ outcome: 'refuse', rule: 'floor' })
+    }
+
+    expect(decide({ mode: 'ignore', cls: '$', floor })).toMatchObject({ outcome: 'allow' })
+  })
+
+  it('total destruction refuses in all five', () => {
+    for (const mode of ['manual', 'automatic', 'acceptEdits', 'plan', 'ignore'] as const) {
+      expect(decide({ mode, cls: 'X', floor: 'hardline: total destruction, erasing a disk' })).toMatchObject({ outcome: 'refuse', rule: 'floor' })
+    }
+  })
+
+  it('G102: a recursive delete of the disk by a program word it cannot read refuses in all five, as policy.py does', () => {
+    const floor = 'hardline: total destruction, recursive delete of the whole disk, a home folder or the system, by a program this gate cannot read'
+
+    for (const mode of ['manual', 'automatic', 'acceptEdits', 'plan', 'ignore'] as const) {
+      expect(decide({ mode, cls: 'X', floor })).toMatchObject({ outcome: 'refuse', rule: 'floor' })
+    }
+  })
+
+  it('a read of the credential list with the Seatbelt off asks, and Plan refuses a class it otherwise allows', () => {
+    for (const mode of ['manual', 'automatic', 'acceptEdits'] as const) {
+      expect(decide({ mode, cls: 'R', floor: CREDENTIAL_READ_FLOOR, granted: true })).toMatchObject({ outcome: 'ask', rule: 'floor' })
+    }
+
+    expect(decide({ mode: 'plan', cls: 'R', floor: CREDENTIAL_READ_FLOOR })).toMatchObject({ outcome: 'refuse', rule: 'mode' })
+    expect(decide({ mode: 'plan', cls: 'R', floor: 'secrets: reading a key, token or keychain item' })).toMatchObject({ outcome: 'ask' })
+    expect(decide({ mode: 'ignore', cls: 'R', floor: CREDENTIAL_READ_FLOOR })).toMatchObject({ outcome: 'allow' })
+  })
+})
+
 describe('scope rules', () => {
-  it('session > project > standing; fresh install is Manual; Ignore is never standing', () => {
+  it('session > project > standing; fresh install is Manual', () => {
     expect(effectiveMode({ standing: 'manual', project: 'automatic', session: 'plan' })).toBe('plan')
     expect(effectiveMode({ standing: 'manual', project: 'automatic', session: null })).toBe('automatic')
     expect(effectiveMode({ standing: 'manual' })).toBe('manual')
-    expect(modeAllowedAt('ignore', 'standing')).toBe(false)
-    expect(modeAllowedAt('ignore', 'session')).toBe(true)
   })
 
   it('spending is granted once only', () => {
@@ -135,5 +184,14 @@ describe('the plugin reads the same table', () => {
       matrix: MATRIX_EXPECTED,
       actions: MATRIX_ACTIONS
     })
+  })
+})
+
+describe('F53: a delete only known when it runs', () => {
+  const floor = 'unresolved delete: recursive delete of a path only known when it runs'
+
+  it('asks outside Ignore, and refuses in Ignore', () => {
+    expect(decide({ mode: 'manual', cls: 'X', facts: {}, floor } as never).outcome).toBe('ask')
+    expect(decide({ mode: 'ignore', cls: 'X', facts: {}, floor } as never)).toMatchObject({ outcome: 'refuse', rule: 'floor' })
   })
 })

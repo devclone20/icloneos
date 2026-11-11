@@ -20,6 +20,16 @@ def run(argv: list[str], env: dict[str, str], cwd: Path) -> subprocess.Completed
     return result
 
 
+def _process_alive(process) -> bool:
+    """A process reaped between the two psutil calls raises NoSuchProcess: that is gone, not an error."""
+    import psutil
+
+    try:
+        return process.is_running() and process.status() != psutil.STATUS_ZOMBIE
+    except psutil.NoSuchProcess:
+        return False
+
+
 def stop_child_tree(child: subprocess.Popen) -> None:
     import psutil
     from agent.deadline import kill_process_tree
@@ -31,7 +41,7 @@ def stop_child_tree(child: subprocess.Popen) -> None:
     child.wait(timeout=10)
     deadline = time.monotonic() + 10
     while descendants and time.monotonic() < deadline:
-        descendants = [p for p in descendants if p.is_running() and p.status() != psutil.STATUS_ZOMBIE]
+        descendants = [p for p in descendants if _process_alive(p)]
         if descendants:
             time.sleep(0.05)
     if descendants:

@@ -39,6 +39,7 @@ import {
   knownSessionOwner,
   knownSessionProfile,
   mergeSessionPage,
+  noteNamedFolder,
   rememberedSessionProfile,
   resolveComposerSessionKey,
   sessionBelongsToProfile,
@@ -1226,5 +1227,32 @@ describe('knownSessionOwner', () => {
     setSessionOwnerHint('hidden-session', owner)
 
     expect(knownSessionOwner([], 'hidden-session')).toEqual(owner)
+  })
+})
+
+describe('fx26b — only a path the user typed or dragged asks main to list it', () => {
+  afterEach(() => {
+    delete (window as { hermesDesktop?: unknown }).hermesDesktop
+    setCurrentCwdTransient('')
+  })
+
+  it('noteNamedFolder hands main the path with its source; setCurrentCwd asks for nothing', () => {
+    const noteFolder = vi.fn(async () => ({ ok: true }))
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = { noteFolder }
+    setCurrentCwd('/backend/moved')
+    expect(noteFolder).not.toHaveBeenCalled()
+    noteNamedFolder('typed', '/backend/typed')
+    expect(noteFolder).toHaveBeenCalledWith('/backend/typed', 'typed')
+  })
+
+  it('a refused gesture is not asked again at the next click', async () => {
+    const noteFolder = vi.fn(async () => ({ ok: false, error: 'gesture' }))
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = { noteFolder }
+    noteNamedFolder('drag', '/backend/dragged')
+    await Promise.resolve()
+    window.dispatchEvent(new MouseEvent('click'))
+    expect(noteFolder).toHaveBeenCalledTimes(1)
   })
 })

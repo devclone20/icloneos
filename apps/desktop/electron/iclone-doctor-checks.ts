@@ -14,6 +14,7 @@ import { isConsentRecord } from './iclone-consent'
 import type { CheckStatus } from './iclone-doctor-catalog'
 import { mirrorFile, ownershipFile, validateRecord } from './iclone-ownership-store'
 import { sealTelemetryEnv } from './iclone-telemetry-seal'
+import { copyFileFromRootAsync } from './lib/no-follow-fs'
 
 const RELEASE_TEAM_ID = 'HJSLQL98D8'
 export const RELEASES_URL = PUBLIC_LATEST_RELEASE_URL
@@ -427,10 +428,11 @@ export async function quickCheck(env: DoctorEnv, file: string): Promise<{ ok: bo
 
   try {
     const copy = path.join(dir, 'state.db')
-    await fs.promises.copyFile(file, copy)
+    // The runtime can plant a link at these names; the copy lands in a folder it cannot read, but never through one.
+    await copyFileFromRootAsync(env.hermesHome, file, copy)
 
     if (lstat(`${file}-wal`)) {
-      await fs.promises.copyFile(`${file}-wal`, `${copy}-wal`)
+      await copyFileFromRootAsync(env.hermesHome, `${file}-wal`, `${copy}-wal`)
     }
 
     const python = realInterpreter(env)

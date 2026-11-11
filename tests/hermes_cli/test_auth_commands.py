@@ -42,7 +42,7 @@ def _write_groq_provider_config(
 def _jwt_with_email(email: str) -> str:
     header = base64.urlsafe_b64encode(b'{"alg":"RS256","typ":"JWT"}').rstrip(b"=").decode()
     payload = base64.urlsafe_b64encode(
-        json.dumps({"email": email}).encode()
+        json.dumps({"email": email, "iss": "https://auth.openai.com"}).encode()
     ).rstrip(b"=").decode()
     return f"{header}.{payload}.signature"
 

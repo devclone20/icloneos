@@ -266,7 +266,7 @@ export const fieldDescriptions = defineFieldCopy({
   checkpoints: {
     maxSnapshots: '创建新副本时，最旧的副本会被删除。',
     enabled:
-      '智能体改动文件前先留一份副本，方便你回退。智能体处于隔离时此项关闭：要使用它，请在“容器”中选择“这台 Mac”。'
+      '智能体改动文件前先留一份副本，方便你回退。智能体处于隔离时此项关闭。'
   },
   memory: {
     provider: '内置记忆无需任何设置即可使用。',

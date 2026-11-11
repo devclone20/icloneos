@@ -14,6 +14,11 @@ import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { notifyError } from '@/store/notifications'
 import { openPreview } from '@/store/preview'
+import { isScreenFramePath } from '@/store/screen-record'
+
+/** A frame of a screen recording: up to 20 arrive at once, too many for a full chip each. */
+const isScreenFrame = (attachment: ComposerAttachment) =>
+  attachment.kind === 'image' && [attachment.path, attachment.detail].some(file => file && isScreenFramePath(file))
 
 export function AttachmentList({
   attachments,
@@ -22,12 +27,33 @@ export function AttachmentList({
   attachments: ComposerAttachment[]
   onRemove?: (id: string) => void
 }) {
+  const { t } = useI18n()
+  const present = attachments.filter(Boolean)
+  const frames = present.filter(isScreenFrame)
+  const keyOf = (attachment: ComposerAttachment) =>
+    attachment.occurrenceId ? `occ:${attachment.occurrenceId}` : attachment.id
+
+  // The frames overlap as one strip, with their count after them (a pseudo-element: the list's children stay the chips).
   return (
-    <div className="flex max-w-full flex-wrap gap-1.5 px-1 pt-1" data-slot="composer-attachments">
-      {attachments.filter(Boolean).map(attachment => (
+    <div
+      className={cn(
+        'flex max-w-full flex-wrap gap-1.5 px-1 pt-1',
+        frames.length > 0 &&
+          'items-center after:text-[0.72rem] after:font-medium after:text-[color:var(--ic-chat-2-65)] after:content-[attr(data-frames-label)]'
+      )}
+      data-frames-label={frames.length > 0 ? t.composer.screenFrames(frames.length) : undefined}
+      data-slot="composer-attachments"
+    >
+      {present
+        .filter(attachment => !isScreenFrame(attachment))
+        .map(attachment => (
+          <AttachmentPill attachment={attachment} key={keyOf(attachment)} onRemove={onRemove} />
+        ))}
+      {frames.map((attachment, index) => (
         <AttachmentPill
           attachment={attachment}
-          key={attachment.occurrenceId ? `occ:${attachment.occurrenceId}` : attachment.id}
+          frame={index === 0 ? 'first' : 'next'}
+          key={keyOf(attachment)}
           onRemove={onRemove}
         />
       ))}
@@ -35,7 +61,16 @@ export function AttachmentList({
   )
 }
 
-function AttachmentPill({ attachment, onRemove }: { attachment: ComposerAttachment; onRemove?: (id: string) => void }) {
+function AttachmentPill({
+  attachment,
+  frame,
+  onRemove
+}: {
+  attachment: ComposerAttachment
+  /** In the frame strip: only the thumbnail, the next one over this one's right part. */
+  frame?: 'first' | 'next'
+  onRemove?: (id: string) => void
+}) {
   const { t } = useI18n()
   const c = t.composer
 
@@ -149,15 +184,25 @@ function AttachmentPill({ attachment, onRemove }: { attachment: ComposerAttachme
   return (
     <>
       <Tip label={attachment.path || attachment.detail || attachment.label}>
-        <div className="group/attachment relative min-w-0 shrink-0">
+        <div
+          className={cn(
+            'group/attachment relative min-w-0 shrink-0',
+            frame && 'hover:z-10 focus-within:z-10',
+            frame === 'next' && '-ml-[26px]'
+          )}
+        >
           <button
             aria-busy={isUploading || undefined}
             aria-label={canPreview ? c.previewLabel(attachment.label) : attachment.label}
             className={cn(
-              'flex max-w-56 items-center gap-2 rounded-2xl border bg-[var(--ic-chat-stage-50)] px-2 py-1.5 text-left shadow-[inset_0_1px_0_var(--ic-glint)] transition-colors disabled:cursor-default',
-              hasUploadError
-                ? 'border-[color:var(--ic-chat-danger-45)] hover:border-[color:var(--ic-chat-danger-60)]'
-                : 'border-[color:var(--ic-chat-subtle-60)] hover:border-[color:var(--ic-chat-accent-35)] hover:bg-[var(--ic-chat-hover-45)]'
+              frame
+                ? 'block rounded-lg disabled:cursor-default'
+                : 'flex max-w-56 items-center gap-2 rounded-2xl border bg-[var(--ic-chat-stage-50)] px-2 py-1.5 text-left shadow-[inset_0_1px_0_var(--ic-glint)] transition-colors disabled:cursor-default',
+              frame
+                ? ''
+                : hasUploadError
+                  ? 'border-[color:var(--ic-chat-danger-45)] hover:border-[color:var(--ic-chat-danger-60)]'
+                  : 'border-[color:var(--ic-chat-subtle-60)] hover:border-[color:var(--ic-chat-accent-35)] hover:bg-[var(--ic-chat-hover-45)]'
             )}
             disabled={!canPreview}
             onClick={() => void openAttachment()}
@@ -185,26 +230,31 @@ function AttachmentPill({ attachment, onRemove }: { attachment: ComposerAttachme
                 </span>
               )}
             </span>
-            <span className="min-w-0">
-              <span className="block truncate text-[0.72rem] font-medium leading-4 text-[color:var(--ic-chat-1-90)]">
-                {attachment.label}
-              </span>
-              {detail && (
-                <span
-                  className={cn(
-                    'block truncate text-[0.62rem] leading-3.5',
-                    hasUploadError ? 'text-[color:var(--ic-chat-danger-80)]' : 'text-[color:var(--ic-chat-2-65)]'
-                  )}
-                >
-                  {detail}
+            {!frame && (
+              <span className="min-w-0">
+                <span className="block truncate text-[0.72rem] font-medium leading-4 text-[color:var(--ic-chat-1-90)]">
+                  {attachment.label}
                 </span>
-              )}
-            </span>
+                {detail && (
+                  <span
+                    className={cn(
+                      'block truncate text-[0.62rem] leading-3.5',
+                      hasUploadError ? 'text-[color:var(--ic-chat-danger-80)]' : 'text-[color:var(--ic-chat-2-65)]'
+                    )}
+                  >
+                    {detail}
+                  </span>
+                )}
+              </span>
+            )}
           </button>
           {onRemove && (
             <button
               aria-label={c.removeAttachment(attachment.label)}
-              className="absolute -right-1 -top-1 grid size-3.5 place-items-center rounded-full border border-[color:var(--ic-chat-subtle-70)] bg-[var(--ic-surface)] text-[color:var(--ic-text-2)] opacity-0 shadow-xs transition hover:bg-[var(--ic-fill-hover)] hover:text-[color:var(--ic-text-1)] group-hover/attachment:opacity-100 focus-visible:opacity-100"
+              className={cn(
+                'absolute -top-1 grid size-3.5 place-items-center rounded-full border border-[color:var(--ic-chat-subtle-70)] bg-[var(--ic-surface)] text-[color:var(--ic-text-2)] opacity-0 shadow-xs transition hover:bg-[var(--ic-fill-hover)] hover:text-[color:var(--ic-text-1)] group-hover/attachment:opacity-100 focus-visible:opacity-100',
+                frame ? '-left-1' : '-right-1'
+              )}
               onClick={() => onRemove(attachment.id)}
               type="button"
             >

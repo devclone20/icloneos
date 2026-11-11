@@ -6,6 +6,7 @@ import {
   type NewChatWorkspaceTarget,
   setCurrentBranch,
   setCurrentCwd,
+  setCurrentCwdTransient,
   setNewChatWorkspaceTarget
 } from '@/store/session'
 
@@ -58,7 +59,8 @@ export function startWorkspaceSession({
 
       const resolved = info.cwd || target
 
-      setCurrentCwd(resolved)
+      // The gateway's answer moves the view only: a path the runtime reports is never one a confined command may write.
+      setCurrentCwdTransient(resolved)
       setNewChatWorkspaceTarget(resolved)
       setCurrentBranch(info.branch || '')
 

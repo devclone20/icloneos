@@ -126,10 +126,22 @@ const GATE_ENV = {
   TERMINAL_ENV: 'iclone_seatbelt'
 }
 
-/** What prepareHermesSpawn returns for a pool backend, with the REAL seal. */
-function gatedPool() {
+const RUNTIME_TEXT = '(version 1)\n(deny default)\n'
+
+/**
+ * What prepareHermesSpawn returns for a pool backend, with the REAL seal. `confined`: the runtime-profile shape the gate
+ * hands out when confinement is on (sandbox-exec, then the profile and its defines, then the interpreter); off, the
+ * command and argv are the backend's own.
+ */
+function gatedPool(confined = false) {
+  const isolated = (args: readonly string[]) => [...PYTHON_ISOLATION_FLAGS, ...args]
+
   return {
-    argv: (args: readonly string[]) => [...PYTHON_ISOLATION_FLAGS, ...args],
+    command: (command: string) => (confined ? '/usr/bin/sandbox-exec' : command),
+    argv: (args: readonly string[], command?: string) =>
+      confined && command !== undefined
+        ? ['-p', RUNTIME_TEXT, '-D', 'RUNTIME_ROOT=/managed', command, ...isolated(args)]
+        : isolated(args),
     attach: h.attach,
     report: { loaded: ['iclone-permissions'] },
     seal: (composed: Record<string, string | undefined>) =>
@@ -186,7 +198,8 @@ describe.each([
       backend: expect.objectContaining({ command: '/managed/venv/bin/python', root: '/managed' }),
       cwd: '/work',
       profile: 'work',
-      role: 'pool'
+      role: 'pool',
+      webDist: '/web'
     })
     expect(h.gate.mock.invocationCallOrder[0]!).toBeLessThan(h.spawn.mock.invocationCallOrder[0]!)
 
@@ -198,6 +211,37 @@ describe.each([
     expect(options.stdio).toBe(gated.stdio)
     expect(h.attach).toHaveBeenCalledWith(child)
     expect(h.attach.mock.invocationCallOrder[0]!).toBeLessThan(h.claim.mock.invocationCallOrder[0]!)
+  })
+
+  it('confinement on: the pool backend runs under the runtime profile like the primary (sandbox-exec, then python)', async () => {
+    h.gate.mockResolvedValue(gatedPool(true))
+    h.spawn.mockReturnValue({ once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null })
+    h.claim.mockRejectedValue(new Error('stop after claim'))
+
+    await expect(spawnPoolBackend('work', entry() as never, opts)).rejects.toThrow(/stop after claim/)
+
+    const [command, args] = h.spawn.mock.calls[0]!
+    expect(command).toBe('/usr/bin/sandbox-exec')
+    expect(args.slice(0, 2)).toEqual(['-p', RUNTIME_TEXT])
+    // The interpreter follows the profile's defines, with its isolation flags and THIS profile's serve args.
+    const python = args.indexOf('/managed/venv/bin/python')
+    expect(python).toBeGreaterThan(1)
+    expect(args.slice(python + 1, python + 3)).toEqual(['-s', '-P'])
+    expect(args.slice(python)).toEqual(expect.arrayContaining(['--profile', 'work', 'serve']))
+  })
+
+  it('confinement off: command and argv are exactly the backend interpreter with its isolation flags', async () => {
+    h.gate.mockResolvedValue(gatedPool(false))
+    h.spawn.mockReturnValue({ once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null })
+    h.claim.mockRejectedValue(new Error('stop after claim'))
+
+    await expect(spawnPoolBackend('work', entry() as never, opts)).rejects.toThrow(/stop after claim/)
+
+    const [command, args] = h.spawn.mock.calls[0]!
+    expect(command).toBe('/managed/venv/bin/python')
+    expect(args[0]).toBe('-s')
+    expect(args).not.toContain('/usr/bin/sandbox-exec')
+    expect(args).not.toContain('-p')
   })
 
   it('m-f / m-b: the lock wins over backend.env, consentEnv() and the inherited env; no payment env; Python isolated', async () => {

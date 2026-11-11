@@ -12,6 +12,8 @@ from pathlib import Path
 from contextlib import suppress
 from typing import Optional
 
+from agent.disk_name import disk_fold
+
 
 def _constants_path(getter_name: str) -> Path:
     """Call ``hermes_constants.<getter_name>()`` (local import avoids cycles); ``~/.hermes`` on any failure."""
@@ -60,6 +62,11 @@ def _is_under(resolved: str | Path, base: str | Path) -> bool:
         except ValueError:
             return False
     return resolved == base or resolved.startswith(str(base) + os.sep)
+
+
+def _is_under_on_disk(resolved: str, base: str) -> bool:
+    """A refusal's reading of ``_is_under``: every spelling the disk opens as this name. Not for a root that grants."""
+    return _is_under(disk_fold(resolved), disk_fold(base))
 
 
 def _resolve_target(path: str) -> Optional[Path]:
@@ -173,15 +180,76 @@ def get_nt_namespace_error(path: str, *, verb: str = "Access") -> Optional[str]:
     )
 
 
+_HOME_CREDENTIAL_FILES = (
+    (".ssh", "authorized_keys"), (".ssh", "id_rsa"), (".ssh", "id_ed25519"),
+    (".netrc",), (".pgpass",), (".npmrc",), (".pypirc",), (".git-credentials",),
+)
+
+# iclone-seam: G25, the owner's ruling: no stored grant opens these with no sheet where the Seatbelt is off. They are not
+# refusals: they stay out of build_write_denied_*, so Manual asks once and Ignore lifts them. Equal to classify-policy.ts.
+HOME_ASK_FILES = (
+    ".zshenv", ".zprofile", ".zshrc", ".zlogin", ".zlogout",
+    ".bashrc", ".bash_profile", ".bash_login", ".bash_logout", ".profile", ".kshrc", ".cshrc", ".tcshrc",
+    ".gitconfig",
+)
+HOME_ASK_DIRS = (
+    "Library/Keychains", ".local/share/keyrings",
+    "Library/Application Support/Google/Chrome", "Library/Application Support/Google/Chrome Canary",
+    "Library/Application Support/Chromium", "Library/Application Support/BraveSoftware",
+    "Library/Application Support/Microsoft Edge", "Library/Application Support/Arc", "Library/Application Support/Vivaldi",
+    "Library/Application Support/com.operasoftware.Opera", "Library/Application Support/Firefox",
+    "Library/Safari", "Library/Cookies", ".mozilla", ".config/google-chrome", ".config/chromium",
+    ".config/fish", ".config/git", "Library/LaunchAgents",
+)
+
+
+def _seatbelt_off() -> bool:
+    """iclone-seam: G23-W2, the owner turned the Seatbelt off and main started this process that way."""
+    with suppress(Exception):
+        from hermes_cli.iclone_policy_env import isolation_off
+
+        return isolation_off()
+    return False
+
+
+def _opened_with_seatbelt_off(homes: set[str], resolved: str) -> bool:
+    """iclone-seam: G23-W2, the owner's ruling: the user's own credential files are his. With the Seatbelt off the permission
+    gate is the one ask (Manual asks once, Ignore does not ask). Anything in this app's own folders keeps its refusal."""
+    if not _seatbelt_off() or any(_is_under_on_disk(resolved, str(base)) for base in _hermes_dirs()):
+        return False
+    return _on_home_credential_list(homes, resolved)
+
+
+def _on_home_credential_list(homes: set[str], resolved: str) -> bool:
+    # ~/.SSH/id_rsa and ~/.\u017fsh/id_rsa are the same file on the home's disk, and realpath keeps the spelling it was given.
+    folded = disk_fold(resolved)
+
+    def real(home: str, *parts: str) -> str:
+        return disk_fold(os.path.realpath(os.path.join(home, *parts)))
+
+    files = (*_HOME_CREDENTIAL_FILES, *((name,) for name in HOME_ASK_FILES))
+    folders = [d.split("/") for d in (*HOME_CREDENTIAL_DIRS, *HOME_ASK_DIRS)]
+    return any(
+        folded in {real(home, *f) for f in files}
+        or any(folded == real(home, *d) or folded.startswith(real(home, *d) + os.sep) for d in folders)
+        for home in homes
+    )
+
+
+def is_home_credential_path(path: str) -> bool:
+    """iclone-seam: G24, the list the Seatbelt-off refusal stands aside for, so the permission gate can always ask for it.
+    G25: this app's own folders keep their refusal, so a listed name inside them never gets a sheet first."""
+    homes, resolved = _homes_and_resolved(path)
+    if any(_is_under_on_disk(resolved, str(base)) for base in _hermes_dirs()):
+        return False
+    return _on_home_credential_list(homes, resolved)
+
+
 def build_write_denied_paths(home: str) -> set[str]:
     """Return exact sensitive paths that must never be written."""
     # ``~/.ssh/config`` is deliberately NOT hard-denied: no key bytes, and editing
     # it is routine. It can carry ProxyCommand / Match exec, so it goes through the
     # approval gate instead (build_write_approval_paths).
-    home_files = (
-        (".ssh", "authorized_keys"), (".ssh", "id_rsa"), (".ssh", "id_ed25519"),
-        (".netrc",), (".pgpass",), (".npmrc",), (".pypirc",), (".git-credentials",),
-    )
     # Secret material under HERMES_HOME, on both the active profile and the global
     # root: overwriting the root .env leaks credentials across every profile that
     # inherits it, and the root Anthropic PKCE store is still read by default /
@@ -199,7 +267,7 @@ def build_write_denied_paths(home: str) -> set[str]:
         os.path.join("cache", "bws_cache.enc.json"),
     )
     paths = [
-        *(os.path.join(home, *f) for f in home_files),
+        *(os.path.join(home, *f) for f in _HOME_CREDENTIAL_FILES),
         *(str(base / f) for f in hermes_files for base in (_hermes_home_path(), _hermes_root_path())),
         "/etc/sudoers", "/etc/passwd", "/etc/shadow",
     ]
@@ -281,12 +349,13 @@ def _classify_resolved_write_denial(homes: set[str], resolved: str) -> Optional[
     """Credential / protected-subpath / safe-root verdict for an already-resolved path."""
     # Approval-gated paths are allowed at this layer so interactive tools can
     # prompt; checked first so the ``.ssh/`` prefix deny doesn't swallow them.
-    if any(resolved in build_write_approval_paths(home) for home in homes):
+    folded = disk_fold(resolved)
+    if any(folded in {disk_fold(p) for p in build_write_approval_paths(home)} for home in homes):
         return None
 
-    if any(
-        resolved in build_write_denied_paths(home)
-        or any(resolved.startswith(prefix) for prefix in build_write_denied_prefixes(home))
+    if not _opened_with_seatbelt_off(homes, resolved) and any(
+        folded in {disk_fold(p) for p in build_write_denied_paths(home)}
+        or any(folded.startswith(disk_fold(prefix)) for prefix in build_write_denied_prefixes(home))
         for home in homes
     ):
         return "credential"
@@ -294,7 +363,7 @@ def _classify_resolved_write_denial(homes: set[str], resolved: str) -> Optional[
     for base in _hermes_dirs():
         for sub in _HERMES_PROTECTED_SUBPATHS:
             with suppress(Exception):
-                if _is_under(resolved, os.path.realpath(os.path.join(str(base), sub))):
+                if _is_under_on_disk(resolved, os.path.realpath(os.path.join(str(base), sub))):
                     return "credential"
 
     safe_roots = get_safe_write_roots()
@@ -327,8 +396,11 @@ def get_write_denied_error(path: str, *, verb: str = "Write", entry: bool = Fals
 def is_write_approval_required(path: str) -> bool:
     """True if ``path`` is approval-gated (``~/.ssh/config``): interactive callers
     prompt, callers without a channel treat it as a block (fail closed)."""
+    if _seatbelt_off():
+        return False  # the permission gate already asked in Manual, and Ignore does not ask
     homes, resolved = _homes_and_resolved(path)
-    return any(resolved in build_write_approval_paths(home) for home in homes)
+    folded = disk_fold(resolved)
+    return any(folded in {disk_fold(p) for p in build_write_approval_paths(home)} for home in homes)
 
 
 # Secret-bearing project-local env file basenames, blocked anywhere on disk.
@@ -365,7 +437,7 @@ _READ_DENIED_DIRS = (
 )
 
 
-def get_read_block_error(path: str) -> Optional[str]:
+def get_read_block_error(path: str, *, route_answered: bool = False) -> Optional[str]:
     """Return an error message when a read targets a denied Hermes path.
 
     Blocked: internal skill-hub caches (prompt-injection carriers), credential
@@ -386,14 +458,17 @@ def get_read_block_error(path: str) -> Optional[str]:
     if nt_error:
         return nt_error
     resolved = Path(path).expanduser().resolve()
+    # G28: VAULT/vault.key opens the vault on this disk, and resolve() keeps the spelling it was given.
+    on_disk = str(resolved)
+    folded = disk_fold(on_disk)
     hermes_dirs = _hermes_dirs()
     reason = None
-    if any(_is_under(resolved, hd / "skills" / ".hub") for hd in hermes_dirs):
+    if any(_is_under_on_disk(on_disk, str(hd / "skills" / ".hub")) for hd in hermes_dirs):
         reason = (
             "is an internal Hermes cache file and cannot be read directly to prevent "
             "prompt injection. Use the skills_list or skill_view tools instead."
         )
-    elif any(resolved in _resolve_each(hd / name for hd in hermes_dirs) for name in _CREDENTIAL_FILE_NAMES):
+    elif any(folded == disk_fold(str(store)) for name in _CREDENTIAL_FILE_NAMES for store in _resolve_each(hd / name for hd in hermes_dirs)):
         reason = (
             "is a Hermes credential store and cannot be read directly. Provider tools "
             "consume these credentials through internal channels." + _DID_SUFFIX
@@ -401,12 +476,13 @@ def get_read_block_error(path: str) -> Optional[str]:
     else:
         for subdir, dir_msg, file_msg in _READ_DENIED_DIRS:
             for blocked_dir in _resolve_each(hd / subdir for hd in hermes_dirs):
-                if _is_under(resolved, blocked_dir):
-                    reason = (dir_msg if resolved == blocked_dir else file_msg) + _DID_SUFFIX
+                if _is_under_on_disk(on_disk, str(blocked_dir)):
+                    reason = (dir_msg if folded == disk_fold(str(blocked_dir)) else file_msg) + _DID_SUFFIX
                     break
             if reason:
                 break
-        if reason is None and resolved.name.lower() in _BLOCKED_PROJECT_ENV_BASENAMES:
+        # iclone-seam: G24, main answered for this exact file: the owner's rule wins over this block, never over the ones above.
+        if reason is None and not route_answered and disk_fold(resolved.name) in _BLOCKED_PROJECT_ENV_BASENAMES:
             reason = (
                 "is a secret-bearing environment file and cannot be read to prevent credential "
                 "leakage. If you need to check the file structure, read .env.example instead." + _DID_SUFFIX

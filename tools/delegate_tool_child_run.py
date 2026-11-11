@@ -455,7 +455,9 @@ def _lease_child_credential(child: Any) -> tuple[Any, Optional[str]]:
                 )
                 leased_cred_id = child_pool.acquire_lease(leased_entry.id) if leased_entry is not None else None
             if leased_entry is not None and hasattr(child, "_swap_credential"):
-                child._swap_credential(leased_entry)
+                if child._swap_credential(leased_entry) is False:  # refused: no lease on a row it does not use
+                    child_pool.release_lease(leased_cred_id)
+                    leased_cred_id = None
     return child_pool, leased_cred_id
 
 def _merge_late_steer(result: Dict[str, Any], subagent_id: Optional[str], child: Any) -> None:

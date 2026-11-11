@@ -101,6 +101,7 @@ export const composer: TranslationOverrides['composer'] = {
   previewLabel: label => `Pré-visualizar ${label}`,
   couldNotPreview: label => `Não foi possível pré-visualizar ${label}`,
   removeAttachment: label => `Remover ${label}`,
+  screenFrames: n => `${n} ${n === 1 ? 'fotograma' : 'fotogramas'}`,
   dictating: 'A ditar',
   preparingAudio: 'A preparar o áudio',
   speakingResponse: 'A falar a resposta',

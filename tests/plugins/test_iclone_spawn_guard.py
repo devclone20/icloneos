@@ -290,6 +290,50 @@ class TestTheLaneItself:
         assert "PermissionError" in str(r["tampered"]), f"tampered ran: {r['tampered']}"
         assert "PermissionError" in str(r["replayed"]), f"replayed ran: {r['replayed']}"
 
+    def test_a_confined_runtime_starts_its_program_only_through_the_sealed_stub(self, tmp_path):
+        """A runtime under its own profile hands the sealed sandbox-exec argv to the launcher through the plugin's
+        stub: exactly ``<this interpreter> -I -S <stub.py> <socket> -- /usr/bin/sandbox-exec …``; nothing else widens."""
+        r = _run(tmp_path, textwrap.dedent("""
+            import subprocess
+            from tools.environments import host_lane
+            STUB = os.path.realpath(str(host_lane.STUB_FILE))
+            OTHER = os.path.realpath(str(host_lane.RUNTIME_ROOT / "plugins" / "iclone-confinement" / "launcher.py"))
+            SB = ["/usr/bin/sandbox-exec", "-p", "(version 1)(allow default)"]
+            shapes = {
+                "stub": lambda a: [sys.executable, "-I", "-S", STUB, "/nonexistent.sock", "--", *SB, *a],
+                "wrong_stub": lambda a: [sys.executable, "-I", "-S", OTHER, "/nonexistent.sock", "--", *SB, *a],
+                "extra_before_dashdash": lambda a: [sys.executable, "-I", "-S", STUB, "/n.sock", "-x", "--", *SB, *a],
+                "flags_swapped": lambda a: [sys.executable, "-S", "-I", STUB, "/nonexistent.sock", "--", *SB, *a],
+                "not_sandbox_exec": lambda a: [sys.executable, "-I", "-S", STUB, "/nonexistent.sock", "--", *a],
+                "other_program": lambda a: ["/bin/sh", "-I", "-S", STUB, "/nonexistent.sock", "--", *SB, *a],
+            }
+            current = {}
+            host_lane.register_program_confiner(
+                lambda argv, *, kind, env=None, reads=(), writes=(): (shapes[current["shape"]](argv), env))
+            frame_file = str(host_lane.RUNTIME_ROOT / "tools" / "transcription_local.py")
+            code = ("import subprocess\\ndef _sysctl_value(argv):\\n"
+                    "    return subprocess.run(argv, capture_output=True).returncode\\n")
+            ns = {}
+            exec(compile(code, frame_file, "exec"), ns)
+            out = {}
+            for name in shapes:
+                current["shape"] = name
+                argv, _ = host_lane.confine_program(["/usr/sbin/sysctl", "-n", "hw.ncpu"], kind="probe")
+                try:
+                    out[name] = ns["_sysctl_value"](argv)
+                except Exception as exc:
+                    out[name] = f"{type(exc).__name__}: {exc}"
+            try:
+                out["unsealed"] = ns["_sysctl_value"](shapes["stub"](["/usr/sbin/sysctl", "-n", "kern.hostname"]))
+            except Exception as exc:
+                out["unsealed"] = f"{type(exc).__name__}: {exc}"
+            print("RESULT=" + json.dumps(out))
+        """))
+        assert r["stub"] == 126, r  # the stub ran; no launcher answers on that socket
+        for name in ("wrong_stub", "extra_before_dashdash", "flags_swapped", "not_sandbox_exec", "other_program",
+                     "unsealed"):
+            assert "PermissionError" in str(r[name]), f"{name} ran: {r[name]}"
+
     def test_the_runtimes_own_interpreter_starts_only_confined(self, tmp_path):
         """(h): a ``hermes`` site starts this runtime's interpreter only with ICLONE_CONFINEMENT=1 in the child's env
         (the child installs this guard first) — and nothing else."""
@@ -405,6 +449,99 @@ class TestNoBypassIsReachableFromTheTools:
                     hits.append(f"{rel}:{node.lineno} .{node.attr}")
         allowed = {"tools/environments/host_lane.py"}  # the guard itself wraps fork_exec
         assert [h for h in hits if h.split(":")[0] not in allowed] == [], hits
+
+
+class TestTheEnvSealIsNeverTheSite:
+    """Every process icloneOS starts installs the env seal (hermes_cli/iclone_sinks.py ``install_spawn_seal``), which
+    wraps ``subprocess.Popen.__init__``. The wrapper is a runtime frame that only passes the call on: the guard judges
+    the frame that called it, exactly as without the seal."""
+
+    _SEAL = "from hermes_cli.iclone_sinks import install_spawn_seal\ninstall_spawn_seal()\n"
+
+    def test_with_the_seal_a_listed_site_still_runs_its_sealed_program(self, tmp_path):
+        if sys.platform != "darwin":
+            pytest.skip("sandbox-exec and sysctl hw.ncpu are macOS")
+        r = _run(tmp_path, TestTheLaneItself._FAKE_CONFINER + self._SEAL + textwrap.dedent("""
+            import subprocess
+            sealed = getattr(subprocess.Popen.__init__, "__iclone_sealed__", False)
+            from tools.transcription_local import _sysctl_value
+            print("RESULT=" + json.dumps({"sealed": sealed, "v": _sysctl_value("hw.ncpu"),
+                                          "refusals": host_lane.spawn_refusals()}))
+        """))
+        assert r["sealed"] is True, r
+        assert r["v"] and str(r["v"]).strip().isdigit() and r["refusals"] == [], r
+
+    def test_with_the_seal_a_refusal_names_the_caller_not_the_seal(self, tmp_path):
+        marker = tmp_path / "outside" / "ran"
+        marker.parent.mkdir()
+        unseen = str(ROOT / "tools" / "never_seen_by_the_inventory.py")
+        r = _run(tmp_path, self._SEAL + textwrap.dedent(_probe("subprocess.run", marker, unseen)))
+        assert r["marker"] is False and "PermissionError" in (r["err"] or ""), r
+        assert "tools/never_seen_by_the_inventory.py::<module> is not a lane" in r["stderr"], r["stderr"][-600:]
+        assert "iclone_sinks" not in r["stderr"]
+
+
+class TestARetriedRefusalIsLoggedOnce:
+    def test_five_attempts_from_one_site_are_five_refusals_and_one_line(self, tmp_path):
+        marker = tmp_path / "outside" / "ran"
+        marker.parent.mkdir()
+        unseen = str(ROOT / "tools" / "never_seen_by_the_inventory.py")
+        src = "import subprocess\ndef poll(m):\n    subprocess.run(['/usr/bin/touch', m])\n"
+        r = _run(tmp_path, f"""
+            from tools.environments import host_lane
+            ns = {{"__name__": "probe"}}
+            exec(compile({src!r}, {unseen!r}, "exec"), ns)
+            errors = 0
+            for _ in range(5):
+                try:
+                    ns["poll"]({str(marker)!r})
+                except PermissionError:
+                    errors += 1
+            print("RESULT=" + json.dumps({{"errors": errors, "refusals": len(host_lane.spawn_refusals()),
+                                          "marker": os.path.exists({str(marker)!r})}}))
+        """)
+        assert (r["errors"], r["refusals"], r["marker"]) == (5, 5, False), r
+        lines = [ln for ln in r["stderr"].splitlines() if ln.startswith("[icloneOS spawn guard]")]
+        assert len(lines) == 1 and "never_seen_by_the_inventory.py::poll" in lines[0], lines
+
+
+class TestTheParentWatchdogStartsNothingWhenConfined:
+    """The serve process's parent-death watchdog asks for the desktop parent's start marker every 2 s. On macOS that
+    was ``ps -p <pid> -o lstart=``, which a confined runtime's spawn guard refuses: one refusal line every poll. In a
+    confined process it now starts nothing and the watchdog checks PID liveness, which needs no program."""
+
+    _BODY = """
+        from tools.environments import host_lane
+        from hermes_cli.iclone_sinks import install_spawn_seal
+        install_spawn_seal()
+        from hermes_cli import web_server_lifecycle as lc
+        marker = "ps:Mon Nov  2 05:45:07 2026"
+        out = {}
+        try:
+            out["marker"] = lc._process_start_marker(os.getppid())
+        except Exception as exc:
+            out["marker"] = type(exc).__name__ + ": " + str(exc)
+        out["parent_orphaned"] = lc._is_serve_orphaned(os.getppid(), marker)
+        out["gone_orphaned"] = lc._is_serve_orphaned(GONE, marker)
+        out["refusals"] = host_lane.spawn_refusals()
+        print("RESULT=" + json.dumps(out))
+    """
+
+    def _gone_pid(self) -> int:
+        child = subprocess.Popen(["/usr/bin/true"])
+        child.wait()
+        return child.pid
+
+    def test_confined_the_start_marker_starts_no_program_and_liveness_still_decides(self, tmp_path):
+        r = _run(tmp_path, f"GONE = {self._gone_pid()}\n" + textwrap.dedent(self._BODY))
+        assert r["refusals"] == [] and "spawn guard" not in r["stderr"], r
+        assert r["marker"].startswith("OSError: ") and "confined runtime" in r["marker"], r
+        assert (r["parent_orphaned"], r["gone_orphaned"]) == (False, True), r
+
+    def test_control_unconfined_the_marker_is_read(self, tmp_path):
+        r = _run(tmp_path, f"GONE = {self._gone_pid()}\n" + textwrap.dedent(self._BODY), confined=False)
+        assert r["marker"].startswith("ps:" if sys.platform == "darwin" else "linux:"), r
+        assert (r["parent_orphaned"], r["gone_orphaned"]) == (False, True), r
 
 
 class TestTheConfinedRuntimeStarts:

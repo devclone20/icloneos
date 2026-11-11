@@ -4,8 +4,8 @@ export const RUNTIME_LOCK = {
   generator: 'iclone/contract/extract.mjs@1',
   app: { upstreamReference: '10b388300a63d83857fac3ca4f8b05b64e01bc50' },
   verifiedAgainst: {
-    rev: 'fb0f640ea3bd67e6c99f87b12e96b7669b608348',
-    openrpcSha256: 'dc0ed79ab77d3998ccf05856daa437c4a175978acb95dd2ea5d7996251074b82',
+    rev: 'fc5c4e2d9101d0c120f2cfe8e9ba9086f13a554a',
+    openrpcSha256: 'a826e83867ee8a2ed15f4cf16901d054078fe67db2771f393065009f385ce140',
     specTier: 'openrpc',
     result: 'amber:3-roots'
   },
@@ -29,7 +29,7 @@ export const RUNTIME_LOCK = {
     'bot_relay.reply': { params: 'opaque', resultReads: [], via: 'js' },
     'bot_relay.roster.sync': { params: { agents: 'opaque' }, resultReads: [], via: 'js' },
     'browser.manage': {
-      params: { action: 'string', session_id: 'string' },
+      params: { action: 'string', 'session_id?': 'string' },
       resultReads: ['connected?', 'messages?', 'url']
     },
     'clarify.lock': {
@@ -550,6 +550,7 @@ export const RUNTIME_LOCK = {
     'HERMES_DESKTOP_READY_FILE',
     'HERMES_DESKTOP_TERMINAL',
     'HERMES_HOME',
+    'HERMES_HOME_NO_LINKS',
     'HERMES_LANGUAGE',
     'HERMES_PARENT_NONCE',
     'HERMES_PARENT_PID',
@@ -560,7 +561,10 @@ export const RUNTIME_LOCK = {
     'PYTHONDONTWRITEBYTECODE',
     'PYTHONPATH',
     'PYTHONPYCACHEPREFIX',
-    'PYTHONUTF8'
+    'PYTHONUNBUFFERED',
+    'PYTHONUTF8',
+    'PYTHON_EXE',
+    'PYTHON_HOME'
   ],
   disk: {
     '.env': 'path',
@@ -574,17 +578,19 @@ export const RUNTIME_LOCK = {
     'hermes-setup.exe': 'path',
     'iclone-perm-spool': 'path',
     'iclone-perm-stats': 'path',
+    'installs/bootstrap-cache': 'path',
     logs: 'path',
     'logs/desktop.log': 'path',
     node: 'path',
     plugins: 'path',
     'plugins/model-providers': 'path',
     profiles: 'path',
-    'state.db': 'path'
+    'state.db': 'path',
+    tools: 'path'
   },
   ipc: {
-    mainChannels: 249,
-    preloadRefs: 341,
+    mainChannels: 260,
+    preloadRefs: 359,
     unpaired: [
       'hermes:git:baseBranchList',
       'hermes:git:branchList',
@@ -655,7 +661,12 @@ export const RUNTIME_LOCK = {
       'iclone:payments:set-limits',
       'iclone:payments:status',
       'iclone:payments:stop',
-      'iclone:permissions:changed'
+      'iclone:permissions:changed',
+      'iclone:screen-record:discard',
+      'iclone:screen-record:start',
+      'iclone:screen-record:status',
+      'iclone:screen-record:stop',
+      'iclone:screen-record:take'
     ]
   },
   engineDeps: {

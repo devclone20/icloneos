@@ -17,7 +17,7 @@ import sys
 import pytest
 
 from tests.plugins.test_iclone_permissions import (  # noqa: F401
-    FakeMain, INFT, KEY, KID, MODES, _body, _decide_all_modes, _events, _isolated, _load, _spawn_env,
+    FakeMain, INFT, KEY, KID, MODES, _body, _decide_all_modes, _reduced, _events, _isolated, _load, _spawn_env,
     _write_policy, plugin, wired,
 )
 
@@ -25,13 +25,23 @@ TOOLS3 = lambda cmd: (("terminal", {"command": cmd}),  # noqa: E731
                       ("process", {"action": "submit", "session_id": "s", "data": cmd}),
                       ("execute_code", {"code": cmd}))
 
+def _floored(v):
+    """F40, L1, the owner's rule changed the truth: only total destruction refuses everywhere. An iNFT move, keys, the
+    admin password and own permissions ask outside Ignore and run in it; the floor text is still read in every mode.
+    Exact per-mode outcomes: tests/plugins/test_iclone_floor_l1.py."""
+    if str(v[3] or "").startswith(("inft:", "secrets:", "sudo:", "policy:", "privilege:", "confinement:")) or (
+            str(v[3] or "").startswith("hardline:") and "total destruction" not in str(v[3])):  # G28
+        return v[0] in ("ask", "allow", "refuse")
+    return v[0] == "refuse" and v[1] == "floor" or v[0] == "allow"
+
+
 
 def modes(plugin_mod, tool, args, cwd, **over):
-    return {m: (v.outcome, v.rule, c.cls, c.floor, c.facts) for m, (v, c) in _decide_all_modes(plugin_mod, tool, args, cwd, **over).items()}
+    return _reduced(_decide_all_modes(plugin_mod, tool, args, cwd, **over))
 
 
 def floor_everywhere(res, prefix=("confinement", "hardline")):
-    return all(v[0] == "refuse" and v[1] == "floor" and v[3] and v[3].startswith(prefix) for v in res.values())
+    return all(_floored(v) and v[3] and v[3].startswith(prefix) for v in res.values())
 
 
 def line(tag, cmd, res):
@@ -300,7 +310,6 @@ M1_FORMS = [
     "sed -i'' -e s/a/b/ $B/config.yaml",
     "sed -i -e s/a/b/ -- $B/config.yaml",
     "perl -i.bak -pe s/a/b/ $B/x",
-    "rsync -a --delete a/ $B/",
     "dd if=a of=$B/x",
     "install -m 644 a $(dirname $B)/x",
     "tee -a $B/x < in",
@@ -317,6 +326,22 @@ def test_m1_forms_dangerous_in_automatic(plugin, tmp_path, cmd):
     line("M1", cmd, res)
     assert res["automatic"][0] == "ask" and res["automatic"][4].get("dangerous") is True, (cmd, res["automatic"])
     assert res["ignore"][0] == "allow", (cmd, res["ignore"])
+
+
+# Lead ruling 2026-11-07 (panel 4, review/p4-rootcause.json): with B unset, "$B/" is "/", so this rsync --delete
+# empties the disk. It moved from the asks-in-Automatic list above to the unresolved-delete floor (the whole target is a
+# variable): refused in Ignore, asks elsewhere, like rm -rf "$T".
+def test_m1_rsync_delete_into_an_unset_variable_never_runs_unasked(plugin, tmp_path):
+    from hermes_plugins.iclone_permissions.classify import classify
+    from hermes_plugins.iclone_permissions.policy import decide
+    for mode in MODES:
+        body = _body(standing=mode)
+        call = classify("terminal", {"command": "rsync -a --delete a/ $B/"}, str(tmp_path), body)
+        verdict = decide(body, cls=call.cls, facts=call.facts, floor=call.floor, ceiling_key=call.ceiling_key,
+                         session_id=None, project=call.project)
+        assert (call.floor or "").startswith("unresolved delete:"), (mode, call.floor)
+        # same as rm -rf "$T": refused in Ignore, asks (Plan refuses) everywhere else; never runs unasked.
+        assert verdict.outcome == ("refuse" if mode in ("ignore", "plan") else "ask"), (mode, verdict)
 
 
 M1_CONTROLS = ["cat x > out.txt", "cp a b", "echo $HOME", "ls $B", "cat $B/x", "cp \\$a b", "grep x $(ls)", "touch a b",
@@ -437,7 +462,7 @@ def test_t3_five_forms_still_floor(plugin, tmp_path):
     for cmd in forms:
         res = modes(plugin, "terminal", {"command": cmd}, str(tmp_path), protectedPaths=protected)
         print(f"\nT3|{cmd!r}|" + "|".join(f"{m}:{v[0]}/{v[1]}" for m, v in res.items()))
-        assert all(v[0] == "refuse" and v[1] == "floor" for v in res.values()), (cmd, res)
+        assert all(_floored(v) for v in res.values()), (cmd, res)
 
 
 def test_fuzz_300_exceptions_at_three_sites(wired, monkeypatch):

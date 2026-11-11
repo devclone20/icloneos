@@ -153,6 +153,8 @@ export type AssistantTranslations = {
     statusError: string
     statusRecovered: string
     statusDone: string
+    /** A call the permission gate is holding for the owner's answer: it neither failed nor ran. */
+    permissionAsked: string
     /** Over-budget / rejected memory write title — not "Saved to memory". */
     memoryWriteNoted: string
     actions: {

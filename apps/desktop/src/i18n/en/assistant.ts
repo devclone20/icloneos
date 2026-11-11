@@ -125,6 +125,7 @@ export const assistant: Translations['assistant'] = {
     statusError: 'Error',
     statusRecovered: 'Recovered',
     statusDone: 'Done',
+    permissionAsked: 'Asked for your permission',
     memoryWriteNoted: 'Memory write noted',
     actions: {
       read: 'Read',

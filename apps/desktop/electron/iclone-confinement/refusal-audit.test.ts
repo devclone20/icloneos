@@ -150,9 +150,10 @@ describe('K07 end to end', () => {
       expect(layer.paths.membersDir).toBe(confinementMembersDir(home))
 
       try {
+        // The kernel's line names the run's token file in this instance's members folder (the profile's tag).
         const line = JSON.stringify({
           timestamp: '2026-10-21 10:00:00.000000+0000',
-          eventMessage: 'Sandbox: cat(4400) deny(1) file-read-data /planted\niclone-confined:project'
+          eventMessage: `Sandbox: cat(4400) deny(1) file-read-data /planted\niclone-confined:project:${confinementMembersDir(home)}/project+${'a'.repeat(12)}+sess-8+${'c'.repeat(32)}`
         })
 
         stdout.write(`${line}\n`)

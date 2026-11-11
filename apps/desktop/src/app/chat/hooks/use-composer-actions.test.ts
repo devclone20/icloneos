@@ -1,7 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { onComposerReplaceText } from '@/app/chat/composer/focus'
+import { screenTimeline } from '@/iclone-shared/screen-timeline'
 import { $composerAttachments, type ComposerAttachment, updateComposerAttachment } from '@/store/composer'
+import { timelineDelivered } from '@/store/screen-record'
 import { $connection } from '@/store/session'
 
 import {
@@ -20,6 +23,49 @@ import {
 // can't read, plus image bytes for vision).
 const osDrop = (path: string): DroppedFile => ({ file: new File(['x'], path.split('/').pop() || 'f'), path })
 const inAppRef = (path: string, extra: Partial<DroppedFile> = {}): DroppedFile => ({ path, ...extra })
+
+describe('removing a screen frame', () => {
+  afterEach(() => {
+    cleanup()
+    $composerAttachments.set([])
+  })
+
+  it('B5: asks the composer to rewrite the recording text; a plain image asks nothing', async () => {
+    const heard: { from: string; to: string }[] = []
+    const off = onComposerReplaceText(detail => heard.push(detail))
+    const folder = '/u/composer-images/screen/rec-a'
+    const frames = [0, 5000, 9000].map(tMs => ({ path: `${folder}/screen-t00${tMs / 1000}s.png`, tMs }))
+    const base = { blankDropped: 0, durationMs: 9000, folder, frames, hitTimeLimit: false, thinnedFrom: 3 }
+    const timeline = screenTimeline(base)
+
+    timelineDelivered({ ...base, timeline })
+    Object.assign(window, { hermesDesktop: { screenRecord: { discard: vi.fn(async () => undefined) } } })
+    $composerAttachments.set([
+      { id: 'image:frame', kind: 'image', label: 'f', path: frames[1].path },
+      { id: 'image:other', kind: 'image', label: 'o', path: '/tmp/shot.png' }
+    ] as ComposerAttachment[])
+
+    const { result } = renderHook(() =>
+      useComposerActions({ activeSessionId: null, currentCwd: '/tmp', requestGateway: vi.fn() as never })
+    )
+
+    await act(async () => {
+      await result.current.removeAttachment('image:other')
+    })
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(heard).toEqual([])
+
+    await act(async () => {
+      await result.current.removeAttachment('image:frame')
+    })
+    await waitFor(() => expect(heard).toHaveLength(1))
+    expect(heard[0].from).toBe(timeline)
+    expect(heard[0].to).toBe(
+      'Screen recording, 9 s of the whole screen, 2 frames attached in this order, each taken when the screen changed. Frame times: 1 t+0 s, 2 t+9 s. 1 frame was taken off by the user.'
+    )
+    off()
+  })
+})
 
 describe('partitionDroppedFiles', () => {
   it('routes File-bearing OS drops to osDrops and path-only in-app drags to inAppRefs', () => {

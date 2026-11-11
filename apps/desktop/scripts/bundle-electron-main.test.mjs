@@ -6,7 +6,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { describe, test } from 'vitest'
 
-import { bundleElectron, bundleOptions, buildPlaces, leakedBuildPaths, rendererLeaks } from './bundle-electron-main.mjs'
+import {
+  bundleElectron,
+  bundleOptions,
+  bundleParses,
+  buildPlaces,
+  leakedBuildPaths,
+  rendererLeaks
+} from './bundle-electron-main.mjs'
 
 /**
  * A fake machine: `home/Desktop/VAULT/lab/app` is the main checkout (the real node_modules, one CJS dependency) and
@@ -28,6 +35,9 @@ function symlinkedWorktree({ entry = "import dep from 'leaky-dep'\nexport const 
   fs.symlinkSync(path.join(main, 'apps', 'desktop', 'node_modules'), path.join(root, 'node_modules'))
   fs.writeFileSync(path.join(root, 'electron', 'main.ts'), entry)
   fs.writeFileSync(path.join(root, 'electron', 'preload.ts'), "import dep from 'leaky-dep'\nconsole.log(dep())\n")
+  // CF1: the third entry, the F7 guard's walk worker (node: modules only).
+  fs.mkdirSync(path.join(root, 'electron', 'iclone-confinement'))
+  fs.writeFileSync(path.join(root, 'electron', 'iclone-confinement', 'hardlinks-walk.ts'), "import 'node:path'\n")
 
   return { home, main, root }
 }
@@ -56,6 +66,7 @@ describe('K141: no build-machine path in the Electron bundles', () => {
     await assert.rejects(bundleElectron({ root, home, ...quiet }), /names a path of the build machine .*K141/)
     // m3: the refused bundle never reaches dist/, and no temp file is left beside it.
     assert.equal(fs.existsSync(path.join(root, 'dist', 'electron-main.mjs')), false)
+    assert.equal(fs.existsSync(path.join(root, 'dist', 'hardlinks-walk-worker.cjs')), false)
     assert.deepEqual(fs.readdirSync(path.join(root, 'dist')), [])
   })
 
@@ -63,6 +74,7 @@ describe('K141: no build-machine path in the Electron bundles', () => {
     const { home, root } = symlinkedWorktree()
     await bundleElectron({ root, home, ...quiet })
     assert.ok(fs.existsSync(path.join(root, 'dist', 'electron-preload.js')))
+    assert.ok(fs.existsSync(path.join(root, 'dist', 'hardlinks-walk-worker.cjs')))
 
     fs.writeFileSync(
       path.join(root, 'electron', 'preload.ts'),
@@ -189,5 +201,35 @@ describe('K141 r2 (m4): the Vite renderer output is checked like the Electron bu
     renderer(root, { 'assets/leak.js': `"${home}"` })
     await bundleElectron({ root, home, ...quiet, isDev: true })
     assert.ok(fs.existsSync(path.join(root, 'dist', 'index.html')))
+  })
+})
+
+// v0.0.7 rehearsal 2026-11-11: the packed app threw "Identifier 'createRequire' has already been declared" on load. The
+// main bundle's banner and iclone-fsevents.ts both imported the name; no test loaded the built bundle.
+describe('the main bundle loads: the banner never collides with a source import', () => {
+  test('a source module importing createRequire from node:module bundles into a main that node accepts', async () => {
+    const { home, root } = symlinkedWorktree({
+      entry: "import { createRequire } from 'node:module'\nexport const r = createRequire(import.meta.url)\n"
+    })
+    await bundleElectron({ root, home, ...quiet })
+
+    const out = path.join(root, 'dist', 'electron-main.mjs')
+    const text = fs.readFileSync(out, 'utf8')
+    assert.equal(bundleParses(text, out), true, 'the built main bundle parses')
+    assert.equal(
+      text.split('\n')[0].includes('import { createRequire }'),
+      false,
+      'the banner imports under its private name'
+    )
+  })
+
+  test('bundleParses refuses a module with a duplicate declaration and accepts a clean one', () => {
+    const dup = "import { createRequire } from 'module'\nimport { createRequire } from 'node:module'\n"
+    assert.equal(bundleParses(dup, 'x.mjs'), false)
+    assert.equal(
+      bundleParses("import { createRequire } from 'node:module'\nexport const r = createRequire\n", 'x.mjs'),
+      true
+    )
+    assert.equal(bundleParses('const a = 1\nconst a = 2\n', 'x.cjs'), false)
   })
 })

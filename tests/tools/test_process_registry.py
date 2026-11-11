@@ -1896,6 +1896,76 @@ class TestSigkillEscalation:
             parent.wait()
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX signals")
+class TestProcAliveWhenRefused:
+    """fx35f: under confinement psutil answers AccessDenied about any other process. That says the kernel refused, not
+    that the process is gone; read as gone, the grace wait was skipped and nothing got escalated."""
+
+    @staticmethod
+    def _refused(pid):
+        import psutil
+        proc = MagicMock(pid=pid)
+        proc.is_running.return_value = True
+        proc.status.side_effect = psutil.AccessDenied(pid)
+        return proc
+
+    def test_a_live_process_is_alive(self):
+        child = _spawn_python_sleep(30)
+        try:
+            assert ProcessRegistry._proc_alive(self._refused(child.pid)) is True
+        finally:
+            child.kill()
+            child.wait()
+
+    def test_a_gone_process_is_not(self):
+        child = _spawn_python_sleep(30)
+        child.kill()
+        child.wait()
+        assert ProcessRegistry._proc_alive(self._refused(child.pid)) is False
+
+    def test_our_exited_child_is_not_and_its_owner_can_still_reap_it(self):
+        child = subprocess.Popen([sys.executable, "-c", "import sys; sys.exit(7)"])
+        deadline = time.monotonic() + 15
+        while ProcessRegistry._proc_alive(self._refused(child.pid)) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert ProcessRegistry._proc_alive(self._refused(child.pid)) is False
+        assert child.wait(timeout=5) == 7
+
+    def test_no_such_process_is_still_not_alive(self):
+        import psutil
+        proc = MagicMock(pid=4242)
+        proc.is_running.return_value = True
+        proc.status.side_effect = psutil.NoSuchProcess(4242)
+        assert ProcessRegistry._proc_alive(proc) is False
+
+    def test_a_child_that_ignores_term_gets_the_grace_wait_and_then_the_kill(self):
+        import psutil
+
+        class Refusing(psutil.Process):
+            def status(self):
+                raise psutil.AccessDenied(self.pid)
+
+            def children(self, recursive=False):
+                raise psutil.AccessDenied(self.pid)
+
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import signal, sys, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\nprint('up', flush=True)\ntime.sleep(60)\n"],
+            stdout=subprocess.PIPE, text=True)
+        try:
+            assert child.stdout.readline().strip() == "up"
+            with patch.object(psutil, "Process", Refusing), \
+                    patch.object(ProcessRegistry, "_daemon_term_grace_seconds", staticmethod(lambda: 0.2)):
+                began = time.monotonic()
+                ProcessRegistry._terminate_host_pid(child.pid)
+                waited = time.monotonic() - began
+            assert child.wait(timeout=5) == -signal.SIGKILL
+            assert waited >= 0.2
+        finally:
+            child.kill()
+            child.wait()
+            child.stdout.close()
+
+
 class TestHandleProcessRedaction:
     """`_handle_process` redacts background-process output before it reaches the
     model / session.db / CLI display — issue #43025.
@@ -3157,3 +3227,59 @@ def test_model_not_found_notice_absent_when_fallback_chain_configured(monkeypatc
     text = _format_async(evt)
     assert text.count("SUBAGENT MODEL REJECTED") == 1
     assert "No fallback chain is configured" not in text
+
+
+class TestBackgroundShape:
+    """fx35e (R40): background=true used to start the command under nohup, which needs to ask the kernel about another
+    process and so exits 127 inside confinement. The shape ignores the hangup in the shell instead, and an ignored
+    signal stays ignored through exec."""
+
+    HOSTILE = ("sleep 60", "echo 'it''s'; exit 3", "x'; touch /tmp/planted; echo '", 'echo "$(id)" `id` $HOME', "a\nb", "nohup server")
+
+    @pytest.mark.parametrize("command", HOSTILE)
+    def test_the_command_is_one_quoted_word(self, command):
+        from tools.process_registry import background_shell
+        text = background_shell(command, "/s/t mp", "proc_ab12")
+        words = shlex.split(text)
+        assert words[words.index("-lc") + 1] == command
+        assert shlex.quote(command) in text
+        assert "/s/t mp/hermes_bg_proc_ab12.log" in words
+
+    def test_nothing_of_the_shape_itself_runs_nohup(self):
+        from tools.process_registry import background_shell
+        assert "nohup" not in background_shell("sleep 60", "/s/tmp", "proc_ab12")
+
+    def _start(self, tmp_path, command):
+        from tools.process_registry import background_shell
+        out = tmp_path / "starter.out"
+        with open(out, "wb") as sink:
+            starter = subprocess.run(
+                ["/bin/bash", "-c", background_shell(command, str(tmp_path), "p1")],
+                stdout=sink, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, timeout=20, start_new_session=True)
+        assert starter.returncode == 0, out.read_text()
+        return int(out.read_text().split()[0])
+
+    def _exit_of(self, tmp_path):
+        exit_file = tmp_path / "hermes_bg_p1.exit"
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            if exit_file.exists() and exit_file.read_text().strip():
+                return exit_file.read_text().strip()
+            time.sleep(0.02)
+        return None
+
+    def test_it_outlives_its_starter_and_a_hangup_of_its_whole_group(self, tmp_path):
+        go, pid = tmp_path / "go", tmp_path / "cmd.pid"
+        wrapper = self._start(tmp_path, f"echo $$ > {pid}; until [ -e {go} ]; do sleep 0.02; done; echo survived; exit 3")
+        deadline = time.monotonic() + 15
+        while not (pid.exists() and pid.read_text().strip()) and time.monotonic() < deadline:
+            time.sleep(0.02)
+        os.killpg(os.getpgid(wrapper), signal.SIGHUP)
+        go.touch()
+        assert self._exit_of(tmp_path) == "3"
+        assert "survived" in (tmp_path / "hermes_bg_p1.log").read_text()
+
+    def test_terminate_still_ends_it(self, tmp_path):
+        self._start(tmp_path, "kill -TERM $$; echo not-reached")
+        assert self._exit_of(tmp_path) == str(128 + signal.SIGTERM)
+        assert "not-reached" not in (tmp_path / "hermes_bg_p1.log").read_text()

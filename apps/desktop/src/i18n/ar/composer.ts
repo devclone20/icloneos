@@ -76,6 +76,7 @@ export const composer: TranslationOverrides['composer'] = {
   previewLabel: label => `معاينة ${label}`,
   couldNotPreview: label => `تعذرت معاينة ${label}`,
   removeAttachment: label => `إزالة ${label}`,
+  screenFrames: n => `${n} إطارات`,
   dictating: 'جار الإملاء',
   preparingAudio: 'جار تجهيز الصوت',
   speakingResponse: 'جار قراءة الرد',

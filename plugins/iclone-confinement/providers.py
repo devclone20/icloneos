@@ -63,20 +63,45 @@ class SeatbeltProvider(TerminalEnvironmentProvider):
     def skip_container_guards(self) -> bool:
         return False
 
+    def availability(self) -> Tuple[bool, str]:
+        """``(available, plain reason when not)``. Under the runtime profile the runtime never starts sandbox-exec (it
+        may not even stat ``/usr/bin``): the launcher main started does, so available means the launcher answers now.
+        Otherwise this process applies the profile itself and needs sandbox-exec. Fail closed: any doubt is a no."""
+        if platform.system() != "Darwin":
+            return False, "Seatbelt exists on macOS only"
+        if not _profiles_dir():
+            return False, "the icloneOS app did not hand over its confinement profiles"
+        if core.runtime_confinement_requested():
+            problem = core.launcher_problem()
+            return (problem is None, problem or "")
+        if not os.path.exists(core.SANDBOX_EXEC):
+            return False, "sandbox-exec is missing on this Mac"
+        return True, ""
+
+    def checked(self) -> Tuple[bool, str]:
+        """``availability()``, told to the app through the plugin's acknowledgement (rewritten when it changes)."""
+        try:
+            available, reason = self.availability()
+        except Exception as exc:  # noqa: BLE001 — a check that cannot finish says no
+            available, reason = False, f"the availability check failed ({type(exc).__name__})"
+        core.report_commands(available, reason)
+        return available, reason
+
     def is_available(self) -> bool:
-        return platform.system() == "Darwin" and os.path.exists(core.SANDBOX_EXEC) and bool(_profiles_dir())
+        return self.checked()[0]
 
     def probe(self) -> Tuple[str, str]:
-        if self.is_available():
-            return ("ready", "")
-        return ("unavailable", "Seatbelt is macOS only and needs the icloneOS app's profiles.")
+        available, reason = self.checked()
+        return ("ready", "") if available else ("unavailable", f"Agent commands are unavailable: {reason}.")
 
     def create_environment(self, *, cwd: str, timeout: int, task_id: str = "default", image: Optional[str] = None,
                            container_config: Optional[dict] = None, **kwargs: Any):
         from .seatbelt import SeatbeltEnvironment
 
-        if not self.is_available():
-            raise core.ConfinementRefused("Seatbelt is not available here; commands are refused rather than run unconfined")
+        available, reason = self.checked()
+        if not available:
+            code = "launcher-unavailable" if core.runtime_confinement_requested() else "other"
+            raise core.ConfinementRefused(f"{reason}; commands are refused rather than run unconfined", code)
         return SeatbeltEnvironment(cwd=cwd, timeout=timeout, cls=_activity_class(), index=core.trusted_index(),
                                    task_id=task_id)
 

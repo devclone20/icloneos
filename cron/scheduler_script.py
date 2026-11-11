@@ -8,8 +8,11 @@ late-bound (``_sched`` / module refs at the bottom) so monkeypatching the defini
 
 from __future__ import annotations
 
+import codecs
 import contextlib
 import contextvars
+import hashlib
+import io
 import logging
 import os
 import shutil
@@ -19,8 +22,10 @@ import subprocess
 import sys
 import threading
 import time
+import tokenize
 from cron.env_settings import cron_env_setting
 from cron.jobs import _ensure_cron_dir
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
@@ -115,26 +120,37 @@ def _read_windows_pyvenv_cfg(venv_dir: Path) -> dict[str, str]:
     }
 
 
+_SCRIPT_SHA256_ENV = "ICLONE_SCRIPT_SHA256"
+_SCRIPT_CHANGED_EXIT = 126
+
 # Mirrors ``python script.py``: sys.path[0] is the script's directory (none under -P), a real
 # ``__main__`` module that outlives the body (atexit/threads can still pickle its classes; a
 # runpy temp module is swapped out when the body returns), plus the live checkout next.
-_POSIX_SCRIPT_BOOTSTRAP = """\
-import importlib.machinery, os, sys, types
+# The cwd entry ``-c`` adds is dropped BEFORE hashlib is imported, so a hashlib.py in the job's
+# workdir cannot answer the checked-bytes comparison. The file is read once: the bytes hashed are
+# the bytes compiled.
+_POSIX_SCRIPT_BOOTSTRAP = f"""\
+import sys
+if not sys.flags.safe_path:
+    del sys.path[0]
+import hashlib, importlib.machinery, os, types
 repo, script = sys.argv[1], sys.argv[2]
+expected = os.environ.pop({_SCRIPT_SHA256_ENV!r}, "")
+with open(script, "rb") as f:
+    source = f.read()
+if expected and hashlib.sha256(source).hexdigest() != expected:
+    sys.stderr.write("BLOCKED by icloneOS permissions: the scheduled script changed after it was checked, "
+                     "so it does not run: " + script + "\\n")
+    sys.exit({_SCRIPT_CHANGED_EXIT})
 sys.argv = [script] + sys.argv[3:]
-if sys.flags.safe_path:
-    sys.path.insert(0, repo)
-else:
-    sys.path[0:1] = [os.path.dirname(script), repo]
+sys.path[0:0] = [repo] if sys.flags.safe_path else [os.path.dirname(script), repo]
 main = types.ModuleType("__main__")
 main.__file__ = script
 main.__loader__ = importlib.machinery.SourceFileLoader("__main__", script)
 main.__cached__ = None
 main.__builtins__ = __builtins__
 sys.modules["__main__"] = main
-with open(script, "rb") as f:
-    code = compile(f.read(), script, "exec")
-exec(code, main.__dict__)
+exec(compile(source, script, "exec"), main.__dict__)
 """
 
 
@@ -397,6 +413,12 @@ def _resolve_cron_interpreter(interpreter: str) -> tuple[Optional[str], Optional
     return str(resolved), None
 
 
+def _script_runs_as_shell(path: Path) -> bool:
+    """The one interpreter decision: ``.sh``/``.bash`` (any case) run on bash, every other script on Python. The runner
+    and the icloneOS floor both read it, so a script is checked as the code it runs as."""
+    return path.suffix.lower() in {".sh", ".bash"}
+
+
 def _script_argv(
     path: Path, interpreter: Optional[str] = None,
 ) -> tuple[Optional[list[str]], dict[str, str], Optional[str]]:
@@ -405,7 +427,7 @@ def _script_argv(
     else the job's ``interpreter`` when set, else a Python chosen by ``_posix_cron_script_argv``
     / ``_windows_cron_python_invocation``. Interpreter selection reads PM's install records and
     may raise; callers run this inside their ``try``."""
-    if path.suffix.lower() in {".sh", ".bash"}:
+    if _script_runs_as_shell(path):
         # which() finds Git Bash on Windows; None there → clear error instead of a "[WinError 2]".
         _bash = shutil.which("bash") or ("/bin/bash" if os.path.isfile("/bin/bash") else None)
         if _bash is None:
@@ -427,6 +449,117 @@ def _script_argv(
     if env_overlay:
         return _windows_cron_bootstrap_argv(python_exe, env_overlay, str(path)), env_overlay, None
     return [python_exe, str(path)], env_overlay, None
+
+
+_ICLONE_SCRIPT_READ_MAX = 1 << 20
+
+
+_CHECKED_PYTHON_ENCODINGS = frozenset({"utf-8", "utf-8-sig", "ascii"})
+
+
+def _python_source_encoding(raw: bytes) -> tuple[str, Optional[str]]:
+    """``(encoding, refusal)``: the encoding Python itself reads this source in (BOM and PEP 263 cookie, by
+    ``tokenize.detect_encoding``). The floor reads UTF-8 text, so any other declared encoding (``utf-7`` hides a call
+    from a UTF-8 read) is refused in every mode instead of being checked as text the interpreter never runs."""
+    try:
+        declared, _lines = tokenize.detect_encoding(io.BytesIO(raw).readline)
+        checked = codecs.lookup(declared).name in _CHECKED_PYTHON_ENCODINGS
+    except (SyntaxError, LookupError) as exc:
+        declared, checked = f"unreadable: {exc}", False
+    if checked:
+        return declared, None
+    return declared, (
+        f"BLOCKED by icloneOS permissions: a scheduled Python script declares the encoding {declared!r}; "
+        "only UTF-8 or ASCII scripts can be checked, so it does not run. Save it as UTF-8 without that coding line"
+    )
+
+
+@dataclass(frozen=True)
+class _CheckedScript:
+    """What the floor read: the sha256 of exactly those bytes and the file's identity from the same open handle."""
+    sha256: str
+    identity: tuple[int, ...]
+
+
+def _file_identity(st: os.stat_result) -> tuple[int, ...]:
+    # ctime moves on every write and on utime, and a user cannot set it back, so a same-size rewrite with a restored
+    # mtime still shows.
+    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _shell_script_text(raw: bytes) -> tuple[str, Optional[str]]:
+    """``(text, refusal)``: the floor reads UTF-8 text, so a shell body that is not NUL-free UTF-8 is refused instead of
+    being checked as text other than the bytes the shell runs."""
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = None
+    if text is not None and "\x00" not in text:
+        return text, None
+    return "", (
+        "BLOCKED by icloneOS permissions: a scheduled shell script that is not plain UTF-8 text (or holds a NUL byte) "
+        "cannot be checked, so it does not run. Save it as UTF-8 text"
+    )
+
+
+def _shell_argv_sourcing_path(shell: str, path: Path) -> list[str]:
+    # ``bash path`` reads the file while it runs, so a line appended after the check would run unchecked; ``.`` reads
+    # the whole file before running any of it. ``$0`` and ``BASH_SOURCE[0]`` stay the real path and the text stays out
+    # of argv. The file is still opened by name after the re-stat: that window is what the re-stat narrows.
+    return [shell, "-c", '. "$0"', str(path)]
+
+
+def _iclone_script_check(path: Path, workdir: Optional[str]) -> tuple[Optional[str], Optional[_CheckedScript]]:
+    """G102: ``(refusal, checked)``. The script's bytes through the app's floor, read as the code its interpreter runs
+    (shell by ``_script_runs_as_shell``, else execute_code); ``(None, None)`` when the app's gate is not in this process.
+    A script too large or unreadable to check is refused. ``checked`` pins what was read so the run can refuse a file
+    rewritten after this read (``_run_job_script``)."""
+    from tools.approval import _ICLONE_IGNORE_PROBE, iclone_unattended_refusal
+
+    if _ICLONE_IGNORE_PROBE is None:
+        return None, None
+    try:
+        with open(path, "rb") as handle:
+            identity = _file_identity(os.fstat(handle.fileno()))
+            raw = handle.read(_ICLONE_SCRIPT_READ_MAX + 1)
+    except OSError as exc:
+        raw, unreadable = b"", type(exc).__name__
+    else:
+        unreadable = "too large to check" if len(raw) > _ICLONE_SCRIPT_READ_MAX else ""
+    if unreadable:
+        return f"BLOCKED by icloneOS permissions: a scheduled script it cannot read does not run ({unreadable})", None
+    checked = _CheckedScript(hashlib.sha256(raw).hexdigest(), identity)
+    if _script_runs_as_shell(path):
+        text, refusal = _shell_script_text(raw)
+        if refusal:
+            return refusal, None
+        tool, args = "terminal", {"command": text}
+    else:
+        encoding, refusal = _python_source_encoding(raw)
+        if refusal:
+            return refusal, None
+        tool, args = "execute_code", {"code": raw.decode(encoding, errors="replace")}
+    return iclone_unattended_refusal(tool, args, workdir or str(path.parent)), checked
+
+
+def _iclone_script_refusal(path: Path, workdir: Optional[str]) -> Optional[str]:
+    """The refusal half of ``_iclone_script_check``."""
+    return _iclone_script_check(path, workdir)[0]
+
+
+def _changed_since_check(path: Path, checked: _CheckedScript) -> Optional[str]:
+    """A refusal when the file at ``path`` is no longer the one the floor read (re-stat right before the spawn)."""
+    try:
+        unchanged = _file_identity(os.stat(path)) == checked.identity
+    except OSError:
+        unchanged = False
+    if unchanged:
+        return None
+    return f"BLOCKED by icloneOS permissions: the scheduled script changed after it was checked, so it does not run: {path}"
+
+
+def _runs_through_bootstrap(argv: list[str]) -> bool:
+    return argv[1:3] == ["-c", _POSIX_SCRIPT_BOOTSTRAP]
 
 
 def _run_job_script(
@@ -452,6 +585,9 @@ def _run_job_script(
         argv, env_overlay, err = _script_argv(path, interpreter)
         if argv is None:
             return False, err
+        refusal, checked = _iclone_script_check(path, workdir)
+        if refusal:
+            return False, refusal
         from tools.environments.local import build_subprocess_env
         # Lossy decode only: keep the platform-default (locale) encoding — gating ``encoding=``
         # to win32 was deliberate (#66566: unconditional UTF-8 leaked into POSIX) — but
@@ -480,10 +616,28 @@ def _run_job_script(
         # env itself — no raw copy at the spawn site (test_subprocess_env_guard).
         env = build_subprocess_env(strip_launch_profile=True)
         env.update(env_overlay)
+        env.pop(_SCRIPT_SHA256_ENV, None)
+        if _script_runs_as_shell(path):
+            # A non-interactive bash sources $BASH_ENV (sh: $ENV) before the -c command, so a startup file would run ahead of
+            # the checked text, unchecked.
+            env.pop("BASH_ENV", None)
+            env.pop("ENV", None)
+        if checked is not None:
+            # The bootstrap compares the bytes it compiles; bash and a chosen interpreter open the file by name, so for
+            # them the re-stat below is the guard (bash sources it, reading it whole before any line runs).
+            if _runs_through_bootstrap(argv):
+                env[_SCRIPT_SHA256_ENV] = checked.sha256
+            elif _script_runs_as_shell(path) and sys.platform != "win32":
+                argv = _shell_argv_sourcing_path(argv[0], path)
         # Subprocess cwd only (default: scripts-dir parent). NEVER os.chdir() the process.
         # Use the job's workdir as the subprocess cwd when configured, otherwise default to the scripts-dir
         # parent (back-compat). NEVER mutate the Python process cwd — that would leak into concurrent
         # gateway sessions (#69396).
+        # Spawn right after the re-stat: nothing slow may run between them.
+        if checked is not None:
+            refusal = _changed_since_check(path, checked)
+            if refusal:
+                return False, refusal
         proc = subprocess.Popen(
             argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             cwd=workdir or str(path.parent), env=env, **popen_kwargs)

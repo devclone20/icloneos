@@ -21,6 +21,16 @@ if TYPE_CHECKING:  # pragma: no cover - annotation only
 _log = logging.getLogger("hermes_cli.web_server")
 
 
+def _spawn_guarded() -> bool:
+    """icloneOS confines this process (the exec-time ``ICLONE_CONFINEMENT`` its spawn guard is installed for)."""
+    try:
+        from tools.environments.host_lane import confined_process
+
+        return confined_process()
+    except Exception:  # noqa: BLE001 — the lane is unreadable: the live value is the evidence left
+        return os.environ.get("ICLONE_CONFINEMENT") == "1"
+
+
 def _process_start_marker(pid: int) -> str:
     """Return a cross-runtime marker for the current incarnation of ``pid``.
 
@@ -71,6 +81,11 @@ def _process_start_marker(pid: int) -> str:
         filetime = (creation.dwHighDateTime << 32) | creation.dwLowDateTime
         return f"win:{filetime + 504911232000000000}"
 
+    if _spawn_guarded():
+        # icloneOS: a confined runtime's spawn guard refuses `ps` (not a lane of a confined process), and the
+        # parent-death watchdog asks every poll. Start nothing: the watchdog reads this as inconclusive and checks PID
+        # liveness instead, which needs no program (a `ps:` marker never proves a replaced parent anyway).
+        raise OSError(f"the start marker of PID {pid} is not read in a confined runtime (it starts no `ps`)")
     result = subprocess.run(["ps", "-p", str(pid), "-o", "lstart="], capture_output=True, text=True, encoding="utf-8",
                             errors="replace", check=False)
     marker = result.stdout.strip()

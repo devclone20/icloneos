@@ -186,7 +186,10 @@ def _prompt_for_sudo_password(timeout_seconds: int = 45, *, command: str = "") -
     """Prompt for a sudo password; "" on skip (empty Enter), timeout, or error. Prefers the
     CLI-registered callback (prompt_toolkit-integrated); otherwise reads /dev/tty (msvcrt on
     Windows) with echo disabled. Human wait time is excluded from tool deadlines (``human_wait_window``)."""
+    from tools.approval import iclone_ignore_in_force
     from tools.human_input_hooks import human_input_request
+    if iclone_ignore_in_force():  # icloneOS F40, L2: in Ignore all no layer asks; sudo runs as written and says what it needs
+        return ""
     # The password never reaches the hook; only how the prompt ended.
     with human_input_request("sudo", prompt=command) as human:
         from tools.terminal_tool import _get_sudo_password_callback

@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs'
 
 import { packedElectronDist, verifyPackedChromiumLicenses } from './electron-licenses.mjs'
 import { PIN_PATH, readPin, verifyPackedRuntime } from './fetch-runtime-pin.mjs'
+import { checkIcloneFsevents } from './iclone-fsevents-check.mjs'
 import { stampExeIdentity } from './set-exe-identity.mjs'
 import { packedResourcesDir, verifyPackedIclonePlugins } from './stage-iclone-plugins.mjs'
 
@@ -89,6 +90,18 @@ export default async function afterPack(context) {
     }
 
     console.log(`[after-pack] packed Hermes runtime verified (${runtimeDir})`)
+  }
+
+  // FSEV (L1-4): the F7 guard's FSEvents addon is packed, unpacked from the asar, and exactly the pinned bytes, before
+  // electron-builder signs it (release-mac.mjs checks the Team-signed copy against the same pin).
+  if (context.electronPlatformName === 'darwin') {
+    const addon = checkIcloneFsevents(path.join(context.appOutDir, `${productName}.app`))
+
+    if (addon.problems.length > 0) {
+      throw new Error(`[after-pack] the FSEvents addon is not packed correctly: ${addon.problems.join('; ')}`)
+    }
+
+    console.log(`[after-pack] packed iclone_fsevents.node verified against its pin (${addon.file})`)
   }
 
   if (context.electronPlatformName !== 'win32') {

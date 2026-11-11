@@ -19,7 +19,7 @@ import logging
 import secrets
 import unicodedata
 from abc import ABC, abstractmethod
-from typing import Optional, Dict
+from typing import Any, Optional, Dict
 from pathlib import Path
 
 from tools.binary_extensions import has_binary_extension
@@ -202,6 +202,30 @@ def _refuse_introduced_json_constant(path: str, content: str,
         "string instead and retry."))
 
 
+def one_file_answered(env: Any, path: str) -> bool:
+    """iclone-seam: G23, main answered for this exact file (plugins/iclone-confinement)."""
+    waiting = getattr(env, "approved_file_waiting", None)
+    return waiting is not None and waiting(path) is True
+
+
+def one_file_read_answered(env: Any, path: str) -> bool:
+    """iclone-seam: G24, main answered for reading this exact file (plugins/iclone-confinement)."""
+    waiting = getattr(env, "approved_read_waiting", None)
+    return waiting is not None and waiting(path) is True
+
+
+def _route_read(env: Any, path: str) -> "tuple[Optional[bytes], Optional[str]]":
+    """iclone-seam: G23-W2, ``(bytes, refusal)`` when main answered for reading this exact file (plugins/iclone-confinement)."""
+    read = getattr(env, "read_approved_file", None)
+    if read is None:
+        return None, None
+    try:
+        data = read(path)
+    except Exception as exc:  # noqa: BLE001 — the launcher's refusal is a sentence for the agent
+        return None, str(exc)
+    return (data, None) if isinstance(data, bytes) else (None, None)
+
+
 class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
     """File operations over any terminal backend exposing ``execute(command, cwd)``
     returning ``{"output": str, "returncode": int}``.
@@ -345,6 +369,17 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         else base64 over the transport; ``(None, result)`` hands back the failed shell read for the
         caller's message. Only a regular file gets a native open (a FIFO would block this thread); the
         rest take the shell path and its timeout, as before."""
+        # iclone-seam: G-98 F42, a patch of the agent's own iNFT profile reads it here.
+        from tools import iclone_own_profile
+
+        own = iclone_own_profile.writable(path)
+        if own is not None and os.path.isfile(own):
+            return iclone_own_profile.read_bytes(own), None
+        routed, refused = _route_read(getattr(self, "env", None), path)
+        if routed is not None:
+            return routed, None
+        if refused:
+            return None, ExecuteResult(stdout=refused, exit_code=1)
         if self._native_read_enabled():
             import stat as _stat
             full = path if os.path.isabs(path) else os.path.join(
@@ -628,10 +663,10 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         head_result = self._head(path, 3)
         return head_result.exit_code == 0 and _has_bom(head_result.stdout)
 
-    def _unified_diff(self, old_content: str, new_content: str, filename: str) -> str:
+    def _unified_diff(self, old_content: str, new_content: str, filename: str, context: int = 3) -> str:
         return ''.join(difflib.unified_diff(
             old_content.splitlines(keepends=True), new_content.splitlines(keepends=True),
-            fromfile=f"a/{filename}", tofile=f"b/{filename}"))
+            fromfile=f"a/{filename}", tofile=f"b/{filename}", n=context))
 
     # --- READ ---------------------------------------------------------------
 
@@ -641,6 +676,66 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         return ReadResult(error=(
             f"Cannot read '{path}': not a regular file (directory, dangling symlink, "
             "FIFO, socket, or device). Reading it could block indefinitely."))
+
+    def _confined_elsewhere(self, path: str) -> Optional[tuple[str, str]]:
+        """fx21: ``(project, folder)`` when this confined environment's command is limited to ``project`` and ``path``
+        is in another folder that could be one, ``folder``; else ``None`` (no confinement, or nothing more to say)."""
+        env = self.env
+        if getattr(env, "host_side_helpers", True):
+            return None
+        project_for = getattr(env, "project_for", None)
+        here = getattr(env, "cwd", None) or self.cwd
+        if project_for is None or not here:
+            return None
+        try:
+            project = project_for(here) or getattr(env, "project_root", None)
+            folder = os.path.realpath(os.path.dirname(os.path.join(here, path)))
+            while folder != os.path.dirname(folder) and not self._path_is_there(folder):
+                folder = os.path.dirname(folder)
+            target = project_for(folder)
+        except Exception:  # noqa: BLE001 - the explanation never replaces the tool's own answer
+            return None
+        inside = folder == project or folder.startswith(project.rstrip(os.sep) + os.sep) if project else True
+        return (project, folder) if project and target and not inside else None
+
+    @staticmethod
+    def _path_is_there(folder: str) -> bool:
+        """A folder the confined runtime may not stat (EPERM) is there; only a missing one walks up."""
+        try:
+            os.stat(folder)
+        except PermissionError:
+            return True
+        except OSError:
+            return False
+        return True
+
+    def _confined_read_refusal(self, path: str) -> Optional[str]:
+        """fx21 (F2): a confined command reads the folder it runs in, not its siblings, and the kernel refuses a stat
+        there, which ``[ -e ]`` reports as missing. "File not found" would be false: ask the kernel, and say the rule."""
+        elsewhere = self._confined_elsewhere(path)
+        if elsewhere is None:
+            return None
+        arg = self._escape_shell_arg(path)
+        probe = self._exec(f"LC_ALL=C /bin/ls -d -- {arg} 2>&1 || true")
+        if "Operation not permitted" not in _strip_terminal_fence_leaks(probe.stdout):
+            return None
+        project, folder = elsewhere
+        return (f"Cannot read '{path}': icloneOS confinement refused it, so whether it exists cannot be told from here. "
+                f"A confined tool reads the folder it runs in ({project}), not {folder}. To read it, run the terminal "
+                f"tool with workdir={folder} (for example cat), which runs confined to that folder.")
+
+    def _confined_write_note(self, path: str, output: str) -> str:
+        """fx21 (F3): what a write refused outside the folder it ran in adds to the bare EPERM: why, and what to do."""
+        if "Operation not permitted" not in (output or ""):
+            return ""
+        elsewhere = self._confined_elsewhere(path)
+        if elsewhere is None:
+            return ""
+        project, folder = elsewhere
+        return (f"\nicloneOS: this write ran confined to {project}, and {folder} is another folder, so the kernel refused "
+                f"it. To write there, run the terminal tool with workdir={folder}: it can write once that folder is open "
+                f"in icloneOS or the user allowed a command in it. If it runs read-only because the folder is not listed, "
+                f"its row in the Containers pane offers Allow this folder.")
 
     def _probe_regular_file(self, path: str) -> tuple[int, str]:
         """Byte size of a REGULAR file: ``(file_size, status)`` with status ``"ok"``,
@@ -823,6 +918,31 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         question), so an exotic shell can never do worse than before. On a local
         POSIX environment the read never touches the shell (``_read_file_native``).
         """
+        routed, refused = _route_read(getattr(self, "env", None), self._expand_path(path))
+        if refused:
+            return ReadResult(error=refused)
+        if routed is not None:
+            if b"\x00" in routed[:8192]:
+                return ReadResult(is_binary=True, file_size=len(routed), error=describe_binary_file(routed[:8192], len(routed)))
+            lines = routed.decode("utf-8", "replace").splitlines()
+            shown = "\n".join(lines[max(0, offset - 1):max(0, offset - 1) + limit])
+            from tools.tool_output_limits import get_max_line_length
+
+            clamped = any(len(line) > get_max_line_length() for line in shown.split("\n"))
+            return ReadResult(content=self._add_line_numbers(shown, offset), total_lines=len(lines), file_size=len(routed),
+                              truncated=len(lines) > max(0, offset - 1) + limit, truncated_lines=clamped or None,
+                              _route_view=(self._expand_path(path), hashlib.sha256(routed).hexdigest()))
+        # iclone-seam: G-98 F42, the agent's own iNFT profile, read in every mode (tools/iclone_own_profile.py).
+        from tools import iclone_own_profile
+
+        own = iclone_own_profile.writable(self._expand_path(path))
+        if own is not None and os.path.isfile(own):
+            text = iclone_own_profile.read_bytes(own).decode("utf-8", "replace")
+            lines = text.splitlines()
+            shown = "\n".join(lines[max(0, offset - 1):max(0, offset - 1) + limit])
+            # f55: a page says it is a page, or the fresh-read rule counts half a SOUL as a full read.
+            return ReadResult(content=self._add_line_numbers(shown, offset), total_lines=len(lines), file_size=len(text),
+                              truncated=len(lines) > max(0, offset - 1) + limit)
         path = self._expand_path(path)  # before shell escaping: ~ doesn't expand in quotes
         offset, limit = normalize_read_pagination(offset, limit)
 
@@ -1213,6 +1333,9 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
 
     def _suggest_similar_files(self, path: str) -> ReadResult:
         """"File not found" result listing up to 5 similar names from the same directory."""
+        refused = self._confined_read_refusal(path)
+        if refused is not None:  # fx21 (F2): not "missing": the kernel would not say
+            return ReadResult(error=refused)
         dir_path = os.path.dirname(path) or "."
         filename = os.path.basename(path)
         basename_no_ext = os.path.splitext(filename)[0].lower()
@@ -1515,7 +1638,15 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         caller already has (skips the read); BOM detection always probes disk.
         """
         path = self._expand_path(path)
-        denied = get_write_denied_error(path)
+        # iclone-seam: G-98 F42, the agent's own iNFT profile, written in every mode (tools/iclone_own_profile.py).
+        from tools import iclone_own_profile
+
+        own = iclone_own_profile.writable(path)
+        if own is not None:
+            return WriteResult(bytes_written=iclone_own_profile.write(own, content))
+        # iclone-seam: G23, the owner's ruling: after main's answer for this exact file, this list does not refuse it. Main
+        # keeps this app's own files out of that answer.
+        denied = None if one_file_answered(getattr(self, "env", None), path) else get_write_denied_error(path)
         if denied:
             return WriteResult(error=denied)
         refused = self._reject_unencodable(path, content)
@@ -1525,6 +1656,16 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         refused = self._fail_closed_syntax_error(path, ext, content)
         if refused is not None:
             return refused
+        # iclone-seam: G2 A5, the one file the owner just allowed where no folder may open (plugins/iclone-confinement).
+        approved = getattr(getattr(self, "env", None), "write_approved_file", None)
+        if approved is not None:
+            try:
+                # A patch names what it read: the writer must find those bytes, and the agent saw only its own lines.
+                written = approved(path, content) if pre_content is None else approved(path, content, patch_of=pre_content)
+            except Exception as exc:  # noqa: BLE001 — the launcher's refusal is a sentence for the agent
+                return WriteResult(error=str(exc))
+            if isinstance(written, int):
+                return WriteResult(bytes_written=written)
 
         # Pre-content is read only for extensions in the UNION of in-process lint and
         # LSP coverage (keeps the hot path fast for binaries).
@@ -1551,7 +1692,11 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         content_bytes = content.encode("utf-8", "surrogateescape")
         write_result = self._atomic_write(path, content)
         if write_result.exit_code != 0:
-            return WriteResult(error=f"Failed to write file: {write_result.stdout}")
+            note = self._confined_write_note(path, write_result.stdout)
+            output = write_result.stdout
+            if note:  # fx22: the launcher's line names the folder the write ran in; only the true one is said
+                output = re.sub(r"^icloneOS: this command has no project writes[^\n]*\n?", "", output, flags=re.M)
+            return WriteResult(error=f"Failed to write file: {output}{note}")
         content_verified, verify_error = self._verify_written_hash(path, content_bytes)
         if verify_error is not None:
             return verify_error
@@ -1570,7 +1715,7 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
     # --- PATCH (replace mode) -----------------------------------------------
 
     def _no_match_result(self, path: str, content: str, old_string: str,
-                         new_string: str, match_count: int, error: Optional[str]) -> PatchResult:
+                         new_string: str, match_count: int, error: Optional[str], hints: bool = True) -> PatchResult:
         """PatchResult for a failed fuzzy match. Already-applied detection first: the
         most common production failure is a re-send of an edit that already landed,
         and a success-shaped no-op stops the model burning turns on re-reads.
@@ -1584,6 +1729,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
                     f"appears to be already applied to {path}. No write "
                     "performed; do not re-send this patch."))
         err_msg = error or f"Could not find match for old_string in {path}"
+        if not hints:
+            return PatchResult(error=err_msg)
         try:
             err_msg += format_no_match_hint(err_msg, match_count, old_string, content)
         except Exception:
@@ -1616,12 +1763,15 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         """Replace text in a file using fuzzy matching (``old_string`` must be
         unique unless ``replace_all``). Returns a PatchResult with diff + lint."""
         path = self._expand_path(path)
-        denied = get_write_denied_error(path)
+        # iclone-seam: G23-W2, one answer from main covers this patch's read and its write; the launcher's fsync'd replace is
+        # the proof it landed, since the read back may be one the kernel refuses.
+        answered = one_file_answered(getattr(self, "env", None), path)
+        denied = None if answered else get_write_denied_error(path)
         if denied:
             return PatchResult(error=denied)
         data, failed = self._read_exact_bytes(path)
         if data is None:
-            return PatchResult(error=failed.cwd_error or f"Failed to read file: {path}")
+            return PatchResult(error=failed.cwd_error or (failed.stdout if answered else "") or f"Failed to read file: {path}")
         # Every line the replacement does not touch is written back, so read the exact bytes;
         # surrogateescape lets write_file restore any byte UTF-8 cannot decode (#79178).
         # Match and diff on BOM-stripped content (a phantom U+FEFF defeats an exact
@@ -1633,7 +1783,8 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         new_content, match_count, _strategy, error = fuzzy_find_and_replace(
             content, old_string, new_string, replace_all)
         if error or match_count == 0:
-            return self._no_match_result(path, content, old_string, new_string, match_count, error)
+            # iclone-seam: G24, the answer was for this patch: lines around a miss in a key file are not part of it.
+            return self._no_match_result(path, content, old_string, new_string, match_count, error, hints=not answered)
         # Models send bare-LF old/new strings; normalize the substituted region to
         # the file's ending so CRLF files stay consistent.
         file_ending = _detect_line_ending(content)
@@ -1642,15 +1793,16 @@ class ShellFileOperations(LintMixin, SearchMixin, FileOperations):
         write_result = self.write_file(path, new_content, pre_content=raw_content)
         if write_result.error:
             return PatchResult(error=f"Failed to write changes: {write_result.error}")
-        verify_error = self._verify_patch_persisted(path, new_content)
+        verify_error = None if answered else self._verify_patch_persisted(path, new_content)
         if verify_error is not None:
             return verify_error
-        lint_result = self._check_lint_delta(path, pre_content=content, post_content=new_content)
+        # iclone-seam: G25, the agent asked to change this file, not to read it: a linter may quote a line of a route file.
+        lint_result = None if answered else self._check_lint_delta(path, pre_content=content, post_content=new_content)
         return PatchResult(
-            success=True, diff=self._unified_diff(content, new_content, path), files_modified=[path],
+            success=True, diff=self._unified_diff(content, new_content, path, context=0 if answered else 3), files_modified=[path],
             lint=lint_result.to_dict() if lint_result else None,
             # From the internal write_file call, whose baseline was the pre-patch content.
-            lsp_diagnostics=write_result.lsp_diagnostics,
+            lsp_diagnostics=None if answered else write_result.lsp_diagnostics,
             _writes=[(path, hashlib.sha256(data).hexdigest(), write_result._content_sha256)])
 
     def patch_v4a(self, patch_content: str) -> PatchResult:

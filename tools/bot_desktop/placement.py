@@ -26,6 +26,7 @@ GATEWAY = "gateway"
 TERMINAL = "terminal"
 REFUSED = "refused"
 _STREAM_BACKENDS = ("docker", "ssh", "singularity")
+_SEATBELT = "iclone_seatbelt"
 
 
 @dataclass(frozen=True)
@@ -43,8 +44,12 @@ def _setting() -> str:
 
 
 def _terminal_backend() -> str:
+    from tools.terminal_scope import TerminalPolicyUnavailable, terminal_env
     from tools.terminal_tool import _get_env_config
-    return str(_get_env_config().get("env_type") or "local")
+    try:
+        return str(_get_env_config().get("env_type") or "local")
+    except TerminalPolicyUnavailable:  # iclone-seam: fx35b — a refused backend must not raise out of a browser spawn
+        return terminal_env("TERMINAL_ENV", "local").strip().lower() or "local"
 
 
 def resolve() -> Placement:
@@ -62,6 +67,16 @@ def resolve() -> Placement:
               f"gateway host would put the agent's screen, browser and computer_use outside the sandbox you chose "
               f"for it. Set bot_desktop.placement: gateway to allow that explicitly.")
     return Placement(REFUSED, backend, reason)
+
+
+def resolve_browser() -> Placement:
+    """Where the browser may run (ruling R1 reverses F54's refusal for the browser, and only for it): with the Seatbelt on
+    agent-browser and its browser run on this host, outside the Seatbelt, through the launcher's door after the permission
+    gate (plugins/iclone-confinement/browser_door.py). Every other backend, and computer use without the door, keeps ``resolve()``'s answer."""
+    where = resolve()
+    if where.where == REFUSED and where.backend == _SEATBELT:
+        return Placement(GATEWAY, where.backend, "the launcher's door runs the browser on this host")
+    return where
 
 
 def terminal_environment(*, create: bool = True) -> Optional[Any]:

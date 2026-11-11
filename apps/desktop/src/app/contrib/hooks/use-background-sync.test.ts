@@ -6,8 +6,10 @@ import { sessionMessagesSignature } from '@/lib/session-signatures'
 import { $changeEventsAvailable, notifySessionsChanged, resetLiveSync } from '@/store/live-sync'
 import {
   $activeSessionId,
+  $currentCwd,
   $selectedStoredSessionId,
   setBusy,
+  setCurrentCwdTransient,
   setMessagingSessions,
   setSessionOwnerHint,
   setSessions
@@ -91,12 +93,14 @@ function useSyncHarness({
   activeIsMessaging = false,
   activeSessionId,
   activeStoredSessionId,
-  refreshActiveTranscript
+  refreshActiveTranscript,
+  requestGateway
 }: {
   activeIsMessaging?: boolean
   activeSessionId: string | null
   activeStoredSessionId: string | null
   refreshActiveTranscript: () => Promise<void>
+  requestGateway?: Parameters<typeof useBackgroundSync>[0]['requestGateway']
 }) {
   const updateSessionState: Parameters<typeof useBackgroundSync>[0]['updateSessionState'] = vi.fn(
     (sessionId, updater) => {
@@ -121,7 +125,7 @@ function useSyncHarness({
     refreshMessagingSessions: vi.fn(),
     refreshSessions: vi.fn(),
     updateSessionState,
-    requestGateway: vi.fn(async () => ({ sessions: [] })) as never
+    requestGateway: requestGateway ?? (vi.fn(async () => ({ sessions: [] })) as never)
   })
 }
 
@@ -816,5 +820,40 @@ describe('isTypingBurstActive', () => {
 
     // Exactly one quiet threshold after the last key the keyboard is cold.
     expect(isTypingBurstActive(1_000_000 + 1_500)).toBe(false)
+  })
+})
+
+describe('fx17 (lens4-pass H2) — a relative workspace the gateway resolves moves the view only', () => {
+  afterEach(() => {
+    cleanup()
+    delete (window as { hermesDesktop?: unknown }).hermesDesktop
+    setCurrentCwdTransient('')
+  })
+
+  it('the resolved cwd is shown and never noted for the launcher', async () => {
+    const noteFolder = vi.fn(async () => ({ ok: true }))
+
+    const sanitizeWorkspaceCwd = vi.fn(async (cwd: string) => ({ cwd, sanitized: false }))
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = { noteFolder, sanitizeWorkspaceCwd }
+    $activeSessionId.set(null)
+    setCurrentCwdTransient('.')
+
+    const requestGateway = vi.fn(async (method: string) =>
+      method === 'config.get' ? { cwd: '/runtime/says' } : { sessions: [] }
+    )
+
+    renderHook(() =>
+      useSyncHarness({
+        activeSessionId: null,
+        activeStoredSessionId: null,
+        refreshActiveTranscript: async () => undefined,
+        requestGateway: requestGateway as never
+      })
+    )
+
+    await waitFor(() => expect($currentCwd.get()).toBe('/runtime/says'))
+    expect(noteFolder).not.toHaveBeenCalled()
+    expect(sanitizeWorkspaceCwd).not.toHaveBeenCalled()
   })
 })

@@ -13,7 +13,7 @@ import type {
   HermesTitleBarTheme
 } from '../src/iclone-shared/bridge-contract'
 
-import { createConfirmTracker } from './agent-update-confirm'
+import { createConfirmTracker, isPermModeShortcutTarget } from './agent-update-confirm'
 import { installExternalLinkRouter } from './external-link-router'
 import { createPaymentsBridge } from './iclone-x402/preload-api'
 
@@ -37,7 +37,8 @@ const agentUpdateConfirm = createConfirmTracker({
 
 // V3-F: the same lock for the permission mode controls and the consent door's answer buttons.
 const permModeConfirm = createConfirmTracker({
-  isConfirmTarget: target => target instanceof Element && target.closest('[data-perm-mode-confirm]') !== null
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-perm-mode-confirm]') !== null,
+  isShortcutTarget: target => isPermModeShortcutTarget(target, document.hasFocus())
 })
 
 const doorAnswerConfirm = createConfirmTracker({
@@ -59,6 +60,12 @@ const confinementConfirm = createConfirmTracker({
   isConfirmTarget: target => target instanceof Element && target.closest('[data-confinement-confirm]') !== null
 })
 
+// fx17 (lens4-pass H2): a folder the user opened (picker, sidebar, resumed session) is listed for the confinement
+// launcher only on the user's own click or key, anywhere in the window: the folder is on screen, the gesture is real.
+const folderConfirm = createConfirmTracker({
+  isConfirmTarget: target => target instanceof Element
+})
+
 // V3-J: the same lock for Settings › Economy › Payments (a settings change, a revoke, clearing the stop).
 const paymentsConfirm = createConfirmTracker({
   isConfirmTarget: target => target instanceof Element && target.closest('[data-payments-confirm]') !== null
@@ -73,9 +80,15 @@ for (const type of ['click', 'keydown']) {
   window.addEventListener(
     type,
     event => {
+      const keyboard = event instanceof KeyboardEvent ? event : undefined
+
       const observed = {
+        altKey: keyboard?.altKey,
+        ctrlKey: keyboard?.ctrlKey,
         isTrusted: event.isTrusted,
-        key: event instanceof KeyboardEvent ? event.key : undefined,
+        key: keyboard?.key,
+        metaKey: keyboard?.metaKey,
+        repeat: keyboard?.repeat,
         target: event.target,
         type: event.type
       }
@@ -85,6 +98,7 @@ for (const type of ['click', 'keydown']) {
       doorAnswerConfirm.observe(observed)
       acpWorkConfirm.observe(observed)
       confinementConfirm.observe(observed)
+      folderConfirm.observe(observed)
       paymentsConfirm.observe(observed)
     },
     { capture: true }
@@ -121,6 +135,17 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // Registry-scoped backend resolution: { connectionId, profile } → descriptor.
   getConnectionFor: (payload: { connectionId?: null | string; profile?: null | string }) =>
     ipcRenderer.invoke('hermes:connection:for', payload),
+  homeSettings: {
+    check: (profile: null | string, doing?: 'install' | 'start') =>
+      ipcRenderer.invoke('hermes:home-settings:check', profile, doing),
+    // Call synchronously inside the button's own click/key handler (it carries data-confinement-confirm).
+    replaceWithCopy: (payload: { doing?: 'install' | 'start'; file: string; profile: null | string; target: string }) =>
+      ipcRenderer.invoke('hermes:home-settings:replace-with-copy', {
+        ...payload,
+        gesture: userGesture(confinementConfirm)
+      }),
+    warnings: (profile: null | string) => ipcRenderer.invoke('hermes:home-settings:warnings', profile)
+  },
   getProfileRoutes: (profiles: string[]) => ipcRenderer.invoke('hermes:plugin-profile-routes', profiles),
   revalidateConnection: () => ipcRenderer.invoke('hermes:connection:revalidate'),
   touchBackend: (profile?: string | null) => ipcRenderer.invoke('hermes:backend:touch', profile),
@@ -196,6 +221,9 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
         ipcRenderer.invoke('iclone:permissions:set-mode', { ...input, gesture: userGesture(permModeConfirm) }),
       revoke: (id: string) =>
         ipcRenderer.invoke('iclone:permissions:revoke', { id, gesture: userGesture(permModeConfirm) }),
+      // fx20 (lens5 H1): takes a folder "Allow this folder" listed off the list. Same lock as revoke.
+      removeFolder: (folder: string) =>
+        ipcRenderer.invoke('iclone:permissions:remove-folder', { folder, gesture: userGesture(permModeConfirm) }),
       // V3-F2: a function's level. Same lock as setMode; a raise also needs main's native old → new confirm.
       setFunctionLevel: (input: Record<string, unknown>) =>
         ipcRenderer.invoke('iclone:permissions:set-function-level', {
@@ -204,6 +232,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
         }),
       hermesApproval: (input: Record<string, unknown>) =>
         ipcRenderer.invoke('iclone:permissions:hermes-approval', input),
+      claimWindowChoice: (sessionId: string) =>
+        ipcRenderer.invoke('iclone:permissions:claim-window-choice', { sessionId }),
       state: (dir?: string | null) => ipcRenderer.invoke('iclone:permissions:state', { dir: dir ?? null }),
       tail: (since: number) => ipcRenderer.invoke('iclone:permissions:tail', { since }),
       onChanged: (callback: (seq: unknown) => void) => {
@@ -221,6 +251,21 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     act: (input: { item: string; title?: string; body?: string }) =>
       ipcRenderer.invoke('iclone:setup:system-act', input)
   },
+  // The Screen record button (electron/screen-record.ts): main records, the window only asks and follows.
+  screenRecord: {
+    status: () => ipcRenderer.invoke('iclone:screen-record:status'),
+    start: () => ipcRenderer.invoke('iclone:screen-record:start'),
+    stop: () => ipcRenderer.invoke('iclone:screen-record:stop'),
+    take: () => ipcRenderer.invoke('iclone:screen-record:take'),
+    discard: (file: string) => ipcRenderer.invoke('iclone:screen-record:discard', file),
+    onState: (callback: (status: unknown) => void) => {
+      const listener = (_event: unknown, status: unknown) => callback(status)
+
+      ipcRenderer.on('iclone:screen-record:state', listener)
+
+      return () => ipcRenderer.removeListener('iclone:screen-record:state', listener)
+    }
+  },
   // V3-J — payments (electron/iclone-x402/): views only, never a key, a signature or a raw mandate; no sign/pay/issue.
   payments: createPaymentsBridge(
     (channel, payload) => ipcRenderer.invoke(channel, payload),
@@ -234,16 +279,31 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     },
     () => document.documentElement.lang
   ),
-  // iCLONE OS — V3-G confinement (electron/iclone-confinement/ipc.ts): read-only state, and Kill for confined pids only.
+  // iCLONE OS — confinement (electron/iclone-confinement/ipc.ts): read-only state, and Kill / Stop for confined
+  // processes only.
   icloneConfinement: {
     state: () => ipcRenderer.invoke('iclone:confinement:state'),
     kill: (pid: number) => ipcRenderer.invoke('iclone:confinement:kill', { pid }),
+    // The owner's Stop on one run of the ledger (every live process the kernel holds in it).
+    stopRun: (run: string) => ipcRenderer.invoke('iclone:confinement:stop-run', { run }),
+    // F41: call synchronously inside the handler of a control carrying data-confinement-confirm.
+    setIsolation: (enabled: boolean) =>
+      ipcRenderer.invoke('iclone:confinement:set-isolation', { enabled, gesture: userGesture(confinementConfirm) }),
     explain: (pid: number) => ipcRenderer.invoke('iclone:confinement:explain', { pid }),
     // Call synchronously inside the handler of a control carrying data-confinement-confirm.
     ackHardlink: (input: { root: string; dir: string; digest: string }) =>
       ipcRenderer.invoke('iclone:confinement:ack-hardlink', { ...input, gesture: userGesture(confinementConfirm) }),
-    onChanged: (callback: () => void) => {
-      const listener = () => callback()
+    // fx13 (D13): "Allow this folder" on a narrowed run — the permission store's folder list, no mode,
+    // by the user's own click only (call it synchronously inside the handler of a control carrying
+    // data-confinement-confirm).
+    allowFolder: (folder: string) =>
+      ipcRenderer.invoke('hermes:confinement:allow-folder', { folder, gesture: userGesture(confinementConfirm) }),
+    // CF5 (B3-n2): one page of a refused group's file names (display only).
+    hardlinkPaths: (input: { root: string; dir: string; digest: string; offset: number }) =>
+      ipcRenderer.invoke('iclone:confinement:hardlink-paths', input),
+    // CF5 (B3-n5): the notice may carry the first scan's count (src/store/confinement.ts reads it).
+    onChanged: (callback: (notice: unknown) => void) => {
+      const listener = (_event: unknown, notice: unknown) => callback(notice)
 
       ipcRenderer.on('iclone:confinement:changed', listener)
 
@@ -725,6 +785,10 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   fetchLinkTitle: (url: string) => ipcRenderer.invoke('hermes:fetchLinkTitle', url),
   resolveFavicon: (url: string) => ipcRenderer.invoke('hermes:resolveFavicon', url),
   sanitizeWorkspaceCwd: (cwd?: null | string) => ipcRenderer.invoke('hermes:workspace:sanitize', cwd),
+  noteFolder: (folder: string, source: 'drag' | 'typed') =>
+    ipcRenderer.invoke('hermes:confinement:note-folder', { folder, source, gesture: userGesture(folderConfirm) }),
+  pickProjectFolder: (options?: { defaultPath?: string; profile?: string }) =>
+    ipcRenderer.invoke('hermes:confinement:pick-project-folder', { ...options, gesture: userGesture(folderConfirm) }),
   settings: {
     getDefaultProjectDir: () => ipcRenderer.invoke('hermes:setting:defaultProjectDir:get'),
     setDefaultProjectDir: (dir: null | string) => ipcRenderer.invoke('hermes:setting:defaultProjectDir:set', dir),
@@ -900,6 +964,12 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   // Soft gateway-mode apply finished tearing down the primary backend. Renderer
   // should wipe session lists + re-dial without a window reload.
+  onBackendRestarted: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('hermes:backend:restarted', listener)
+
+    return () => ipcRenderer.removeListener('hermes:backend:restarted', listener)
+  },
   onConnectionApplied: (callback: () => void) => {
     const listener = () => callback()
     ipcRenderer.on('hermes:connection:applied', listener)

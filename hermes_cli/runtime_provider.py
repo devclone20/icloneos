@@ -517,6 +517,15 @@ _POOL_ENTRY_SIMPLE_MODES: Dict[str, tuple] = {
 }
 
 
+def _codex_config_gateway(model_cfg) -> str:
+    """``model.base_url`` for openai-codex from a file that reads whole. The last good copy kept after a failed
+    read names nothing: a credential never follows a gateway the current file no longer names (FX34 R38)."""
+    from hermes_cli.config import FailedConfigRead, load_config_readonly
+    if isinstance(load_config_readonly(), FailedConfigRead):
+        return ""
+    return _config_base_url_for_provider(model_cfg, "openai-codex") or ""
+
+
 def _pool_entry_mode_and_url(provider, entry, model_cfg, effective_model, base_url) -> tuple:
     """(api_mode, base_url) for a pool entry of ``provider``."""
     if provider == "actual" and str(getattr(entry, "source", "")).startswith("env:"):
@@ -533,7 +542,7 @@ def _pool_entry_mode_and_url(provider, entry, model_cfg, effective_model, base_u
             # model.base_url is the secondary proxy override (same rule as the generic tail below:
             # only when the pool row still carries the canonical URL).
             if base_url in ("", default_url):
-                base_url = _config_base_url_for_provider(model_cfg, provider) or base_url
+                base_url = _codex_config_gateway(model_cfg) or base_url
         if provider == "xai":
             # Env-seeded rows keep the registry host. model.base_url is the relay
             # override, and only while the row is still that host — an explicit
@@ -571,6 +580,9 @@ def _resolve_runtime_from_pool_entry(*, provider: str, entry: PooledCredential, 
     api_mode, base_url = _pool_entry_mode_and_url(provider, entry, model_cfg, _effective_model(model_cfg, target_model),
                                                   _pool_entry_base_url(entry).rstrip("/"))
     base_url = _finalize_base_url(provider, api_mode, base_url)
+    if provider == "openai-codex":
+        from hermes_cli.auth_codex import _ensure_codex_pool_entry_host
+        _ensure_codex_pool_entry_host(_pool_entry_api_key(entry), base_url, label=getattr(entry, "label", None))
     return _runtime(provider, api_mode, base_url, _pool_entry_api_key(entry), source=getattr(entry, "source", "pool"),
                     credential_pool=pool, requested_provider=requested_provider)
 
@@ -678,8 +690,15 @@ def _creds_fallback(api_key, explicit_base_url, base_url, expiry, expiry_key, re
 
 
 def _explicit_codex(requested_provider, model_cfg, api_key, explicit_base_url, target_model):
-    api_key, base_url, last_refresh = _creds_fallback(api_key, explicit_base_url, explicit_base_url or DEFAULT_CODEX_BASE_URL,
-                                                      None, "last_refresh", resolve_codex_runtime_credentials)
+    # The host rule runs once, below, on the final pair: the stored route is not where this key is going.
+    resolve = (lambda: resolve_codex_runtime_credentials(route_url=explicit_base_url)) if explicit_base_url \
+        else resolve_codex_runtime_credentials
+    # An explicit key with no explicit URL takes the one rule too: env, then model.base_url, then the default.
+    route = explicit_base_url or _pool_entry_mode_and_url("openai-codex", None, model_cfg, "", "")[1]
+    api_key, base_url, last_refresh = _creds_fallback(api_key, explicit_base_url, route,
+                                                      None, "last_refresh", resolve)
+    from hermes_cli.auth_codex import _ensure_codex_credential_host
+    _ensure_codex_credential_host(api_key, base_url)
     return _runtime("openai-codex", "codex_responses", base_url, api_key, source="explicit", last_refresh=last_refresh,
                     requested_provider=requested_provider)
 
@@ -959,6 +978,11 @@ def _tag(runtime: Optional[Dict[str, Any]], requested_provider: str) -> Optional
     """Stamp ``requested_provider`` on a runtime built by a collaborator that does not set it."""
     if runtime:
         runtime["requested_provider"] = requested_provider
+        base_url = runtime.get("base_url")
+        if runtime.get("provider") == "custom" and base_url:
+            from hermes_cli.auth_codex import _ensure_codex_credential_host, _is_chatgpt_route
+            if _is_chatgpt_route(str(base_url)):  # a custom key aimed at chatgpt.com passes the same rule
+                _ensure_codex_credential_host(runtime.get("api_key"), str(base_url))
     return runtime
 
 

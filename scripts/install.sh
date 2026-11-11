@@ -112,6 +112,9 @@ fail() { STAGE_REASON="$1"; FAILURE_CLASS="${2:-other}"; log_error "$1"; exit 1;
 write_install_receipt() {
     # $1 outcome, $2 failed stage, $3 failure class. One file per run: the first writer wins.
     # A failed write (full disk) removes its partial temp file: the reader never sees dotfiles.
+    # Run by the app, this process is outside the sandbox and the runtime can write every name on this path. The app sends
+    # no install metrics, so nothing is lost by not walking it.
+    [ "${HERMES_HOME_NO_LINKS:-}" != 1 ] || return 0
     {
         local dir="$HERMES_HOME/telemetry/shared_metrics/pending_installs" id="$INSTALL_RUN_ID"
         [ -n "$id" ] && [ ! -e "$dir/$id.json" ] && mkdir -p "$dir" && {
@@ -864,14 +867,42 @@ stage_config() {
     mkdir -p "$HERMES_HOME"/cron "$HERMES_HOME"/sessions "$HERMES_HOME"/logs \
         "$HERMES_HOME"/pairing "$HERMES_HOME"/hooks "$HERMES_HOME"/image_cache \
         "$HERMES_HOME"/audio_cache "$HERMES_HOME"/memories "$HERMES_HOME"/skills
-    if [ ! -f "$HERMES_HOME/.env" ]; then
-        cp "$INSTALL_DIR/.env.example" "$HERMES_HOME/.env" 2>/dev/null || touch "$HERMES_HOME/.env"
-    fi
-    chmod 600 "$HERMES_HOME/.env"
-    if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$INSTALL_DIR/cli-config.yaml.example" ]; then
-        cp "$INSTALL_DIR/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
+    local helper="$INSTALL_DIR/scripts/desktop-update/no_follow.pl"
+    if [ "${HERMES_HOME_NO_LINKS:-}" = 1 ]; then
+        [ -f "$helper" ] && command -v perl >/dev/null 2>&1 \
+            || fail "the no-follow helper or perl is missing, so the agent's settings were not touched" other
+        # Run by the app: outside the sandbox, on a home the runtime can write. Every step is no-follow, so a link planted
+        # after main's check is left alone: it is never written through, and its target's mode never changes.
+        # Pinned now: the helper refuses a link anywhere in a path, and the folders above the home may hold one.
+        local home
+        home="$(cd "$HERMES_HOME" && pwd -P)" || fail "$HERMES_HOME could not be opened" other
+        seed_settings_file "$helper" "$INSTALL_DIR/.env.example" "$home/.env" /dev/null
+        perl "$helper" chmod-private "$home/.env" \
+            || log_warn ".env in $HERMES_HOME is a link or not a plain file: its mode was left as it is"
+        seed_settings_file "$helper" "$INSTALL_DIR/cli-config.yaml.example" "$home/config.yaml" ""
+    else
+        if [ ! -f "$HERMES_HOME/.env" ]; then
+            cp "$INSTALL_DIR/.env.example" "$HERMES_HOME/.env" 2>/dev/null || touch "$HERMES_HOME/.env"
+        fi
+        chmod 600 "$HERMES_HOME/.env"
+        if [ ! -f "$HERMES_HOME/config.yaml" ] && [ -f "$INSTALL_DIR/cli-config.yaml.example" ]; then
+            cp "$INSTALL_DIR/cli-config.yaml.example" "$HERMES_HOME/config.yaml"
+        fi
     fi
     log_success "config prepared in $HERMES_HOME"
+}
+
+# $1 helper, $2 example, $3 target, $4 what to seed when the example is missing (empty = nothing). Never replaces: whatever
+# has the name already, link included, stays. Exit 1 from the helper is "the name is taken" or a failed write, told apart below.
+seed_settings_file() {
+    local source="$2"
+    [ -f "$source" ] || source="$4"
+    [ -n "$source" ] || return 0
+    [ ! -e "$3" ] && [ ! -L "$3" ] || return 0
+    local rc=0
+    perl "$1" publish-new "$3" < "$source" || rc=$?
+    [ "$rc" -ne 3 ] || fail "$3 is on a path with a link or a special file, so it was not created" other
+    [ -e "$3" ] || [ -L "$3" ] || fail "$3 could not be created" other
 }
 
 # Interactive stages read the terminal, not stdin: under `curl | bash` stdin

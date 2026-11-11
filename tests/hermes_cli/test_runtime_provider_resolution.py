@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from hermes_cli import runtime_provider as rp
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 
 def test_configured_api_key_provider_without_key_fails_closed(monkeypatch):
@@ -90,7 +91,7 @@ def test_runtime_selected_copilot_exchanges_ambient_pool_token(tmp_path, monkeyp
 
 def test_resolve_runtime_provider_uses_credential_pool(monkeypatch):
     class _Entry:
-        access_token = "pool-token"
+        access_token = chatgpt_jwt("pool-token")
         source = "manual"
         base_url = "https://chatgpt.com/backend-api/codex"
 
@@ -107,7 +108,7 @@ def test_resolve_runtime_provider_uses_credential_pool(monkeypatch):
     resolved = rp.resolve_runtime_provider(requested="openai-codex")
 
     assert resolved["provider"] == "openai-codex"
-    assert resolved["api_key"] == "pool-token"
+    assert resolved["api_key"] == chatgpt_jwt("pool-token")
     assert resolved["credential_pool"] is not None
     assert resolved["source"] == "manual"
 
@@ -2297,7 +2298,7 @@ def _codex_rung(monkeypatch, rung: str) -> dict:
         monkeypatch.setattr(rp, "credential_pool_matches_provider", lambda *a, **k: True)
         return {}
     monkeypatch.setattr(rp, "load_pool", lambda _p: SimpleNamespace(has_credentials=lambda: False))
-    return {"explicit_api_key": "sk-explicit"} if rung == "explicit" else {}
+    return {"explicit_api_key": chatgpt_jwt("explicit")} if rung == "explicit" else {}
 
 
 @pytest.mark.parametrize("rung", ["pool", "oauth", "explicit"])

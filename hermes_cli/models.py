@@ -88,6 +88,10 @@ def _get_json(
     """GET ``url`` and parse the JSON body. ``opener`` defaults to the catalog opener (resolved at
     call time so monkeypatching ``_urlopen_model_catalog_request`` still applies). Raises on failure."""
     req = urllib.request.Request(url, headers=headers or {})
+    if req.has_header("Authorization"):  # the one urllib sender of a bearer here: the same two checks as httpx's send
+        from hermes_cli.auth_codex import _codex_judge_send
+        where = urllib.parse.urlsplit(url)
+        _codex_judge_send(req.get_header("Authorization"), where.hostname or "", where.path)
     with (opener or _urlopen_model_catalog_request)(req, timeout=timeout, **open_kwargs) as resp:
         body = resp.read()
         if req.get_header("Accept-encoding") == "gzip" and resp.headers.get("Content-Encoding", "").lower() == "gzip":

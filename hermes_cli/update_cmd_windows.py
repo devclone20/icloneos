@@ -1234,6 +1234,11 @@ def _refresh_bootstrap_cache_scripts(branch: str = "main") -> None:
     The .ps1 copy gets a UTF-8 BOM to match the installer's cache format (#67193 encoding fix).
     """
     from hermes_cli.update_cmd import _m
+    # Under the app the runtime can write this folder, nothing reads it (main's cache moved to installs/), and this
+    # process runs outside the sandbox: no write there. The standalone bootstrapper keeps its refresh.
+    from hermes_cli.no_follow import ENV_FLAG
+    if os.environ.get(ENV_FLAG) == "1":
+        return
     with _best_effort('Could not refresh bootstrap-cache scripts after update: %s'):
         cache_dir = Path(_m().get_hermes_home()) / "bootstrap-cache"
         if not cache_dir.is_dir():

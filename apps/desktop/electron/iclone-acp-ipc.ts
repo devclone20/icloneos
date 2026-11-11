@@ -35,6 +35,7 @@ import { consentAllows } from './iclone-consent'
 import { consentDoorCommand } from './iclone-consent-door'
 import { doctorDoorCommand } from './iclone-doctor'
 import { economyRefusal } from './iclone-ownership-gate'
+import { withCallingSession } from './iclone-permissions/calling-session'
 import { activePermissions } from './iclone-permissions/ipc'
 import { permVerb } from './iclone-permissions/socket-verb'
 import { writeFileAtomicSync } from './lib/atomic-write'
@@ -273,6 +274,8 @@ interface AgentRequest {
   token: string
   inft: string | null
   argv: unknown
+  /** S6: HERMES_SESSION_ID of the calling command, a claim; read only through withCallingSession. */
+  session?: unknown
 }
 
 /** Pure: one request line → a request, or null for anything malformed. */
@@ -284,7 +287,7 @@ export function parseAgentRequest(line: string): AgentRequest | null {
       return null
     }
 
-    const { v, token, inft, argv } = value as Record<string, unknown>
+    const { v, token, inft, argv, session } = value as Record<string, unknown>
 
     if (v !== 1 || typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) {
       return null
@@ -294,7 +297,7 @@ export function parseAgentRequest(line: string): AgentRequest | null {
       return null
     }
 
-    return { token, inft: typeof inft === 'string' && inft.trim() ? inft.trim() : null, argv }
+    return { token, inft: typeof inft === 'string' && inft.trim() ? inft.trim() : null, argv, session }
   } catch {
     return null
   }
@@ -458,7 +461,11 @@ export async function startAcpSocketServer(deps: AcpSocketDeps): Promise<AcpSock
 
         deps.log(`[iclone-acp-ipc] consent ${asker.slug} ${String(request.argv[1] ?? '')}`)
 
-        const door = await consentDoorCommand(asker.slug, request.argv.slice(1), abort.signal)
+        const consentArgv = request.argv.slice(1)
+
+        const door = await withCallingSession(request.session, () =>
+          consentDoorCommand(asker.slug, consentArgv, abort.signal)
+        )
 
         if (door.stdout) {
           send({ t: 'o', d: door.stdout })

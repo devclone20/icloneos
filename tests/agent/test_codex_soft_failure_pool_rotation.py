@@ -14,6 +14,7 @@ from agent.agent_runtime_helpers import recover_with_credential_pool
 from agent.credential_pool import STATUS_EXHAUSTED, CredentialPool, PooledCredential
 from agent.turn_response_check import retry_invalid_response
 from agent.turn_retry_state import TurnRetryState
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 _BASE_URL = "https://chatgpt.com/backend-api/codex"
 
@@ -21,7 +22,7 @@ _BASE_URL = "https://chatgpt.com/backend-api/codex"
 def _entry(i: int) -> PooledCredential:
     return PooledCredential(
         provider="openai-codex", id=f"cred-{i}", label=f"acct-{i}", auth_type="api_key", priority=i,
-        source="manual", access_token=f"tok-{i}-1234567890", base_url=_BASE_URL,
+        source="manual", access_token=chatgpt_jwt(f"account-{i}"), base_url=_BASE_URL,
     )
 
 
@@ -86,7 +87,7 @@ def test_quota_soft_failure_rotates_pool_before_provider_fallback():
     verdict = _run(agent, _soft_failure("usage_limit_reached", "You've hit your usage limit. Try again at 3:00 PM."))
 
     assert verdict.action == "continue"
-    assert agent.swapped_to == ["cred-1"] and agent.api_key == "tok-1-1234567890"
+    assert agent.swapped_to == ["cred-1"] and agent.api_key == chatgpt_jwt("account-1")
     benched = next(e for e in pool.entries() if e.id == "cred-0")
     assert benched.last_status == STATUS_EXHAUSTED and benched.last_error_reason == "usage_limit_reached"
     agent._try_activate_fallback.assert_not_called()
@@ -99,6 +100,6 @@ def test_content_policy_soft_failure_leaves_pool_alone():
     verdict = _run(agent, _soft_failure("content_policy_violation", "Your request was rejected by our safety system."))
 
     assert verdict.action == "continue"  # ordinary invalid-response retry path
-    assert agent.swapped_to == [] and agent.api_key == "tok-0-1234567890"
+    assert agent.swapped_to == [] and agent.api_key == chatgpt_jwt("account-0")
     assert all(e.last_status is None for e in pool.entries())
     agent._try_activate_fallback.assert_called()

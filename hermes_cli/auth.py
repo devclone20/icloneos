@@ -2037,8 +2037,13 @@ def get_codex_auth_status() -> Dict[str, Any]:
         on_pool_miss=_codex_pool_rate_limited_status)
     if str(status.get("source") or "").startswith("pool:"):
         # Pool rows keep the canonical URL; the chat route may send this key to model.base_url.
-        from hermes_cli.auth_codex import _codex_pool_route_base_url
-        status["base_url"] = _codex_pool_route_base_url(status.get("base_url"))
+        from hermes_cli.auth_codex import _codex_host_accepts_credential, _codex_pool_route_unchecked, _codex_refusal_message
+        status["base_url"] = _codex_pool_route_unchecked(status.get("base_url"))
+        # A login at its quota carries no key here: there is nothing to judge, and it stays logged in.
+        if status.get("api_key") and not _codex_host_accepts_credential(status["api_key"], status["base_url"]):
+            # Same rule as chat: a row chat refuses is not logged in unless another row is only cooling down.
+            status = _codex_pool_rate_limited_status() or {
+                **status, "logged_in": False, "api_key": None, "error": _codex_refusal_message(status["source"].split(":", 1)[1])}
     return status
 
 

@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { CONFINEMENT_STATE_SCHEMA, type ConfinementStateView } from '../../src/iclone-shared/confinement'
 
 import { confinementMarker, parseMarker } from './backend'
+import { RUNTIME_ANSWER } from './members'
 import {
   agentActivity,
   type AuditSlice,
@@ -17,7 +18,10 @@ import {
   outsideProcesses,
   parseElapsed,
   parsePs,
-  type PsRow
+  PLUGIN_REASON_MAX,
+  type PsRow,
+  runtimePids,
+  withMembership
 } from './state'
 
 const SHA = 'a'.repeat(64)
@@ -80,6 +84,8 @@ const base = (over: Partial<FoldInput> = {}): FoldInput => ({
   refusals: [],
   tampered: [],
   hardlinks: [],
+  // The command sandboxes on their own: the runtime's confinement is configured only on macOS (its own block below).
+  darwin: false,
   ...over
 })
 
@@ -356,5 +362,344 @@ describe('G9 — the state schema, and every pane field traces to it', () => {
     for (const key of reads) {
       expect(Object.keys(view), key).toContain(key)
     }
+  })
+})
+
+describe('the runtime profile — by the kernel’s mark, never by argv or ancestry', () => {
+  const PROFILE = { profileSha: 'f'.repeat(64), reads: ['/usr'], writes: ['/run'], denied: ['/secret'] }
+
+  /** Hermes and its stub, both held in the runtime profile; the stub carries the confined argv while it waits. */
+  const runtimeRows: PsRow[] = [
+    { pid: 100, ppid: 1, pgid: 100, elapsedSec: 60, command: '/opt/hermes/python -m hermes serve', runtime: true },
+    {
+      pid: 150,
+      ppid: 100,
+      pgid: 150,
+      elapsedSec: 5,
+      command: `/opt/py -I -S stub.py /run/launcher.sock -- /usr/bin/sandbox-exec -p x /bin/bash -c 'ls __HERMES_CWD_z__' ${marker}`,
+      runtime: true
+    },
+    { pid: 160, ppid: 100, pgid: 160, elapsedSec: 5, command: '/opt/py -c "import x"', runtime: true }
+  ]
+
+  const on = (over: Partial<FoldInput> = {}) =>
+    foldState(base({ rows: runtimeRows, darwin: true, runtimeProfile: PROFILE, launcher: 'up', ...over }))
+
+  it('withMembership reads the runtime answer as a mark, never as a run', async () => {
+    const snap = await withMembership(
+      [
+        { pid: 100, ppid: 1, pgid: 100, elapsedSec: 1, command: 'hermes' },
+        { pid: 200, ppid: 1, pgid: 200, elapsedSec: 1, command: 'bash' },
+        { pid: 300, ppid: 1, pgid: 300, elapsedSec: 1, command: 'other' }
+      ],
+      async () =>
+        new Map([
+          [100, RUNTIME_ANSWER],
+          [200, RUN]
+        ])
+    )
+
+    expect(snap.rows.map(row => [row.pid, row.run, row.runtime])).toEqual([
+      [100, undefined, true],
+      [200, RUN, undefined],
+      [300, undefined, undefined]
+    ])
+  })
+
+  it('ON: Hermes stays hermes, its held children are runtime (the stub too: not an agent command, not a forgery)', () => {
+    const view = on()
+
+    expect(view.runtime).toEqual({ state: 'on', launcher: 'up', pids: [100], ...PROFILE })
+    expect(view.outside.map(item => [item.pid, item.kind])).toEqual([
+      [100, 'hermes'],
+      [150, 'runtime'],
+      [160, 'runtime']
+    ])
+    expect(view.reasons).toEqual([])
+    expect(view.verdict).toBe('green')
+  })
+
+  it('a forged argv the kernel does NOT hold is still an agent command, and red', () => {
+    const forged = runtimeRows.map(row => (row.pid === 150 ? { ...row, runtime: undefined } : row))
+    const view = on({ rows: forged })
+
+    expect(view.outside.find(item => item.pid === 150)?.kind).toBe('agent-command')
+    expect(view.reasons).toEqual(
+      expect.arrayContaining([
+        { code: 'forged-marker', pid: 150 },
+        { code: 'agent-command-outside', pid: 150 }
+      ])
+    )
+    expect(view.verdict).toBe('red')
+  })
+
+  it('BROKEN: a Hermes the kernel does not hold in the runtime profile is red, by pid', () => {
+    const loose = runtimeRows.map(row => (row.pid === 100 ? { ...row, runtime: undefined } : row))
+    const view = on({ rows: loose })
+
+    expect(view.runtime.state).toBe('broken')
+    expect(view.reasons).toContainEqual({ code: 'runtime-not-confined', pid: 100 })
+    expect(view.verdict).toBe('red')
+  })
+
+  it('unverified: broken (not kernel-checked), said by membership-unverified, never runtime-not-confined', () => {
+    const view = on({ rows: runtimeRows.map(({ runtime: _runtime, ...row }) => row), verified: false })
+
+    expect(view.runtime.state).toBe('broken')
+    expect(view.reasons.map(reason => reason.code)).not.toContain('runtime-not-confined')
+    expect(view.reasons).toContainEqual({ code: 'membership-unverified' })
+  })
+
+  it('launcher down is red, and the card says so; a launcher that is not running while configured is down, never off', () => {
+    for (const launcher of ['down', 'off', undefined] as const) {
+      const view = on({ launcher })
+
+      expect(view.runtime).toMatchObject({ state: 'on', launcher: 'down' })
+      expect(view.reasons).toEqual([{ code: 'launcher-down' }])
+      expect(view.verdict).toBe('red')
+    }
+  })
+
+  it('OFF only when runtime confinement is not configured: confinement off, or not macOS', () => {
+    for (const over of [{ enabled: false }, { darwin: false }] as Partial<FoldInput>[]) {
+      const view = on({ ...over, rows: runtimeRows.map(row => ({ ...row, runtime: undefined })) })
+
+      expect(view.runtime).toMatchObject({
+        state: 'off',
+        launcher: 'off',
+        profileSha: null,
+        reads: [],
+        writes: [],
+        denied: []
+      })
+      expect(view.reasons.map(reason => reason.code)).not.toContain('runtime-not-confined')
+      expect(view.reasons.map(reason => reason.code)).not.toContain('runtime-not-running')
+    }
+
+    expect(foldState(base()).runtime).toMatchObject({ state: 'off', launcher: 'off' })
+  })
+
+  it('STOPPED: configured but no Hermes process (dead before ready, or not started): red, never off, never green', () => {
+    // Hermes died before it was ready: main still names its pid, ps no longer lists it; the launcher stopped with it.
+    for (const over of [
+      { hermesPids: [100], rows: [], launcher: 'down' },
+      { hermesPids: [], rows: [], launcher: 'off', runtimeProfile: null },
+      { hermesPids: [], rows: runtimeRows.slice(1), launcher: 'up' }
+    ] as Partial<FoldInput>[]) {
+      const view = on(over)
+
+      expect(view.runtime.state).toBe('stopped')
+      expect(view.runtime.launcher).toBe(over.launcher === 'up' ? 'up' : 'down')
+      expect(view.verdict).toBe('red')
+      // One reason: the launcher stopping with the last runtime is a consequence, said on This Mac.
+      expect(view.reasons.filter(reason => reason.code !== 'membership-unverified')).toEqual([
+        { code: 'runtime-not-running' }
+      ])
+    }
+
+    expect(on({ hermesPids: [], rows: [], runtimeProfile: null }).runtime).toMatchObject({
+      profileSha: null,
+      reads: []
+    })
+  })
+
+  it('a live Hermes with no runtime profile while confinement is on is not held: broken, red by pid', () => {
+    const view = on({ runtimeProfile: null, rows: runtimeRows.map(row => ({ ...row, runtime: undefined })) })
+
+    expect(view.runtime.state).toBe('broken')
+    expect(view.reasons).toContainEqual({ code: 'runtime-not-confined', pid: 100 })
+  })
+
+  describe('the plugin’s word on the agent’s commands (its acknowledgement), a fact the runtime reports', () => {
+    const report = (available: boolean, pid = 100, reason = 'the launcher is not answering') => ({
+      pid,
+      available,
+      reason: available ? '' : reason
+    })
+
+    it('G22 B1: two runtimes, each with its own word: both confined and acknowledged reads green', () => {
+      const rows = [...runtimeRows, { ...runtimeRows.find(row => row.pid === 100)!, pid: 500, ppid: 1 }]
+
+      expect(
+        on({ rows, hermesPids: [100, 500], pluginAckPids: [100, 500], pluginCommands: [report(true), report(true, 500)] })
+      ).toMatchObject({ verdict: 'green', reasons: [] })
+    })
+
+    it('G22 B1: a second runtime that never confirmed, or was never held, still reads red, by its own facts', () => {
+      const rows = [...runtimeRows, { ...runtimeRows.find(row => row.pid === 100)!, pid: 500, ppid: 1, elapsedSec: 300 }]
+
+      expect(on({ rows, hermesPids: [100, 500], pluginAckPids: [100], pluginCommands: [report(true)] }).reasons).toContainEqual({
+        code: 'plugin-not-loaded'
+      })
+
+      const loose = rows.map(row => (row.pid === 500 ? { ...row, runtime: undefined } : row))
+
+      expect(on({ rows: loose, hermesPids: [100, 500], pluginAckPids: [100, 500] }).reasons).toContainEqual({
+        code: 'runtime-not-confined',
+        pid: 500
+      })
+      expect(
+        on({ rows, hermesPids: [100, 500], pluginAckPids: [100, 500], pluginCommands: [report(true), report(false, 500)] }).reasons[0]
+      ).toMatchObject({ code: 'agent-commands-unavailable' })
+    })
+
+    it('M4: the window\'s runtime dead or gone reads stopped whatever the pool does, and the pool\'s commands are still judged', () => {
+      const pool = { ...runtimeRows.find(row => row.pid === 100)!, pid: 500, ppid: 1, elapsedSec: 300 }
+      const loose = { pid: 501, ppid: 500, elapsedSec: 300, command: 'sh -c __HERMES_CWD_ x', pgid: 501 } as typeof pool
+      const rows = [pool, loose]
+
+      for (const over of [
+        { primaryPid: null, hermesPids: [500] },
+        { primaryPid: 100, hermesPids: [100, 500] },
+        { hermesPids: [100, 500] }
+      ] as Partial<FoldInput>[]) {
+        const view = on({ ...over, rows, pluginAckPids: [500] })
+
+        expect(view.runtime.state).toBe('stopped')
+        expect(view.verdict).toBe('red')
+        expect(view.reasons).toContainEqual({ code: 'runtime-not-running' })
+        expect(view.outside.map(process => process.pid)).toContain(501)
+      }
+    })
+
+    it('G24: the window runtime dead with a pool runtime outside the Seatbelt reads broken, never stopped', () => {
+      const pool = { ...runtimeRows.find(row => row.pid === 100)!, pid: 500, ppid: 1, runtime: false }
+      const view = on({ primaryPid: 100, hermesPids: [100, 500], rows: [pool], pluginAckPids: [500] })
+
+      expect(view.runtime.state).toBe('broken')
+    })
+
+    it('M4: a live window runtime with a pool runtime is still judged on every live runtime', () => {
+      const rows = [...runtimeRows, { ...runtimeRows.find(row => row.pid === 100)!, pid: 500, ppid: 1 }]
+      const loose = rows.map(row => (row.pid === 500 ? { ...row, runtime: undefined } : row))
+      const facts = { primaryPid: 100, hermesPids: [100, 500], pluginAckPids: [100, 500] }
+
+      expect(on({ ...facts, rows }).runtime.state).toBe('on')
+      expect(on({ ...facts, rows: loose }).runtime.state).toBe('broken')
+    })
+
+    it('M4: with no window runtime the pool\'s pids still reach the fold, so its commands are judged; the state comes from primaryPid, not from this list', () => {
+      expect(runtimePids(100, [{ process: { pid: 500 } }, { process: null }, { process: { pid: 100 } }, { process: { pid: undefined } }])).toEqual([100, 500])
+      expect(runtimePids(undefined, [{ process: { pid: 500 } }])).toEqual([500])
+      expect(runtimePids(undefined, [])).toEqual([])
+    })
+
+    it('every kernel fact green, but the plugin withholds the commands: red, with its plain reason, labelled', () => {
+      const view = on({ pluginCommands: [report(false)] })
+
+      expect(view.runtime).toMatchObject({ state: 'on', launcher: 'up' })
+      expect(view.reasons).toEqual([
+        { code: 'agent-commands-unavailable', reason: 'the launcher is not answering', reportedBy: 'runtime' }
+      ])
+      expect(view.verdict).toBe('red')
+    })
+
+    it('R20: an unreadable config is a note, not a refusal: green stays green, and a dead process says nothing', () => {
+      const view = on({ pluginCommands: [{ ...report(true), note: 'config.yaml could not be read' }] })
+
+      expect(view.verdict).toBe('green')
+      expect(view.reasons).toEqual([{ code: 'agent-config-unreadable' }])
+
+      expect(on({ pluginCommands: [{ ...report(true, 999), note: 'x' }] }).reasons).toEqual([])
+    })
+
+    it('a child of Hermes said it (the plugin loads in its interpreter children too): still red', () => {
+      expect(on({ pluginCommands: [report(false, 160)] }).verdict).toBe('red')
+    })
+
+    it('available never turns a red verdict green: it adds nothing, and the kernel facts still decide', () => {
+      expect(on({ pluginCommands: [report(true)] })).toMatchObject({ verdict: 'green', reasons: [] })
+
+      const loose = runtimeRows.map(row => (row.pid === 100 ? { ...row, runtime: undefined } : row))
+      const broken = on({ rows: loose, pluginCommands: [report(true)] })
+
+      expect(broken.verdict).toBe('red')
+      expect(broken.reasons).toContainEqual({ code: 'runtime-not-confined', pid: 100 })
+
+      expect(on({ launcher: 'down', pluginCommands: [report(true)] }).reasons).toEqual([{ code: 'launcher-down' }])
+    })
+
+    it('with the launcher down both facts are said: main’s own, and the runtime’s', () => {
+      expect(on({ launcher: 'down', pluginCommands: [report(false)] }).reasons).toEqual([
+        { code: 'launcher-down' },
+        { code: 'agent-commands-unavailable', reason: 'the launcher is not answering', reportedBy: 'runtime' }
+      ])
+    })
+
+    it('a report from a process outside every live Hermes tree (a Hermes that exited) says nothing', () => {
+      expect(on({ pluginCommands: [report(false, 4242)] })).toMatchObject({ verdict: 'green', reasons: [] })
+      expect(
+        on({ hermesPids: [], rows: [], pluginCommands: [report(false)] }).reasons.map(reason => reason.code)
+      ).not.toContain('agent-commands-unavailable')
+    })
+
+    it('confinement off: nothing the plugin says makes a reason', () => {
+      expect(on({ enabled: false, pluginCommands: [report(false)] }).reasons).toEqual([])
+    })
+
+    it('the reason is clipped, and an empty one still reads as a reason', () => {
+      const long = on({ pluginCommands: [report(false, 100, 'x'.repeat(5000))] }).reasons[0]
+      const empty = on({ pluginCommands: [report(false, 100, '')] }).reasons[0]
+
+      expect(long).toMatchObject({ code: 'agent-commands-unavailable' })
+      expect(long?.code === 'agent-commands-unavailable' ? long.reason.length : 0).toBe(PLUGIN_REASON_MAX)
+      expect(empty).toEqual({ code: 'agent-commands-unavailable', reason: 'no reason given', reportedBy: 'runtime' })
+    })
+  })
+})
+
+describe('membership-unverified — said only when the kernel truly could not be asked', () => {
+  const quiet = (over: Partial<FoldInput>) =>
+    foldState(
+      base({
+        verified: false,
+        hermesPids: [],
+        rows: [{ pid: 500, ppid: 1, pgid: 500, elapsedSec: 9, command: 'unrelated app' }],
+        ...over
+      })
+    )
+
+  const said = (view: ConfinementStateView) => view.reasons.some(reason => reason.code === 'membership-unverified')
+
+  it('the probe ran and failed: said, whatever runs', () => {
+    expect(said(quiet({ membership: 'failed' }))).toBe(true)
+    expect(said(quiet({}))).toBe(true)
+  })
+
+  it('no probe to run (no runtime Python yet) and nothing to ask about: not said', () => {
+    expect(said(quiet({ membership: 'none' }))).toBe(false)
+  })
+
+  it('no probe to run while a Hermes lives, or a process carries the confinement marker: said', () => {
+    expect(said(quiet({ membership: 'none', hermesPids: [100], rows }))).toBe(true)
+    expect(
+      said(
+        quiet({
+          membership: 'none',
+          rows: [{ pid: 700, ppid: 1, pgid: 700, elapsedSec: 1, command: `/bin/sleep 9 ${marker}` }]
+        })
+      )
+    ).toBe(true)
+  })
+
+  it('answered: never said', () => {
+    expect(said(foldState(base({ verified: true, membership: 'answered' })))).toBe(false)
+  })
+
+  it('withMembership names why: none without a probe, failed when it throws, answered when it answers', async () => {
+    const one: PsRow[] = [{ pid: 9, ppid: 1, pgid: 9, elapsedSec: 1, command: 'x' }]
+
+    expect(await withMembership(one, null)).toMatchObject({ verified: false, probe: 'none' })
+    expect(
+      await withMembership(one, async () => {
+        throw new Error('no python')
+      })
+    ).toMatchObject({ verified: false, probe: 'failed' })
+    expect(await withMembership(one, async () => new Map())).toMatchObject({ verified: true, probe: 'answered' })
+  })
+
+  it('schema 8: runs ride on the state as folded', () => {
+    expect(foldState(base()).runs).toEqual([])
+    expect(foldState(base()).schema).toBe(CONFINEMENT_STATE_SCHEMA)
   })
 })

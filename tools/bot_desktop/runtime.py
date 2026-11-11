@@ -385,13 +385,13 @@ def ensure_started_for_tool() -> None:
         logger.info("Bot Desktop auto-start skipped: %s", exc)
 
 
-def tool_placement() -> str:
+def tool_placement(*, browser: bool = False) -> str:
     """Where the browser / cua-driver a tool is about to spawn MUST run: ``placement.GATEWAY`` or
     ``placement.TERMINAL``. Policy first, liveness second: a ``terminal`` placement whose screen is down gets
     it started here (raising with the blocker when it cannot come up) and a ``refused`` placement raises its
     reason. Neither ever yields the host — a screen that happens to be down is not permission to run the
-    agent's browser outside the sandbox the user chose."""
-    where = placement.resolve()
+    agent's browser outside the sandbox the user chose. ``browser``: the caller is the browser (ruling R1)."""
+    where = placement.resolve_browser() if browser else placement.resolve()
     if where.where == placement.REFUSED:
         raise RuntimeError(where.reason)
     if where.where == placement.GATEWAY:

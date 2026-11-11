@@ -8,6 +8,7 @@ Usage: ``python -m hermes_cli.main web [--port 8080]``.
 
 from contextlib import asynccontextmanager
 
+import contextlib
 import asyncio
 from collections import deque
 import hmac
@@ -306,6 +307,13 @@ async def _lifespan(app: "FastAPI"):
     try:
         yield
     finally:
+        # uvicorn re-raises SIGTERM once this ends, so atexit never runs in this process: a browser video being captured is saved
+        # from here, at a quit and at a restart, beside the rest of the teardown. stop_recordings_for_exit holds its own bound.
+        browser_videos = None
+        try:
+            browser_videos = tui_gateway.server._start_saving_browser_videos()
+        except Exception:
+            _log.debug("Browser video save skipped", exc_info=True)
         try:
             tui_gateway.server.clear_tui_message_injector()
         except Exception:
@@ -339,6 +347,8 @@ async def _lifespan(app: "FastAPI"):
         if desktop_owned:
             _terminate_desktop_managed_gateway()
         eager_reconcile_thread.join()
+        if browser_videos is not None:
+            browser_videos.join()
 
 
 def _app_state_default(app: "FastAPI", name: str, factory):
@@ -1272,7 +1282,19 @@ def _build_uvicorn_server(host: str, port: int, *, ssh_isolated: bool = False):
         # leaves room for lifespan shutdown + cron_stop before the kill.
         timeout_graceful_shutdown=3,
     )
-    return config, uvicorn.Server(config)
+    server = uvicorn.Server(config)
+    handle_exit = getattr(server, "handle_exit", None)
+
+    def _save_browser_videos_then_exit(sig, frame):
+        # At the signal, not when the lifespan ends: those 3 s come out of the 5 s before the SIGKILL.
+        with contextlib.suppress(Exception):
+            import tui_gateway.server as gateway
+            gateway._start_saving_browser_videos()
+        handle_exit(sig, frame)
+
+    if handle_exit is not None:
+        server.handle_exit = _save_browser_videos_then_exit
+    return config, server
 
 
 def _best_effort(what: str, fn) -> None:

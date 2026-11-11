@@ -6,11 +6,11 @@
       "Wo": "A",
       "X": "A",
       "N": "A",
-      "$": "Q",
+      "$": "A",
       "M": "A",
-      "S": "Q",
-      "I": "A:unprivileged",
-      "D": "A:project"
+      "S": "A",
+      "I": "A",
+      "D": "A"
     },
     "manual": {
       "R": "A",
@@ -78,7 +78,7 @@
       "A1": "allow",
       "A2": "allow",
       "A3": "allow",
-      "A4": "ask"
+      "A4": "allow"
     },
     "manual": {
       "A1": "ask",

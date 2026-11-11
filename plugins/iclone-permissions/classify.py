@@ -18,12 +18,14 @@ import re
 import shlex
 import sys
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+
+from agent.disk_name import disk_fold
 
 from .normalize import NormalizedCommand, SimpleCommand, _split_top, mask_data, normalize
-from .policy import MANUAL_TABLE_ROW, decide_cell, matching_grant
+from .policy import CREDENTIAL_READ_FLOOR, MANUAL_TABLE_ROW, TOTAL_DESTRUCTION, UNREAD_CONFINEMENT_FLOOR, UNRESOLVED_DELETE_FLOOR, decide_cell, is_total_destruction, matching_grant
 
 # (class, ceiling consent key or None[, "get"]) — "get" marks a GET with no body and no credentials (Plan
 # allows it, note 5). Path-taking writers and readers are refined from their arguments below.
@@ -82,6 +84,7 @@ TOOL_CLASSES: Dict[str, Tuple[Optional[str], ...]] = {
     "browser_vault_enter_code": ("$", "spendTrade"),
     # the screen and the desktop
     "computer_use": ("S", "automation"),
+    "screen_record": ("S", "screen"),
     "read_window_below": ("R", "screen"),
     "read_terminal": _R,
     # shell and code (PROCESS_TOOLS are refined from their action below: reads stay R, input to a running shell is X)
@@ -493,9 +496,18 @@ def _within(path: Optional[str], root: str) -> bool:
     return path == resolved_root or path.startswith(resolved_root.rstrip(os.sep) + os.sep)
 
 
+def _within_on_disk(path: str, root: str) -> bool:
+    """``_within`` for a floor: every spelling the disk opens as this name. Not for the project, a root that grants."""
+    try:
+        resolved_root = str(Path(root).expanduser().resolve())
+    except _PATH_ERRORS:
+        resolved_root = root
+    return _within(disk_fold(path), disk_fold(resolved_root))
+
+
 def _guarded(path: Optional[str], roots: Sequence[str]) -> bool:
     """A write target inside a never-writable path. An unresolvable target is guarded: it may be one."""
-    return path is None or any(_within(path, root) for root in roots)
+    return path is None or any(_within_on_disk(path, root) for root in roots)
 
 
 def _matches_secret(path: Optional[str], pattern: str) -> bool:
@@ -505,16 +517,16 @@ def _matches_secret(path: Optional[str], pattern: str) -> bool:
         pattern = str(Path(os.path.dirname(pattern)).resolve() / os.path.basename(pattern))
     except _PATH_ERRORS:
         pass
-    return fnmatch.fnmatchcase(path, pattern) or _within(path, pattern)
+    return fnmatch.fnmatchcase(disk_fold(path), disk_fold(pattern)) or _within_on_disk(path, pattern)
 
 
-def _mentions(command: str, paths: Sequence[str]) -> Optional[str]:
+def _mentions(command: str, paths: Sequence[str], spelling: Callable[[str], str] = str) -> Optional[str]:
     home = os.path.expanduser("~")
     normalized = command.replace("$HOME", home).replace("${HOME}", home)
-    normalized = re.sub(r"(^|[\s=\"'])~(?=/)", lambda m: m.group(1) + home, normalized)
+    normalized = spelling(re.sub(r"(^|[\s=\"'])~(?=/)", lambda m: m.group(1) + home, normalized))
     for raw in paths:
         stem = raw.split("*", 1)[0].rstrip(os.sep) or raw
-        if stem and stem in normalized:
+        if stem and spelling(stem) in normalized:
             return raw
     return None
 
@@ -560,7 +572,9 @@ def _hardline(command: str) -> Optional[str]:
         from tools.approval import detect_hardline_command
 
         hit, description = detect_hardline_command(command)
-    except Exception as exc:  # noqa: BLE001 — the floor cannot be checked, so the floor holds
+    # g28b: if this detector fails the floor is a hardline outside total destruction, so since G28 it asks (Plan
+    # refuses, Ignore runs) instead of refusing; a failing destruction detector still refuses.
+    except Exception as exc:  # noqa: BLE001
         return f"hardline: the never-run list could not be checked ({type(exc).__name__})"
     return f"hardline: {description}" if hit else None
 
@@ -997,6 +1011,7 @@ class View:
     unresolvable: bool
     unknown: bool = False                   # r7 U: the LINE has an unknown (same on both readings)
     stop: bool = False                      # r7b m-o: a stop-type verb is on the line, on EITHER reading
+    floor: str = ""                         # P5i: norm only — the text the destruction floor reads (see normalize)
 
 
 def _literal_commands(text: str) -> Tuple[SimpleCommand, ...]:
@@ -1036,7 +1051,8 @@ def views(command: str, norm: Optional[NormalizedCommand] = None,
     masked = command if unknown else mask_data(command, norm.data)
     stop = bool(_STOP_WORD.search(command) or _STOP_WORD.search(norm.text))
     raw = View("raw", masked, command, _literal_commands(masked), False, unknown, stop)
-    folded = View("norm", norm.text, norm.text, tuple(norm.commands), norm.unresolvable, unknown, stop)
+    folded = View("norm", norm.text, norm.text, tuple(norm.commands), norm.unresolvable, unknown, stop,
+                  norm.floor_text if norm.floor_text != norm.text else "")
     return raw, folded
 
 
@@ -1047,6 +1063,25 @@ class _Ctx:
     protected: Tuple[str, ...]
     secrets: Tuple[str, ...]
     guard_pids: Tuple[int, ...]
+
+
+def _floor_destruction(v: View, c: _Ctx) -> Optional[str]:
+    """F40, L1: first in the list, so on a line that also trips another floor this is the floor it reports."""
+    try:
+        from tools.approval import detect_floor_command
+        from tools.approval_floor import UNRESOLVED_DELETES
+
+        hit, description = detect_floor_command(v.full, getattr(c, "cwd", None))
+        if description in UNRESOLVED_DELETES:
+            return f"{UNRESOLVED_DELETE_FLOOR} {description}"
+    except Exception as exc:  # noqa: BLE001 — the floor cannot be checked, so the floor holds
+        return f"{TOTAL_DESTRUCTION}, it could not be checked ({type(exc).__name__})"
+    return f"{TOTAL_DESTRUCTION}, {description}" if hit else None
+
+
+def _worst_floor(one: Optional[str], other: Optional[str]) -> Optional[str]:
+    """Two floors on one call: total destruction is the one to report, since it alone survives Ignore."""
+    return other if other and is_total_destruction(other) and not is_total_destruction(one) else (one or other)
 
 
 def _floor_hardline(v: View, c: _Ctx) -> Optional[str]:
@@ -1060,14 +1095,79 @@ def _floor_policy(v: View, c: _Ctx) -> Optional[str]:
     return None
 
 
+_GLOB_CHARS = re.compile(r"[*?\[]")
+
+
+def _spelled_paths(v: View, cwd: Optional[str]) -> List[str]:
+    """Each argument of the line as the path the shell opens, written out: ~ and $HOME expanded, '.', '..' and '//'
+    folded, a relative word joined to the folder an earlier ``cd``/``pushd`` on the line moved to. A glob stays a glob."""
+    home = os.path.expanduser("~")
+    here, out = cwd, []
+    # The verbatim line: the data mask hides a grep's file operand from v.commands, and a key read hides there too.
+    for command in _literal_commands(v.full):
+        mine: List[str] = []
+        for word in command.args:
+            word = _REDIRECT.sub("", word).split("=", 1)[-1] if not word.startswith("-") or "=" in word else ""
+            if not word:
+                continue
+            word = re.sub(r"^\$\{?HOME\}?(?=/|$)", lambda _m: home, word)
+            word = os.path.expanduser(word)
+            if not os.path.isabs(word):
+                if not here:
+                    continue
+                word = os.path.join(here, word)
+            mine.append(os.path.normpath(word).replace("//", "/"))
+        out.extend(mine)
+        if command.prog in ("cd", "pushd"):
+            here = mine[0] if mine else (here if command.args else home)
+    return out
+
+
+def _components_may_match(word: str, pattern: str) -> bool:
+    """One path component of a command word against one of a secret pattern: either one's glob takes the other's name,
+    or both are globs (``*_rsa`` against ``id_*`` can name the same file). A glob that opens with a wildcard does not
+    take a dot name in the shell, so ``~/*/id_rsa`` is not ``~/.ssh/id_rsa``."""
+    if pattern.startswith(".") and word[:1] in ("*", "?", "["):
+        return False
+    return (fnmatch.fnmatchcase(word, pattern) or fnmatch.fnmatchcase(pattern, word)
+            or bool(_GLOB_CHARS.search(word) and _GLOB_CHARS.search(pattern)))
+
+
+def _names_a_secret(spelled: str, patterns: Sequence[str]) -> bool:
+    """A written-out path, or a glob that can expand to one, that is a secret path. Both sides fold as the disk reads a
+    name, and the home is also tried through its real path (/tmp and /private/tmp are one folder)."""
+    home = os.path.expanduser("~")
+    real_home = os.path.realpath(home)
+    spellings = {spelled}
+    if spelled == home or spelled.startswith(home + os.sep):
+        spellings.add(real_home + spelled[len(home):])
+    # Lexical on purpose: no stat of the words, so a command's text never touches the files it names.
+    for pattern in patterns:
+        forms = {pattern}
+        if pattern == home or pattern.startswith(home + os.sep):
+            forms.add(real_home + pattern[len(home):])
+        for form in forms:
+            want = disk_fold(form).split(os.sep)
+            for spelling in spellings:
+                have = disk_fold(spelling).split(os.sep)
+                if len(have) == len(want) and all(_components_may_match(h, w) for h, w in zip(have, want)):
+                    return True
+    return False
+
+
 def _floor_secrets(v: View, c: _Ctx) -> Optional[str]:
-    if _mentions(v.full, c.secrets) or _KEYCHAIN.search(v.full):
+    # G25: c.secrets also feeds the kernel profiles' read denials; this one file is about what it lets in, so it stays here.
+    # G28: ~/.SSH/id_rsa is the same key on this disk, and with the Seatbelt off a stored shell grant would run it with no sheet.
+    # G102: and so are ~/.ssh/./id_rsa, ~//.ssh/id_rsa, ~/x/../.ssh/id_rsa, a glob ~/.ss?/id_rsa and cd ~/.ssh && cat id_rsa.
+    keys = [*c.secrets, os.path.join(os.path.expanduser("~"), ".ssh", "authorized_keys")]
+    if (_mentions(v.full, keys, disk_fold) or _KEYCHAIN.search(v.full)
+            or any(_names_a_secret(spelled, keys) for spelled in _spelled_paths(v, c.cwd))):
         return "secrets: the command reads a key, token or keychain item"
     return None
 
 
 def _floor_sudo(v: View, c: _Ctx) -> Optional[str]:
-    return "privilege: sudo is never fed by the agent" if _SUDO_FEED.search(v.full) else None
+    return "sudo: the agent feeds your admin password to sudo" if _SUDO_FEED.search(v.full) else None
 
 
 def _floor_tcc(v: View, c: _Ctx) -> Optional[str]:
@@ -1076,9 +1176,14 @@ def _floor_tcc(v: View, c: _Ctx) -> Optional[str]:
 
 def _floor_confinement(v: View, c: _Ctx) -> Optional[str]:
     if (_kill_targets_guard(v.text, c.guard_pids) or _pkill_pattern_floor(v.commands, c.guard_pids)
-            or _fuser_kill_floor(v.commands, c.guard_pids) or _osascript_stops_guard(v.full)
-            or _unresolvable_floor(v, c.guard_pids, c.protected)):
-        return "confinement: icloneOS and the agent runtime are not stopped by the agent"
+            or _fuser_kill_floor(v.commands, c.guard_pids) or _osascript_stops_guard(v.full)):
+        return "confinement: this stops icloneOS, the agent runtime or your whole login session"
+    if _unresolvable_floor(v, c.guard_pids, c.protected):
+        # g28b: G28 made stopping icloneOS ask, read or not (R7b-d2). A program word it cannot resolve beside a payment
+        # binary is not a stop: it stays refused outside Ignore, as before G28 (modes.ts mirror).
+        if v.unresolvable and _MONEY_NAME.search(v.full):
+            return UNREAD_CONFINEMENT_FLOOR
+        return "confinement: this stops icloneOS, the agent runtime or your whole login session"
     return None
 
 
@@ -1088,7 +1193,7 @@ def _floor_inft(v: View, c: _Ctx) -> Optional[str]:
 
 # The floors, in the order their reasons are reported. Each is evaluated on BOTH readings.
 FLOOR_RULES: Tuple[Tuple[str, Any], ...] = (
-    ("hardline", _floor_hardline), ("policy", _floor_policy), ("secrets", _floor_secrets), ("sudo", _floor_sudo),
+    ("destruction", _floor_destruction), ("hardline", _floor_hardline), ("policy", _floor_policy), ("secrets", _floor_secrets), ("sudo", _floor_sudo),
     ("tcc", _floor_tcc), ("confinement", _floor_confinement), ("inft", _floor_inft),
 )
 
@@ -1219,11 +1324,33 @@ def command_floor(command: str, cwd: Optional[str], policy: Mapping[str, Any],
                tuple(str(p) for p in policy.get("secretPaths") or [] if isinstance(p, str)),
                tuple(_guard_pids(policy)))
     for _name, rule in FLOOR_RULES:
+        # P5: one rule's worst answer across both readings, so an unresolved raw reading never hides a normalised
+        # reading that is total destruction (rm -rf $'/' is / once decoded).
+        found: Optional[str] = None
         for view in readings:
-            floor = rule(view, ctx)
-            if floor:
-                return floor
+            # P5i: every reading is always computed. The destruction floor alone reads the normalised commands
+            # re-joined with their original operators where that is certain (``View.floor``), so a delete joined to
+            # a cd by && is judged in the cd's folder on this reading too; nothing else reads that text.
+            judged = replace(view, full=view.floor) if _name == "destruction" and view.floor else view
+            floor = rule(judged, ctx)
+            if floor and not _mktemp_resolved_on_the_original(_name, view, floor, readings):
+                found = _worst_floor(found, floor)
+            if found and is_total_destruction(found):
+                break
+        if found:
+            return found
     return None
+
+
+def _mktemp_resolved_on_the_original(rule: str, view: View, floor: str, readings: Tuple[View, View]) -> bool:
+    """P4: the normalised reading hoists T=$(mktemp -d) out of its assignment, so there $T reads as unset; P5: it keeps
+    only $X of ${X:-w}. When the original reading, which saw the variable set to mktemp or its written default word,
+    found no destruction, its answer stands. Only the unresolved floor is forgiven, never total destruction, and only when
+    every name the normalised reading leaves unset is one the original sets to mktemp or gives a written default (P5b)."""
+    from tools.approval_floor import only_names_the_original_resolves
+
+    return (rule == "destruction" and view.name == "norm" and floor.startswith(UNRESOLVED_DELETE_FLOOR)
+            and readings[0].name == "raw" and only_names_the_original_resolves(readings[0].full, view.full))
 
 
 # The shell-outs an `execute_code` body (or an interpreter's -c/-e/stdin code) can carry: a string literal handed to
@@ -1271,7 +1398,7 @@ def _classify_code(code: str, cwd: Optional[str], project: Optional[str], policy
         spans.append(span)
         cand = classify_command(shlex.join(argv), cwd, project, policy, _depth=_depth + 1, scope=scope)
         shellouts.append(cand)
-        floor = floor or cand.floor
+        floor = _worst_floor(floor, cand.floor)
     has_site = bool(_SHELLOUT_SITE.search(code))
     for match in _CODE_STRING.finditer(code):
         if any(a <= match.start() < b for a, b in spans):
@@ -1285,7 +1412,7 @@ def _classify_code(code: str, cwd: Optional[str], project: Optional[str], policy
             continue
         cand = classify_command(literal, cwd, project, policy, _depth=_depth + 1, scope=scope)
         shellouts.append(cand)
-        floor = floor or cand.floor
+        floor = _worst_floor(floor, cand.floor)
     unknown = whole.unknown or any(c.unknown for c in shellouts)
     cands = [c for c in [whole, *shellouts] if c.cls != "X"]
     if not cands:
@@ -1392,7 +1519,7 @@ def classify_command(command: str, cwd: Optional[str], project: Optional[str], p
                 facts = {}
             cands.append(Classified(rule_cls, key, target, project, facts))
     for code_call in code_calls:
-        floor = floor or code_call.floor
+        floor = _worst_floor(floor, code_call.floor)
         if code_call.cls != "X":
             cands.append(Classified(code_call.cls, code_call.ceiling_key, target, project, dict(code_call.facts)))
     if overflow or norm.overflow:
@@ -1441,6 +1568,33 @@ def patch_targets(patch: str) -> Tuple[Optional[List[Tuple[str, str]]], Optional
     return targets, None
 
 
+CREDENTIAL_WRITE_FLOOR = "secrets: writing a file your shell, git or launchd runs, or a key"
+
+
+def _on_credential_list(path: Optional[str]) -> bool:
+    """G24: a grant keys on the class alone, so one answered for ~/Documents/x would otherwise open ~/.ssh with no sheet
+    where the Seatbelt is off. Mirror of classify-policy.ts credentialWriteFloor."""
+    if path is None:
+        return False
+    try:
+        from agent.file_safety import is_home_credential_path
+
+        return is_home_credential_path(path)
+    except Exception:  # noqa: BLE001 — the list cannot be checked, so the ask holds
+        return True
+
+
+def _credential_read_needs_an_ask(path: Optional[str]) -> bool:
+    """G28: with the Seatbelt on the kernel and the one-file route stand before this file. With it off this floor is all there
+    is. Mirror of classify-policy.ts credentialReadFloor; a search above the list loses these results in tools/file_tools.py."""
+    try:
+        from agent.file_safety import _seatbelt_off
+
+        return _seatbelt_off() and _on_credential_list(path)
+    except Exception:  # noqa: BLE001 — the state cannot be checked, so the ask holds
+        return True
+
+
 def _classify_writes(paths: List[Tuple[str, Optional[str]]], project: Optional[str], ceiling: Optional[str],
                      policy: Mapping[str, Any]) -> Classified:
     """One class for a set of writes/deletes: D if anything is deleted, else Wo if anything lands outside, else Wp.
@@ -1452,6 +1606,8 @@ def _classify_writes(paths: List[Tuple[str, Optional[str]]], project: Optional[s
     floor = None
     if any(_guarded(path, guard_paths(policy)) for _, path in paths):
         floor = "policy: writing the permission policy or its guards"
+    elif any(_on_credential_list(path) for _, path in paths):
+        floor = CREDENTIAL_WRITE_FLOOR
     return Classified(cls, ceiling, target, project, {"inProject": in_project}, floor)
 
 
@@ -1481,6 +1637,81 @@ def commit_process_input(args: Mapping[str, Any]) -> None:
 
 # ---- the classifier --------------------------------------------------------------------------------------------------
 
+_BUNDLE_ID = re.compile(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+){2,}")
+
+
+def _is_bundle_id(name: str) -> bool:
+    """Reverse-DNS with at least three labels: 'Draw.io' is an app's name, 'com.jgraph.drawio' a bundle id."""
+    return bool(_BUNDLE_ID.fullmatch(name))
+
+
+def _app_file_name_label(app: str) -> str:
+    """Display only, no decision reads it: '/Applications/Safari.app' and 'Draw.io.app' are file names, so the sheet shows
+    'Safari' and 'Draw.io'. A bare bundle id with '.app' after it ('com.apple.Safari.app') is that bundle id; one whose
+    last label merely is 'app' ('com.example.app', 'Com.Example.App') stays whole."""
+    has_folder = "/" in app.rstrip("/")
+    name = app.rstrip("/").rpartition("/")[2].strip() if has_folder else app
+    if name[-4:].lower() != ".app" or not name[:-4].strip():
+        return app
+    if not has_folder and _is_bundle_id(name) and not _is_bundle_id(name[:-4]) and (
+            name[:1].islower() or name[-4:] != ".app"):
+        return app
+    return name[:-4].strip()
+
+
+def _computer_use_target(args: Mapping[str, Any], session_id: Optional[str]) -> str:
+    """S10 D2: what the sheet names. The key, the text or the click, and the app it lands in."""
+    action = str(args.get("action") or "use the screen")
+    app = str(args.get("app") or "").strip()
+    if not app:
+        try:
+            from tools.computer_use.tool import active_app_for_session
+            app = active_app_for_session(session_id) or ""
+        except Exception:  # noqa: BLE001 — the sheet still says it does not know
+            app = ""
+    else:
+        app = _app_file_name_label(app)
+        # A bundle id from the model, with the driver's own name for that app already known: the name, as the tool's own
+        # same-app check reads them. Not provably the same app (a localised name, another app): what the model named.
+        # Only Apple's own bundle ids prove it from the tail; com.evil.calculator shows both, and the owner reads it.
+        try:
+            from tools.computer_use.tool import active_app_for_session
+            named = active_app_for_session(session_id) or ""
+        except Exception:  # noqa: BLE001 — the sheet still names what the model named
+            named = ""
+        bundle_id = _is_bundle_id(app)
+        if bundle_id and named and named.lower() == app.lower().rpartition(".")[2]:
+            app = named if app.lower().startswith("com.apple.") else f"{named} ({app})"
+        elif bundle_id:
+            # No name proved for it: a readable name from the tail, the bundle id beside it as what was really named.
+            tail = app.rpartition(".")[2]
+            app = f"{tail[:1].upper()}{tail[1:]} ({app})"
+    where = f"in {app}" if app else "in the app in front (no app named)"
+    if action == "key":
+        return f"Press the key {args.get('keys') or args.get('key') or '?'} {where}"
+    if action == "type":
+        return f"Type {str(args.get('text') or '')!r} {where}"
+    if action == "set_value":
+        return f"Set a value to {str(args.get('value') or '')!r} {where}"
+    if action in ("click", "double_click", "right_click", "middle_click"):
+        spot = f"element {args['element']}" if args.get("element") is not None else f"point {args.get('coordinate')}"
+        return f"{action.replace('_', ' ').capitalize()} on {spot} {where}"
+    if action == "focus_app":
+        return f"Bring {app or 'an app'} forward"
+    if action == "capture":
+        return f"See the screen {where}"
+    return f"{action.replace('_', ' ').capitalize()} {where}"
+
+
+def _screen_record_target(args: Mapping[str, Any]) -> str:
+    """G9: the one ask says the whole screen is recorded and where the file goes."""
+    try:
+        from tools.screen_record_tool import ask_sentence
+        return ask_sentence(args)
+    except Exception:  # noqa: BLE001 — the sheet still says what matters
+        return "Record the whole screen, for at most 600 seconds. The video file goes to Movies/icloneOS Recordings in your home folder."
+
+
 def _classify_one(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], policy: Mapping[str, Any], *,
                   session_id: Optional[str] = None, lineage: Optional[Sequence[str]] = None) -> Classified:
     """One tool call by its own name (``classify`` adds the wrapper and the path arguments around it)."""
@@ -1494,6 +1725,9 @@ def _classify_one(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], p
             # V3-UP r3: ``workdir`` is where the command runs, so its relative paths resolve THERE (the project the
             # call is judged against stays the session's own).
             return classify_command(command, _workdir(args, cwd), project, policy, scope=scope)
+
+    if tool_name == "screen_record" and args.get("action") in ("stop", "status"):
+        return Classified("R", None, f"screen recording {args.get('action')}", project)  # ending it and looking never ask
 
     if tool_name in PROCESS_TOOLS:
         action = str(args.get("action") or "")
@@ -1541,7 +1775,9 @@ def _classify_one(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], p
         raw = str(args.get(PATH_READERS[tool_name]) or "")
         path = _resolve(raw, cwd) if raw else ""
         target = path if path is not None else f"{raw} (does not resolve)"
-        if raw and any(_matches_secret(path, p) for p in policy.get("secretPaths") or []):
+        if _credential_read_needs_an_ask(_resolve(raw or ".", cwd)):
+            floor = CREDENTIAL_READ_FLOOR
+        elif raw and any(_matches_secret(path, p) for p in policy.get("secretPaths") or []):
             floor = "secrets: reading a key, token or keychain item"
     elif tool_name in CODE_TOOLS:
         code = str(args.get("code") or "")
@@ -1558,6 +1794,10 @@ def _classify_one(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], p
     elif cls == "N":
         target = str(args.get("url") or args.get("query") or args.get("ref") or "")
         facts["getOnly"] = tool_name in GET_ONLY_TOOLS
+    elif tool_name == "computer_use":
+        target = _computer_use_target(args, session_id)
+    elif tool_name == "screen_record":
+        target = _screen_record_target(args)
     else:
         for key in ("command", "url", "path", "action", "name", "query", "target"):
             if args.get(key):
@@ -1583,9 +1823,17 @@ def classify(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], policy
     call's own (the hook passes them): when a line shows several classes, the one picked is decided against the
     grants that match this call, as ``policy.decide`` will read them (r7b m-g). A bridge wrapper is the class of
     what it wraps (``BRIDGE_WRAPPERS``); every argument that names a local path carries its floor (``PATH_ARGS``)."""
+    from tools.approval_floor import walk_snapshot  # P5e: the floor's path lookups are reused inside this call only
+
+    with walk_snapshot():
+        return _classify(tool_name, args, cwd, policy, session_id=session_id, lineage=lineage, depth=_depth)
+
+
+def _classify(tool_name: str, args: Mapping[str, Any], cwd: Optional[str], policy: Mapping[str, Any], *,
+              session_id: Optional[str], lineage: Optional[Sequence[str]], depth: int) -> Classified:
     args = args if isinstance(args, Mapping) else {}
     if tool_name in BRIDGE_WRAPPERS:
-        return _classify_wrapper(args, cwd, policy, session_id=session_id, lineage=lineage, depth=_depth)
+        return _classify_wrapper(args, cwd, policy, session_id=session_id, lineage=lineage, depth=depth)
     base = _classify_one(tool_name, args, cwd, policy, session_id=session_id, lineage=lineage)
     if tool_name not in PATH_ARGS:
         return base
@@ -1617,7 +1865,8 @@ def _classify_wrapper(args: Mapping[str, Any], cwd: Optional[str], policy: Mappi
                               lineage=lineage, _depth=depth + 1))
     scope = Scope(session_id or None, tuple(s for s in lineage or () if isinstance(s, str) and s))
     top = _strictest(cands, policy, scope)
-    floor = next((c.floor for c in cands if c.floor), None)
+    floor = next((c.floor for c in cands if is_total_destruction(c.floor)), None) or next(
+        (c.floor for c in cands if c.floor), None)
     names = ", ".join(str(e.get("name") or "?") for e in entries if isinstance(e, Mapping))
     target = f"tool_call → {names}: {top.target}"
     return Classified(top.cls, top.ceiling_key, target[:4000], project, dict(top.facts), floor,
@@ -1714,7 +1963,7 @@ def _with_path_args(tool_name: str, args: Mapping[str, Any], cwd: Optional[str],
                 written = _classify_writes([("update", path)], base.project, "fileWriting", policy)
                 cands.append(Classified(written.cls, written.ceiling_key, written.target, base.project,
                                         dict(written.facts)))
-                floor = floor or written.floor
+                floor = _worst_floor(floor, written.floor)
             elif floor is None and any(_matches_secret(path, p) for p in policy.get("secretPaths") or []):
                 floor = "secrets: reading a key, token or keychain item"
     if len(cands) == 1 and floor == base.floor:

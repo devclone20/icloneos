@@ -76,25 +76,43 @@ export const SUB_LOCKS = Object.freeze({
 // The accepted risks of the Privy sign-in page's lock (owner decision 2026-11-03/04): one entry per finding, each with
 // its own advisory. The `until` version forces the next release to re-decide them (the gate refuses an expired waiver).
 const SIGN_IN_UNTIL =
-  'v0.0.6: re-decided each release; removed when a compatible fix exists (backlog: SECURITY.md §3.3)'
-const SIGN_IN_ZOD_WHY =
+  'v0.0.8: re-decided each release; removed when a compatible fix exists (backlog: SECURITY.md §3.3)'
+const SIGN_IN_DECIDED =
+  'accepted by the owner 2026-11-03/04, re-decided 2026-11-05 for v0.0.6 by the security review; removed when a ' +
+  'compatible fix exists; ' +
+  're-reviewed 2026-11-10 for v0.0.7: still no compatible fix (zod 3.25.76 is the last 3.x, the fix is only in 4.6.6+; ' +
+  '@privy-io/react-auth 3.51.3, the newest, moves @privy-io/api-base to 2.0.0 without zod but still needs x402 ^0.7.1 ' +
+  '(zod ^3.24.2; every x402 up to 1.2.0 still needs zod 3 and wagmi 2), @coinbase/cdp-sdk still needs zod ^3.25.76 and ' +
+  '@reown/appkit-wallet 1.8.24 still pins zod 3.22.4; wagmi 2.19.5, the last 2.x, pins @wagmi/connectors 6.2.0 > ' +
+  '@walletconnect/ethereum-provider 2.21.1 > @walletconnect/utils 2.21.1 > query-string 7.1.3, which needs ' +
+  'decode-uri-component ^0.2.2, and 0.5.1 is ESM-only, so no override is safe); the lock and privy-login.js are ' +
+  'unchanged since 2026-11-02 (sha256 4e56921f and 3287799b); in privy-login.js the only zod parse calls are zod\'s own ' +
+  'internals (no shipped code parses data with a zod schema), no array schema has a size constraint, and ' +
+  'decode-uri-component is absent'
+const SIGN_IN_ZOD_NO_FIX =
   'no compatible fix: GHSA-mrhx-c7xc-m3w5 is fixed only in zod 4.6.6, no 3.x release has it, and the consumers need ' +
   'zod 3 (@privy-io/api-base ^3.25.76, @coinbase/cdp-sdk ^3.25.76, x402 ^3.24.2, @reown/appkit-wallet 3.22.4 exact); ' +
-  'worst case: the sign-in window runs out of memory (a DoS of the sign-in window only), no data or code is exposed; ' +
-  'accepted by the owner 2026-11-03/04, re-decided at v0.0.6; removed when a compatible fix exists'
+  'the newest @privy-io/react-auth (3.51.2, checked 2026-11-05) still resolves it; '
+const SIGN_IN_ZOD_WORST =
+  'worst case: the sign-in window runs out of memory (a DoS of the sign-in window only), no data or code is exposed; '
 
 /**
  * The app's own npm locks bundled into what electron-builder packages (G-42, v0.0.5): by folder from the repo root,
  * each with its own waivers (same rules as WAIVED: tied, stale, expired). The Privy sign-in page is built from
- * iclone/privy/login-island's lock by esbuild into iclone/privy/privy-login.js, which ships as an extraResources entry
- * (apps/desktop/package.json, "iclone-privy"): every non-dev package of that lock is in the bundle the app serves.
+ * iclone/privy/login-island's lock by esbuild into iclone/privy/privy-login.js, which ships through build.files
+ * (apps/desktop/package.json, to "iclone-privy": privy.html, privy-login.js, privy-preload.cjs). The gate judges every
+ * non-dev package of the lock; the esbuild metafile decides what is in the bundle.
  */
 export const APP_LOCKS = Object.freeze({
   'iclone/privy/login-island': Object.freeze({
     'zod@3.25.76': Object.freeze({
       until: SIGN_IN_UNTIL,
       severity: 'high',
-      reason: SIGN_IN_ZOD_WHY,
+      reason:
+        SIGN_IN_ZOD_NO_FIX +
+        'this copy is in privy-login.js, but no shipped code parses anything with its schemas (checked 2026-11-04); ' +
+        SIGN_IN_ZOD_WORST +
+        SIGN_IN_DECIDED,
       advisories: Object.freeze({
         'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
       })
@@ -103,7 +121,11 @@ export const APP_LOCKS = Object.freeze({
     'zod@3.22.4': Object.freeze({
       until: SIGN_IN_UNTIL,
       severity: 'high',
-      reason: SIGN_IN_ZOD_WHY,
+      reason:
+        SIGN_IN_ZOD_NO_FIX +
+        'these copies are in the lock but not in privy-login.js (esbuild metafile, 2026-11-04); ' +
+        SIGN_IN_ZOD_WORST +
+        SIGN_IN_DECIDED,
       advisories: Object.freeze({
         'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
       })
@@ -114,9 +136,10 @@ export const APP_LOCKS = Object.freeze({
       reason:
         'no compatible fix: GHSA-qr28-fpjm-wq7f is fixed only in 0.5.1, and the consumer is query-string 7 ' +
         "(@wagmi/connectors > @walletconnect/utils > query-string 7.1.3 > decode-uri-component 0.2.2); npm's only " +
-        'fix is a semver-major @privy-io/react-auth; worst case: the sign-in window hangs on a malformed ' +
-        'percent-encoded input (a DoS of the sign-in window only), no data or code is exposed; accepted by the owner ' +
-        '2026-11-03/04, re-decided at v0.0.6; removed when a compatible fix exists',
+        'fix is a semver-major @privy-io/react-auth; neither package is in privy-login.js, they are in the lock only ' +
+        '(esbuild metafile, 2026-11-04); worst case if that changes: the sign-in window hangs on a malformed ' +
+        'percent-encoded input (a DoS of the sign-in window only), no data or code is exposed; ' +
+        SIGN_IN_DECIDED,
       advisories: Object.freeze({
         'GHSA-qr28-fpjm-wq7f': 'HIGH, CWE-400/407: denial of service via quadratic replacement of percent-encoded runs'
       })
@@ -125,14 +148,22 @@ export const APP_LOCKS = Object.freeze({
 })
 
 // The accepted risks of the optional ACP CLI's lock (owner decision 2026-11-03/04): one entry per finding, each with
-// its own advisory, matched exactly (a GHSA id, or npm's own id when the advisory has no GHSA). The `until` version
-// forces the next release to re-decide them (the gate refuses an expired waiver).
+// its own advisory, matched by name@version and id (a GHSA id, or npm's own id when the advisory has no GHSA; a re-keyed
+// npm synthetic id also matches when every high advisory in its chain is waived here). The `until` version forces the
+// next release to re-decide them (the gate refuses an expired waiver).
 const ACP_CLI_UNTIL =
-  'v0.0.6: re-decided each release; removed when a compatible fix exists (backlog: move the ACP CLI to acp-node-v2)'
+  'v0.0.8: re-decided each release; removed when a compatible fix exists (backlog: move the ACP CLI to acp-node-v2, ' +
+  'which itself still needs zod 3 through @account-kit/infra)'
 const ACP_CLI_WORST =
-  'only the optional ACP CLI is affected (installed from this lock only when the user adds it); worst case: the ACP ' +
-  'CLI process runs out of memory or stalls, no data or code is exposed; accepted by the owner 2026-11-03/04, ' +
-  're-decided at v0.0.6; removed when a compatible fix exists'
+  'only the optional ACP CLI is affected (installed from this lock only when the user adds it); in the module graph ' +
+  'of the CLI, zod parses local configuration objects and the modules that import it build no array schema ' +
+  '(checked 2026-11-04); worst case: the ACP CLI process runs out of memory or stalls, no data or code is exposed; ' +
+  'accepted by the owner 2026-11-03/04, re-decided 2026-11-05 for v0.0.6 by the security review; removed when a ' +
+  'compatible fix exists; ' +
+  're-reviewed 2026-11-10 for v0.0.7: still no compatible fix (zod 3.25.76 is the last 3.x; the newest ' +
+  '@virtuals-protocol/acp-cli 1.0.40 needs acp-node ^0.3.0-beta.40 and acp-node-v2 ^0.1.15, both through ' +
+  '@account-kit/infra 4.88.5, which needs zod ^3.22.4); acp-cli-lock is unchanged since 2026-11-01 (sha256 dc5a9c6b), ' +
+  'and the install still runs only on the user\'s gesture (iclone:acp-tools:install, gestureOk)'
 // npm's own id for the meta-advisory it writes on acp-node (no GHSA: no acp-node release is outside the vulnerable
 // range). npm derives that id from whichever vulnerable dependency it resolves first (@aa-sdk/core or
 // @account-kit/infra, both only through zod), so the same lock gives one of two ids from run to run (v0.0.5,

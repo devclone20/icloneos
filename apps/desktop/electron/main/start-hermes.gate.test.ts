@@ -153,6 +153,7 @@ const GATE_ENV = {
 /** What prepareHermesSpawn returns, with the REAL seal (so the call site's composition is what is tested). */
 function gatedPrimary() {
   return {
+    command: (command: string) => command,
     argv: (args: readonly string[]) => [...PYTHON_ISOLATION_FLAGS, ...args],
     attach: h.attach,
     report: { loaded: ['iclone-permissions', 'iclone-confinement'] },
@@ -209,7 +210,8 @@ describe('start-hermes — the iclone gate before the spawn', () => {
       backend: expect.objectContaining({ root: '/managed', command: '/managed/venv/bin/python' }),
       cwd: '/work',
       profile: 'work',
-      role: 'primary'
+      role: 'primary',
+      webDist: '/web'
     })
     expect(h.spawn).toHaveBeenCalledTimes(1)
     expect(h.gate.mock.invocationCallOrder[0]!).toBeLessThan(h.spawn.mock.invocationCallOrder[0]!)
@@ -417,5 +419,78 @@ describe('start-hermes — a remote boot failure only the user can resolve', () 
     expect(failure?.retryable).toBe(true)
     expect(failure?.running).toBe(false)
     expect(h.bootState.backendStartFailure ?? null).toBeNull()
+  })
+})
+
+describe('start-hermes — runtime confinement at the call site', () => {
+  const TEXT = '(version 1)\n(deny default)\n'
+
+  const RUNTIME_ENV = {
+    ...GATE_ENV,
+    ICLONE_CONFINEMENT_LAUNCHER: '/ud/confinement/run/launcher.sock',
+    ICLONE_RUNTIME_CONFINED: '1'
+  }
+
+  /** prepareHermesSpawn under runtime confinement: sandbox-exec, the profile and its defines, then the interpreter. */
+  function gatedConfined() {
+    const isolated = (args: readonly string[]) => [...PYTHON_ISOLATION_FLAGS, ...args]
+
+    return {
+      ...gatedPrimary(),
+      command: vi.fn((_command: string) => '/usr/bin/sandbox-exec'),
+      argv: vi.fn((args: readonly string[], command?: string) =>
+        command === undefined ? isolated(args) : ['-p', TEXT, '-D', 'PROJECT=/work', command, ...isolated(args)]
+      ),
+      seal: (composed: Record<string, string | undefined>) =>
+        sealHermesSpawnEnv(composed, { gateEnv: RUNTIME_ENV, role: 'primary', runtimeRoot: '/managed' })
+    }
+  }
+
+  it('on: spawns sandbox-exec -p <profile> -D… <python> -s -P <args>, with the fd-3 stdio and the launcher env', async () => {
+    const gated = gatedConfined()
+    const child = { once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null }
+
+    h.gate.mockResolvedValue(gated)
+    h.spawn.mockReturnValue(child)
+
+    await expect(startHermes()).rejects.toThrow(/superseded/)
+
+    const [command, args, options] = h.spawn.mock.calls[0]!
+
+    expect(gated.command).toHaveBeenCalledWith('/managed/venv/bin/python')
+    expect(command).toBe('/usr/bin/sandbox-exec')
+    expect(args).toEqual([
+      '-p',
+      TEXT,
+      '-D',
+      'PROJECT=/work',
+      '/managed/venv/bin/python',
+      '-s',
+      '-P',
+      '-m',
+      'hermes_cli.main',
+      'serve'
+    ])
+    expect(options.stdio).toBe(gated.stdio)
+    expect(options.stdio).toEqual(['ignore', 'pipe', 'pipe', 'pipe'])
+    expect(options.env).toMatchObject({
+      ICLONE_CONFINEMENT_LAUNCHER: '/ud/confinement/run/launcher.sock',
+      ICLONE_RUNTIME_CONFINED: '1'
+    })
+    expect(h.attach).toHaveBeenCalledWith(child)
+  })
+
+  it('off: the call site spawns exactly the backend command and the isolated argv', async () => {
+    h.gate.mockResolvedValue(gatedPrimary())
+    h.spawn.mockReturnValue({ once: vi.fn(), on: vi.fn(), stdio: [], stdout: null, stderr: null })
+
+    await expect(startHermes()).rejects.toThrow(/superseded/)
+
+    const [command, args, options] = h.spawn.mock.calls[0]!
+
+    expect(command).toBe('/managed/venv/bin/python')
+    expect(args).toEqual(['-s', '-P', '-m', 'hermes_cli.main', 'serve'])
+    expect(options.env).not.toHaveProperty('ICLONE_RUNTIME_CONFINED')
+    expect(options.env).not.toHaveProperty('ICLONE_CONFINEMENT_LAUNCHER')
   })
 })

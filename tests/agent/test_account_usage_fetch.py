@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timezone
 
 import pytest
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 from agent.account_usage import (
     AccountUsageSnapshot,
@@ -78,7 +79,7 @@ def test_fetch_account_usage_codex(monkeypatch):
         lambda refresh_if_expiring=True: {
             "provider": "openai-codex",
             "base_url": "https://chatgpt.com/backend-api/codex",
-            "api_key": "access-token",
+            "api_key": chatgpt_jwt("access-token"),
         },
     )
     monkeypatch.setattr(

@@ -1,8 +1,8 @@
 {
  "spec": 1,
- "rev": "fb0f640ea3bd67e6c99f87b12e96b7669b608348",
- "describe": "fb0f640ea3",
- "openrpcSha256": "dc0ed79ab77d3998ccf05856daa437c4a175978acb95dd2ea5d7996251074b82",
+ "rev": "fc5c4e2d9101d0c120f2cfe8e9ba9086f13a554a",
+ "describe": "fc5c4e2d91",
+ "openrpcSha256": "a826e83867ee8a2ed15f4cf16901d054078fe67db2771f393065009f385ce140",
  "specTier": "openrpc",
  "drift": [],
  "methods": {
@@ -4155,7 +4155,10 @@
     "status",
     "connect",
     "disconnect",
-    "use"
+    "use",
+    "record_status",
+    "record_sync",
+    "record_stop"
    ],
    "title": "BrowserAction",
    "type": "string"
@@ -4476,8 +4479,16 @@
    "additionalProperties": false,
    "properties": {
     "connected": {
-     "title": "Connected",
-     "type": "boolean"
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Connected"
     },
     "url": {
      "anyOf": [
@@ -4517,11 +4528,62 @@
      ],
      "default": null,
      "title": "Browser Use"
+    },
+    "armed": {
+     "anyOf": [
+      {
+       "type": "boolean"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Armed"
+    },
+    "boot": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Boot"
+    },
+    "capturing": {
+     "anyOf": [
+      {
+       "items": {
+        "type": "string"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Capturing"
+    },
+    "notices": {
+     "anyOf": [
+      {
+       "items": {
+        "$ref": "#/components/schemas/BrowserRecordNotice"
+       },
+       "type": "array"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Notices"
     }
    },
-   "required": [
-    "connected"
-   ],
    "title": "BrowserManageResult",
    "type": "object"
   },
@@ -4543,6 +4605,54 @@
     "level"
    ],
    "title": "BrowserProgressPayload",
+   "type": "object"
+  },
+  "BrowserRecordNotice": {
+   "additionalProperties": false,
+   "properties": {
+    "seq": {
+     "title": "Seq",
+     "type": "integer"
+    },
+    "ok": {
+     "title": "Ok",
+     "type": "boolean"
+    },
+    "message": {
+     "title": "Message",
+     "type": "string"
+    },
+    "file": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "File"
+    },
+    "path": {
+     "anyOf": [
+      {
+       "type": "string"
+      },
+      {
+       "type": "null"
+      }
+     ],
+     "default": null,
+     "title": "Path"
+    }
+   },
+   "required": [
+    "seq",
+    "ok",
+    "message"
+   ],
+   "title": "BrowserRecordNotice",
    "type": "object"
   },
   "CapabilityEntry": {

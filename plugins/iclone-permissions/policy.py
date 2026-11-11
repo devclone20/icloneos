@@ -64,6 +64,7 @@ class Verdict:
     grant_id: Optional[str] = None
     fn: Optional[str] = None  # V3-F2: the function whose level decided (the strictest candidate)
     level: Optional[str] = None
+    floor: Optional[str] = None  # F40: the floor that refused in Ignore, from the line or a part it read
 
 
 class SignedPolicy:
@@ -138,8 +139,46 @@ def _cell_outcome(cell: str, facts: Mapping[str, bool]) -> str:
     return "refuse"
 
 
+# F40, L1, the owner's "liberta tudo": in Ignore all the one floor is total destruction, or text too unreadable to check.
+# Moving an iNFT, sending keys, the admin password and the agent's own permissions leave the floor in Ignore all only:
+# in every other mode they ask, whatever the cell or a grant says, and what is approved runs.
+TOTAL_DESTRUCTION = "hardline: total destruction"
+# F53: a delete only known when it runs asks outside Ignore, and is refused in Ignore with how to write it.
+UNRESOLVED_DELETE_FLOOR = "unresolved delete:"
+# G28: system permissions and stopping icloneOS ask too, as the owner ordered for the modes that ask; Ignore runs them.
+_ASKING_FLOORS = ("inft:", "secrets:", "sudo:", "policy:", "privilege:", "confinement:", UNRESOLVED_DELETE_FLOOR)
+# g28b: G28 moved stopping icloneOS, read or not. A program word it cannot resolve beside a payment binary is not a stop
+# and keeps its refusal outside Ignore. Mirror of modes.ts UNREAD_CONFINEMENT_FLOOR.
+UNREAD_CONFINEMENT_FLOOR = "confinement: a command this gate cannot read sits beside a payment binary"
+# G28: the owner's order. Shutdown, reboot, kill-all and a fork bomb are hardlines outside total destruction: they ask, and
+# what is approved runs. Only total destruction refuses in every mode. Mirror of modes.ts floorAsks.
+HARDLINE_FLOOR = "hardline:"
+# G28: with the Seatbelt off nothing else stands before this read. It asks where the mode asks, and Plan, which only reads
+# freely, refuses it: an ask there would hand keys to a mode that promises to change nothing. Mirror of modes.ts.
+CREDENTIAL_READ_FLOOR = "secrets: reading a key or credential file with the Seatbelt off"
+
+
+def is_total_destruction(floor: Optional[str]) -> bool:
+    return bool(floor) and str(floor).startswith((TOTAL_DESTRUCTION, "unreadable:"))
+
+
+def ignore_refuses(floor: Optional[str]) -> bool:
+    """F40: the floors Ignore still refuses, for a tool call and for a scheduled job's script alike."""
+    return is_total_destruction(floor) or str(floor or "").startswith(UNRESOLVED_DELETE_FLOOR)
+
+
+def floor_asks(floor: Optional[str]) -> bool:
+    if str(floor or "").startswith(UNREAD_CONFINEMENT_FLOOR):
+        return False
+    return bool(floor) and (str(floor).startswith(_ASKING_FLOORS) or (str(floor).startswith(HARDLINE_FLOOR) and not is_total_destruction(floor)))
+
+
 def decide_cell(cell: str, facts: Mapping[str, bool], *, cls: str, floor: Optional[str], ceiling: Optional[str], granted: bool) -> tuple:
     """Mirror of modes.ts ``decide``: floor, ceiling OFF, the cell, undecided ceiling, grant."""
+    if floor_asks(floor):
+        if ceiling == "off" or _cell_outcome(cell, facts) == "refuse":
+            return "refuse", "ceiling" if ceiling == "off" else "mode"
+        return "ask", "floor"
     if floor:
         return "refuse", "floor"
     if ceiling == "off":
@@ -166,6 +205,13 @@ def effective_mode(body: Mapping[str, Any], session_id: Optional[str], project: 
         if sessions.get(sid):
             return sessions[sid]
     return (project and projects.get(project)) or body.get("standing") or "manual"
+
+
+def session_has_own_mode(body: Mapping[str, Any], session_id: Optional[str],
+                         lineage: Optional[Sequence[str]] = None) -> bool:
+    """A mode on the session or a parent: it beats the project and the standing mode, and Settings writes neither it nor them."""
+    sessions = body.get("sessions") or {}
+    return any(sessions.get(sid) for sid in _sessions(session_id, lineage))
 
 
 def matching_grant(body: Mapping[str, Any], cls: str, session_id: Optional[str], project: Optional[str],
@@ -237,14 +283,23 @@ def _ordered(fns: Optional[Sequence[str]]) -> list:
 
 def decide(body: Optional[Mapping[str, Any]], *, cls: str, facts: Mapping[str, bool], floor: Optional[str],
            ceiling_key: Optional[str], session_id: Optional[str], project: Optional[str],
-           lineage: Optional[Sequence[str]] = None, fns: Optional[Sequence[str]] = None) -> Verdict:
-    """The plugin's local decision. Unsigned ⇒ Manual, and every ask goes to main, which decides again."""
+           lineage: Optional[Sequence[str]] = None, fns: Optional[Sequence[str]] = None,
+           mode_project: Any = "") -> Verdict:
+    """The plugin's local decision. Unsigned ⇒ Manual, and every ask goes to main, which decides again. F50, S5:
+    ``mode_project`` is the session's own window project, the only project whose row can set the mode; ``project`` is
+    where the call lands and only matches grants. Callers with no session (the launcher's ceiling) leave it out."""
     if body is None:
         outcome, rule = decide_cell(MANUAL_TABLE_ROW.get(cls, "Q"), facts, cls=cls, floor=floor, ceiling=None, granted=False)
         return Verdict(outcome, "floor" if rule == "floor" else "unsigned", "manual")
-    mode = effective_mode(body, session_id, project, lineage)
+    mode = effective_mode(body, session_id, project if mode_project == "" else mode_project, lineage)
+    # F40 (owner, G-98): in Ignore only a floor decides, on the line or on any part read. No switch, level, grant or
+    # unread reading can bring an ask back; main's decideFunctions reads it the same way.
+    if mode == "ignore":
+        named = next((one for one in (floor, *(part.floor for part in (getattr(fns, "parts", None) or ())))
+                      if ignore_refuses(one)), None)
+        return Verdict("refuse", "floor", mode, floor=named) if named else Verdict("allow", "mode", mode)
     table = body.get("table") or {}
-    cell = str((table.get(mode) or MANUAL_TABLE_ROW).get(cls, "Q"))
+    cell = "R!" if mode == "plan" and floor == CREDENTIAL_READ_FLOOR else str((table.get(mode) or MANUAL_TABLE_ROW).get(cls, "Q"))
     key = ceiling_key or (body.get("ceilingKey") or {}).get(cls)
     # A switch the body does not name is undecided, never ON.
     ceiling = ((body.get("ceilings") or {}).get(key) or "undecided") if key else None

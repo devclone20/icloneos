@@ -29,7 +29,8 @@ from tools.approval_context import (
     get_current_session_key,
 )
 from tools.approval_detection import (
-    _approval_key_aliases, _check_sudo_stdin_guard, detect_dangerous_command, detect_hardline_command,
+    _approval_key_aliases, _check_sudo_stdin_guard, detect_dangerous_command, detect_floor_command,
+    detect_hardline_command,
 )
 from tools.approval_floors import (
     _command_matches_permanent_allowlist, _hardline_block_result, _match_user_deny_rule, _sudo_stdin_block_result,
@@ -92,6 +93,75 @@ def iclone_pinned_approval_mode() -> str | None:
 _lock = threading.Lock()
 _pending: dict[str, dict] = {}
 _session_approved: dict[str, set] = {}
+# icloneOS F40: main's Ignore, read from the signed policy by the plugin. Never an env var, config key or file an
+# agent can write; no probe (no lock, no plugin) or a probe that fails is never Ignore.
+_ICLONE_IGNORE_PROBE = None
+
+
+def set_iclone_ignore_probe(probe) -> None:
+    global _ICLONE_IGNORE_PROBE
+    if _ICLONE_POLICY_LOCK:
+        _ICLONE_IGNORE_PROBE = probe
+
+
+_ICLONE_UNATTENDED_FLOOR = None
+_ICLONE_IGNORE_REFUSES = None
+
+
+def set_iclone_unattended_floor(floor_of, ignore_refuses=None) -> None:
+    """Called by the bundled gate: ``floor_of(tool, args, cwd)`` is its own floor for text no tool call carries, and
+    ``ignore_refuses(floor)`` the floors its Ignore still refuses on a tool call, so a script meets the same set."""
+    global _ICLONE_UNATTENDED_FLOOR, _ICLONE_IGNORE_REFUSES
+    if _ICLONE_POLICY_LOCK:
+        _ICLONE_UNATTENDED_FLOOR = floor_of
+        _ICLONE_IGNORE_REFUSES = ignore_refuses
+
+
+def _iclone_script_deny_rule(text: str) -> str | None:
+    """The user's ``approvals.deny`` rule a script's text meets: the whole text, then each line as its own command."""
+    for command in dict.fromkeys([text, *(line.strip() for line in text.splitlines())]):
+        rule = _match_user_deny_rule(command) if command else None
+        if rule:
+            return rule
+    return None
+
+
+def iclone_unattended_refusal(tool: str, args: dict, cwd: str | None) -> str | None:
+    """G102: a scheduled job's script runs with no tool call, so the gate never sees it and nobody is there to answer
+    a sheet. Since G28 the runtime leaves shutdown, kill-all and stopping icloneOS to that sheet, so here every floor
+    the gate would ask about refuses outside Ignore, as before G28; Ignore refuses exactly what it refuses on a tool
+    call (the gate's ``ignore_refuses``). The user's deny rules refuse in every mode. Outside the app (no gate) nothing
+    changes. A floor, rule or Ignore set that cannot be checked refuses."""
+    if _ICLONE_IGNORE_PROBE is None:
+        return None
+    try:
+        rule = _iclone_script_deny_rule(str(args.get("command") or args.get("code") or ""))
+        if rule:
+            return f"BLOCKED by icloneOS permissions: a scheduled script matches your deny rule '{rule}', so it does not run"
+        floor = _ICLONE_UNATTENDED_FLOOR(tool, args, cwd) if _ICLONE_UNATTENDED_FLOOR is not None else "the gate's floor is not available"
+        if not floor:
+            return None
+        refuses = _ICLONE_IGNORE_REFUSES
+        if iclone_ignore_in_force() and refuses is not None and not refuses(floor):
+            return None
+    except Exception as exc:  # noqa: BLE001
+        floor = f"the floor could not be checked ({type(exc).__name__})"
+    return f"BLOCKED by icloneOS permissions: a scheduled script cannot ask you, so it does not run ({floor})"
+
+
+def iclone_ignore_in_force() -> bool:
+    """True when the app's Ignore permissions covers this session. Every Hermes ask path reads this just before it
+    would ask; total destruction and the user's own deny rules have already run by then and stay refused."""
+    probe = _ICLONE_IGNORE_PROBE
+    if probe is None:
+        return False
+    try:
+        return probe(get_current_session_key(default="")) is True
+    except Exception:  # noqa: BLE001
+        logger.debug("icloneOS Ignore probe failed; treating it as off", exc_info=True)
+        return False
+
+
 _session_yolo: set[str] = set()
 _permanent_approved: set = set()
 # Routed multiplex profiles: one permanent allowlist per profile home (see ``_permanent_set``).
@@ -1066,6 +1136,19 @@ def _user_deny_block(command: str) -> dict | None:
     return _user_deny_block_result(deny_pattern)
 
 
+def _iclone_floor_of(command: str, ignore: bool) -> tuple:
+    if ignore:
+        return detect_floor_command(command)
+    if _ICLONE_IGNORE_PROBE is None:
+        return detect_hardline_command(command)
+    # G28: with the gate in place the classifier asks for the other hardlines and for a delete it cannot resolve, and what is
+    # approved runs; only total destruction reaches this refusal.
+    from tools.approval_floor import UNRESOLVED_DELETES
+
+    is_floor, description = detect_floor_command(command)
+    return (False, None) if description in UNRESOLVED_DELETES else (is_floor, description)
+
+
 def _floor_block(command: str, *, sudo_guard: bool = False) -> dict | None:
     """Unconditional floors, BEFORE yolo / mode=off / cron approve-mode so no
     session-level setting can bypass them: hardline catastrophic commands,
@@ -1076,15 +1159,17 @@ def _floor_block(command: str, *, sudo_guard: bool = False) -> dict | None:
     can run, #58748)."""
     from agent.runtime_self_protection import command_deletes_runtime
 
-    is_hardline, hardline_desc = detect_hardline_command(command)
+    # icloneOS F40, L1: in Ignore the one floor is total destruction; L2 reads one effective mode.
+    ignore = iclone_ignore_in_force()
+    is_hardline, hardline_desc = _iclone_floor_of(command, ignore)
     if is_hardline:
         logger.warning("Hardline block: %s (command: %s)", hardline_desc, command[:200])
         return _hardline_block_result(hardline_desc, command)
-    runtime_target = command_deletes_runtime(command)
+    runtime_target = None if ignore else command_deletes_runtime(command)
     if runtime_target:
         logger.warning("Runtime self-delete block: %s (command: %s)", runtime_target, command[:200])
         return _hardline_block_result(f"recursive/any delete of {runtime_target}", command)
-    if sudo_guard:
+    if sudo_guard and _ICLONE_IGNORE_PROBE is None:  # icloneOS F40: with the gate in place it asks; what is approved runs
         is_sudo_guess, sudo_guess_desc = _check_sudo_stdin_guard(command)
         if is_sudo_guess:
             logger.warning("Sudo stdin guard block: %s (command: %s)", sudo_guess_desc, command[:200])

@@ -32,6 +32,7 @@ import { $agentRuntimeSkipped, $installOverlayOwnsFailure } from '@/store/agent-
 import { skipDesktopBoot } from '@/store/boot'
 
 import { FirstRunRemoteForm } from './first-run-remote-form'
+import { HomeSettingsRefusalPanel, useHomeSettingsRefusal } from './home-settings-refusal'
 
 /**
  * DesktopInstallOverlay
@@ -474,6 +475,9 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     })
   }, [state.error, state.log, state.manifest, state.stages])
 
+  // The default home: what the config stage runs on.
+  const [homeSettings, setHomeSettings] = useHomeSettingsRefusal(Boolean(shouldShow && state.error), 'default', 'install')
+
   if (!shouldShow) {
     return null
   }
@@ -716,6 +720,12 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
               </div>
             </div>
           )}
+
+          {failed && homeSettings && diagnosis?.class === 'homeSettings' ? (
+            <div className="mb-4">
+              <HomeSettingsRefusalPanel doing="install" onChange={setHomeSettings} profile="default" refusal={homeSettings} />
+            </div>
+          ) : null}
 
           {stages.length > 0 && (
             <ol className="mb-4 space-y-0.5">

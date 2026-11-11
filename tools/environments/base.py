@@ -63,6 +63,7 @@ _live_foreground_cond = threading.Condition(threading.RLock())
 _exit_fenced = False  # one-way, set by the hard-exit kill: no foreground command spawns after it
 _spawns_in_flight = 0  # past the fence check, child maybe alive, not yet in _live_foreground
 _HARD_KILL_BUDGET_S = 0.5
+_GRACEFUL_SPAWN_WAIT_S = 5.0  # bounds only a wedged spawn: a healthy one publishes and notifies at once
 
 
 def _enter_foreground_spawn() -> bool:
@@ -102,7 +103,10 @@ def kill_live_foreground_processes(*, now: bool = False) -> int:
     (Modal, Daytona, Vercel) run on daemon threads under that one deadline."""
     global _exit_fenced
     if not now:
+        # A child already forked but not yet published is invisible to the snapshot and would be
+        # orphaned by the exit this funnel serves, so wait for spawns past the fence check.
         with _live_foreground_cond:
+            _live_foreground_cond.wait_for(lambda: _spawns_in_flight == 0, _GRACEFUL_SPAWN_WAIT_S)
             live = list(_live_foreground.values())
         for env, proc in live:
             _quiet_kill(env._kill_process, proc)

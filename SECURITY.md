@@ -54,18 +54,36 @@ below it.
 - **The operating system is the boundary.** In-process screens — the command approval patterns, output
   redaction, skill scanning — are heuristics that reduce accidents. They are not containment, and bypassing one
   is not a vulnerability by itself.
-- **Seatbelt confines agent commands.** On macOS the agent's commands, tools, the browser and the helper programs
-  they start run under a Seatbelt profile that denies by default. The agent runtime process itself is not
-  kernel-sandboxed; a guard refuses any program it would start outside the sandbox. Escaping a profile, or starting
-  an unconfined program, is in scope.
+- **Seatbelt confines agent commands.** On macOS, while confinement is on (it is on by default, and you can turn it
+  off), the agent's commands and the programs they start run under a Seatbelt profile that denies by default; the
+  agent's browser runs outside it, through a door in the launcher. The agent runtime process itself is not
+  kernel-sandboxed; while confinement is on, a guard refuses any other program it would start outside the sandbox,
+  except a shell command you approve, which runs once outside it, and the helpers the app runs for computer use
+  and screen recording. The file tools can go outside it for a single file in your home folder that no folder grant
+  can open: once on the ask in the modes that ask, with no ask in Ignore permissions.
+  Escaping a profile, or starting an unconfined program, is in scope.
 - **The window is untrusted; the main process is privileged.** Chat markdown, tool output and web content render
   in the window. Every privileged channel (terminal, keychain, wallet, payments, permissions) must answer only the
   app's own windows. A channel that acts for any other frame or window is in scope.
 - **Commands to bundled CLIs are argv-only**, checked against a flag allowlist, never passed through a shell.
   Reaching an unlisted flag or a shell metacharacter is in scope.
-- **The permission gate and its floors.** No mode allows wiping the disk, changing the agent's own permissions or
-  its record, reading keys to send them anywhere, stopping the app or the gate, typing your administrator
-  password, or transferring an iNFT. Getting the agent past one of these floors is in scope.
+- **The permission gate and its floors.** Every mode refuses the total destruction of the machine: wiping the disk
+  or a whole home folder, raw writes to a disk, and kernel or boot damage. Outside Ignore permissions, changing the
+  agent's own permissions or its record, reading keys to send them anywhere, stopping the app or the gate, typing
+  your administrator password and transferring an iNFT ask first; in Ignore permissions
+  nothing asks, and the agent can do all of them. Getting the agent past the total-destruction floor, or past an
+  ask in a mode that asks, is in scope.
+- **What the delete check does not read (stated limits).** The check reads the text of one command at a time, so a
+  script, a program, a language's own delete call, or a command built at run time, encoded or passed through `eval`
+  can go round it. A variable exported, or a function or alias made, by an earlier command in the same terminal is
+  not known to it: `export CDPATH=/` and then `cd usr && rm -rf *` is not refused. It does not know the folder a
+  command runs in, so a delete that climbs out with `..`, such as `rm -rf ../../*` run two folders below your home,
+  is not refused. A launcher around a delete (`xargs` fed from input it cannot
+  read, `npx rimraf`, `cmake -E rm`) is not read. `${X:-w}` is read as `w`, whatever `X` holds when it runs. A git
+  alias and `clean.requireForce` turned off in a config file are not read; paths under `/net`, `/Network` and
+  `/home` are read as written; `find -exec shred`, `srm` and `rsync --remove-source-files` are not read as deletes,
+  and moves to the Trash and AppleScript deletes are not read. Your own deny rules still apply. A way past the
+  check that is not on this list is in scope.
 - **Keys stay in the main process.** Payment keys are sealed with the Keychain (payments stay off until the
   Keychain setting is on) and never sent to a window or a log. A key, seed or token that reaches either is in scope.
 - **Pinned downloads.** The agent runtime is pinned by SHA-256 and installed from a copy inside the app. Getting
@@ -95,9 +113,9 @@ log and payment keys with, so it stays in Manual, and payments and the ACP tools
 
 ### Accepted high-severity advisories with no compatible fix
 
-These ship in v0.0.5. Our release checks accept each one explicitly, by name, version and advisory (for `acp-node`, whose
+These ship in v0.0.7. Our release checks accept each one explicitly, by name, version and advisory (for `acp-node`, whose
 npm advisory id can change between runs, by name, version and the accepted GHSA advisories it depends on), and stop accepting
-it at v0.0.6: it must then be decided again or, as soon as a compatible fix exists, removed. `npm audit` shows more
+it at v0.0.8: it must then be decided again or, as soon as a compatible fix exists, removed. `npm audit` shows more
 packages as high than the ones named here, because it also counts every package that depends on them.
 
 **The bundled sign-in page** (the sign-in window only):

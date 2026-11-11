@@ -7,10 +7,12 @@ shared, so the two transports must agree on results.
 """
 
 import json
+import os
+import subprocess
 
 import pytest
 
-from tools.environments.local import LocalEnvironment
+from tools.environments.local import LocalEnvironment, _kill_process_group_posix
 from tools.file_operations import ShellFileOperations
 
 pytestmark = pytest.mark.platforms("posix")  # native rg lane is POSIX-only
@@ -126,3 +128,13 @@ def test_limit_hit_keeps_drained_matches_when_group_kill_is_refused(tree, ops_fa
     monkeypatch.setattr(os, "killpg", lambda pgid, sig: (_ for _ in ()).throw(PermissionError(1, "Operation not permitted")))
     result = ops.search(pattern="needle", path=str(tree), limit=2)
     assert not result.error and len(result.matches) == 2, result.to_dict()
+
+
+def test_kill_of_a_child_that_just_exited_is_not_an_error():
+    """rg closes stdout, then exits: the native lane's poll() can see it alive and the kill find a zombie."""
+    proc = subprocess.Popen(["/usr/bin/true"], start_new_session=True)
+    os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOWAIT)
+
+    _kill_process_group_posix(proc)
+
+    assert proc.wait(timeout=5) == 0

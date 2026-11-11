@@ -226,6 +226,7 @@ export const ABSENT_IN_WEB = [
   // V3-RT-B: the agent runtime's install status, skip and repair belong to this Mac's installer; a browser installs
   // nothing (the install overlay and the Settings section read the bridge as absent).
   'agentRuntime',
+  'homeSettings',
   'appUpdate',
   'dataUrlReadMax',
   // REL-6: the ACP tools installer writes the CLI into this Mac's app folder; a browser installs nothing (and the
@@ -249,6 +250,9 @@ export const ABSENT_IN_WEB = [
   'paneBus',
   // The pop-out pet is an OS window (V3-P): a browser has none, so the pet stays in the page.
   'petOverlay',
+  // AI record captures the screen with desktopCapturer in main. A browser has neither, so the title-bar tool reads the
+  // bridge as absent and is not offered, and nothing records.
+  'screenRecord',
   // The VS Code Marketplace theme search runs in the desktop main process (electron/vscode-marketplace.ts). The
   // runtime serves no themes marketplace route, so the web build has none: the theme pages say so instead (V3-0).
   'themes'
@@ -268,6 +272,7 @@ const DESKTOP_ONLY_CALLS = [
   'getProfileRoutes',
   'getRecentLogs',
   'normalizePreviewTarget',
+  'noteFolder',
   'oauthLoginConnectionConfig',
   'oauthLogoutConnectionConfig',
   'openBrowserWindow',

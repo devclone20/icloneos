@@ -194,6 +194,7 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
     try:
         from agent.secret_scope import _is_global_env, load_env_file
         from agent.secret_sources.registry import apply_all
+        from hermes_cli.config_read_errors import unreadable_env_error, warn_unreadable_env
 
         local_env = {name: value for name, value in os.environ.items() if _is_global_env(name)}
         local_env.update(load_env_file(home / ".env"))
@@ -202,7 +203,10 @@ def _hydrate_profile_secret_sources(home: Path) -> dict[str, str]:
         # Without seeding it here a cold profile configured for the supported .op.env flow fails 1Password
         # hydration (sweeper review on #74549). .env values win — never override an existing key.
         op_env = home / ".op.env"
-        if op_env.exists():
+        op_env_error = unreadable_env_error(op_env)
+        if op_env_error is not None:
+            warn_unreadable_env(op_env, op_env_error)
+        elif op_env.exists():
             for _name, _value in load_env_file(op_env).items():
                 local_env.setdefault(_name, _value)
         local_env["HERMES_HOME"] = str(home)
@@ -399,6 +403,10 @@ def _restore_iclone_spawn_env() -> None:
         restore_environ()
     except Exception:  # noqa: BLE001 — readers use the exec-time copy anyway; this only keeps children honest
         pass
+    # iclone-seam: fx35 — nor a confined process's terminal backend, whether or not it also holds the policy lock.
+    from hermes_cli.iclone_policy_env import settle_backend
+
+    settle_backend(os.environ)
 
 
 def _sanitize_env_file_if_needed(path: Path) -> None:
@@ -517,12 +525,18 @@ def load_hermes_dotenv(
     project_env_path = Path(project_env) if project_env else None
     load_pass = next(_DOTENV_PASSES)  # one pass: later layers below see the earlier layers' output
 
-    if user_env.exists():  # normalize formatting / strip NULs before parsing
+    from hermes_cli.config_read_errors import unreadable_env_error, warn_unreadable_env
+
+    user_env_error = unreadable_env_error(user_env)
+    if user_env_error is not None:
+        warn_unreadable_env(user_env, user_env_error)
+
+    if user_env_error is None and user_env.exists():  # normalize formatting / strip NULs before parsing
         _sanitize_env_file_if_needed(user_env)
     if project_env_path and project_env_path.exists():
         _sanitize_env_file_if_needed(project_env_path)
 
-    if user_env.exists():
+    if user_env_error is None and user_env.exists():
         _load_dotenv_with_fallback(user_env, override=True, load_pass=load_pass)
         loaded.append(user_env)
         _clear_known_keys_missing_from_dotenv(user_env)  # mirrors reload_env(): inherited keys must not leak
@@ -531,7 +545,10 @@ def load_hermes_dotenv(
     # apply_onepassword_secrets() even in cron with no shell state; gitignored so the token never enters
     # the committed .env. override=False lets a systemd `EnvironmentFile=-…/.op.env` token win.
     op_env = home_path / ".op.env"
-    if op_env.exists() and not os.environ.get("OP_SERVICE_ACCOUNT_TOKEN"):
+    op_env_error = None if os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") else unreadable_env_error(op_env)
+    if op_env_error is not None:
+        warn_unreadable_env(op_env, op_env_error)
+    elif op_env.exists() and not os.environ.get("OP_SERVICE_ACCOUNT_TOKEN"):
         _load_dotenv_with_fallback(op_env, override=False, load_pass=load_pass)
 
     if project_env_path and project_env_path.exists():

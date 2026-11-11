@@ -291,6 +291,7 @@ _DESKTOP_BUILD_ENTRY_POINTS = (
 # What the entry points import, outside the update_* family and the pipeline above.
 _UPDATE_DEPENDENCIES = (
     "hermes_cli/_subprocess_compat.py",  # update git env, process-tree kill, PM git exposure
+    "hermes_cli/no_follow.py",  # update_cmd_windows: a linked config or .env is refused on the update path too
     "hermes_cli/local_runtime/processes.py",  # bounded probes' spawn_server/job custody
     "agent/deadline.py",  # bounded probes' process-tree timeout cleanup
     # migrate_all_homes' second-hop provider/profile decisions, run on every update. Its

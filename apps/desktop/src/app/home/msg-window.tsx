@@ -17,7 +17,7 @@
  * and every session. The window has TWO views: `chat` shows the Message
  * surface under the head band and `it` fills the SAME window with the iT
  * terminal, the sidebar listing the iT sessions instead (§12). OWNER DECISION
- * 2026-10-19 (RESUME/contracts/M1_message_head_band.md): the head band is in
+ * 2026-10-19 (contract M1, message head band): the head band is in
  * BOTH views — it used to be chat-only so no pill sat over the shell's first
  * lines, and what makes it safe in iT is that the terminal now starts at the
  * band's bottom edge (msg-head.tsx, it-terminal.css). The chat only hides

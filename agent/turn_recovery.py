@@ -1104,6 +1104,8 @@ def nonretryable_client_error_result(
         # A free-tier refusal is fully explained by its own sentence; the raw provider summary
         # (status codes, JSON) is for the log, not for a first-time user's chat.
         _final_response = _welcome_tier_guidance(classified, model=model, in_chat=True)
+    elif getattr(api_error, "code", None) == "codex_credential_host_unknown":
+        _final_response = _nonretryable_summary  # no provider was reached: the refusal is the whole message
     else:
         # Every surface reads final_response; the CLI hint lines above never reach chat.
         _final_response = nonretryable_copy(

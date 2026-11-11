@@ -66,22 +66,43 @@ def enforce_no_refusal() -> None:
     policy is exactly the authority leak this module closes (#68559 requires refusal, not fallback).
     Non-scoped and policy-scoped contexts pass silently.
     """
+    # iclone-seam: fx35b — marked confined at exec without the app's backend: every tool, whatever the scope says.
+    from hermes_cli.iclone_policy_env import exec_backend_refusal
+
+    no_backend = exec_backend_refusal()
+    if no_backend:
+        raise TerminalPolicyUnavailable(no_backend)
     scope = _terminal_scope_var.get()
     if isinstance(scope, TerminalPolicyRefusal):
         raise TerminalPolicyUnavailable(
             f"terminal policy unavailable for this profile: {scope.reason}")
+    if scope is None:
+        # iclone-seam: fx35 — no scope: the process's own config or .env asked a confined process for another backend.
+        from hermes_cli.iclone_policy_env import refused_backend
+
+        reason = refused_backend()
+        if reason:
+            raise TerminalPolicyUnavailable(reason)
 
 
 def terminal_env(name: str, default: str = "") -> str:
     """Authoritative read of a ``TERMINAL_*`` variable.
 
     No scope: process env, then *default*. Refusal scope: raise. Policy scope: ONLY the
-    policy; a missing key yields *default*, never os.environ.
+    policy; a missing key yields *default*, never os.environ. While icloneOS confines this process,
+    ``TERMINAL_ENV`` is the exec-time backend whatever the env or a directly bound scope say.
     """
     scope = _terminal_scope_var.get()
+    if scope is not None:
+        enforce_no_refusal()
+    if name == "TERMINAL_ENV":  # iclone-seam: fx35
+        from hermes_cli.iclone_policy_env import confined_backend
+
+        pinned = confined_backend()
+        if pinned:
+            return pinned
     if scope is None:
         return os.environ.get(name, default)
-    enforce_no_refusal()
     value = scope.get(name)
     return default if value is None else str(value)
 
@@ -167,6 +188,18 @@ def build_profile_terminal_scope(
             _apply(raw_terminal)
             image_pinned = image_pinned or "docker_image" in raw_terminal
     scope["TERMINAL_DOCKER_IMAGE_PINNED"] = "1" if image_pinned else "0"
+    # iclone-seam: fx35 — a turn routed to any profile runs in the backend main chose for this confined process.
+    from hermes_cli.iclone_policy_env import confined_backend, confined_project, other_backend_refusal
+
+    if confined_backend():
+        refusal = other_backend_refusal(scope.get("TERMINAL_ENV"))
+        if refusal:
+            raise TerminalPolicyUnavailable(refusal)
+        scope["TERMINAL_ENV"] = confined_backend()
+        # No cwd of its own: the app's project, as in a turn of the launch profile. The placeholder below answers
+        # "sandbox default" for a plugin backend, which is /root; the sandbox refuses every command there.
+        if not scope.get("TERMINAL_CWD") and confined_project():
+            scope["TERMINAL_CWD"] = confined_project()
     _resolve_scope_cwd_placeholder(scope)
     return scope
 

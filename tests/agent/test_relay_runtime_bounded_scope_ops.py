@@ -260,3 +260,32 @@ class TestHealthyPathUnchanged:
         # session may still own an active publication. Plugin teardown owns
         # the final flush after tracked operations drain.
         assert fake.subscribers.flushed == 0
+
+
+# f55: Relay is not in icloneOS' runtime by design; its absence is one quiet line, and any other failure keeps its traceback.
+class TestRelayAbsentFromTheRuntime:
+    @staticmethod
+    def registry(monkeypatch, exc):
+        def refuse(**_):
+            raise exc
+
+        monkeypatch.setattr(relay_runtime, "RelayRuntime", refuse)
+        monkeypatch.setattr(relay_runtime, "_relay_absent_noted", False)
+        return relay_runtime.RelayHostRegistry()
+
+    def test_one_quiet_line_and_no_traceback(self, monkeypatch, caplog):
+        registry = self.registry(monkeypatch, ModuleNotFoundError("No module named 'nemo_relay'", name="nemo_relay"))
+        with caplog.at_level("DEBUG", logger=relay_runtime.logger.name):
+            hosts = [registry.for_profile(key) for key in ("a", "b", "a")]
+        assert all(isinstance(host, relay_runtime.NoopRelayRuntime) for host in hosts)
+        assert [record.levelname for record in caplog.records] == ["INFO"]
+        assert "not installed" in caplog.text and caplog.records[0].exc_info is None and "Traceback" not in caplog.text
+
+    @pytest.mark.parametrize("exc", [ModuleNotFoundError("No module named 'grpc'", name="grpc"), RuntimeError("boom")],
+                             ids=["its-dependency-missing", "another-failure"])
+    def test_anything_else_keeps_its_warning_and_traceback(self, monkeypatch, caplog, exc):
+        registry = self.registry(monkeypatch, exc)
+        with caplog.at_level("DEBUG", logger=relay_runtime.logger.name):
+            host = registry.for_profile("a")
+        assert isinstance(host, relay_runtime.NoopRelayRuntime)
+        assert [record.levelname for record in caplog.records] == ["WARNING"] and caplog.records[0].exc_info

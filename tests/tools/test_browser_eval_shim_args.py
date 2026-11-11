@@ -26,7 +26,7 @@ def _run_through_seam(monkeypatch, browser_cmd: str, command: str, args: list, s
         captured.update(cmd_parts=cmd_parts, stdin=stdin_payload)
         return bt_session._interpret_browser_command_output(cmd, stdout, "", 0)
 
-    monkeypatch.setattr(bt_session, "_browser_command_preflight", lambda: {"browser_cmd": browser_cmd})
+    monkeypatch.setattr(bt_session, "_browser_command_preflight", lambda *_: {"browser_cmd": browser_cmd})
     monkeypatch.setattr(bt_session, "_get_session_info", lambda task_id: {"session_name": "s", "cdp_url": None})
     monkeypatch.setattr(bt_session._cloud, "_get_browser_engine", lambda: "auto")
     monkeypatch.setattr(bt_session._cloud, "_is_headed_mode", lambda: False)

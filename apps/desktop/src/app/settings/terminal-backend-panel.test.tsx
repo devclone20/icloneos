@@ -60,6 +60,26 @@ afterEach(() => {
 })
 
 describe('TerminalBackendPanel', () => {
+  it('isolation on: the list says it is not used and no row can be picked', async () => {
+    const { fixtureState } = await import('@/app/home/containers/containers-fixtures')
+    const { $confinement } = await import('@/store/confinement')
+
+    $confinement.set({ status: 'ready', state: fixtureState(), error: null })
+
+    try {
+      const { TerminalBackendPanel } = await import('./terminal-backend-panel')
+      const { container } = render(<TerminalBackendPanel onConfiguredChange={vi.fn()} />)
+      const docker = (await screen.findByText('Docker')).closest('button') as HTMLButtonElement
+
+      expect(container.querySelector('[data-backend-sandboxed]')?.textContent).toContain('not used')
+      expect(docker.disabled).toBe(true)
+      fireEvent.click(docker)
+      expect(selectTerminalBackend).not.toHaveBeenCalled()
+    } finally {
+      $confinement.set({ status: 'loading', state: null, error: null })
+    }
+  })
+
   it('lists backends with status pills from the backends endpoint', async () => {
     const { TerminalBackendPanel } = await import('./terminal-backend-panel')
     render(<TerminalBackendPanel onConfiguredChange={vi.fn()} />)

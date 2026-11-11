@@ -7,6 +7,7 @@ import type { ChatMessage } from '@/lib/chat-messages'
 import { activeConnectionScopeSuffix, rescopeConnectionScopedStores } from '@/lib/connection-scoped'
 import { persistBoolean, persistString, readJson, storedBoolean, storedString, writeJson } from '@/lib/storage'
 import { syncCronModelImpactConnection } from '@/store/cron-model-impact-scope'
+import { notify } from '@/store/notifications'
 import type { SessionInfo, UsageStats } from '@/types/hermes'
 
 import type { SessionOwnerRoute, SessionOwnerScope } from './session-request-router'
@@ -1169,7 +1170,30 @@ export const setCurrentFastMode = (next: Updater<boolean>) => {
  */
 export const setCurrentCwd = (next: Updater<string>) => {
   updateAtom($currentCwd, next)
-  persistString(workspaceCwdKey(), $currentCwd.get().trim() || null)
+
+  const cwd = $currentCwd.get().trim()
+
+  persistString(workspaceCwdKey(), cwd || null)
+}
+
+/** fx26b: a path the user typed or dragged, at the moment of that act, goes to main to be listed. The picker lists in
+ *  main itself. Nothing else calls this: moving the workspace (`setCurrentCwd`, `setCurrentCwdTransient`) lists nothing,
+ *  and a resumed session stays listed because of main's own record, never because of its row. */
+export const noteNamedFolder = (source: 'drag' | 'typed', cwd: string): void => {
+  if (!cwd || $connection.get()?.mode === 'remote') {
+    return
+  }
+
+  // fx27 (F2 major 3): main's refusal is shown, not swallowed: the folder opens all the same, but the user learns that
+  // its commands run narrowed and why. Main's message is the only text; nothing here names a folder.
+  void window.hermesDesktop
+    ?.noteFolder?.(cwd, source)
+    ?.then(answer => {
+      if (answer && answer.ok === false && typeof answer.message === 'string' && answer.message) {
+        notify({ kind: 'warning', title: cwd, message: answer.message })
+      }
+    })
+    .catch(() => undefined)
 }
 
 export const setTerminalBackend = (next: Updater<string>) => updateAtom($terminalBackend, next)

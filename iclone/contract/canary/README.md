@@ -1,6 +1,6 @@
 # iclone/contract/canary — the sandboxed canary
 
-Contract decision 13 (`RESUME/contracts/P4_upstream.md`): static rules cannot see a break that keeps every schema
+Contract decision 13 (the P4 upstream contract): static rules cannot see a break that keeps every schema
 identical, so the canary runs the **candidate** runtime for real, in a sandbox, and records what the app would see.
 
 ```sh

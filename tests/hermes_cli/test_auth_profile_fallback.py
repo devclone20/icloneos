@@ -17,6 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 
 def _make_auth_store(pool: dict | None = None, providers: dict | None = None) -> dict:
@@ -160,7 +161,7 @@ def test_codex_runtime_uses_global_pool_when_profile_singleton_is_empty(profile_
             "auth_type": "oauth",
             "priority": 0,
             "source": "manual:device_code",
-            "access_token": "global-codex-access-token",
+            "access_token": chatgpt_jwt("global-codex-access-token"),
             "refresh_token": "global-codex-refresh-token",
         }],
     }))
@@ -177,14 +178,14 @@ def test_codex_runtime_uses_global_pool_when_profile_singleton_is_empty(profile_
     creds = resolve_codex_runtime_credentials(refresh_if_expiring=False)
 
     assert creds["source"] == "credential_pool"
-    assert creds["api_key"] == "global-codex-access-token"
+    assert creds["api_key"] == chatgpt_jwt("global-codex-access-token")
 
     # Profile rows shadow the root the moment they exist (read_credential_pool precedence).
     _write(profile_env["profile"] / "auth.json", _make_auth_store(pool={
         "openai-codex": [{"id": "prof", "auth_type": "oauth", "priority": 0,
-                          "access_token": "profile-codex-access-token", "refresh_token": "r"}],
+                          "access_token": chatgpt_jwt("profile-codex-access-token"), "refresh_token": "r"}],
     }))
-    assert resolve_codex_runtime_credentials(refresh_if_expiring=False)["api_key"] == "profile-codex-access-token"
+    assert resolve_codex_runtime_credentials(refresh_if_expiring=False)["api_key"] == chatgpt_jwt("profile-codex-access-token")
 
 
 def test_codex_cooldown_clear_writes_to_the_store_that_owns_the_borrowed_pool(profile_env):

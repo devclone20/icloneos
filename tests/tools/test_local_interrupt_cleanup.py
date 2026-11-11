@@ -278,6 +278,43 @@ os._exit(0)
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX process groups")
 @pytest.mark.live_system_guard_bypass  # a red run must reap survivors reparented to init
+def test_exit_cleanup_waits_for_a_spawn_not_yet_published(monkeypatch):
+    """Child forked, spawn not yet in ``_live_foreground``: the exit funnel must wait for it, or the
+    host exits with the command orphaned (gate run h13, same window the test above can land in)."""
+    from tools import terminal_tool_lifecycle
+
+    monkeypatch.setattr(terminal_tool_lifecycle, "_scratch_paths", lambda: [])
+    env = LocalEnvironment(cwd="/tmp")
+    spawned = threading.Event()
+    run_bash = env._run_bash
+
+    def slow_to_publish(*args, **kwargs):
+        proc = run_bash(*args, **kwargs)
+        spawned.set()
+        time.sleep(0.5)
+        return proc
+
+    monkeypatch.setattr(env, "_run_bash", slow_to_publish)
+    result: dict = {}
+    t = threading.Thread(target=lambda: result.update(env.execute("sleep 3518", timeout=600)), daemon=True)
+    proc = None
+    try:
+        t.start()
+        assert spawned.wait(20.0), "test setup: foreground sleep never started"
+        proc = _descendant_running("sleep 3518")
+        assert proc is not None
+        pgid = os.getpgid(proc.pid)
+
+        terminal_tool_lifecycle.cleanup_all_environments()
+
+        assert _wait_for_pgid_exit(pgid, timeout=15.0), (
+            f"foreground command survived exit cleanup:\n{_process_group_snapshot(pgid)}")
+    finally:
+        if proc is not None:
+            with contextlib.suppress(Exception):
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+
+
 @pytest.mark.parametrize("scenario", ["spawn_before_publish", "launch_after_fence"])
 def test_hard_exit_leaves_no_foreground_survivor_around_the_spawn(scenario, tmp_path):
     """A hard exit must own every foreground child: one spawned but not yet registered when the kill

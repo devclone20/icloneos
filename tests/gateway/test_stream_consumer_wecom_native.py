@@ -1030,7 +1030,9 @@ class TestClarifyEagerReseed:
 
         # 第二轮 eager seed：即便标志有残留，仍能正确再次开流。
         consumer.request_reopen_seed()
-        await self._drain(consumer, 0.05)
+        # The seed frame is sent before the flag is set, so the flag orders the count below;
+        # a fixed sleep here lost the race to a descheduled consumer task (gate run h11).
+        assert await self._wait_until(lambda: consumer._native_stream_opened)
 
         seeds_after = len(
             [f for f in adapter.frames if f["text"] == "" and not f["finalize"]]
@@ -1039,7 +1041,6 @@ class TestClarifyEagerReseed:
             "第二轮 eager seed 必须再发一个新的空 seed 帧 "
             f"(before={seeds_before_second_boundary}, after={seeds_after})"
         )
-        assert await self._wait_until(lambda: consumer._native_stream_opened)
         assert consumer._reopen_seeded_eagerly is True
         assert consumer._awaiting_reopen_after_boundary is False
 

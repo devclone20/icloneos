@@ -187,16 +187,17 @@ NOT conclude "cua-driver can't drive this app" — climb the ladder. If
 action schema lacks that property; choose another verified rung without
 inferring support from the executable's reported version.
 
-## Page content is a separate toolset
+## Pages: the browser tools or a visible browser app
 
-`computer_use` is desktop-only: it does not expose a typed route for browser
-page content (no `cua_browser_*` actions). For reading or acting on a page's
-DOM — navigation, clicking a link by text, typed input into a form field —
-use the separate `browser_navigate`/`browser_click`/`browser_type`/`browser_snapshot`
-tools (or `browser_exec` when the Browser Use CLI backend is active); their
-own schemas document the current contract. Reserve `computer_use` for browser
-*chrome* (the address bar, permission prompts, extension popups, native
-dialogs) and anything else on screen that isn't page content.
+`computer_use` has no typed route for page content (no `cua_browser_*` actions).
+To read a page or act on its DOM (navigate, click a link by text, type in a
+field), use `browser_navigate`/`browser_click`/`browser_type`/`browser_snapshot`:
+they run a browser of their own, apart from the user's logins. To drive the
+user's own browser, or its chrome (address bar, permission prompts, extension
+popups, native dialogs), use `computer_use` on the visible browser app. Either
+works with the Seatbelt on or off. If a browser tool says it is not installed,
+tell the user the step it names, and meanwhile use `web_search` or the visible
+browser app.
 
 ### Key shortcuts vary per platform
 

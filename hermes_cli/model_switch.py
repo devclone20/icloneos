@@ -1464,6 +1464,11 @@ def _creds_for_switched_provider(st: _Switch) -> Optional[ModelSwitchResult]:
         try:
             st.resolve_runtime(requested=st.target_provider, explicit_base_url=alias_url or None)
         except Exception as e:
+            from hermes_cli.auth_codex import CODEX_HOST_UNKNOWN_CODE
+            from hermes_cli.auth_constants import AuthError, CODEX_RATE_LIMITED_CODE
+            if isinstance(e, AuthError) and e.code in (CODEX_HOST_UNKNOWN_CODE, CODEX_RATE_LIMITED_CODE):
+                from hermes_cli.auth import format_auth_error
+                return st.fail_on_target(format_auth_error(e))  # the true reason: the quota, or the refusal and its fix
             if st.target_provider.strip().lower() in LLAMACPP_ALIASES:
                 # A local-runtime alias has no credential to add: the seam's own message ("server
                 # isn't running" / "turned off") is the actionable one, the auth hint below is noise.
@@ -1592,6 +1597,19 @@ def _resolve_switch_credentials(st: _Switch) -> Optional[ModelSwitchResult]:
     if mandated_mode is not None and st.api_mode != "codex_app_server":
         st.api_mode = mandated_mode
     st.api_mode = st.api_mode or determine_api_mode(st.target_provider, st.base_url)
+    return None
+
+
+def _refuse_pair_off_the_rule(st: _Switch) -> Optional[ModelSwitchResult]:
+    """The final pair passes the two Codex checks before validation dials it, so /model reports the fix by name."""
+    from hermes_cli.auth_codex import _ensure_codex_credential_host
+    from hermes_cli.auth_constants import AuthError
+    if not st.api_key or not st.base_url:
+        return None
+    try:
+        _ensure_codex_credential_host(st.api_key, str(st.base_url))
+    except AuthError as exc:
+        return st.fail_on_target(str(exc))
     return None
 
 
@@ -1753,7 +1771,7 @@ def switch_model(
         explicit_provider=explicit_provider, user_providers=user_providers, custom_providers=custom_providers,
         new_model=raw_input.strip(), target_provider=current_provider)
     route = _route_explicit_provider if explicit_provider else _route_from_model_input
-    for step in (route, _resolve_switch_credentials, _validate_switch):
+    for step in (route, _resolve_switch_credentials, _refuse_pair_off_the_rule, _validate_switch):
         fail = step(st)
         if fail is not None:
             return fail

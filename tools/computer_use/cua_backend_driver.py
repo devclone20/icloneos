@@ -72,8 +72,53 @@ def _wsl_windows_path_to_posix(path: str) -> str:
     drive = (win.drive or "").rstrip(":").lower()
     return "/".join(["/mnt", drive, *win.parts[1:]]) if wsl and drive else path
 
+def _door_module():
+    """plugins/iclone-confinement/driver_door.py, by path as the launcher loads it (the folder's name has a hyphen)."""
+    import importlib.util
+    name = "iclone_driver_door"
+    if name not in sys.modules:
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "plugins", "iclone-confinement", "driver_door.py")
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+def icloneos_started() -> bool:
+    """icloneOS started this runtime, Seatbelt on or off: main's own exec values, no dotenv."""
+    try:
+        from hermes_cli.iclone_policy_env import exec_env, isolation_off
+        return exec_env("ICLONE_CONFINEMENT") == "1" or isolation_off()
+    except Exception:  # noqa: BLE001
+        return False
+
+def door_socket() -> str:
+    """The launcher's socket when this runtime is confined: then the driver is reached through the launcher only."""
+    try:
+        from hermes_cli.iclone_policy_env import exec_env
+        from tools.environments.host_lane import confined_process
+        return (exec_env("ICLONE_CONFINEMENT_LAUNCHER") or "") if confined_process() else ""  # main names it at exec (index.ts)
+    except Exception:  # noqa: BLE001
+        return ""
+
+def spawn_argv(argv: List[str]) -> List[str]:
+    """Confined: the command naming the door becomes the launcher's stub carrying it. Anything else is unchanged."""
+    if not argv or argv[0] != _door_module().COMMAND:
+        return list(argv)
+    from tools.environments.host_lane import STUB_FILE
+    return [sys.executable, "-I", "-S", os.path.realpath(str(STUB_FILE)), door_socket(), "--", *argv]
+
+def spawn_env(argv: List[str], env: Optional[Dict[str, str]]) -> Optional[Dict[str, str]]:
+    """The stub asks for the folder it runs in; the door uses none, so ``/`` and never the runtime's getcwd."""
+    if not argv or argv[0] != _door_module().COMMAND:
+        return env
+    return {**(os.environ if env is None else env), "ICLONE_RUN_CWD": "/"}
+
 def resolve_cua_driver_cmd(override: Optional[str] = None) -> Optional[str]:
-    """Read PM's selected binary without installing; never replace an explicit override."""
+    """Read PM's selected binary without installing; never replace an explicit override. Under icloneOS: the Seatbelt
+    on names the launcher's door; off, a real user's install is found by its signature when PM has no record."""
+    if override is None and door_socket():
+        return _door_module().COMMAND
     configured = (override if override is not None else os.environ.get(_CUA_DRIVER_CMD_ENV, "")).strip()
     if configured:
         expanded = os.path.expanduser(configured)
@@ -82,13 +127,22 @@ def resolve_cua_driver_cmd(override: Optional[str] = None) -> Optional[str]:
     from pm import installed_package
 
     installed = installed_package("cua-driver")
-    return str(installed.binary) if installed and installed.binary else None
+    if installed and installed.binary:
+        return str(installed.binary)
+    if icloneos_started() and sys.platform == "darwin":
+        door = _door_module()
+        app, _ = door.locate(os.path.expanduser("~"), os.environ.get("HERMES_HOME", ""))
+        return door.executable_of(app) if app else None
+    return None
 
 def cua_driver_binary_available() -> bool:
     """True if PM or an explicit override selects a local driver."""
     return resolve_cua_driver_cmd() is not None
 
 def cua_driver_install_hint() -> str:
+    if icloneos_started() and sys.platform == "darwin":
+        door = _door_module()
+        return door.locate(os.path.expanduser("~"), os.environ.get("HERMES_HOME", ""))[1] or door.ABSENT
     return ("cua-driver is not installed. Install the pinned driver with:\n  hermes computer-use install\n"
             "Or run `hermes tools` and enable the Computer Use toolset to install it automatically.")
 
@@ -132,7 +186,7 @@ def _resolve_mcp_invocation(driver_cmd: str, *, timeout: float = 6.0) -> Tuple[s
     # a concrete (path-bearing) command replaces the one we verified — and THAT binary is probed for `--no-overlay`,
     # not the system one.
     command = _wsl_windows_path_to_posix(command) if isinstance(command, str) and command else ""
-    command = command if command and _has_path_separator(command) else driver_cmd
+    command = command if command and _has_path_separator(command) and driver_cmd != _door_module().COMMAND else driver_cmd
     return command, _mcp_args_with_overlay_flag(args, driver_cmd=command)
 
 def _manifest_contract_reason(manifest: Optional[Dict[str, Any]]) -> str:
@@ -161,7 +215,7 @@ def cua_driver_runtime_contract_status(binary: Optional[str] = None) -> Dict[str
     """Report whether a local driver can host Hermes' 0.20 integration."""
     resolved = binary or resolve_cua_driver_cmd()
     version: Optional[str] = None
-    reason = "cua-driver is not installed"
+    reason = cua_driver_install_hint() if icloneos_started() else "cua-driver is not installed"
     if resolved:
         try:
             result = _cb()._run_driver(resolved, "manifest", timeout=15.0 if sys.platform == "win32" else 5.0)

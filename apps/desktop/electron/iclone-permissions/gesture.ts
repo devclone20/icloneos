@@ -1,7 +1,7 @@
 /**
  * V3-F §2 — the lock on every decision only the user may make (a mode change, a grant revoke, a door answer). Three
  * facts must all hold, the U1 §2.8 pattern: the renderer saw user activation, the preload's isolated world saw a
- * trusted click/Enter ON the marked control (`data-perm-mode-confirm` / `data-consent-door-answer`, single use), and
+ * trusted click/Enter ON the marked control, or a plain digit in the open selector (agent-update-confirm.ts) (`data-perm-mode-confirm` / `data-consent-door-answer`, single use), and
  * the browser process delivered real input to that very window within the window. A synthetic `.click()`, a devtools
  * call or an agent driving the page fails at least one of them.
  */

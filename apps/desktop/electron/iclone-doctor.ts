@@ -24,7 +24,7 @@ import { type CheckImpl, CHECKS, type DoctorEnv, execAbsolute } from './iclone-d
 import { applySteps, describeStep, FIXES, type FixImpl, isPassive } from './iclone-doctor-fixes'
 import { writeFileAtomicSync } from './lib/atomic-write'
 
-/** @public used by RESUME/run/gates/R13/extra/2026-10-17_r1_hostile.mjs */
+/** @public used by a gate probe kept outside this repository */
 export const REPORT_SCHEMA = 1
 const PARALLEL = 3
 const GLYPH: Record<CheckStatus, string> = { pass: '✓', warn: '⚠', fail: '✗', skip: '–' }

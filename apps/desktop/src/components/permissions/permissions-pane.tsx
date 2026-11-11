@@ -9,13 +9,15 @@ import { useI18n } from '@/i18n'
 import { CONFINEMENT_ON_BY_DEFAULT, type ConfinementVerdict } from '@/iclone-shared/confinement'
 import type { PermissionIntegrityFinding } from '@/iclone-shared/permissions'
 import { triggerHaptic } from '@/lib/haptics'
-import { $confinement, readConfinementOnce } from '@/store/confinement'
-import { $permissions, revokePermissionGrant, watchPermissions } from '@/store/permissions'
+import { $confinement, pollConfinementOnce, readConfinementOnce } from '@/store/confinement'
+import { $permissions, removePermissionFolder, revokePermissionGrant, watchPermissions } from '@/store/permissions'
 import { $currentCwd } from '@/store/session'
 
 import { AuditList } from './audit-list'
 import { FunctionMatrix } from './function-matrix'
+import { IsolationControl } from './isolation-control'
 import { ModePicker } from './mode-picker'
+import { ModeResetNotice } from './mode-reset-notice'
 
 const ModeIcon = codiconIcon('shield')
 const FloorIcon = codiconIcon('circle-slash')
@@ -91,7 +93,7 @@ export function PermissionsPane() {
     void readConfinementOnce()
 
     const off = window.hermesDesktop?.icloneConfinement?.onChanged(() => void readConfinementOnce())
-    const timer = window.setInterval(() => void readConfinementOnce(), CONFINEMENT_NOTE_POLL_MS)
+    const timer = window.setInterval(pollConfinementOnce, CONFINEMENT_NOTE_POLL_MS)
 
     return () => {
       off?.()
@@ -134,11 +136,11 @@ export function PermissionsPane() {
 
   const projectKey = state.project
   const projectMode = projectKey ? state.mode.projects[projectKey] : undefined
-  const current = scope === 'project' && projectMode ? projectMode : state.mode.standing
+  const chosen = scope === 'project' && projectMode ? projectMode : state.mode.standing
 
   return (
     <SettingsContent>
-      <div className="grid gap-6 pt-2" data-permissions-pane="">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 pt-2" data-permissions-pane="">
         <section>
           <SectionHeading icon={ModeIcon} title={copy.title} />
           <p className="mb-2 text-[0.8125rem] text-(--ui-text-tertiary)">{copy.lead}</p>
@@ -215,8 +217,13 @@ export function PermissionsPane() {
               {projectKey ? copy.scope.project(projectKey) : copy.scope.noProject}
             </Button>
           </div>
+          <p className="mb-1 text-[0.75rem] leading-4 text-(--ui-text-tertiary)" data-permission-scope-note="">
+            {copy.scope.standingNote}
+          </p>
+          <ModeResetNotice className="mb-2" />
           <ModePicker
-            current={current}
+            chosen={chosen}
+            inForce={chosen}
             target={
               scope === 'project' && projectKey
                 ? { scope: 'project', key: projectKey }
@@ -226,6 +233,7 @@ export function PermissionsPane() {
           <p className="pt-2 text-[0.75rem] leading-4 text-(--ui-text-tertiary)" data-permission-shell-note="">
             {copy.shellNote[shellNoteFor(confinement.status, confinement.state)]}
           </p>
+          <IsolationControl />
         </section>
 
         <section>
@@ -233,6 +241,7 @@ export function PermissionsPane() {
           <p className="mb-2 text-[0.8125rem] text-(--ui-text-tertiary)">{copy.functions.lead}</p>
           <FunctionMatrix
             ceilings={state.ceilings}
+            layout="fit"
             levels={state.functions}
             sealed={state.sealed}
             unconfirmed={state.unconfirmed}
@@ -241,7 +250,7 @@ export function PermissionsPane() {
 
         <section data-permission-grants="">
           <SectionHeading icon={GrantIcon} title={copy.grants.title} />
-          {state.grants.length === 0 && state.fnGrants.length === 0 ? (
+          {state.grants.length === 0 && state.fnGrants.length === 0 && !state.mode.folders?.length ? (
             <p className="text-[0.8125rem] text-(--ui-text-tertiary)">{copy.grants.empty}</p>
           ) : (
             state.grants.map(grant => (
@@ -266,6 +275,27 @@ export function PermissionsPane() {
               />
             ))
           )}
+          {(state.mode.folders ?? []).map(folder => (
+            <SettingRow
+              control={
+                <Button
+                  data-perm-mode-confirm=""
+                  onClick={() => {
+                    triggerHaptic('selection')
+                    void removePermissionFolder(folder)
+                  }}
+                  size="sm"
+                  variant="outline"
+                >
+                  {copy.grants.removeFolder}
+                </Button>
+              }
+              detail={folder}
+              hint={copy.grants.folderHint}
+              key={folder}
+              title={copy.grants.folderTitle}
+            />
+          ))}
           {state.fnGrants.map(grant => (
             <SettingRow
               control={
@@ -299,9 +329,16 @@ export function PermissionsPane() {
         <section>
           <SectionHeading
             aside={
-              <Pill tone={state.chain.ok ? 'muted' : 'warn'}>
-                {state.chain.ok ? copy.audit.chainOk(state.chain.records) : copy.audit.chainBroken}
-              </Pill>
+              // L5-12: a live region, so the end of the check (intact or broken) is announced, not only drawn.
+              <span aria-live="polite" data-permission-chain-status="" role="status">
+                {state.chain.verifying ? (
+                  <Pill tone="muted">{copy.audit.chainVerifying}</Pill>
+                ) : (
+                  <Pill tone={state.chain.ok ? 'muted' : 'warn'}>
+                    {state.chain.ok ? copy.audit.chainOk(state.chain.records) : copy.audit.chainBroken}
+                  </Pill>
+                )}
+              </span>
             }
             icon={AuditIcon}
             title={copy.audit.title}

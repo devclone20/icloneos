@@ -220,6 +220,15 @@ export async function teardownPrimaryBackendAndWait({ soft = false } = {}) {
   }
 }
 
+/** The same backend came back: nothing about the connection changed, so the window keeps its conversation and dials again. */
+export function sendBackendRestarted() {
+  const webContents = windowsState.mainWindow?.isDestroyed() ? null : windowsState.mainWindow?.webContents
+
+  if (webContents && !webContents.isDestroyed()) {
+    webContents.send('hermes:backend:restarted')
+  }
+}
+
 export function sendConnectionApplied() {
   if (!windowsState.mainWindow || windowsState.mainWindow.isDestroyed()) {
     return

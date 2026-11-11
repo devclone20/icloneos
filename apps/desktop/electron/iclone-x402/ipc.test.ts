@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { buildAllProfileSpecs } from '../iclone-confinement/profiles'
 import { globToSbplRegex, renderSbpl } from '../iclone-confinement/sbpl'
+import { callingSession } from '../iclone-permissions/calling-session'
 
 import type { PaymentAuditEntry, PayResult, X402Client } from './client'
 import {
@@ -75,7 +76,7 @@ interface Rig {
 const rigs: Rig[] = []
 
 async function rig(
-  options: { hang?: boolean; client?: boolean; bindProfile?: (slug: string) => ProfileBinding } = {}
+  options: { hang?: boolean; client?: boolean; bindProfile?: (slug: string) => ProfileBinding; onVerb?: () => void } = {}
 ): Promise<Rig> {
   // A short base: macOS sun_path is 104 bytes.
   const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'v3jw-')), 'run')
@@ -86,6 +87,8 @@ async function rig(
   const client: X402Client = {
     pay: async req => {
       calls.push({ agent: req.agent, url: req.url })
+
+      options.onVerb?.()
 
       if (options.hang) {
         await new Promise<void>(resolve => waiting.push(resolve))
@@ -139,6 +142,17 @@ describe('wire-socket: the pay socket, a token per spawn', () => {
     expect(minted.env.ICLONE_PAY_HOME).toBe(HOME)
     expect(JSON.stringify(minted.env)).not.toContain(token)
     expect(minted.env.ICLONE_PAY_SOCKET).toBe(server.socketPath)
+  })
+
+  it('S6: the verb runs with the session the request names, and with none when it names none', async () => {
+    const seen: (null | string)[] = []
+    const { server } = await rig({ onVerb: () => seen.push(callingSession()) })
+    const token = tokenOf(server.mint('agent-a').env)
+
+    await ask(server.socketPath, request(token, ['pay', 'http://127.0.0.1:9/paid'], { session: 'zz-a' }))
+    await ask(server.socketPath, request(token, ['pay', 'http://127.0.0.1:9/paid']))
+
+    expect(seen).toEqual(['zz-a', null])
   })
 
   it('wire-socket: the verb runs as the slug the token was minted for; a request cannot name another agent', async () => {

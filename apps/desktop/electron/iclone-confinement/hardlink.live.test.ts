@@ -23,7 +23,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { ACTIVITY_CLASSES } from '../../src/iclone-shared/confinement'
 
 import { createLiveWorld, type LiveWorld } from './live-harness'
+import { probeVerdict } from './live-verdict.test-helpers'
 import { SANDBOX_EXEC } from './probe'
+import { refusalRecordDir, reportedRefusalsDir } from './refusals'
 
 import { createConfinement } from './index'
 
@@ -125,7 +127,7 @@ describe.runIf(LIVE)('F7 — the critic’s planted hard link: 5 classes × NET 
 
     linkSync(path.join(world.outside, 'secret.txt'), planted)
 
-    const shown = world.hardlinks.check(world.project)
+    const shown = await world.hardlinks.check(world.project)
 
     expect((await world.runConfined('cat README.md')).code).toBeNull()
 
@@ -133,7 +135,9 @@ describe.runIf(LIVE)('F7 — the critic’s planted hard link: 5 classes × NET 
       throw new Error('expected a refusal')
     }
 
-    expect(world.hardlinks.acknowledgeGroup(world.project, world.project, shown.block.groups[0].digest).ok).toBe(true)
+    expect(
+      (await world.hardlinks.acknowledgeGroup(world.project, world.project, shown.block.groups[0].digest)).ok
+    ).toBe(true)
     expect((await world.runConfined('cat README.md')).out).toBe('inside\n')
 
     writeFileSync(path.join(world.outside, 'other.txt'), 'other\n')
@@ -364,9 +368,12 @@ describe.runIf(LIVE)(
 
         expect(world.hardlinks.acks()).toHaveLength(acksBefore)
 
+        // With the link still in the project the guard refuses the spawn, and this read would never run.
+        unlinkSync(evil)
+
         const direct = await world.runConfined(`cat ${hermesEnv}`, { cls: 'build' })
 
-        expect(direct.code).not.toBe(0)
+        expect(probeVerdict(direct)).toBe('refused')
         expect(direct.out).not.toContain(ENV)
       } finally {
         unlinkSync(world.pnpmStore)
@@ -393,7 +400,7 @@ describe.runIf(LIVE)('F7 r6 MAJOR-1‴ — the agent cds into the store: the sec
       // The premise: unconfined, the store's name reads the secret.
       expect((await world.runPlain(`cat ${blob}`)).out).toContain(ENV)
       // The algorithm alone: the store name is one of two, the other (the secret's own) is outside — it asks.
-      expect(world.hardlinks.check(world.pnpmStore, 'build')).toMatchObject({
+      expect(await world.hardlinks.check(world.pnpmStore, 'build')).toMatchObject({
         ok: false,
         block: { kind: 'hard-links', paths: [blob], count: 1 }
       })
@@ -444,7 +451,7 @@ describe.runIf(LIVE)('F7 r3 T2 — 500 pnpm-shaped links: one gesture runs the c
     expect(refused.code).toBeNull()
     expect(refused.out).toContain('and 497 more are hard links')
 
-    const shown = world.hardlinks.check(world.project)
+    const shown = await world.hardlinks.check(world.project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
@@ -457,19 +464,43 @@ describe.runIf(LIVE)('F7 r3 T2 — 500 pnpm-shaped links: one gesture runs the c
     let gestures = 0
 
     // What the pane does on the one click.
-    const result = world.hardlinks.acknowledgeGroup(world.project, pnpm, shown.block.groups[0].digest)
+    const result = await world.hardlinks.acknowledgeGroup(world.project, pnpm, shown.block.groups[0].digest)
 
     gestures += 1
     expect(result).toMatchObject({ ok: true, count: 500 })
+
+    const appearedBefore = world.appeared.length
+
     expect((await world.runConfined('cat README.md')).out).toBe('inside\n')
     expect(gestures).toBe(1)
+
+    // The post-exit scan counts the exit's whole millisecond as the run's (hardlinks.ts L1-2: Date.now() is whole ms,
+    // a ctime is not), and `runConfined` resolves on 'close', often inside that millisecond. Planted at once, the late
+    // link landed in that millisecond and was named in the finished run's T3 note (1 of 3 runs at 7aa4571241, 8 of 9
+    // across CF4..CF6, every run on v007/int), and that stray note made the T3 test below fail. Two whole milliseconds
+    // later the order is unambiguous, so this test asserts the rule instead of racing it.
+    const ranAt = Date.now()
+
+    while (Date.now() <= ranAt + 1) {
+      await new Promise(resolve => setTimeout(resolve, 1))
+    }
 
     const late = plant(500)
     const again = await world.runConfined('cat README.md')
 
     expect(again.code).toBeNull()
     expect(again.out).toContain(`${late} is a hard link`)
-    expect(world.hardlinks.check(world.project)).toMatchObject({ ok: false, block: { count: 1 } })
+    expect(await world.hardlinks.check(world.project)).toMatchObject({ ok: false, block: { count: 1 } })
+    // Made after that run had exited: refused on its own, never in that run's name. The post-exit scan may read the
+    // tree before or after the plant, so the rule is also asked directly with an exit no earlier than the real one
+    // (`ranAt`): the ctime puts the link after it, and the answer is a refusal with nothing that appeared.
+    expect(await world.hardlinks.check(world.project, undefined, ranAt)).toMatchObject({
+      ok: false,
+      block: { count: 1, paths: [late] },
+      appeared: null
+    })
+    // CF1: that run's post-exit check is queued before the refused start's pre-check, so its answer is in by now.
+    expect(world.appeared.slice(appearedBefore)).toEqual([])
 
     rmSync(path.join(world.project, 'node_modules'), { recursive: true })
     rmSync(store, { recursive: true })
@@ -491,29 +522,35 @@ describe.runIf(LIVE)(
       await new Promise(resolve => setTimeout(resolve, 300))
       linkSync(secret, planted)
 
-      const outcome = await run
+      // A failure here must not leave the link behind: the next test would be refused at its start for this one's.
+      try {
+        const outcome = await run
 
-      // Seatbelt has no inode filter: the run reached the file (the residual the ticket accepts) …
-      expect(outcome.out).toContain(SECRET.trim())
-      // … and the scan after its exit said so, naming the run and the path.
-      await new Promise(resolve => setTimeout(resolve, 50))
-      expect(world.appeared).toHaveLength(1)
-      expect(world.appeared[0]).toMatchObject({
-        root: world.project,
-        pid: outcome.pid,
-        sessionId: 'v3g-test',
-        block: { kind: 'hard-links', paths: [planted], count: 1 }
-      })
+        // Seatbelt has no inode filter: the run reached the file (the residual the ticket accepts) …
+        expect(outcome.out).toContain(SECRET.trim())
+        // … and the scan after its exit said so, naming the run and the path. No sleep: a check of the same root
+        // enters its queue after that run's post-exit check (CF1, call order), so once it answers the note is in, at
+        // any load (a fixed 50 ms was a latency guess the folder run broke).
+        expect(await world.hardlinks.check(world.project)).toMatchObject({ ok: false, block: { paths: [planted] } })
+        expect(world.appeared).toHaveLength(1)
+        expect(world.appeared[0]).toMatchObject({
+          root: world.project,
+          pid: outcome.pid,
+          sessionId: 'v3g-test',
+          block: { kind: 'hard-links', paths: [planted], count: 1 }
+        })
 
-      const next = await world.runConfined('cat during-run')
+        const next = await world.runConfined('cat during-run')
 
-      expect(next.code).toBeNull()
-      expect(next.out).toContain(`${planted} is a hard link`)
-      rmSync(planted)
-      world.appeared.splice(0)
+        expect(next.code).toBeNull()
+        expect(next.out).toContain(`${planted} is a hard link`)
+      } finally {
+        rmSync(planted, { force: true })
+        world.appeared.splice(0)
+      }
     })
 
-    it('through the layer: the row lands in refusals/*.jsonl and the state carries the note, in that run’s name', async () => {
+    it('through the layer: the row lands in main’s refusal record and the state carries the note, in that run’s name', async () => {
       const userDataDir = path.join(world.root, 'layer-userData')
 
       const layer = createConfinement({
@@ -544,7 +581,7 @@ describe.runIf(LIVE)(
 
       writeFileSync(secret, SECRET)
 
-      const spawned = layer.backend('seatbelt').spawn({
+      const spawned = await layer.backend('seatbelt').spawn({
         cls: 'project',
         argv: ['/bin/sh', '-c', 'sleep 0.7; cat during-layer-run'],
         cwd: world.project,
@@ -561,38 +598,72 @@ describe.runIf(LIVE)(
 
       await new Promise(resolve => setTimeout(resolve, 300))
       linkSync(secret, planted)
-      await new Promise<void>(resolve => spawned.child.once('close', () => resolve()))
-      await new Promise(resolve => setTimeout(resolve, 50))
 
-      const rows = readdirSync(path.join(userDataDir, 'confinement', 'refusals')).flatMap(name =>
-        readFileSync(path.join(userDataDir, 'confinement', 'refusals', name), 'utf8')
-          .split('\n')
-          .filter(Boolean)
-          .map(line => JSON.parse(line) as Record<string, unknown>)
-      )
+      try {
+        await new Promise<void>(resolve => spawned.child.once('close', () => resolve()))
 
-      expect(rows).toContainEqual(
-        expect.objectContaining({
+        // Main's own record (refusal-record/<UTC day>.jsonl), where the runtime cannot write; its runs/ subfolder holds
+        // per-run counts and is not a day file.
+        const recordDir = refusalRecordDir(userDataDir)
+
+        const readRows = () =>
+          existsSync(recordDir)
+            ? readdirSync(recordDir, { withFileTypes: true })
+                .filter(entry => entry.isFile() && entry.name.endsWith('.jsonl'))
+                .flatMap(entry =>
+                  readFileSync(path.join(recordDir, entry.name), 'utf8')
+                    .split('\n')
+                    .filter(Boolean)
+                    .map(line => JSON.parse(line) as Record<string, unknown>)
+                )
+            : []
+
+        // The post-exit check runs after 'close' can fire and the layer keeps its guard to itself, so the test waits
+        // for the row with a deadline instead of a fixed 50 ms (the folder run, under load, took longer: rows were []).
+        // The assertion below is unchanged; a row that never lands still fails it, after 10 s.
+        const deadline = Date.now() + 10_000
+        let rows = readRows()
+
+        while (!rows.some(row => row.target === planted) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 25))
+          rows = readRows()
+        }
+
+        expect(rows).toContainEqual(
+          expect.objectContaining({
+            pid: spawned.pid,
+            process: 'hard-link',
+            operation: 'hard-link-appeared',
+            target: planted,
+            sessionId: 'v3g-layer',
+            root: world.project
+          })
+        )
+        // Never in the folder the runtime writes (the plugin's own report): main's row is main's alone.
+        const reportedDir = reportedRefusalsDir(userDataDir)
+
+        const reported = existsSync(reportedDir)
+          ? readdirSync(reportedDir, { withFileTypes: true })
+              .filter(entry => entry.isFile())
+              .map(entry => readFileSync(path.join(reportedDir, entry.name), 'utf8'))
+              .join('')
+          : ''
+
+        expect(reported).not.toContain(planted)
+
+        const state = await layer.state()
+
+        expect(state.reasons).toContainEqual({
+          code: 'hardlink-appeared',
           pid: spawned.pid,
-          process: 'hard-link',
-          operation: 'hard-link-appeared',
-          target: planted,
-          sessionId: 'v3g-layer',
-          root: world.project
+          root: world.project,
+          path: planted
         })
-      )
-
-      const state = await layer.state()
-
-      expect(state.reasons).toContainEqual({
-        code: 'hardlink-appeared',
-        pid: spawned.pid,
-        root: world.project,
-        path: planted
-      })
-      // Said, not red: the run is over; what turns the next one away is the scan before it.
-      expect(state.reasons.filter(reason => reason.code === 'hardlink-appeared')).toHaveLength(1)
-      rmSync(planted)
+        // Said, not red: the run is over; what turns the next one away is the scan before it.
+        expect(state.reasons.filter(reason => reason.code === 'hardlink-appeared')).toHaveLength(1)
+      } finally {
+        rmSync(planted, { force: true })
+      }
     })
   }
 )

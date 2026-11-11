@@ -12,6 +12,8 @@ export interface TitlebarTool {
   /** A toggle in flight: the button stays enabled (and keeps focus) and ignores clicks until the state lands. */
   busy?: boolean
   hidden?: boolean
+  /** Stays in sight and reachable while one of our modals has the strip's other tools out of the way. */
+  keepOverModals?: boolean
   href?: string
   icon: ReactNode
   onSelect?: (event?: MouseEvent) => void

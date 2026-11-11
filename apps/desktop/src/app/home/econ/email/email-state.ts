@@ -600,7 +600,7 @@ interface StampedMailState {
   writtenAt: null | number
 }
 
-/** @public — read by the R3d harness probes (RESUME/run/gates/R3d/extra). */
+/** @public — read by the R3d harness probes (kept outside this repository). */
 export function parseStampedMailState(raw: unknown): StampedMailState {
   const stamp = asRecord(raw)?.w
 

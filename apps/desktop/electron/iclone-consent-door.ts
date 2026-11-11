@@ -50,6 +50,22 @@ export interface DoorPermission {
   session: string | null
   subagent: string | null
   scopes: readonly PermissionDoorScope[]
+  /** G-98 F42: allowing runs this one command outside the Seatbelt, in this folder; the sheet says so. */
+  outsideOnce?: string | null
+  /** G2 A5: allowing writes this one file outside the Seatbelt, and opens nothing else; the sheet says so. */
+  outsideFile?: string | null
+  /** G23: that file runs later with the owner's access, or holds keys; the sheet adds one line. */
+  outsideFileRuns?: boolean
+  /** G23-W2: Allow reads this file for the agent, rather than writing it. */
+  outsideFileRead?: boolean
+  /** G23-W2: the link the agent named; `outsideFile` is its real target. */
+  outsideFileLink?: string | null
+  /** G25: the path is on the credential floor's list; where no one-file line stands, the sheet says so in its own line. */
+  credentialFile?: boolean
+  /** G28: a read of that list with the Seatbelt off; the sheet says what the agent gets. */
+  credentialRead?: boolean
+  /** Keychain off: nothing can be remembered, so Allow covers this one request; the sheet says so. */
+  keychainOff?: boolean
 }
 
 type PermissionDoorChoice = 'deny' | PermissionDoorScope
@@ -180,7 +196,17 @@ interface Pending {
   waiters: Set<Waiter>
   /** Starts the two-minute clock; called when the request reaches the screen. */
   arm: () => void
-  settle: (choice: DoorChoice | PermissionDoorChoice | 'timeout') => void
+  settle: (choice: DoorChoice | PermissionDoorChoice | 'timeout', read?: string | null) => void
+  /** True once the request reached the sheet (`deps.show`): what `askPermissionShown` answers with. */
+  displayed: boolean
+}
+
+/** The answer to a V3-F permission ask and whether the sheet displayed its folder (fx17, lens4-pass M2). */
+export interface PermissionDoorAnswer {
+  outcome: PermissionDoorOutcome
+  shown: boolean
+  /** S1: the whole text the sheet says it showed before this answer; null if it says nothing. */
+  read?: string | null
 }
 
 /** Distinct keys one iNFT may have waiting at once; the rest are refused (exit 1), never queued. */
@@ -189,6 +215,8 @@ export const PENDING_PER_INFT_MAX = 3
 const PENDING_TOTAL_MAX = 24
 
 interface DoorDeps {
+  /** S6: main's reading of the calling session's mode. True only when that session is in Ignore. */
+  ignoreInForce?: () => boolean
   store: Pick<ConsentStore, 'allowAlways' | 'read'>
   /** Called with the request now on screen (null = no sheet). */
   show: (request: DoorRequest | null) => void
@@ -221,7 +249,12 @@ export function createConsentDoor(deps: DoorDeps) {
     recent = [item, ...loadRecent()].slice(0, RECENT_MAX)
 
     try {
-      writeFileAtomicSync(file, `${JSON.stringify({ schema: 1, requests: recent }, null, 2)}\n`, { mode: 0o600 })
+      // L4-05: the Recent list is history, not consent: no grant is read from it (once/deny live in memory, the
+      // switches in iclone-consent.ts stay durable). Losing a line in a power cut is harmless: atomic, not fsynced.
+      writeFileAtomicSync(file, `${JSON.stringify({ schema: 1, requests: recent }, null, 2)}\n`, {
+        mode: 0o600,
+        durable: false
+      })
     } catch {
       // The history is a convenience; the answer itself has already been given.
     }
@@ -266,6 +299,11 @@ export function createConsentDoor(deps: DoorDeps) {
         return Promise.resolve(refused(key, 'the request was withdrawn'))
       }
 
+      // F40, S6: Ignore in the calling session answers the agent's own consent verb without the sheet. Not remembered: it ends with the mode.
+      if (deps.ignoreInForce?.()) {
+        return Promise.resolve({ allowed: true, key, scope: 'once' })
+      }
+
       const current = state(slug, key)
 
       if (current === 'on' || current === 'once') {
@@ -308,6 +346,7 @@ export function createConsentDoor(deps: DoorDeps) {
         const entry: Pending = {
           request,
           waiters: new Set(),
+          displayed: false,
           // The clock runs from when the sheet is on screen, so a queued request is never denied unseen.
           arm() {
             timer = setTimeout(() => entry.settle('timeout'), timeoutMs)
@@ -380,6 +419,16 @@ export function createConsentDoor(deps: DoorDeps) {
         }
       })
     },
+    /** F40: Ignore just went into force. Every ask on the sheet that it covers is answered once, now. */
+    releaseAsks(stillAsked: (permission: DoorPermission) => boolean): void {
+      for (const entry of [...queue]) {
+        const permission = entry.request.permission
+
+        if (permission && !stillAsked(permission)) {
+          entry.settle('once')
+        }
+      }
+    },
     /**
      * V3-F: a permission ask from the Hermes plugin (through main's authority) on the same one-at-a-time sheet. Never
      * deduplicated and never remembered per key: every ask is its own call, answered once, with its own scope.
@@ -391,18 +440,37 @@ export function createConsentDoor(deps: DoorDeps) {
       reason: string,
       signal?: AbortSignal
     ): Promise<PermissionDoorOutcome> {
+      return this.askPermissionShown(slug, permission, key, reason, signal).then(answer => answer.outcome)
+    },
+    /**
+     * fx17 (lens4-pass M2): the same ask, answered together with the door's own word on whether this sheet
+     * displayed the ask's folder — the fact the authority needs before it lists that folder for the confinement
+     * launcher. `shown` is false for an ask that never reached the screen (aborted, busy) and for one with no folder.
+     */
+    askPermissionShown(
+      slug: string,
+      permission: DoorPermission,
+      key: ConsentPermissionKey,
+      reason: string,
+      signal?: AbortSignal
+    ): Promise<PermissionDoorAnswer> {
       if (signal?.aborted) {
-        return Promise.resolve('withdrawn')
+        return Promise.resolve({ outcome: 'withdrawn', shown: false })
+      }
+
+      // F40: the mode is main's own reading, passed by main's callers. In Ignore nothing reaches this sheet.
+      if (permission.mode === 'ignore') {
+        return Promise.resolve({ outcome: 'once', shown: false })
       }
 
       if (
         queue.length >= PENDING_TOTAL_MAX ||
         queue.filter(entry => entry.request.inft === slug).length >= PENDING_PER_INFT_MAX
       ) {
-        return Promise.resolve('busy')
+        return Promise.resolve({ outcome: 'busy', shown: false })
       }
 
-      return new Promise(resolve => {
+      return new Promise<PermissionDoorAnswer>(resolve => {
         const at = now()
         let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -417,10 +485,11 @@ export function createConsentDoor(deps: DoorDeps) {
             permission
           },
           waiters: new Set(),
+          displayed: false,
           arm() {
             timer = setTimeout(() => entry.settle('timeout'), timeoutMs)
           },
-          settle(choice) {
+          settle(choice, read = null) {
             const index = queue.indexOf(entry)
 
             if (index < 0) {
@@ -434,7 +503,11 @@ export function createConsentDoor(deps: DoorDeps) {
             }
 
             signal?.removeEventListener('abort', onAbort)
-            resolve(choice === 'timeout' || isPermissionChoice(choice) ? choice : 'deny')
+            resolve({
+              outcome: choice === 'timeout' || isPermissionChoice(choice) ? choice : 'deny',
+              shown: entry.displayed && permission.project !== null,
+              read
+            })
 
             if (index === 0) {
               startFront()
@@ -452,7 +525,7 @@ export function createConsentDoor(deps: DoorDeps) {
               clearTimeout(timer)
             }
 
-            resolve('withdrawn')
+            resolve({ outcome: 'withdrawn', shown: false })
 
             if (index === 0) {
               startFront()
@@ -469,7 +542,7 @@ export function createConsentDoor(deps: DoorDeps) {
       })
     },
     /** The sheet's answer; only the request on screen can be answered, and only with a choice its kind offers. */
-    answer(id: unknown, choice: unknown): boolean {
+    answer(id: unknown, choice: unknown, read?: unknown): boolean {
       const head = queue[0]
 
       if (!head || head.request.id !== id) {
@@ -486,7 +559,7 @@ export function createConsentDoor(deps: DoorDeps) {
         return false
       }
 
-      head.settle(choice as DoorChoice | PermissionDoorChoice)
+      head.settle(choice as DoorChoice | PermissionDoorChoice, typeof read === 'string' ? read : null)
 
       return true
     },
@@ -524,6 +597,7 @@ export function createConsentDoor(deps: DoorDeps) {
 
     if (head) {
       head.request = { ...head.request, expiresAt: new Date(now().getTime() + timeoutMs).toISOString() }
+      head.displayed = true
       head.arm()
     }
 
@@ -578,6 +652,8 @@ interface RegisterDoorDeps {
   /** Sends the request on screen (or null) to the app windows. */
   broadcast: (request: DoorRequest | null) => void
   userDataDir: string
+  /** S6: main's reading of the calling session's mode. True only when that session is in Ignore. */
+  ignoreInForce?: () => boolean
   /** V3-F §3: an answer counts only on a trusted gesture on the sheet's own buttons (gesture.ts). */
   gestureOk?: (event: unknown, input: unknown) => boolean
 }
@@ -585,7 +661,13 @@ interface RegisterDoorDeps {
 let stopClearingDenied: (() => void) | null = null
 
 export function registerConsentDoor(deps: RegisterDoorDeps): ConsentDoor {
-  const door = createConsentDoor({ store: deps.store, show: deps.broadcast, userDataDir: deps.userDataDir })
+  const door = createConsentDoor({
+    store: deps.store,
+    show: deps.broadcast,
+    userDataDir: deps.userDataDir,
+    ignoreInForce: deps.ignoreInForce
+  })
+
   const ipcMain = guardedHandler(deps.ipcMain, deps.isTrustedSender)
 
   activeDoor = door
@@ -597,7 +679,9 @@ export function registerConsentDoor(deps: RegisterDoorDeps): ConsentDoor {
       return false
     }
 
-    return door.answer((input as Record<string, unknown> | null)?.id, (input as Record<string, unknown> | null)?.choice)
+    const answer = input as Record<string, unknown> | null
+
+    return door.answer(answer?.id, answer?.choice, answer?.shown)
   })
   ipcMain.handle('iclone:consent:requests', () => door.recent())
 

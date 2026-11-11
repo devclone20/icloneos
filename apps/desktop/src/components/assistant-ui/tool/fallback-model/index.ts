@@ -692,6 +692,13 @@ function toolErrorText(part: ToolPart, result: Record<string, unknown>): string 
   return ''
 }
 
+/**
+ * How the permission gate ends a call while the owner has not answered yet (plugins/iclone-permissions: it waits 20 s
+ * inside Hermes' hook limit, then blocks, and the agent retries the same call once the owner answered). Nothing failed
+ * and nothing ran, so it is neither a red row nor "Ran …". Pinned against the plugin's wording in fallback-model.test.ts.
+ */
+export const OWNER_PERMISSION_PENDING = "Waiting for the owner's permission in icloneOS"
+
 function toolStatus(part: ToolPart, resultRecord: Record<string, unknown>): ToolStatus {
   if (part.result === undefined) {
     return 'running'
@@ -704,8 +711,14 @@ function toolStatus(part: ToolPart, resultRecord: Record<string, unknown>): Tool
     return 'success'
   }
 
-  if (!toolErrorText(part, resultRecord)) {
+  const errorText = toolErrorText(part, resultRecord)
+
+  if (!errorText) {
     return 'success'
+  }
+
+  if (errorText.startsWith(OWNER_PERMISSION_PENDING)) {
+    return 'asked'
   }
 
   // A rejected memory write is a budget negotiation, not a failure: the store
@@ -1414,23 +1427,22 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
   const status = toolStatus(part, resultRecord)
   // Skip residual error-heuristic text once status is success (stale isError
   // envelope over a landed memory write would otherwise foul the subtitle).
-  const error = status === 'success' ? '' : toolErrorText(part, resultRecord)
+  const asked = status === 'asked'
+  const error = status === 'success' || asked ? '' : toolErrorText(part, resultRecord)
   // Over-budget memory refusals stay amber — don't claim "Saved".
   const memoryMissed = part.toolName === 'memory' && part.result !== undefined && status !== 'success'
 
   const baseTitle =
     part.result === undefined
       ? meta.pending
-      : memoryMissed
-        ? translateNow('assistant.tool.memoryWriteNoted')
-        : meta.done
+      : asked
+        ? translateNow('assistant.tool.permissionAsked')
+        : memoryMissed
+          ? translateNow('assistant.tool.memoryWriteNoted')
+          : meta.done
 
-  const titleParts = dynamicTitle(
-    part,
-    argsRecord,
-    resultRecord,
-    titlePartsFromAction(baseTitle, part.result === undefined ? meta.pendingAction : undefined)
-  )
+  const baseTitleParts = titlePartsFromAction(baseTitle, part.result === undefined ? meta.pendingAction : undefined)
+  const titleParts = asked ? baseTitleParts : dynamicTitle(part, argsRecord, resultRecord, baseTitleParts)
 
   const title = titleParts.title
   const titleEnriched = title !== baseTitle

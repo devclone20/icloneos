@@ -584,6 +584,15 @@ describe('A-1 upgrade rule: a legacy `v: 1` file is unverified — kept where sa
 })
 
 describe('A-1 Keychain off: an unsealed run signs nothing and verifies nothing, and never says more than it knows', () => {
+  it('G21: with the Keychain off the Ignore alert stays acknowledged across launches, so it does show once', () => {
+    rmSync(file('master.sealed'), { force: true })
+    launch(null)
+    expect(store.ignoreAcknowledged()).toBe(false)
+    store.acknowledgeIgnore()
+    launch(null)
+    expect(store.ignoreAcknowledged()).toBe(true)
+  })
+
   it('a choice made unsealed is written honestly unsealed, and the next sealed launch reads it as pending', async () => {
     rmSync(file('master.sealed'), { force: true })
     launch(null)
@@ -602,12 +611,12 @@ describe('A-1 Keychain off: an unsealed run signs nothing and verifies nothing, 
     expect(authority.state().integrity).toEqual([{ file: 'functions', problem: 'unverified' }])
   })
 
-  it('an unsealed run shows the stored state and reports nothing it cannot know; in force stays Manual', async () => {
+  it('an unsealed run shows what is in force, Manual until the owner chooses again, and reports nothing it cannot know', async () => {
     await userMode('automatic')
     await userSets('payments', 'askOnce')
     launch(null)
     expect(authority.state().sealed).toBe(false)
-    expect(authority.state().mode.standing).toBe('automatic')
+    expect(authority.state().mode.standing).toBe('manual')
     expect(authority.state().functions.payments).toBe('askOnce')
     expect(authority.state().integrity).toEqual([])
     // In force: the unsealed clamp (askOnce → Follow mode) over a published Manual mode — nothing wider than Manual.
@@ -663,5 +672,19 @@ describe('A-1 the store refuses to start without the launch’s keys', () => {
   it('no keys, or a seal fact that is not a boolean, is a TypeError (R2-M4: never defaults to sealed)', () => {
     expect(() => createPermissionStore(permissions, undefined as never)).toThrow(TypeError)
     expect(() => createPermissionStore(permissions, { ...keys, sealed: undefined as never })).toThrow(TypeError)
+  })
+
+  it('F50, S4: Keychain off and on again, a sealed older Ignore never comes back over a later Manual', async () => {
+    const { narrowestOfMode } = await import('./store')
+    const stamp = { v: 1, folders: [], updatedAt: 't' }
+    const prior = { ...stamp, standing: 'ignore', projects: { '/a': 'ignore' }, sessions: { s: 'ignore', gone: 'ignore' } } as never
+    const later = { ...stamp, standing: 'manual', projects: { '/a': 'manual' }, sessions: { s: 'manual' } } as never
+    const planted = { ...stamp, standing: 'ignore', projects: {}, sessions: { s: 'ignore', new: 'ignore' } } as never
+    const manual = { ...stamp, standing: 'manual', projects: {}, sessions: { s: 'manual' } } as never
+
+    expect(narrowestOfMode(prior, later)).toMatchObject({ standing: 'manual', projects: { '/a': 'manual' }, sessions: { s: 'manual' } })
+    // An overlay proves nothing: it can narrow, it never widens or adds a row.
+    expect(narrowestOfMode(manual, planted)).toMatchObject({ standing: 'manual', sessions: { s: 'manual' } })
+    expect(narrowestOfMode(manual, planted).sessions).not.toHaveProperty('new')
   })
 })

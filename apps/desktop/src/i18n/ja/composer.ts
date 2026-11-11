@@ -101,6 +101,7 @@ export const composer: TranslationOverrides['composer'] = {
   previewLabel: label => `${label} のプレビュー`,
   couldNotPreview: label => `${label} をプレビューできませんでした`,
   removeAttachment: label => `${label} を削除`,
+  screenFrames: n => `${n} フレーム`,
   dictating: '口述中',
   preparingAudio: '音声を準備中',
   speakingResponse: '応答を読み上げ中',

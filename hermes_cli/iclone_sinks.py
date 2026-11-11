@@ -359,9 +359,11 @@ SINKS: Dict[str, Dict[str, object]] = {
         "denied_by": "iclone_no_upload: every upload, delete and sweep refused under icloneOS",
     },
     "cua-driver": {
-        "files": ["tools/computer_use/cua_backend.py"],
+        "files": ["tools/computer_use/cua_backend.py", "plugins/iclone-confinement/driver_door.py"],
         "kind": "cua-driver product telemetry (PostHog), a child tool",
-        "denied_by": "CUA_DRIVER_RS_TELEMETRY_ENABLED=0 always under icloneOS (_cua_telemetry_disabled) + the env seal",
+        "denied_by": "CUA_DRIVER_RS_TELEMETRY_ENABLED=0 always under icloneOS (_cua_telemetry_disabled) + the env seal; "
+                     "driver_door.py starts and stops the signed driver from the launcher, outside the seal, so it "
+                     "writes the same 0 itself on all three of its launches (f54)",
     },
     "browser-use": {
         "files": ["tools/browser_use_cli.py"],

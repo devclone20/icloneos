@@ -124,7 +124,8 @@ export function WorkTab({ slug }: { slug: string }) {
             <Note kind={view.hold === 'ownership-unverified' ? 'info' : 'warn'}>{copy.holds[view.hold]}</Note>
           ) : null}
           {view.readError ? <Note kind="warn">{copy.readError(view.readError)}</Note> : null}
-          {view.chain.ok ? null : (
+          {view.chain.verifying ? <Note>{copy.chainVerifying}</Note> : null}
+          {view.chain.ok || view.chain.verifying ? null : (
             <>
               <Note kind="error">{copy.chainBroken}</Note>
               <Note>{copy.repair.hint}</Note>

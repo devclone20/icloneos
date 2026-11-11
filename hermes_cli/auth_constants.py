@@ -21,17 +21,12 @@ if TYPE_CHECKING:
     import httpx
 else:
     class _LazyHttpx:
-        __slots__ = ("_mod",)
-
-        def __init__(self) -> None:
-            object.__setattr__(self, "_mod", None)
+        # Holds nothing: a module cached here outlives a swapped ``sys.modules`` entry, so one first touch
+        # under a stand-in would answer for the rest of the process. The import is a dict lookup once loaded.
+        __slots__ = ()
 
         def _resolve(self):
-            mod = object.__getattribute__(self, "_mod")
-            if mod is None:
-                mod = _importlib.import_module("httpx")
-                object.__setattr__(self, "_mod", mod)
-            return mod
+            return _importlib.import_module("httpx")
 
         def __getattr__(self, name):
             return getattr(self._resolve(), name)

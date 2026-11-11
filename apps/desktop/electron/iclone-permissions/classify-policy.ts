@@ -7,9 +7,10 @@ import { existsSync, realpathSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { diskFold } from '../iclone-confinement/disk-name'
 import { CONSENT_CAPABILITY_KEYS, type ConsentRecord } from '../iclone-consent'
 
-import type { Ceiling } from './modes'
+import { type Ceiling, CREDENTIAL_READ_FLOOR } from './modes'
 
 export interface PolicyPathsInput {
   userDataDir: string
@@ -65,6 +66,120 @@ export function secretPaths(input: PolicyPathsInput): string[] {
     path.join(input.userDataDir, 'payments', 'keys'),
     path.join(input.userDataDir, 'payments', 'mandates')
   ]
+}
+
+// G25: equal to agent/file_safety.py (HOME_CREDENTIAL_DIRS + HOME_ASK_DIRS, the one-name files + HOME_ASK_FILES); a test compares them.
+const HOME_CREDENTIAL_DIRS = [
+  '.ssh',
+  '.aws',
+  '.gnupg',
+  '.kube',
+  '.docker',
+  '.azure',
+  '.config/gh',
+  '.config/gcloud',
+  'Library/Keychains',
+  '.local/share/keyrings',
+  'Library/Application Support/Google/Chrome',
+  'Library/Application Support/Google/Chrome Canary',
+  'Library/Application Support/Chromium',
+  'Library/Application Support/BraveSoftware',
+  'Library/Application Support/Microsoft Edge',
+  'Library/Application Support/Arc',
+  'Library/Application Support/Vivaldi',
+  'Library/Application Support/com.operasoftware.Opera',
+  'Library/Application Support/Firefox',
+  'Library/Safari',
+  'Library/Cookies',
+  '.mozilla',
+  '.config/google-chrome',
+  '.config/chromium',
+  '.config/fish',
+  '.config/git',
+  'Library/LaunchAgents'
+]
+
+const HOME_CREDENTIAL_FILES = [
+  '.netrc',
+  '.pgpass',
+  '.npmrc',
+  '.pypirc',
+  '.git-credentials',
+  '.zshenv',
+  '.zprofile',
+  '.zshrc',
+  '.zlogin',
+  '.zlogout',
+  '.bashrc',
+  '.bash_profile',
+  '.bash_login',
+  '.bash_logout',
+  '.profile',
+  '.kshrc',
+  '.cshrc',
+  '.tcshrc',
+  '.gitconfig'
+]
+
+export const CREDENTIAL_WRITE_FLOOR = 'secrets: writing a file your shell, git or launchd runs, or a key'
+
+const realHome = (home: string): string => {
+  try {
+    return realpathSync(home)
+  } catch {
+    return home
+  }
+}
+
+/**
+ * G24: a grant keys on the class alone, so it must not open the file tools' credential list (agent/file_safety.py) with
+ * no sheet where the Seatbelt is off. Main judges this itself: the floor on the call is the runtime's own word. A name is
+ * judged as the home's disk reads it (`diskFold`). `target` joins a patch's files with ", ", so a split can only ask more, never less.
+ */
+export function credentialWriteFloor(tool: string, target: string, home: string): string | null {
+  if (tool !== 'write_file' && tool !== 'patch') {
+    return null
+  }
+
+  return target.split(', ').some(part => onCredentialList(part, home)) ? CREDENTIAL_WRITE_FLOOR : null
+}
+
+/**
+ * G28: with the Seatbelt on the kernel and the one-file route stand before these files. With it off this floor is all there
+ * is, for a file on the list and for the folder a search starts in. Mirror of classify.py _credential_read_needs_an_ask.
+ */
+export function credentialReadFloor(tool: string, target: string, home: string, seatbeltOff: () => boolean): string | null {
+  return (tool === 'read_file' || tool === 'search_files') && seatbeltOff() && onCredentialList(target, home)
+    ? CREDENTIAL_READ_FLOOR
+    : null
+}
+
+/** G102: the file a link names, as the runtime's is_home_credential_path reads it (realpath where the target, or its folder, exists). */
+const realTarget = (target: string): string => {
+  try {
+    return realpathSync(target)
+  } catch {
+    try {
+      return path.join(realpathSync(path.dirname(target)), path.basename(target))
+    } catch {
+      return target
+    }
+  }
+}
+
+const onCredentialList = (target: string, home: string): boolean =>
+  [target, realTarget(target)].some(spelling => onCredentialListAsWritten(spelling, home))
+
+const onCredentialListAsWritten = (target: string, home: string): boolean => {
+  const file = diskFold(target).replace(/(.)\/+$/, '$1')
+
+  const under = (base: string, name: string) => path.join(base, diskFold(name))
+
+  return [home, realHome(home)].map(diskFold).some(
+    base =>
+      HOME_CREDENTIAL_FILES.some(name => file === under(base, name)) ||
+      HOME_CREDENTIAL_DIRS.some(name => file === under(base, name) || file.startsWith(under(base, name) + path.sep))
+  )
 }
 
 /** Each capability switch as a ceiling: ON lets the mode decide, OFF refuses, absent is undecided. */

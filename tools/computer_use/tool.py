@@ -73,7 +73,19 @@ def _input_target_mismatch(backend, requested_app: str) -> Optional[str]:
     of the other ('Google-chrome' vs 'chrome'). Unknown target -> None (fail open; the verify ladder catches it)."""
     last_app = getattr(backend, "_last_app", None)
     current, wanted = (last_app or "").strip().lower(), requested_app.strip().lower()
-    return None if not current or not wanted or wanted in current or current in wanted else last_app
+    if not current or not wanted or wanted in current or current in wanted:
+        return None
+    # The same app by another of its names: its bundle id, or the bundle's tail (Calculator, on a Mac that says Calculadora).
+    try:
+        rows = backend.list_apps()
+    except Exception:  # noqa: BLE001 — not provably the same app: the mismatch stands
+        return last_app
+    for row in rows if isinstance(rows, list) else []:
+        names = {str(row.get(k) or "").strip().lower() for k in ("name", "app_name", "display_name")} if isinstance(row, dict) else set()
+        bundle = str(row.get("bundle_id") or row.get("bundleId") or "").strip().lower() if isinstance(row, dict) else ""
+        if current in names and bundle and wanted in (bundle, bundle.rpartition(".")[2]):
+            return None
+    return last_app
 
 # ── Backend selection — env-swappable for tests ─────────────────────────────
 # Per-Hermes-session cached backends (own cua-driver session, native target, refs, grant namespace).
@@ -253,6 +265,12 @@ def _backend_for_call(session_id: str = "") -> Iterator[ComputerUseBackend]:
             return
 
 
+def active_app_for_session(session_id: Optional[str]) -> Optional[str]:
+    """The app the session's actions land in, for the ask (S10 D2); None when nothing is focused yet."""
+    with _backend_lock:
+        backend = _backends.get(_scoped_sid(session_id or "")) or _backend
+    return getattr(backend, "_last_app", None) or None
+
 def release_computer_use_session(session_id: str) -> bool:
     """Release one session-owned backend (lifecycle seam for hosts/plugins); idempotent, True iff one was released.
     Cache entries are removed BEFORE stopping so new lookups cannot retain the stale target/ref namespace. Approval
@@ -352,6 +370,9 @@ def handle_computer_use(args: Dict[str, Any], **kwargs) -> Any:
         hint = ({"hint": "If the cua-driver binary is missing, run `hermes computer-use install`. If a Python "
                          "dependency is missing, the error above shows the exact install command."}
                 if configured_backend_name() == DEFAULT_BACKEND else {})
+        from hermes_cli.iclone_policy_env import locked
+        if locked() or "Install CuaDriver" in str(e):  # icloneOS: the sentence already says what to do; hermes' CLI is not on this Mac
+            hint = {}
         return json.dumps({"error": f"computer_use backend unavailable: {e}", **hint})
     try:
         with call:
@@ -503,6 +524,11 @@ def _dispatch(backend: ComputerUseBackend, action: str, args: Dict[str, Any], fe
     if spec is None:
         return json.dumps({"error": f"unknown action {action!r}" + (f" — did you mean {hint!r}? See the action enum in the tool schema."
                                                                  if (hint := _ACTION_SUGGESTIONS.get(str(action))) else "")})
+    # iclone-seam: S9, in any mode but Ignore input never reaches icloneOS's own window or alerts (tools/iclone_own_app.py).
+    if spec.input:
+        from tools import iclone_own_app
+        if (own_app := iclone_own_app.refusal(backend, action, args.get("delivery_mode"))) is not None:
+            return own_app
     # app= guard: input goes to the sticky target from the last capture/focus_app and the backend drops app=
     # silently — refuse a clear mismatch rather than type into the wrong window while reporting ok:true.
     if (spec.input and isinstance(requested_app := args.get("app"), str) and requested_app.strip()

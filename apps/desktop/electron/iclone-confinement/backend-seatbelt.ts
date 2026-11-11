@@ -21,14 +21,22 @@ import type {
 import { writeFileAtomicSync } from '../lib/atomic-write'
 
 import { type ConfinementBackend, confinementMarker, type SpawnRequest, type SpawnResult } from './backend'
-import { hardlinkFiles, type HardlinkGuard, hardlinkRefusal } from './hardlinks'
+import {
+  checkBeforeStart,
+  hardlinkFiles,
+  type HardlinkGuard,
+  hardlinkRefusal,
+  hardlinkUnansweredRefusal
+} from './hardlinks'
 import { newRunToken } from './members'
 import { probeSeatbelt, SANDBOX_EXEC } from './probe'
 import {
   acceptableProjectRoot,
+  appOwnFiles,
   buildAllProfileSpecs,
   type ConfinementPaths,
   type ProfileSpec,
+  projectGitState,
   realOrSelf
 } from './profiles'
 import { auditSbpl, renderSbpl } from './sbpl'
@@ -92,6 +100,13 @@ export function pluginSpec(
     refusalsDir: path.join(paths.userDataDir, 'confinement', 'refusals'),
     // T2'': the pnpm store roots a `build` command may be linked into without a gesture (hardlinks.ts).
     pnpmStoreRoots,
+    // G8 (R1): Hermes' PM store, the one place a real install keeps agent-browser: the launcher runs the browser's
+    // widened profile only for a program inside a store main named. Never a store for hard links (pnpmStoreRoots is).
+    toolStoreRoots: [realOrSelf(path.join(paths.hermesHome, 'tools'))],
+    // fx7: the folders no class writes and no project is rooted at or inside (core.acceptable_project_root).
+    protectedWrites: generated[0]?.spec.protectedWrites ?? [],
+    // G23: the one thing the one-file route leaves alone (core.one_file_refusal; main judges the same list).
+    appFiles: appOwnFiles(paths),
     sha256: Object.fromEntries(generated.map(item => [item.spec.cls, item.sha256]))
   })
 }
@@ -180,7 +195,7 @@ interface SeatbeltDeps {
   scan: () => Promise<Snapshot>
   probe?: () => Promise<BackendStatusView>
   /** F7: refuses a project with hard links to outside inodes the owner did not acknowledge (hardlinks.ts). */
-  hardlinks: Pick<HardlinkGuard, 'check'>
+  hardlinks: Pick<HardlinkGuard, 'check'> & Partial<Pick<HardlinkGuard, 'firstScanProgress'>>
   /** r6: the pnpm store roots (`pnpmStoreRoots`): a store, or a folder inside one, is never a project. */
   storeRoots?: readonly string[]
   /** T3: the scan after a run's exit found what the pre-start scan could not (a link planted during the run). */
@@ -207,7 +222,13 @@ function send(pids: Iterable<number>, signal: NodeJS.Signals): void {
   }
 }
 
-export function createSeatbeltBackend(deps: SeatbeltDeps): ConfinementBackend {
+/** Kept apart from SeatbeltDeps, whose text is part of the reviewed launch pin (hermes-spawn-paths.allow.txt). */
+interface SeatbeltTimings {
+  /** How long a start waits for its hard-link check before it is refused (`HARDLINK_CHECK_DEADLINE_MS`). */
+  hardlinkDeadlineMs?: number
+}
+
+export function createSeatbeltBackend(deps: SeatbeltDeps, timings: SeatbeltTimings = {}): ConfinementBackend {
   const known = () => deps.profiles().map(knownProfile)
 
   const list = (snapshot: Snapshot): ConfinedProcessView[] =>
@@ -216,7 +237,7 @@ export function createSeatbeltBackend(deps: SeatbeltDeps): ConfinementBackend {
   return {
     id: 'seatbelt',
     probe: () => (deps.probe ?? probeSeatbelt)(),
-    spawn(request: SpawnRequest): SpawnResult {
+    async spawn(request: SpawnRequest): Promise<SpawnResult> {
       const profile = deps.profiles().find(item => item.spec.cls === request.cls)
 
       if (!profile) {
@@ -238,11 +259,14 @@ export function createSeatbeltBackend(deps: SeatbeltDeps): ConfinementBackend {
       // F7: the project and the scratch (T1: scratch too; it is small and main owns it) are scanned before the start.
       const roots = project === scratch ? [scratch] : [project, scratch]
 
+      // Awaited, never past the deadline: a check that does not answer in time refuses the start (fail closed).
       for (const root of roots) {
-        const links = deps.hardlinks.check(root, request.cls)
+        const links = await checkBeforeStart(deps.hardlinks, root, request.cls, timings.hardlinkDeadlineMs)
 
         if (!links.ok) {
-          return { ok: false, error: hardlinkRefusal(links.block), hardlinks: links.block }
+          return 'block' in links
+            ? { ok: false, error: hardlinkRefusal(links.block), hardlinks: links.block }
+            : { ok: false, error: hardlinkUnansweredRefusal(root, links) }
         }
       }
 
@@ -253,6 +277,7 @@ export function createSeatbeltBackend(deps: SeatbeltDeps): ConfinementBackend {
         SCRATCH: scratch,
         NET: request.network && profile.spec.network === 'grant' ? '1' : '0',
         WRITE_PROJECT: request.writeProject && project !== scratch ? '1' : '0',
+        PROJECT_GIT: projectGitState(project, scratch),
         OUTPUT_DIR: realOrSelf(request.outputDir ?? path.join(scratch, 'output')),
         MEMBER: token.file
       }
@@ -286,13 +311,22 @@ export function createSeatbeltBackend(deps: SeatbeltDeps): ConfinementBackend {
       // the exit cannot undo that; it records it, and the next run in that root is refused like any other.
       const pid = child.pid
 
+      // The walk lists again only the directories whose ctime moved during the run (a planted name moves its
+      // directory's), and a new link is decided by the full scan (hardlinks.ts). The walk ends after the exit, so a
+      // link made after it (its inode's ctime) is not this run's. A check that fails records nothing here: the next
+      // start in that root measures again and refuses on its own answer.
       child.once('exit', () => {
-        for (const root of roots) {
-          const links = deps.hardlinks.check(root, request.cls)
+        const exitedAt = Date.now()
 
-          if (!links.ok) {
-            deps.onHardlinkAppeared?.({ root, block: links.block, pid, sessionId: request.sessionId ?? null })
-          }
+        for (const root of roots) {
+          void deps.hardlinks.check(root, request.cls, exitedAt).then(
+            links => {
+              if (!links.ok && links.appeared) {
+                deps.onHardlinkAppeared?.({ root, block: links.appeared, pid, sessionId: request.sessionId ?? null })
+              }
+            },
+            () => undefined
+          )
         }
       })
 

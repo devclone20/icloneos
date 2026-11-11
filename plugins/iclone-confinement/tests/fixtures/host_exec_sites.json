@@ -8,22 +8,22 @@
   },
   "agent/anthropic_credentials.py::_find_claude_code_keychain_item::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): /usr/bin/security reaches the keychain, which no profile opens (NEVER_EXEC) (agent/anthropic_credentials.py:265)",
+   "why": "refused when confined: /usr/bin/security reaches the keychain, which no profile opens (NEVER_EXEC) (agent/anthropic_credentials.py:265)",
    "line": 265
   },
   "agent/anthropic_credentials.py::_mirror_claude_code_credentials_to_keychain::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): /usr/bin/security -i writes the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:598)",
+   "why": "refused when confined: /usr/bin/security -i writes the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:598)",
    "line": 598
   },
   "agent/anthropic_credentials.py::_read_claude_code_keychain_payload::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): /usr/bin/security reads the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:294)",
+   "why": "refused when confined: /usr/bin/security reads the keychain (NEVER_EXEC) (agent/anthropic_credentials.py:294)",
    "line": 294
   },
   "agent/anthropic_credentials.py::run_hermes_oauth_login_pure::webbrowser.open#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): webbrowser -> osascript/open reach outside every sandbox (NEVER_EXEC); the URL is still shown (agent/anthropic_credentials.py:779)",
+   "why": "refused when confined: webbrowser -> osascript/open reach outside every sandbox (NEVER_EXEC); the URL is still shown (agent/anthropic_credentials.py:779)",
    "line": 779
   },
   "agent/anthropic_credentials.py::run_oauth_setup_token::subprocess.run#1": {
@@ -44,12 +44,12 @@
   "agent/copilot_acp_client.py::CopilotACPClient._spawn::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 365
+   "line": 371
   },
   "agent/copilot_acp_client.py::_acp_supported::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 93
+   "line": 94
   },
   "agent/deadline.py::kill_process_tree::subprocess.run#1": {
    "verdict": "b",
@@ -151,6 +151,31 @@
    "why": "refused by the spawn guard in a confined process (the default outcome)",
    "line": 201
   },
+  "bench/rows/install.first_launch.py::_first_exec::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 638
+  },
+  "bench/rows/install.first_launch.py::_first_exec::subprocess.run#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 643
+  },
+  "bench/rows/install.first_launch.py::_place_uv_cache::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 278
+  },
+  "bench/rows/install.first_launch.py::_ship_uv_cache::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 304
+  },
+  "bench/rows/install.first_launch.py::cmd_sample::subprocess.run#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 450
+  },
   "cli.py::HermesCLI._run_quick_command::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
@@ -169,12 +194,12 @@
   "cron/scheduler_script.py::_run_job_script::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 487
+   "line": 641
   },
   "cron/scheduler_script.py::_terminate_cron_script_process::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 223
+   "line": 239
   },
   "gateway/platforms/base.py::_detect_macos_system_proxy::subprocess.check_output#1": {
    "verdict": "c",
@@ -214,7 +239,7 @@
   "gateway/run.py::_probe_audio_duration::asyncio.create_subprocess_exec#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 2583
+   "line": 2586
   },
   "gateway/run_inbound.py::GatewayInboundMixin._hm_run_exec_quick_command::asyncio.create_subprocess_shell#1": {
    "verdict": "b",
@@ -269,12 +294,12 @@
   "hermes_bootstrap.py::<module>::os.execv#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 599
+   "line": 609
   },
   "hermes_bootstrap.py::<module>::subprocess.call#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 598
+   "line": 608
   },
   "hermes_cli/_early_recovery.py::_held_open::subprocess.run#1": {
    "verdict": "b",
@@ -484,7 +509,7 @@
   "hermes_cli/config.py::edit_config::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 3191
+   "line": 3211
   },
   "hermes_cli/copilot_auth.py::_probe_gh_cli_token::subprocess.run#1": {
    "verdict": "b",
@@ -821,6 +846,16 @@
    "why": "refused by the spawn guard in a confined process (the default outcome)",
    "line": 403
   },
+  "hermes_cli/iclone_sinks.py::install_spawn_seal::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 792
+  },
+  "hermes_cli/iclone_sinks.py::install_spawn_seal::subprocess.Popen#2": {
+   "verdict": "b",
+   "why": "refused by the spawn guard in a confined process (the default outcome)",
+   "line": 803
+  },
   "hermes_cli/journey.py::_open_in_editor::subprocess.call#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
@@ -1084,7 +1119,7 @@
   "hermes_cli/model_setup_flows.py::_external_process_login_gate::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 1099
+   "line": 1103
   },
   "hermes_cli/onepassword_secrets_cli.py::_op_whoami::subprocess.run#1": {
    "verdict": "b",
@@ -1094,7 +1129,7 @@
   "hermes_cli/plugin_host.py::PluginHost.ensure_started::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 121
+   "line": 124
   },
   "hermes_cli/plugin_host_profiles.py::_extract::subprocess.run#1": {
    "verdict": "b",
@@ -1264,7 +1299,7 @@
   "hermes_cli/tools_config_cua.py::_cua_driver_autostart_registered_windows::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 181
+   "line": 194
   },
   "hermes_cli/tools_config_cua.py::_run_text::subprocess.run#1": {
    "verdict": "b",
@@ -1444,12 +1479,12 @@
   "hermes_cli/version_info.py::_git_version_info::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 223
+   "line": 248
   },
   "hermes_cli/version_info.py::_run_git::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 63
+   "line": 74
   },
   "hermes_cli/web_git.py::_run::subprocess.run#1": {
    "verdict": "b",
@@ -1499,12 +1534,12 @@
   "hermes_cli/web_server_lifecycle.py::_maybe_open_browser._open::webbrowser.open#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 250
+   "line": 265
   },
   "hermes_cli/web_server_lifecycle.py::_process_start_marker::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 74
+   "why": "not reached in a confined process: the parent-death watchdog's start marker starts no ps there and the watchdog checks PID liveness instead (no refusal every poll); were it reached, the spawn guard would refuse it",
+   "line": 89
   },
   "hermes_cli/web_server_memory.py::_run_setup_command::subprocess.run#1": {
    "verdict": "b",
@@ -1711,15 +1746,90 @@
    "why": "the confined runtime itself: -m plugins.google_meet.meet_bot (imports hermes_bootstrap first; its browser launch is then refused) (plugins/google_meet/process_manager.py:105)",
    "line": 105
   },
+  "plugins/iclone-confinement/browser_door.py::_descendants::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 702
+  },
+  "plugins/iclone-confinement/browser_door.py::_holds_port::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 503
+  },
+  "plugins/iclone-confinement/browser_door.py::_stop_session::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 742
+  },
+  "plugins/iclone-confinement/browser_door.py::listens_outside::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 490
+  },
+  "plugins/iclone-confinement/browser_door.py::run_chrome::os.execv#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 552
+  },
+  "plugins/iclone-confinement/browser_door.py::run_chrome::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 550
+  },
+  "plugins/iclone-confinement/browser_door.py::start_sitter::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 667
+  },
+  "plugins/iclone-confinement/core.py::_run_one_file::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the stub carrying one approved file, written or read, to the launcher, which checks main's row; G2 A5, G23-W2, confined at the launcher's door",
+   "line": 1181
+  },
+  "plugins/iclone-confinement/driver_door.py::signature_problem::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 66
+  },
+  "plugins/iclone-confinement/driver_door.py::sit::subprocess.run#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 243
+  },
+  "plugins/iclone-confinement/driver_door.py::start_sitter::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
+   "line": 207
+  },
+  "plugins/iclone-confinement/launcher.py::Launcher._spawn::subprocess.Popen#1": {
+   "verdict": "b",
+   "why": "never in a confined process: the launcher runs as its own process that main starts outside any sandbox, and starts only the sandbox-exec argv it validated; were this code reached inside a confined process, the spawn guard would refuse it (no environment on the stack, not a listed site)",
+   "line": 1904
+  },
   "plugins/iclone-confinement/providers.py::_run_version::subprocess.Popen#1": {
    "verdict": "c",
-   "why": "inside the agent's Seatbelt, probe: the container program's --version (plugins/iclone-confinement/providers.py:142)",
-   "line": 142
+   "why": "inside the agent's Seatbelt, probe: the container program's --version (plugins/iclone-confinement/providers.py:167)",
+   "line": 167
+  },
+  "plugins/iclone-confinement/screen_door.py::Recorder.start::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "G9: this file's own supervisor, in the launcher with the Seatbelt on, in the runtime with it off; argv fixed by the code, the file name chosen here",
+   "line": 264
+  },
+  "plugins/iclone-confinement/screen_door.py::picture_is_black::subprocess.run#1": {
+   "verdict": "a",
+   "why": "G9: ffprobe from two fixed system paths on the file just recorded, no shell, no request input",
+   "line": 152
+  },
+  "plugins/iclone-confinement/screen_door.py::supervise::subprocess.Popen#1": {
+   "verdict": "a",
+   "why": "G9: the fixed /usr/sbin/screencapture -v -x <file chosen here>, no shell, no request input",
+   "line": 198
   },
   "plugins/iclone-confinement/seatbelt.py::_ConfinedPopen::subprocess.Popen#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 24
+   "line": 45
   },
   "plugins/memory/byterover/__init__.py::_run_brv::subprocess.run#1": {
    "verdict": "b",
@@ -1764,22 +1874,22 @@
   "plugins/platforms/photon/adapter.py::PhotonAdapter._apply_spectrum_patch::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 970
+   "line": 987
   },
   "plugins/platforms/photon/adapter.py::PhotonAdapter._quick_stdout::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 882
+   "line": 899
   },
   "plugins/platforms/photon/adapter.py::PhotonAdapter._start_sidecar::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 1005
+   "line": 1018
   },
   "plugins/platforms/photon/adapter.py::_reinstall_sidecar_deps._run::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 296
+   "line": 313
   },
   "plugins/platforms/photon/auth.py::login_device_flow::webbrowser.open#1": {
    "verdict": "b",
@@ -1884,7 +1994,7 @@
   "pm/environment.py::PythonEnvironment._run::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 317
+   "line": 456
   },
   "pm/environment.py::_run_streaming::subprocess.Popen#1": {
    "verdict": "b",
@@ -1919,12 +2029,12 @@
   "pm/packages.py::Git.unpack::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 701
+   "line": 709
   },
   "pm/packages.py::Npm.unpack::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 615
+   "line": 623
   },
   "pm/plugin_eviction.py::_interpreter_version::subprocess.run#1": {
    "verdict": "b",
@@ -1934,17 +2044,17 @@
   "pm/progress.py::run_contained::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 161
+   "line": 180
   },
   "pm/progress.py::run_contained::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 144
+   "line": 163
   },
   "pm/progress.py::run_contained::subprocess.run#2": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 150
+   "line": 169
   },
   "pm/recovery.py::validate_environment::subprocess.run#1": {
    "verdict": "b",
@@ -2144,7 +2254,7 @@
   "scripts/ci/classify_changes.py::_gh_lines::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 614
+   "line": 615
   },
   "scripts/ci/lockfile_diff.py::_git_show::subprocess.run#1": {
    "verdict": "b",
@@ -2499,7 +2609,7 @@
   "scripts/termux/validate_installed.py::main::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 145
+   "line": 155
   },
   "scripts/termux/validate_installed.py::run::subprocess.run#1": {
    "verdict": "b",
@@ -2509,7 +2619,7 @@
   "scripts/termux/validate_installed.py::tui_smoke::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 48
+   "line": 58
   },
   "scripts/verify-bootstrap-version-stamp.py::_git::subprocess.run#1": {
    "verdict": "b",
@@ -2550,6 +2660,11 @@
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
    "line": 81
+  },
+  "tools/approval_floor.py::_bash_output::subprocess.Popen#1": {
+   "verdict": "c",
+   "why": "inside the agent's Seatbelt, probe: /bin/bash --restricted --noprofile --norc -c <the floor's delete-target expansion script> with an empty env (PATH /var/empty), set -f, no stdin, cwd /, its own session killed whole after a 2 s timeout or any error; unconfined it runs under sandbox-exec with the floor's deny profile (exec, writes, reads, network, lookups, signals); a refused or failed spawn reads every word that needs bash as unresolved (fail closed) (tools/approval_floor.py:653)",
+   "line": 653
   },
   "tools/async_delegation_recovery_hints.py::git_state_hint.run::subprocess.run#1": {
    "verdict": "b",
@@ -2599,7 +2714,7 @@
   "tools/browser_tool_lifecycle.py::_legacy_kill_process_tree::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 515
+   "line": 518
   },
   "tools/browser_tool_real_profile.py::_launch_real_profile_chrome::subprocess.Popen#1": {
    "verdict": "b",
@@ -2607,19 +2722,19 @@
    "line": 202
   },
   "tools/browser_tool_session.py::_popen_agent_browser::subprocess.Popen#1": {
-   "verdict": "c",
-   "why": "inside the agent's Seatbelt, browser: agent-browser and its browser (programs.py browser_widening) (tools/browser_tool_session.py:240)",
-   "line": 240
+   "verdict": "r",
+   "why": "ruling R1 narrows ruling 56 for this one site: only the launcher's door to the browser, outside the Seatbelt (browser_door.py) (tools/browser_tool_session.py:248)",
+   "line": 248
   },
   "tools/browser_use_cli.py::_kill_cli_process_group::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 582
+   "line": 596
   },
   "tools/browser_use_cli.py::_run_cli_killing_process_group::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 598
+   "line": 612
   },
   "tools/checkpoint_manager.py::_init_store::subprocess.run#1": {
    "verdict": "b",
@@ -2643,53 +2758,53 @@
   },
   "tools/computer_use/cua_backend.py::_run_quiet::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend.py:195)",
-   "line": 195
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend.py:209)",
+   "line": 209
   },
   "tools/computer_use/cua_backend_capture.py::_linux_x11_active_window_id::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_capture.py:52)",
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_capture.py:52)",
    "line": 52
   },
   "tools/computer_use/cua_backend_daemon.py::_EmbeddedCuaDaemon.start::subprocess.Popen#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_daemon.py:171)",
-   "line": 171
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_daemon.py:180)",
+   "line": 180
   },
   "tools/computer_use/cua_backend_session.py::_CuaDriverSession._lifecycle_coro::mcp.StdioServerParameters#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:235)",
-   "line": 235
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:237)",
+   "line": 237
   },
   "tools/computer_use/cua_backend_session.py::_CuaDriverSession._lifecycle_coro::mcp.client.stdio.stdio_client#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:236)",
-   "line": 236
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:238)",
+   "line": 238
   },
   "tools/computer_use/cua_backend_session.py::_cli_run_json::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:105)",
-   "line": 105
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/cua_backend_session.py:106)",
+   "line": 106
   },
   "tools/computer_use/doctor.py::_open_mcp::subprocess.Popen#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:120)",
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:120)",
    "line": 120
   },
   "tools/computer_use/doctor.py::_run_cli::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:47)",
+   "why": "refused when confined: cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/doctor.py:47)",
    "line": 47
   },
   "tools/computer_use/permissions.py::_run::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/permissions.py:52)",
-   "line": 52
+   "why": "refused when confined except the launcher's door: cua-driver drives other apps through Accessibility, by nature outside any sandbox; the card's exact verbs go through spawn_argv (tools/computer_use/permissions.py:58)",
+   "line": 58
   },
   "tools/computer_use/permissions.py::request_permissions_grant::subprocess.run#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): cua-driver drives other apps through Accessibility, by nature outside any sandbox (tools/computer_use/permissions.py:135)",
-   "line": 135
+   "why": "refused when confined except the launcher's door: cua-driver drives other apps through Accessibility, by nature outside any sandbox; the card's exact verbs go through spawn_argv (tools/computer_use/permissions.py:237)",
+   "line": 237
   },
   "tools/env_probe.py::_run::subprocess.run#1": {
    "verdict": "c",
@@ -2718,13 +2833,13 @@
   },
   "tools/environments/host_lane.py::_guard_fork_exec::subprocess.Popen#1": {
    "verdict": "b",
-   "why": "not a spawn: the guard reads Popen._execute_child's code object to recognise subprocess' own fork_exec (tools/environments/host_lane.py:312)",
-   "line": 312
+   "why": "not a spawn: the guard reads Popen._execute_child's code object to recognise subprocess' own fork_exec (tools/environments/host_lane.py:437)",
+   "line": 437
   },
   "tools/environments/local.py::LocalEnvironment._run_bash::subprocess.Popen#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 1088
+   "line": 1107
   },
   "tools/environments/remote_common.py::run_capture::subprocess.run#1": {
    "verdict": "a",
@@ -2773,7 +2888,7 @@
   },
   "tools/mcp_oauth.py::_announce_authorization_url::webbrowser.open#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): webbrowser -> osascript/open (NEVER_EXEC); the URL is still printed (tools/mcp_oauth.py:784)",
+   "why": "refused when confined: webbrowser -> osascript/open (NEVER_EXEC); the URL is still printed (tools/mcp_oauth.py:784)",
    "line": 784
   },
   "tools/mcp_tool.py::_spawn_death_supervisor::subprocess.Popen#1": {
@@ -2794,32 +2909,37 @@
   "tools/process_registry.py::ProcessRegistry._spawn_local_pty::ptyprocess.PtyProcess#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 1189
+   "line": 1212
   },
   "tools/process_registry.py::ProcessRegistry.spawn_local::subprocess.Popen#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 1241
+   "line": 1264
   },
   "tools/process_registry.py::_stop_systemd_unit::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 485
+   "line": 508
   },
   "tools/process_registry.py::_systemd_run_user_scope_available::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 283
+   "line": 306
   },
   "tools/process_registry_termination.py::ProcessTerminationMixin._terminate_host_pid::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 56
+   "line": 69
   },
   "tools/read_extract.py::_pdf_page_texts::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
    "line": 262
+  },
+  "tools/screen_record_tool.py::_through_the_door::subprocess.run#1": {
+   "verdict": "b",
+   "why": "G9: only the launcher's stub with one exact screen recording verb passes the guard (host_lane screen_form); any other form is refused",
+   "line": 111
   },
   "tools/self_repo_guard.py::_read_git_alias::subprocess.run#1": {
    "verdict": "b",
@@ -2883,7 +3003,7 @@
   },
   "tools/voice_mode.py::_run_system_player::subprocess.Popen#1": {
    "verdict": "b",
-   "why": "refused when confined (ruling 56): afplay/ffplay need the audio services the profile does not open; the app plays audio itself (tools/voice_mode.py:1105)",
+   "why": "refused when confined: afplay/ffplay need the audio services the profile does not open; the app plays audio itself (tools/voice_mode.py:1105)",
    "line": 1105
   },
   "tools/voice_mode.py::_wsl_powershell_player_cmd._out::subprocess.check_output#1": {

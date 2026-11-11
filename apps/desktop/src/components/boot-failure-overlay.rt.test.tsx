@@ -46,6 +46,10 @@ describe('the gate-refused card keeps a long error inside its callout (critic r2
     const repair = await screen.findByRole('button', { name: translateNow('boot.failure.repairInstall') })
     const callout = screen.getByTestId('boot-failure-error')
 
+    // The padding as utilities: in the built app .ic-sys-callout's own padding loses to preflight (ic-system chunk first).
+    expect(callout.classList.contains('px-3')).toBe(true)
+    expect(callout.classList.contains('py-2.5')).toBe(true)
+
     expect(callout.textContent).toContain('ruamel/yaml/__init__.py')
     expect(callout.className.split(' ')).toEqual(
       expect.arrayContaining(['min-w-0', '[overflow-wrap:anywhere]', 'overflow-y-auto', 'max-h-40'])

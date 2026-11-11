@@ -37,7 +37,8 @@ export type SpawnResult =
 export interface ConfinementBackend {
   readonly id: ConfinementBackendId
   probe(): Promise<BackendStatusView>
-  spawn(request: SpawnRequest): SpawnResult
+  /** Asynchronous: the pre-start checks (the hard-link scan, F7) never hold main's thread. */
+  spawn(request: SpawnRequest): Promise<SpawnResult>
   /** The processes this backend confines, derived from one `ps` snapshot and the kernel's membership answer. */
   list(snapshot: Snapshot): ConfinedProcessView[]
   /** Stops the run `pid` belongs to; succeeds only once a fresh snapshot shows none of it alive. */

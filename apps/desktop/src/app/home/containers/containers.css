@@ -1,52 +1,436 @@
-/* V3-G — the Containers window. Layout only: every colour, radius and type size is a token (ic-tokens.css, and the
-   econ window's own --e-* variables), the rows, pills, notes and rails are EconomyOS parts (econ.css). */
+/* The Containers window. Layout only: every colour, radius and type size is a token (ic-tokens.css, and the econ
+   window's own --e-* variables); the rows, pills, notes, tabs and rails are EconomyOS parts (econ.css). Tones are the
+   parts' own: up, down, warn, muted and tone — nothing new. */
 
-.iecon[data-kind='containers'] .icont__verdict {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
+/* In the light skin the house hues are colours for marks: as small text on paper they measure 3.05:1 (warn), 3.23:1
+   (up), 4.08:1 (down), 4.14:1 (mute) and 2.41:1 (tone), and the focus ring 2.81:1. This pane's --e-* aliases deepen them
+   towards the ink, so all text clears 4.5:1 and the ring 3:1; the house tokens stay as they are. */
+:root[data-hermes-theme='iclone-light'] .iecon[data-kind='containers'] {
+  --e-up: color-mix(in srgb, var(--ic-success) var(--ic-a60), var(--ic-text-1));
+  --e-down: color-mix(in srgb, var(--ic-danger) var(--ic-a80), var(--ic-text-1));
+  --e-warn: color-mix(in srgb, var(--ic-warning) var(--ic-a60), var(--ic-text-1));
+  --e-mute: color-mix(in srgb, var(--ic-text-1) var(--ic-a72), transparent);
+  --e-tone: color-mix(in srgb, var(--ic-text-1) var(--ic-a72), transparent);
+  --e-gold: var(--ic-accent-strong);
+}
+
+/* What the shared parts print in --e-faint measures below 4.5:1 here, and these carry information. */
+.iecon[data-kind='containers'] :is(.e-section__title, .e-rail__count, .e-tab__count, .e-pill--muted) {
+  color: var(--e-mute);
+}
+
+/* A note's colour is its border: long sentences read in the ink, never in a status hue. */
+.iecon[data-kind='containers'] :is(.e-note--warn, .e-note--error) {
+  color: var(--e-ink);
+}
+
+/* The pane's key handler wraps the frame without becoming a layout box. */
+.icont {
+  display: contents;
+}
+
+.icont__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── a subtopic's page ──────────────────────────────────────────────────── */
+
+/* The window's head holds the title alone. Each subtopic opens with its name and its facts; under them one slot for
+   what stays true on every tab; the content scrolls below, so none of the three moves when a count or a state changes. */
+.icont__page {
+  --icont-gutter: 20px;
+  --icont-measure: 1600px;
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+.icont__lead {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: var(--icont-measure);
+  padding: 20px var(--icont-gutter) 16px;
+}
+
+.icont__lead-top {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+}
+
+.iecon[data-kind='containers'] .icont__lead-title {
+  margin: 0;
+  font-size: var(--ic-type-2xl);
+  font-weight: 500;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  color: var(--e-ink);
+}
+
+.icont__lead-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 28px;
+  align-items: baseline;
+  justify-content: space-between;
+  /* The same height with one fact or two, so the page below does not move between tabs. */
+  min-height: 18px;
+}
+
+.icont__verdict {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.icont__verdict-pill {
+  display: inline-flex;
+}
+
+/* From the other four tabs the pill opens Backends, where the control is. */
+button.icont__verdict-pill {
+  all: unset;
+  display: inline-flex;
+  border-radius: var(--ic-radius-round);
+  cursor: pointer;
+}
+
+button.icont__verdict-pill:focus-visible {
+  outline: 2px solid var(--e-gold);
+  outline-offset: 2px;
 }
 
 .icont__verdict-hint {
-  overflow: hidden;
+  min-width: 0;
+  font-size: var(--ic-type-md);
+  line-height: 18px;
+  color: var(--e-mute);
+}
+
+.icont__tally {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  font-family: inherit;
+  font-size: var(--ic-type-md);
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+  letter-spacing: 0;
+  color: var(--e-mute);
+}
+
+.icont__tally > * + *::before {
+  display: inline-block;
+  margin: 0 8px;
+  content: '·';
+  color: var(--e-faint);
+}
+
+/* What stays true on every tab: isolation off, a read that did not come back, why it is not confined. */
+.icont__standing {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: var(--icont-measure);
+  padding: 0 var(--icont-gutter) 14px;
+}
+
+.icont__standing:empty {
+  display: none;
+}
+
+/* One form for all that stands here: a bar in the tone colour, the sentence in the ink. */
+.iecon[data-kind='containers'] :is(.icont__standing .e-note, [data-isolation-line]) {
+  margin: 0;
+  padding: 0 0 0 10px;
+  border: 0 solid var(--e-line);
+  border-inline-start: 2px solid var(--e-line-strong);
+  border-radius: var(--icont-square, 0);
+  background: var(--icont-none, none);
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--e-ink);
+}
+
+.iecon[data-kind='containers'] .icont__standing .e-note--warn {
+  border-inline-start-color: var(--e-warn);
+}
+
+.iecon[data-kind='containers'] :is(.icont__standing .e-note--error, [data-isolation-line]) {
+  border-inline-start-color: var(--e-down);
+}
+
+[data-isolation-line] b {
+  font-weight: 500;
+  color: var(--e-down);
+}
+
+[data-isolation-line] span {
+  color: var(--e-mute);
+}
+
+/* The slot and the body are one scroller in the narrow layout, and two places elsewhere. */
+.icont__scroll {
+  display: contents;
+}
+
+.icont__body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden auto;
+  border-top: 1px solid var(--e-line);
+}
+
+.icont__body > * {
+  flex-shrink: 0;
+  max-width: var(--icont-measure);
+}
+
+.icont__iso {
+  margin: 8px var(--icont-gutter) 12px;
+}
+
+/* The title stands above the card and names the rows under it too. The card takes the column; the sentence keeps its
+   measure and the button stays beside it. */
+.iecon[data-kind='containers'] .icont__body .icont__iso > .e-section {
+  padding-inline: 0;
+}
+
+.icont__iso [data-isolation-label] {
+  display: none;
+}
+
+.icont__iso [data-isolation-control] > div:first-child {
+  gap: 28px;
+  justify-content: flex-start;
+}
+
+.icont__iso [data-isolation-control] span {
+  text-wrap: pretty;
+}
+
+/* The off line opens the subtopic's list, under its filters. */
+.iecon[data-kind='containers'] .icont__body [data-isolation-line] {
+  max-width: var(--icont-measure);
+  margin: 12px var(--icont-gutter) 0;
+}
+
+.icont__seg-short {
+  display: none;
+}
+
+/* Sentence-case words are not tracked: tracking belongs to caps. */
+.iecon[data-kind='containers'] :is(.e-tab, .icont__disclose, .e-search input) {
+  letter-spacing: 0;
+}
+
+/* Every empty tab: one pattern at one height, with no widow. */
+.iecon[data-kind='containers'] .icont__body .e-empty {
+  flex: none;
+  justify-content: flex-start;
+  padding-top: 64px;
+  text-wrap: balance;
+}
+
+.icont__list > .e-section:first-child {
+  margin-top: 0;
+  padding-top: 28px;
+}
+
+/* The toolbar's rule and the list's title share one section gap. */
+.iecon[data-kind='containers'] .icont__body .icont__activity {
+  gap: 0;
+}
+
+.iecon[data-kind='containers'] .icont__body .icont__activity .e-toolbar {
+  margin-block-end: 0;
+}
+
+.icont__iso [data-isolation-control] {
+  border-radius: var(--e-radius);
+}
+
+.icont__iso:empty {
+  display: none;
+}
+
+/* The runtime's own commands, folded away: one quiet disclosure beside the filters. */
+.icont__housekeeping.e-btn {
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-shrink: 0;
+  min-height: 0;
+  padding: 0 2px;
+  font-family: inherit;
   font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+  color: var(--e-mute);
+  transition: color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.icont__housekeeping.e-btn:hover,
+.icont__housekeeping.e-btn:focus-visible,
+.icont__housekeeping.e-btn[data-shown='true'] {
+  color: var(--e-mute);
+}
+
+.icont__housekeeping-act {
+  color: var(--e-mute);
+  text-decoration: underline;
+  text-decoration-color: var(--e-line);
+  text-underline-offset: 3px;
+}
+
+/* A housekeeping row reads a shade quieter than the agent's, once shown. */
+.icont__run[data-origin='runtime'] .icont__command {
+  color: var(--e-mute);
+}
+
+/* The command cell: the Runtime mark (when the runtime issued the run) never shrinks; the command ellipsizes. */
+.icont__command-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* F45d-5: the mark follows the command and gives way first, so the narrowest row still says what ran. */
+.icont__ran-once {
+  flex-grow: 0;
+  flex-shrink: 1000;
+  flex-basis: auto;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--ic-font-sans);
   color: var(--e-mute);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.icont__tally {
-  margin-left: auto;
+.icont__origin {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-family: var(--ic-font-sans);
+}
+
+/* Identifiers keep their case: a profile hash reads as the inspector prints it. */
+.icont__hash .e-pill {
   font-family: var(--e-mono);
-  font-size: var(--ic-type-sm);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.04em;
-  color: var(--e-faint);
+  letter-spacing: 0.02em;
+  text-transform: none;
+}
+
+/* A session id ellipsizes at its start: the shared date prefix goes, the distinguishing tail stays. */
+.icont__tail {
+  display: block;
+  overflow: hidden;
+  direction: rtl;
+  text-align: left;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.icont__live,
+.icont__tail > bdi {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+/* ── sections ───────────────────────────────────────────────────────────── */
+
+.icont__activity,
 .icont__agents,
 .icont__profiles,
-.icont__follow,
-.icont__hardlinks {
+.icont__refusals,
+.icont__mac,
+.icont__hardlinks,
+.icont__escaped,
+.icont__list {
   display: flex;
   flex-direction: column;
   gap: 12px;
   min-width: 0;
 }
 
-/* A confined tree reads as one block: the root, then its children under one hairline. */
+.icont__list {
+  gap: 4px;
+}
+
+/* Refusals: one hairline between groups (the last refusal's own rule); the group heads give the rhythm. */
+.icont__refusals {
+  gap: 0;
+}
+
 .icont__group + .icont__group {
   border-top: 1px solid var(--e-line);
 }
 
-.icont__command {
+.icont__command,
+.icont__group-title {
   display: block;
   overflow: hidden;
+  min-width: 0;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A group head whose title is data (a command, a session id): verbatim, one line, the end slot always in view. */
+.icont__group-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px 20px 6px;
+}
+
+.icont__group-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.icont__group-head .icont__group-title {
+  margin: 0;
+  font-size: var(--ic-type-md);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--e-ink);
+}
+
+.icont__group-head .icont__group-title[data-mono='true'] {
+  font-family: var(--e-mono);
+}
+
+.icont__group-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+}
+
+.icont__group-end {
+  flex-shrink: 0;
 }
 
 .icont__command--child {
@@ -62,20 +446,152 @@
 
 .icont__muted {
   font-size: var(--ic-type-sm);
-  color: var(--e-faint);
+  color: var(--e-mute);
+}
+
+.icont__mono,
+.icont__path {
+  font-family: var(--e-mono);
+}
+
+.icont__num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .icont__explain {
+  margin: 0;
+  padding: 0 20px;
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+.icont__agent + .icont__agent {
+  padding-top: 12px;
+  border-top: 1px solid var(--e-line);
+}
+
+/* A profile is a block of text: its name, its one line, and one quiet line of counts. */
+.icont__profiles {
+  gap: 0;
+  padding-bottom: 12px;
+}
+
+.icont__profiles-never {
+  padding-block: 12px;
+}
+
+.icont__profiles .icont__profile {
+  gap: 2px;
+  padding: 10px 20px;
+  border-top: 1px solid var(--e-line);
+}
+
+.icont__block-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+}
+
+.iecon[data-kind='containers'] .icont__block-name {
+  margin: 0;
+  font-size: var(--ic-type-lg);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--e-ink);
+}
+
+.icont__block-top .icont__hash {
+  margin-inline-start: auto;
+}
+
+.icont__block-text {
   margin: 0;
   font-size: var(--ic-type-md);
   line-height: 1.45;
   color: var(--e-mute);
 }
 
-.icont__profile + .icont__profile,
-.icont__agent + .icont__agent {
-  padding-top: 12px;
-  border-top: 1px solid var(--e-line);
+.icont__block-quiet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  align-items: baseline;
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  line-height: 18px;
+  color: var(--e-mute);
+}
+
+.icont__block-quiet > span:not(.icont__block-paths) + span:not(.icont__block-paths)::before {
+  margin-inline-end: 10px;
+  content: '·';
+  color: var(--e-faint);
+}
+
+.icont__block-paths {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.icont__profiles .icont__never .icont__explain,
+.icont__block-paths .icont__explain {
+  padding: 0;
+  font-size: var(--ic-type-sm);
+}
+
+.icont__block-paths .icont__mono {
+  overflow-wrap: anywhere;
+}
+
+/* The list's 20px alignment line holds for the lines that sit straight in a view, outside rows and notes. */
+.icont__refusals .icont__why {
+  padding: 10px 20px;
+}
+
+.icont__refusals .icont__actions .e-btn--quiet {
+  text-decoration: underline;
+  text-decoration-color: var(--e-line);
+  text-underline-offset: 3px;
+}
+
+.icont__inspector .icont__explain {
+  padding: 0;
+}
+
+/* The runtime's never list, one path per line on request. */
+.icont__disclose.e-btn {
+  min-height: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--e-mute);
+  text-decoration: underline;
+  text-decoration-color: var(--e-line);
+  text-underline-offset: 3px;
+}
+
+.icont__paths {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+  overflow-wrap: anywhere;
+}
+
+.icont__profile,
+.icont__refusal-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .icont__detail {
@@ -86,10 +602,906 @@
   overflow-wrap: anywhere;
 }
 
+.icont__said {
+  font-size: var(--ic-type-sm);
+  overflow-wrap: anywhere;
+}
+
+/* The note belongs to its row: the row's line moves below the note, so it never floats between two rows. */
+.icont__run:has(> .icont__narrowed) .e-row {
+  --e-line: color-mix(in srgb, var(--ic-text-1) 0%, transparent);
+}
+
+.icont__narrowed {
+  display: grid;
+  gap: 8px;
+  padding: 0 20px 12px 46px;
+}
+
+.icont__run > .icont__narrowed {
+  border-bottom: 1px solid var(--e-line);
+}
+
+.icont__narrowed[data-short='true'] {
+  padding-bottom: 8px;
+}
+
+.icont__inspector .icont__narrowed {
+  padding: 0;
+}
+
+.icont__narrowed-text {
+  margin: 0;
+  max-width: 68ch;
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+.icont__narrowed-lead {
+  font-weight: 500;
+  color: var(--e-ink);
+}
+
+.icont__allow {
+  display: grid;
+  gap: 8px;
+}
+
+.icont__allow-path {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+  color: var(--e-ink);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.icont__allow-act {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.icont__allow-means {
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+.icont__instead {
+  display: grid;
+  gap: 6px;
+  padding: 0 20px;
+}
+
+.icont__inspector .icont__instead {
+  padding: 0;
+}
+
 .icont__owner-step {
   display: block;
   margin-top: 4px;
   font-family: var(--e-mono);
-  color: var(--e-faint);
+  color: var(--e-mute);
   user-select: text;
+}
+
+/* ── tones (the parts' own) ─────────────────────────────────────────────── */
+
+.icont [data-tone='up'] {
+  --icont-tone: var(--e-up);
+  color: var(--icont-tone);
+}
+
+.icont [data-tone='down'] {
+  --icont-tone: var(--e-down);
+  color: var(--icont-tone);
+}
+
+.icont [data-tone='warn'] {
+  --icont-tone: var(--e-warn);
+  color: var(--icont-tone);
+}
+
+.icont [data-tone='muted'] {
+  --icont-tone: var(--e-mute);
+  color: var(--icont-tone);
+}
+
+.icont [data-tone='tone'] {
+  --icont-tone: var(--e-tone);
+  color: var(--icont-tone);
+}
+
+/* ── status marks ───────────────────────────────────────────────────────── */
+
+.icont__dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--ic-radius-round);
+  background: var(--icont-tone, var(--e-faint));
+  vertical-align: middle;
+}
+
+/* A calm breath, only while the root runs. */
+.icont__dot[data-live='true'] {
+  animation: icont-breath var(--e-live-pulse) var(--ic-ease-std) infinite alternate;
+}
+
+@keyframes icont-breath {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icont__dot[data-live='true'] {
+    animation: none;
+  }
+}
+
+.icont__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+}
+
+.icont__phase {
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ── run rows: one grid for Running and Recent ─────────────────────────── */
+
+/* Mark, command, state, refused, agent, time, detail, action: both groups fill the same eight cells, so a column reads
+   straight down the list, and refused stands beside the state it qualifies. The list's own width picks how many fit, with
+   or without the inspector; the command takes the rest. Tracks that hold text scale with it. */
+.iecon[data-kind='containers'] .e-main {
+  container: icont-list / inline-size;
+}
+
+.icont__run {
+  --icont-state: calc(136px * var(--ic-text-scale, 1));
+  --icont-agent: calc(112px * var(--ic-text-scale, 1));
+  --icont-time: calc(84px * var(--ic-text-scale, 1));
+  --icont-detail: calc(84px * var(--ic-text-scale, 1));
+  --icont-refused: auto;
+  --icont-action: calc(96px * var(--ic-text-scale, 1));
+
+  position: relative;
+}
+
+.icont__run:not([data-group='running']) {
+  --icont-action: 20px;
+}
+
+/* The pill sits straight after the command and takes room only when there is one; the rest keep their columns. */
+.icont__run .e-row > .e-cell:is(:nth-child(1), :nth-child(2), :nth-child(4)) {
+  order: -1;
+}
+
+.icont__run .e-row > .e-cell:is(:nth-child(6), :nth-child(7)) {
+  text-align: end;
+}
+
+.icont__run .e-row {
+  display: grid;
+  grid-template-columns:
+    14px minmax(0, 1fr) var(--icont-state) var(--icont-refused) var(--icont-agent) var(--icont-time)
+    var(--icont-detail) var(--icont-action);
+}
+
+/* One agent behind every row: its column goes. */
+:where(.icont__list[data-one-agent]) .icont__run .e-row {
+  grid-template-columns:
+    14px minmax(0, 1fr) var(--icont-state) var(--icont-refused) var(--icont-time) var(--icont-detail)
+    var(--icont-action);
+}
+
+:where(.icont__list[data-one-agent]) .icont__run .e-row > .e-cell:nth-child(5) {
+  display: none;
+}
+
+.icont__run .e-row > .e-cell {
+  min-width: 0;
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.icont__run .e-row > .e-cell:nth-child(2) {
+  font-size: var(--ic-type-md);
+}
+
+.icont__run .e-row > .e-cell:first-child {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icont__run .e-row > .e-cell:nth-child(8) {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+/* The refusal reasons are many: past one line they wrap whole, and a wrapped group cannot stay a pill. */
+.icont__refusals .e-tab {
+  white-space: nowrap;
+}
+
+@container icont-list (max-width: 860px) {
+  .icont__refusals .e-tabs {
+    flex-wrap: wrap;
+    border-radius: var(--e-radius);
+  }
+
+  .icont__run .e-row {
+    grid-template-columns:
+      14px minmax(0, 1fr) var(--icont-state) var(--icont-refused) var(--icont-time) var(--icont-detail)
+      var(--icont-action);
+  }
+
+  .icont__run .e-row > .e-cell:nth-child(5) {
+    display: none;
+  }
+}
+
+@container icont-list (max-width: 760px) {
+  .icont__run .e-row {
+    grid-template-columns:
+      14px minmax(0, 1fr) var(--icont-state) var(--icont-refused) var(--icont-time)
+      var(--icont-action);
+  }
+
+  .icont__run .e-row > .e-cell:nth-child(7) {
+    display: none;
+  }
+}
+
+/* The mark carries the state's words from here down: a Tip and its name. */
+@container icont-list (max-width: 640px) {
+  .icont__run .e-row {
+    grid-template-columns: 14px minmax(0, 1fr) var(--icont-refused) var(--icont-time) var(--icont-action);
+  }
+
+  .icont__run .e-row > .e-cell:nth-child(3) {
+    display: none;
+  }
+
+  .icont__activity .e-toolbar {
+    flex-wrap: wrap;
+  }
+
+  .icont__activity :is(.e-toolbar__start, .e-toolbar__end) {
+    flex: 1 1 100%;
+  }
+}
+
+/* The refused pill takes room only when there is one, so the command keeps the row. */
+@container icont-list (max-width: 480px) {
+  .icont__run .e-row {
+    grid-template-columns: 14px minmax(0, 1fr) auto var(--icont-action);
+  }
+
+  .icont__run .e-row > .e-cell:nth-child(6) {
+    display: none;
+  }
+
+  /* An escaped process keeps its mark, its kind and its command: the pid is in the Machine view. */
+  .icont__escaped .e-row > .e-cell:nth-child(2) {
+    display: none;
+  }
+
+  .icont__escaped .e-row > .e-cell--grow {
+    min-width: 0;
+  }
+}
+
+/* The narrow window gives the inspector its floor, and the short rail labels keep the list the room for its command. */
+.iecon[data-kind='containers'] .iecon__body {
+  container: icont-body / inline-size;
+}
+
+/* An expanded window fills the app, the Dock's lane included. The Dock tucks away and comes back over the window when the
+   pointer touches the edge or a tile has the keyboard (dock.css), so the page keeps clear of its rail at every size:
+   12px from the edge, 66px wide, 6px of air. The same lane an unexpanded window keeps (--ic-frame-left, 96px). The inline
+   start follows the Dock to the right edge in RTL. */
+.iecon[data-kind='containers'][data-expanded] .iecon__body {
+  --icont-dock-clear: 84px;
+  padding-inline-start: var(--icont-dock-clear);
+}
+
+/* The smallest windows cannot spare that lane for a Dock that is tucked away, so there it opens only while the Dock is out. */
+@media (max-width: 860px) {
+  :root:not(:has(.dock[data-revealed], .dock :focus-visible)) .iecon[data-kind='containers'][data-expanded] .iecon__body {
+    padding-inline-start: 0;
+  }
+}
+
+@container icont-body (max-width: 1000px) {
+  .iecon[data-kind='containers'] .e-app--rail.e-app--aside {
+    grid-template-columns: 148px minmax(0, 1fr) 320px;
+  }
+}
+
+/* Too narrow for three columns: while a run is open, the rail steps aside for the list. Closing it brings the rail back. */
+@container icont-body (max-width: 800px) {
+  .iecon[data-kind='containers'] .e-app--rail.e-app--aside {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-areas: 'main aside';
+  }
+
+  .iecon[data-kind='containers'] .e-app--aside > .e-rail {
+    display: none;
+  }
+}
+
+/* The window's own width decides the layout. At the app's smallest window the rail is a strip of tabs above the page, the
+   rows wrap instead of cutting their words, and an open command takes the page's place: Escape or its close brings it back. */
+@container icont-body (max-width: 760px) {
+  .iecon[data-kind='containers'] .e-app--rail,
+  .iecon[data-kind='containers'] .e-app--rail.e-app--aside {
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'rail'
+      'main';
+  }
+
+  .iecon[data-kind='containers'] .e-app--rail.e-app--aside {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'aside';
+  }
+
+  .iecon[data-kind='containers'] .e-app--aside > .e-main {
+    display: none;
+  }
+
+  .iecon[data-kind='containers'] .e-rail {
+    padding: 6px 8px;
+    border-right: 0 solid var(--e-line);
+    border-bottom: 1px solid var(--e-line);
+  }
+
+  /* One line of tabs; the widest locale slides sideways rather than leave a tab alone below. */
+  .iecon[data-kind='containers'] .e-rail {
+    overflow: auto hidden;
+    scrollbar-width: none;
+  }
+
+  .iecon[data-kind='containers'] .e-rail__section {
+    display: flex;
+    flex-flow: row nowrap;
+    gap: 0;
+    width: max-content;
+    min-width: 100%;
+    justify-content: space-between;
+  }
+
+  .iecon[data-kind='containers'] .e-rail__item {
+    flex: 0 0 auto;
+    gap: 4px;
+    width: auto;
+    margin: 0;
+    padding-inline: 6px;
+  }
+
+  .icont__seg-short {
+    display: inline;
+  }
+
+  /* Out of sight, still the segment's name for assistive tech. */
+  .icont__seg-long {
+    position: absolute;
+    overflow: hidden;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .iecon[data-kind='containers'] .icont__activity .e-tabs {
+    flex-wrap: nowrap;
+  }
+
+  .icont__activity .e-toolbar {
+    gap: 6px;
+  }
+
+  [data-isolation-line] span {
+    display: none;
+  }
+
+  .iecon[data-kind='containers'] .icont__body [data-isolation-line] {
+    margin-top: 6px;
+  }
+
+  .icont__lead-line:empty {
+    display: none;
+  }
+
+  .icont__lead {
+    gap: 2px;
+    padding-top: 10px;
+    padding-bottom: 8px;
+  }
+
+  .icont__lead-line {
+    min-height: 0;
+  }
+
+  /* The pill's Tip keeps the sentence, and a fault says itself in the slot: the list gets the room. */
+  .icont__verdict-hint {
+    display: none;
+  }
+
+  .icont__activity .e-tab {
+    padding-inline: 8px;
+  }
+
+  /* The stable slot costs too much here: it scrolls away with the content. */
+  .icont__scroll {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden auto;
+  }
+
+  .icont__body {
+    flex: none;
+    min-height: auto;
+    overflow: visible;
+  }
+
+  .icont__segments {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .icont__activity .e-search {
+    height: 32px;
+  }
+
+  .iecon[data-kind='containers'] .e-toolbar {
+    padding-block: 8px;
+  }
+
+  .iecon[data-kind='containers'] .icont__body .e-section {
+    padding-block: 8px 4px;
+  }
+
+  /* A cell with nothing to say takes no line of its own. */
+  .icont__mac .e-row > .e-cell:empty {
+    display: none;
+  }
+
+  .iecon[data-kind='containers'] .e-toolbar,
+  .iecon[data-kind='containers'] .e-toolbar__start,
+  .iecon[data-kind='containers'] .e-tabs {
+    flex-wrap: wrap;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .iecon[data-kind='containers'] .e-row {
+    flex-wrap: wrap;
+    height: auto;
+    row-gap: 4px;
+  }
+
+  .iecon[data-kind='containers'] .e-row > .e-cell--grow {
+    flex: 1 0 100%;
+    white-space: normal;
+  }
+
+  .iecon[data-kind='containers'] .e-app--aside .e-aside {
+    padding-inline: 20px;
+    border-left: 0 solid var(--e-line);
+  }
+}
+
+/* Stop centres on the row's own line, whatever is said under it. */
+.icont__run-line {
+  position: relative;
+}
+
+/* Only a pointer on the row or focus on it shows that it opens. */
+.icont__open {
+  display: inline-flex;
+  color: var(--e-mute);
+  opacity: 0;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.e-row:is(:hover, :focus-visible) .icont__open {
+  opacity: 1;
+}
+
+.icont__stop-result .e-note {
+  margin: 0;
+}
+
+/* A note belongs to its row: it starts on the command's line, and the hairline closes both. */
+.icont__run > .icont__stop-result {
+  padding: 0 20px 10px 46px;
+}
+
+.icont__run:has(> .icont__stop-result) {
+  border-bottom: 1px solid var(--e-line);
+}
+
+/* Clipped, not removed: the row keeps its height, so a note arriving moves nothing. */
+.icont__run:has(> .icont__stop-result) .e-row {
+  clip-path: inset(0 0 1px);
+}
+
+/* Focus lands here when the control that held it leaves with the run: never a ring around a heading or the pane. */
+.icont:focus,
+.icont__inspector-head:focus {
+  outline-width: 0;
+}
+
+.icont__run-stop {
+  position: absolute;
+  inset-inline-end: var(--icont-gutter, 20px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.icont__run-stop .e-btn {
+  min-height: 0;
+  padding: 3px 12px;
+  font-size: var(--ic-type-sm);
+}
+
+/* Stop is a choice, not a state: it reads as danger only once the pointer or the focus is on it. */
+.icont__danger .e-btn:is(:hover, :focus-visible) {
+  color: var(--e-down);
+  border-color: var(--ic-econ-down-40);
+  background: var(--ic-econ-down-10);
+}
+
+/* The filters never shrink under the housekeeping disclosure: the toolbar's start wraps it to a line of its own
+   when both do not fit (the inspector open), so no label is ever drawn over another. */
+.icont__segments {
+  flex-shrink: 0;
+}
+
+.icont__activity .e-toolbar__start {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.icont__activity .e-search {
+  min-width: 180px;
+}
+
+/* ── inspector ──────────────────────────────────────────────────────────── */
+
+.icont__inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  padding-bottom: 24px;
+}
+
+/* The aside already clears the window controls; expanded, they are not over it, and the inspector takes the room. */
+.iecon[data-kind='containers'][data-expanded] .e-aside {
+  padding-inline-end: 20px;
+}
+
+/* The aside already pads: the inspector's section titles and notes start on the content's own line. */
+.icont__inspector .e-section {
+  padding: 16px 0 6px;
+}
+
+.icont__inspector .e-note {
+  margin: 12px 0;
+}
+
+.icont__inspector-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.icont__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.icont__cmd {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--e-line);
+  border-radius: var(--e-radius);
+  background: var(--e-sunken);
+}
+
+.icont__cmd-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--e-ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The lifecycle: one hairline, a mark per event, times in a tabular column. */
+.icont__timeline {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0 0 0 18px;
+  list-style: none;
+}
+
+.icont__timeline::before {
+  content: '';
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 4px;
+  border-inline-start: 1px solid var(--e-line-strong);
+}
+
+.icont__node {
+  position: relative;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  font-size: var(--ic-type-md);
+}
+
+.icont__node-mark {
+  position: absolute;
+  inset-inline-start: -18px;
+  top: 5px;
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--icont-tone, var(--e-line-strong));
+  border-radius: var(--ic-radius-round);
+  background: var(--e-raised);
+}
+
+.icont__node[data-kind='live'] .icont__node-mark,
+.icont__node[data-kind='end'] .icont__node-mark {
+  background: var(--icont-tone, var(--e-faint));
+}
+
+.icont__node-time {
+  font-family: var(--e-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--e-mute);
+}
+
+.icont__node-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  color: var(--e-ink);
+}
+
+.icont__node-label .icont__path {
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+  overflow-wrap: anywhere;
+}
+
+.icont__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  font-size: var(--ic-type-md);
+}
+
+.icont__facts dt {
+  color: var(--e-mute);
+}
+
+.icont__facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--e-ink);
+  overflow-wrap: anywhere;
+}
+
+/* Each refusal: what it tried, on what, and the rule that said no. */
+.icont__whys {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.icont__why {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--e-line);
+}
+
+.icont__why-op {
+  font-size: var(--ic-type-md);
+  color: var(--e-ink);
+}
+
+.icont__why .icont__path {
+  font-size: var(--ic-type-sm);
+  color: var(--e-down);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.icont__why-rule {
+  font-size: var(--ic-type-sm);
+  line-height: 1.45;
+  color: var(--e-mute);
+}
+
+/* ── the page's own gutter ──────────────────────────────────────────────── */
+
+.iecon[data-kind='containers'] .icont__body :is(.e-row, .e-section, .e-toolbar) {
+  padding-inline: var(--icont-gutter);
+}
+
+/* A section title belongs to the rows under it. */
+.iecon[data-kind='containers'] .icont__body .e-section {
+  padding-block: 28px 8px;
+}
+
+.iecon[data-kind='containers'] .icont__body .e-note {
+  margin-inline: var(--icont-gutter);
+}
+
+/* ── Backends: one grid ─────────────────────────────────────────────────── */
+
+/* Name or pid, state or kind, version or age, sentence or command: every row of the page on the same four tracks, and the
+   hairlines stop at the gutter where the card stops. */
+.icont__mac {
+  --icont-mac-cols: calc(170px * var(--ic-text-scale, 1)) calc(150px * var(--ic-text-scale, 1))
+    calc(64px * var(--ic-text-scale, 1)) minmax(0, 1fr);
+  gap: 0;
+  padding-bottom: 20px;
+}
+
+.icont__mac-col {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.iecon[data-kind='containers'] .icont__body .icont__mac .e-rows {
+  margin-inline: var(--icont-gutter);
+}
+
+.iecon[data-kind='containers'] .icont__body .icont__mac .e-row {
+  padding-inline: 0;
+}
+
+.iecon[data-kind='containers'] .icont__body .icont__mac .e-row > .e-cell {
+  min-width: 0;
+  font-size: var(--ic-type-md);
+}
+
+.icont__mac .icont__said {
+  font-size: var(--ic-type-sm);
+  color: var(--e-mute);
+}
+
+@container icont-body (min-width: 761px) {
+  .iecon[data-kind='containers'] .icont__body .icont__mac .e-row {
+    display: grid;
+    grid-template-columns: var(--icont-mac-cols);
+  }
+
+  .iecon[data-kind='containers'] .icont__body .icont__cover .e-row > .e-cell:nth-child(2) {
+    grid-column: 2 / -1;
+  }
+}
+
+/* ── large ──────────────────────────────────────────────────────────────── */
+
+/* A big window is a bigger page, not the same page with a margin: the type steps up one token, the gutter opens, the rail
+   widens, and the content takes the width. */
+@container icont-body (min-width: 1500px) {
+  .iecon[data-kind='containers'] .e-app {
+    --icont-type-sm: var(--ic-type-md);
+    --icont-type-md: var(--ic-type-lg);
+    --icont-type-lg: var(--ic-type-xl);
+    --icont-type-2xl: calc(var(--ic-type-2xl) * 1.25);
+  }
+
+  .iecon[data-kind='containers'] .e-app > * {
+    --ic-type-sm: var(--icont-type-sm);
+    --ic-type-md: var(--icont-type-md);
+    --ic-type-lg: var(--icont-type-lg);
+    --ic-type-2xl: var(--icont-type-2xl);
+  }
+
+  .iecon[data-kind='containers'] .e-app--rail {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .iecon[data-kind='containers'] .e-app--rail.e-app--aside {
+    grid-template-columns: 220px minmax(0, 1fr) minmax(320px, 36%);
+  }
+
+  .icont__page {
+    --icont-gutter: 32px;
+    --icont-measure: none;
+  }
+
+  .icont__group-head,
+  .icont__body .icont__explain,
+  .icont__refusals .icont__why {
+    padding-inline: var(--icont-gutter);
+  }
+
+  .iecon[data-kind='containers'] .icont__body .e-row {
+    padding-block: 14px;
+  }
+
+  .iecon[data-kind='containers'] .icont__body .icont__mac .e-row {
+    padding-inline: 0;
+  }
+
+  .icont__profiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(720px, 1fr));
+    gap: 0 32px;
+    padding-inline: var(--icont-gutter);
+  }
+
+  .icont__profiles-never {
+    grid-column: 1 / -1;
+    padding-inline: 0;
+  }
+
+  .icont__profiles .icont__profile {
+    padding-inline: 0;
+  }
+
+  .icont__body .icont__profiles-never {
+    padding-inline: 0;
+  }
+
+  .icont__mac {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .icont__mac-col + .icont__mac-col {
+    padding-top: 0;
+  }
 }

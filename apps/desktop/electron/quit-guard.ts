@@ -65,9 +65,24 @@ interface QuitPrompt {
  * are the app replacing itself, not the user walking away, and a modal there
  * would strand the detached script waiting on a PID that never exits.
  */
-export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean): null | QuitPrompt {
-  if (quittingForHandoff || work.count < 1) {
+export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean, leftRunning = 0): null | QuitPrompt {
+  if (quittingForHandoff || (work.count < 1 && leftRunning < 1)) {
     return null
+  }
+
+  // fx21 (F1): a confined background command stops with the app, so quitting past one is a choice like a running turn.
+  const background =
+    leftRunning < 1 ? null : `Quitting also stops ${leftRunning === 1 ? '1 background command' : `${leftRunning} background commands`}.`
+
+  if (work.count < 1) {
+    return {
+      detail:
+        leftRunning === 1
+          ? 'Quitting stops it. Start it again after you reopen the app if you still need it.'
+          : 'Quitting stops them. Start them again after you reopen the app if you still need them.',
+      message:
+        leftRunning === 1 ? '1 background command is still running.' : `${leftRunning} background commands are still running.`
+    }
   }
 
   const listed = work.titles.slice(0, MAX_LISTED)
@@ -82,7 +97,8 @@ export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean): nu
     detail: [
       lines.join('\n'),
       lines.length > 0 ? '' : null,
-      'Quitting stops the agent mid-turn. Any work it has not finished writing is lost.'
+      'Quitting stops the agent mid-turn. Any work it has not finished writing is lost.',
+      background
     ]
       .filter(line => line !== null)
       .join('\n')

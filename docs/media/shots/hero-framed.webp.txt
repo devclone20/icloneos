@@ -1,5 +1,5 @@
 icloneos-raster-text/2
-sha256 ae35b63181f4533a02053a9390a5a73fd595312754871d7f89baee866e073743
+sha256 401b04c9c0becda2e1bbf7d9e4df673c94e817425e999f6151c29a00ffef1ea0
 transcript signed docs/media/shots/shots.json
 iNFT
-#5
+#6

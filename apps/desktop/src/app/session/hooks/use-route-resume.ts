@@ -84,6 +84,9 @@ export function useRouteResume({
   const lastPathnameRef = useRef<string | null>(null)
   const seenGatewayStateRef = useRef(false)
   const wasGatewayOpenRef = useRef(false)
+  // The gateway came back while another view was up (a restart from Settings): the runtime id this window holds died with
+  // the old backend, so the first look at the chat afterwards counts as the reconnect it did not see.
+  const reopenedAwayRef = useRef(false)
   // True until the FIRST resume this window dispatches. That resume is the
   // cold-start restore of a route that was already loaded before the reload —
   // a re-attachment, not a navigation — so it must not home focus/tabs to the
@@ -110,14 +113,19 @@ export function useRouteResume({
     // stays false until the first effect run, so a session that mounts with the gateway
     // already open is not mistaken for "became open" and does not double-resume with the
     // pathname-driven initial resume below.
-    const gatewayBecameOpen = seenGatewayStateRef.current && !wasGatewayOpenRef.current && gatewayOpen
+    const reopened = seenGatewayStateRef.current && !wasGatewayOpenRef.current && gatewayOpen
     lastPathnameRef.current = locationPathname
     seenGatewayStateRef.current = true
     wasGatewayOpenRef.current = gatewayOpen
 
     if (currentView !== 'chat' || !gatewayOpen) {
+      reopenedAwayRef.current ||= reopened
+
       return
     }
+
+    const gatewayBecameOpen = reopened || reopenedAwayRef.current
+    reopenedAwayRef.current = false
 
     if (routedSessionId) {
       const cachedRuntime = runtimeIdByStoredSessionIdRef.current.get(routedSessionId)

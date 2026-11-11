@@ -36,6 +36,9 @@
  * on sys.path, so a workspace holding a `hermes_cli/` cannot shadow the runtime) — flags, so the agent's own shell
  * commands (a user's `python script.py`) keep their normal behaviour.
  *
+ * The runtime-confinement pair (`CONFINEMENT_RUNTIME_ENV`: the launcher's socket and the confined flag) is ICLONE_*,
+ * so it survives only as the gate's own env (confinement on, macOS); the same names from anywhere else are dropped.
+ *
  * `sealHermesSpawnEnv` composes a spawn's env in one place, so nothing inherited, nothing from backend.env and nothing
  * from consentEnv() can override the gate: the gate's env is applied LAST. A pool backend gets no payment env.
  */
@@ -64,6 +67,12 @@ export const HERMES_APP_ENV: ReadonlySet<string> = new Set([
   'HERMES_PARENT_START_MARKER',
   'HERMES_SPAWN',
   'HERMES_WEB_DIST'
+])
+
+/** The gate's runtime-confinement variables: kept from the gate's env only, never inherited or composed. */
+export const CONFINEMENT_RUNTIME_ENV: ReadonlySet<string> = new Set([
+  'ICLONE_CONFINEMENT_LAUNCHER',
+  'ICLONE_RUNTIME_CONFINED'
 ])
 
 /** The plain variables a gated Python keeps (see the module comment for each). */

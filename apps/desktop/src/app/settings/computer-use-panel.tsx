@@ -1,12 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-
+import { useComputerUseFlow } from '@/components/setup/computer-use-flow'
+import { CUA_DRIVER_WORDS } from '@/components/setup/copy'
+import { CuaDriverAction, CuaDriverExplain, CuaDriverFlowNote } from '@/components/setup/cua-driver-explain'
 import { Button } from '@/components/ui/button'
-import { getActionStatus, getComputerUseStatus, grantComputerUsePermissions } from '@/hermes'
-import { sleep } from '@/iclone-shared/async'
-import { AlertTriangle, Check, ExternalLink, Loader2, RefreshCw, X } from '@/lib/icons'
-import { upsertDesktopActionTask } from '@/store/activity'
-import { notify, notifyError } from '@/store/notifications'
-import type { ComputerUseStatus } from '@/types/hermes'
+import { AlertTriangle, Check, Loader2, RefreshCw, X } from '@/lib/icons'
 
 import { Pill } from './primitives'
 
@@ -49,92 +45,15 @@ function PermissionRow({ granted, label, hint }: { granted: boolean | null; labe
 }
 
 /**
- * Cross-platform Computer Use preflight card.
- *
- * cua-driver runs on macOS, Windows, and Linux, but readiness differs: macOS
- * needs two TCC grants (Accessibility + Screen Recording) that attach to
- * cua-driver's own `com.trycua.driver` identity — not Hermes — and are
- * requested via `cua-driver permissions grant` (dialog attributed to
- * CuaDriver). Windows/Linux have no TCC toggles, so readiness is driver health
- * from `cua-driver doctor`. The backend folds both into one `ready` signal.
- *
- * Binary install/upgrade stays in the cua-driver provider's post-setup runner
- * below this card (the generic ToolsetConfigPanel).
+ * Cross-platform Computer Use preflight card. macOS needs two TCC grants on CuaDriver's own identity
+ * (`com.trycua.driver`); Windows/Linux have no TCC toggles, so readiness is driver health from `cua-driver doctor`.
+ * The Allow, install and status flow is the Set up row's own (components/setup/computer-use-flow.ts).
+ * Binary upgrade stays in the provider's post-setup runner below this card (the generic ToolsetConfigPanel).
  */
 export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) {
-  const [status, setStatus] = useState<ComputerUseStatus | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [granting, setGranting] = useState(false)
-  const activeRef = useRef(false)
+  const { grant, install, loaded, phase, reason, refresh, state, status } = useComputerUseFlow(true, onConfiguredChange)
 
-  const refresh = useCallback(async () => {
-    try {
-      setStatus(await getComputerUseStatus())
-    } catch (err) {
-      notifyError(err, 'Could not read Computer Use status')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
-  useEffect(() => {
-    activeRef.current = true
-    void refresh()
-
-    return () => void (activeRef.current = false)
-  }, [refresh])
-
-  const grant = useCallback(async () => {
-    setGranting(true)
-
-    try {
-      const started = await grantComputerUsePermissions()
-
-      if (!started.ok) {
-        notifyError(new Error('spawn failed'), 'Could not request permissions')
-
-        return
-      }
-
-      notify({
-        kind: 'info',
-        title: 'Approve in System Settings',
-        message: 'macOS will show a permission dialog attributed to CuaDriver. Approve it, then return here.'
-      })
-
-      // The driver waits for the user to flip the switch — poll until it exits.
-      for (let attempt = 0; attempt < 150 && activeRef.current; attempt += 1) {
-        await sleep(1500)
-
-        if (!activeRef.current) {
-          break
-        }
-
-        const polled = await getActionStatus(started.name, 200)
-        upsertDesktopActionTask(polled)
-
-        if (!polled.running) {
-          break
-        }
-      }
-
-      if (activeRef.current) {
-        await refresh()
-        onConfiguredChange?.()
-      }
-    } catch (err) {
-      if (activeRef.current) {
-        notifyError(err, 'Could not request permissions')
-      }
-    } finally {
-      if (activeRef.current) {
-        setGranting(false)
-      }
-    }
-  }, [onConfiguredChange, refresh])
-
-  if (loading) {
+  if (!loaded) {
     return (
       <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
@@ -157,32 +76,43 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
 
   if (!status.installed) {
     return (
-      <p className="px-1 text-xs text-muted-foreground">
-        Install the cua-driver backend below to drive this machine.
-        {status.can_grant && ' Then grant Accessibility and Screen Recording here.'}
-      </p>
+      <div className="grid gap-2 px-1" data-computer-use-state="notInstalled">
+        <p className="text-xs text-muted-foreground">
+          {status.can_grant
+            ? 'CuaDriver is not installed yet. Install it, then allow Accessibility and Screen recording here.'
+            : 'Install the cua-driver backend below to drive this machine.'}
+        </p>
+        {status.can_grant ? (
+          <div>
+            <CuaDriverAction grant={() => void grant()} install={() => void install()} phase={phase} state={state} />
+            <CuaDriverFlowNote phase={phase} reason={reason} state={state} status={status} />
+            <CuaDriverExplain />
+          </div>
+        ) : null}
+      </div>
     )
   }
 
   const failingChecks = status.checks.filter(c => c.status !== 'ok')
 
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-2" data-computer-use-state={state ?? 'other'}>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <div className="min-w-0">
           {status.can_grant ? (
             <p className="text-[0.72rem] text-muted-foreground">
-              Grants attach to CuaDriver&apos;s own identity (com.trycua.driver), not Hermes — so the dialog is
-              attributed to the process that drives your Mac.
+              macOS keeps these on CuaDriver (com.trycua.driver), apart from this app, so the dialog names the helper that
+              uses your Mac.
             </p>
           ) : (
             <p className="text-[0.72rem] text-muted-foreground">{PLATFORM_NOTE[status.platform] ?? ''}</p>
           )}
           {status.version && <p className="text-[0.68rem] text-muted-foreground/80">{status.version}</p>}
+          {status.can_grant ? <CuaDriverExplain /> : null}
         </div>
         <Button onClick={() => void refresh()} size="sm" variant="text">
           <RefreshCw className="size-3.5" />
-          Recheck
+          {CUA_DRIVER_WORDS.recheck}
         </Button>
       </div>
 
@@ -190,12 +120,12 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
         <>
           <PermissionRow
             granted={status.accessibility}
-            hint="Lets cua-driver post clicks, keystrokes, and read the accessibility tree."
+            hint="Lets CuaDriver click, type and read the buttons of an app."
             label="Accessibility"
           />
           <PermissionRow
             granted={status.screen_recording}
-            hint="Lets cua-driver capture screenshots of app windows."
+            hint="Lets CuaDriver see the window of the app it is using."
             label="Screen Recording"
           />
         </>
@@ -230,10 +160,10 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
         </div>
       ) : (
         status.can_grant && (
-          <Button disabled={granting} onClick={() => void grant()} size="sm">
-            {granting ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
-            {granting ? 'Waiting for approval…' : 'Grant permissions'}
-          </Button>
+          <div className="grid justify-items-start gap-1 px-1">
+            <CuaDriverAction grant={() => void grant()} install={() => void install()} phase={phase} state={state} />
+            <CuaDriverFlowNote phase={phase} reason={reason} state={state} status={status} />
+          </div>
         )
       )}
     </div>

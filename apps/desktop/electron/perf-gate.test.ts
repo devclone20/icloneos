@@ -24,10 +24,10 @@ const projectNames = async () => {
 }
 
 describe('the perf project (K105)', () => {
-  it('the default run has no perf project: no wall-clock budget runs there', async () => {
+  it('the default run has no perf project: no wall-clock budget runs there (electron-fsevents is the serial real-fseventsd group)', async () => {
     vi.stubEnv('ICLONE_PERF', '')
 
-    expect((await projectNames()).map(project => project.name)).toEqual(['ui', 'electron'])
+    expect((await projectNames()).map(project => project.name)).toEqual(['ui', 'electron', 'electron-fsevents'])
   })
 
   it('ICLONE_PERF=1 adds it, selecting only the tests named "… @perf"', async () => {

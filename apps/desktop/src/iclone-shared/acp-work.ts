@@ -106,7 +106,8 @@ export interface WorkView {
   totals: { earnedMicros: number; spentMicros: number; escrowMicros: number }
   fixes: WorkFixView[]
   /** `gaps`: interrupted writes or repairs, each one a recorded gap in the chain. Broken: the Repair action shows. */
-  chain: { ok: boolean; records: number; gaps: number }
+  /** `verifying`: a re-verification is running; `ok` is false until it ends and means nothing yet. */
+  chain: { ok: boolean; records: number; gaps: number; verifying?: boolean }
   readAt: number | null
   readError: string | null
 }

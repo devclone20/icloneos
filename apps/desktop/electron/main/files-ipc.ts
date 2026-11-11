@@ -76,6 +76,28 @@ function persistDataUrlReadMaxMb(maxMb: unknown) {
 // instead of truncation when the source exceeds it.
 const PLUGIN_SOURCE_MAX_BYTES = 16 * 1024 * 1024
 
+/** fx26b: the native dialog behind "open a project". Main lists what it answers (iclone-permissions/ipc.ts). */
+export async function pickProjectFolderDialog(options: unknown): Promise<string[]> {
+  const asked = (options ?? {}) as { defaultPath?: unknown; profile?: string }
+  const given = typeof asked.defaultPath === 'string' ? asked.defaultPath : ''
+  let defaultPath: string | undefined
+
+  try {
+    const bridged = IS_WINDOWS && given ? resolvePickerDefaultPath(given, undefined, asked.profile) : given
+
+    defaultPath = bridged ? path.resolve(bridged) : undefined
+  } catch {
+    defaultPath = undefined
+  }
+
+  const result = await showOpenDialogForMainWindow(
+    { title: 'Open folder', defaultPath, properties: ['openDirectory'] },
+    'add-context'
+  )
+
+  return result.canceled ? [] : result.filePaths
+}
+
 export function registerFilesIpc({ windowsState }: FilesIpcDeps): void {
   ipcMain.handle('hermes:data-url-read-max:get', () => ({
     maxMb: dataUrlReadMaxMb,

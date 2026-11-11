@@ -13,10 +13,11 @@ import pytest
 
 from agent.agent_runtime_helpers import recover_with_credential_pool
 from agent.error_classifier import FailoverReason, classify_api_error
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 MODEL = "gpt-5.3-codex"
 OTHER_MODEL = "gpt-5.3-codex-mini"
-TOKENS = ("tok-account-a", "tok-account-b")
+TOKENS = (chatgpt_jwt("account-a"), chatgpt_jwt("account-b"))  # rotation lands only on a row its route accepts
 
 
 class _Err(Exception):

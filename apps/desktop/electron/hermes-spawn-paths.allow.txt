@@ -3,338 +3,331 @@
 # declaration it is decided by (once each). Never edit by hand without reviewing the launch it describes.
 == agent-update.ts ensureFullPreUpdateBackup eaa6ff34ed3c [forward]
 deps .run(deps.hermesBin, ['config', 'set', 'updates.pre_update_backup', 'full'], { env: { ...process.env, HERMES_HOME: deps.hermesHome }, timeoutMs: 20000 })
-
 == backend-claim.ts execText 98361ea0d7e6 [forward]
 execFile(command, args, hiddenWindowsChildOptions({ encoding: 'utf8', timeout }), (error, stdout) => { if (error) { reject(error); } else { resolve(String(stdout || '').trim()); } })
 export function execText(command: string, args: string[], { timeout = 3000 } = {}): Promise<string> { return new Promise<string>((resolve, reject) => { execFile(command, args, hiddenWindowsChildOptions({ encoding: 'utf8', timeout }), (error, stdout) => { if (error) { reject(error); } else { resolve(String(stdout || '').trim()); } }); }); }
-
 == backend-claim.ts processStartMarker 4fb75fef0a94 [system]
 execText('ps', ['-p', String(pid), '-o', 'lstart='])
-
 == backend-claim.ts processStartMarker 9ccdec68d8e1 [system]
 execText('powershell.exe', [ '-NoProfile', '-NonInteractive', '-Command', `$p = Get-Process -Id ${pid} -ErrorAction Stop; $p.StartTime.ToUniversalTime().Ticks` ], { timeout: 30000 })
-
 == backend-probes.ts canImportHermesCli 14cae9cb73b8 [forward]
 execProbeSync(pythonPath, [...PYTHON_ISOLATION_FLAGS, '-c', hermesRuntimeImportProbe()], { env: sealedProbeEnv({ ...process.env, ...(opts.env || {}) }), stdio: 'ignore', timeout: PROBE_TIMEOUT_MS, windowsHide: true })
 const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const DEFAULT_PROBE_TIMEOUT_MS = 15000;
-
 == backend-probes.ts execProbeSync df4d0932f2f5 [forward]
 execFileSync(command, args, options)
-
+== backend-probes.ts execProbeSync df4d0932f2f5 [forward]
+execFileSync(command, args, options)
 == backend-probes.ts verifyHermesCli 15c1a273e53e [forward]
 execProbeSync(hermesCommand, ['--version'], { stdio: 'ignore', timeout: PROBE_TIMEOUT_MS, shell: Boolean(opts?.shell), windowsHide: true })
 const PROBE_TIMEOUT_MS = DEFAULT_PROBE_TIMEOUT_MS;
 const DEFAULT_PROBE_TIMEOUT_MS = 15000;
-
 == bootstrap-runner.ts extractTarball 010d16cdb5bf [system]
 spawn(TAR_BIN, ['-xf', '-', '-C', destDir, '--strip-components', '1', '--no-same-owner'], { signal: abortSignal, stdio: ['pipe', 'ignore', 'pipe'] })
 const TAR_BIN = process.platform === 'darwin' ? '/usr/bin/tar' : 'tar';
-
 == bootstrap-runner.ts gitResult 12b6414b081d [git]
 runGit(args, { cwd, timeoutMs })
 return runGit(args, { cwd, timeoutMs }).then(({ code, stderr, stdout }) => ({ code, stderr, stdout }), () => ({ code: null, stderr: '', stdout: '' }));
-
 == bootstrap-runner.ts run 2a8f9b211548 [git]
 execFileSync('git', args, { ...hiddenWindowsChildOptions(), cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000 })
-
-== bootstrap-runner.ts spawnBash 15c5a3f0c653 [install]
-spawn('bash', [scriptPath, ...args], { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...(home ? { HOME: home, XDG_CACHE_HOME: path.join(home, '.cache') } : {}), HERMES_HOME: hermesHome || codePathEnv('HERMES_HOME') || '' } })
-
+== bootstrap-runner.ts spawnBash 1ab403662ca8 [install]
+spawn('bash', [scriptPath, ...args], { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...NO_LINKS_ENV, ...(home ? { HOME: home, XDG_CACHE_HOME: path.join(home, '.cache') } : {}), HERMES_HOME: hermesHome || codePathEnv('HERMES_HOME') || '' } })
 == bootstrap-runner.ts spawnPowerShell fe408f5ca09a [install]
 spawn(ps, fullArgs, { ...hiddenWindowsChildOptions(), stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, HERMES_HOME: hermesHome || codePathEnv('HERMES_HOME') || '' } })
 const ps = process.platform === 'win32' ? resolveWindowsPowerShell() : 'pwsh';
-
 == desktop-plugin-install.ts gitExit 957b5c0fc9b1 [git]
 runGit(args, { bin: gitBin, cwd, timeoutMs: 60000 })
 const result = await runGit(args, { bin: gitBin, cwd, timeoutMs: 60000 });
-
 == fs-ipc.ts registerFsIpc 4fc8f572e075 [open]
 shell.openPath(path.normalize(dir))
 const dir = String(dirPath || '').trim();
-
 == git-ipc.ts registerGitIpc 201fc062dcfa [git]
 fileDiffVsHead(repoPath, filePath, resolveGitBinary())
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-ipc.ts registerGitIpc 415db5fd2833 [git]
 reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-ipc.ts registerGitIpc 45198392602a [git]
 reviewFetchPrComment(repoPath, resolveGhBinary(), url)
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-ipc.ts registerGitIpc 7a55e2cf7584 [git]
 reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-ipc.ts registerGitIpc 7abbc836f669 [git]
 reviewShipInfo(repoPath, resolveGhBinary())
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-ipc.ts registerGitIpc e91dab88955e [git]
 reviewPrList(repoPath, resolveGhBinary(), branches, numbers)
 export function registerGitIpc({ resolveGitBinary, resolveGhBinary, isTrustedSender }: GitIpcDeps) { const handle = (channel: string, listener: GitHandler) => ipcMain.handle(channel, (event, ...args) => { if (isTrustedSender(event, channel) !== true) { throw new Error('Git is only available to the app window'); } return listener(event, ...args); }); handle('hermes:git:worktreeList', async (_event, repoPath) => listWorktrees(repoPath, resolveGitBinary())); handle('hermes:git:worktreeAdd', async (_event, repoPath, options) => addWorktree(repoPath, options || {}, resolveGitBinary())); handle('hermes:git:worktreeRemove', async (_event, repoPath, worktreePath, options) => removeWorktree(repoPath, worktreePath, options || {}, resolveGitBinary())); handle('hermes:git:branchSwitch', async (_event, repoPath, branch) => switchBranch(repoPath, branch, resolveGitBinary())); handle('hermes:git:branchList', async (_event, repoPath) => listBranches(repoPath, resolveGitBinary())); handle('hermes:git:baseBranchList', async (_event, repoPath) => listBaseBranches(repoPath, resolveGitBinary())); handle('hermes:git:repoStatus', async (_event, repoPath) => repoStatus(repoPath, resolveGitBinary())); handle('hermes:git:review:list', async (_event, repoPath, scope, baseRef) => reviewList(repoPath, scope, baseRef, resolveGitBinary())); handle('hermes:git:review:diff', async (_event, repoPath, filePath, scope, baseRef, staged) => reviewDiff(repoPath, filePath, scope, baseRef, staged, resolveGitBinary())); handle('hermes:git:fileDiff', async (_event, repoPath, filePath) => fileDiffVsHead(repoPath, filePath, resolveGitBinary())); handle('hermes:git:review:stage', async (_event, repoPath, filePath) => reviewStage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:unstage', async (_event, repoPath, filePath) => reviewUnstage(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revert', async (_event, repoPath, filePath) => reviewRevert(repoPath, filePath ?? null, resolveGitBinary())); handle('hermes:git:review:revParse', async (_event, repoPath, ref) => reviewRevParse(repoPath, ref, resolveGitBinary())); handle('hermes:git:review:commit', async (_event, repoPath, message, push) => reviewCommit(repoPath, message, Boolean(push), resolveGitBinary())); handle('hermes:git:review:commitContext', async (_event, repoPath) => reviewCommitContext(repoPath, resolveGitBinary())); handle('hermes:git:review:push', async (_event, repoPath) => reviewPush(repoPath, resolveGitBinary())); handle('hermes:git:review:shipInfo', async (_event, repoPath) => reviewShipInfo(repoPath, resolveGhBinary())); handle('hermes:git:review:prList', async (_event, repoPath, branches, numbers) => reviewPrList(repoPath, resolveGhBinary(), branches, numbers)); handle('hermes:git:review:fetchPrComment', async (_event, repoPath, url) => reviewFetchPrComment(repoPath, resolveGhBinary(), url)); handle('hermes:git:review:createPr', async (_event, repoPath) => reviewCreatePr(repoPath, resolveGitBinary(), resolveGhBinary())); handle('hermes:git:scanRepos', async (_event, roots, options) => { try { return await scanGitRepos(roots || [], options || {}); } catch { return []; } }); }
-
 == git-review-ops.ts fileDiffVsHead 26e20713074d [forward]
 execFile(gitBin || 'git', ['diff', '--no-index', '--', '/dev/null', filePath], { cwd, windowsHide: true, timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (_err, stdout) => resolve(String(stdout || '')))
 let cwd;
-
 == git-review-ops.ts reviewCreatePr b25aa39d8436 [forward]
 runGh(['pr', 'create', '--fill'], cwd, ghBin)
 const cwd = resolveRequestedPathForIpc(repoPath, { purpose: 'Review create PR' });
-
 == git-review-ops.ts reviewDiff 26e20713074d [forward]
 execFile(gitBin || 'git', ['diff', '--no-index', '--', '/dev/null', filePath], { cwd, windowsHide: true, timeout: 30000, maxBuffer: 32 * 1024 * 1024 }, (_err, stdout) => resolve(String(stdout || '')))
 let cwd;
-
 == git-review-ops.ts reviewFetchPrComment d6fc002a5058 [forward]
 runGh(['api', endpoint], cwd, ghBin)
 const endpoint = parsed.kind === 'review' ? `repos/${parsed.owner}/${parsed.repo}/pulls/comments/${parsed.id}` : `repos/${parsed.owner}/${parsed.repo}/issues/comments/${parsed.id}`;
 const parsed = parsePrCommentUrl(url);
 let cwd;
-
 == git-review-ops.ts reviewPrList 41b90d6b16ce [forward]
 runGh(['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], cwd, ghBin)
 let cwd;
-
 == git-review-ops.ts reviewPrList 76ec327ec837 [forward]
 runGh(['api', 'graphql', '-f', `query=${query}`], cwd, ghBin)
 const query = prQueryFor(owner, name, branchChunk, numberChunk);
 const [owner, name] = repo.stdout.trim().split('/');
 chunks
 let cwd;
-
 == git-review-ops.ts reviewShipInfo 2aeb72646482 [forward]
 runGh(['pr', 'view', '--json', 'url,state,number'], cwd, ghBin)
 let cwd;
-
 == git-review-ops.ts reviewShipInfo 70a9c1cd49c8 [forward]
 runGh(['auth', 'status'], cwd, ghBin)
 let cwd;
-
 == git-review-ops.ts runGh 0b9ddc0ea7ea [forward]
 execFile(ghBin || 'gh', args, { cwd, env: ghEnv(ghBin), windowsHide: true, timeout: 30000, maxBuffer: 8 * 1024 * 1024 }, (err, stdout) => resolve({ ok: !err, stdout: String(stdout || '') }))
-
 == git-worktree-ops.ts gitOut acfc7010b220 [git]
 runGit(args, { bin: gitBin, cwd, timeoutMs: 30000 })
 const result = await runGit(args, { bin: gitBin, cwd, timeoutMs: 30000 });
-
 == gitlock.ts gitProcessRunning 4832af7ad34e [system]
 execFile(cmd, args, { timeout: 10000 }, (error, stdout) => { if (process.platform === 'win32') { resolve(Boolean(stdout && stdout.toLowerCase().includes('git.exe'))); return; } if (error && (error as any).code === 1) { resolve(false); return; } resolve(true); })
 const [cmd, args] = process.platform === 'win32' ? ['tasklist', ['/FI', 'IMAGENAME eq git.exe', '/FO', 'CSV']] : ['pgrep', ['-x', 'git']];
-
+== iclone-acp-tools/ipc.ts registerAcpToolsIpc dd66b4850c0e [open]
+deps.openFile(file)
+const file = which === 'installed' ? deps.tools.noticesFile() : which === 'app' ? deps.appNotices : null;
+const which = (input as Record<string, unknown> | null)?.which;
+export interface AcpToolsIpcDeps { ipcMain: IpcMainLike; isTrustedSender: ConsentSenderGuard | undefined; tools: AcpTools; gestureOk(event: unknown, input: unknown): boolean; audit: InstallAuditSink; openFile(file: string): Promise<unknown>; appNotices: string; }
+return { view: (): AcpToolsView => view, cliVersion, refresh: (): Promise<AcpToolsView> => { if (!installing) { sweepLeftovers(deps.root); } return check(); }, install, cancel: (): boolean => { if (!installing) { return false; } installing.controller.abort(); return true; }, runtime, problem: (): string | null => { const answer = answerFor(view); return answer.ok ? null : answer.error; }, noticesFile, launcherReport: (report: { type: 'escape' | 'integrity'; what: string; }): void => { if (report.type === 'escape') { auditOnce('refuse', `acp tools: refused a module outside the verified tree (${report.what})`); } else { auditOnce('refuse', `acp tools: a file changed after the check and was refused at load (${report.what})`); verified = null; void check(); } }, sweep: () => { const pin = pinOf(); sweep('reason' in pin ? null : pin.lockSha256); } };
+let view: AcpToolsView = { state: 'checking', cliVersion: null };
+let installing: { controller: AbortController; promise: Promise<InstallAnswer>; } | null = null;
+export interface AcpToolsDeps { root: string; pinDir: string; launcher: string; target: PinTarget; fetch(url: string, signal: AbortSignal): Promise<Buffer>; sealer: KeySealer | null; noSealReason?: 'keychain-off' | 'unsealable'; record: InstallRecordStore; native: NativeAddons; audit?(entry: AcpToolsAudit): void; log(line: string): void; onChange?(view: AcpToolsView): void; now?(): Date; beforeCheck?(): Promise<void>; }
+const check = (): Promise<AcpToolsView> => { if (installing) { return Promise.resolve(view); } if (checking && checking.generation === generation) { return checking.promise; } const mine = generation; const promise = fullCheck() .then(({ view: next, verified: tree }) => { if (mine !== generation || installing) { return next; } verified = tree; if (next.state === 'unverified') { auditOnce('refuse', `acp tools: ${next.reason}${next.subject ? ` (${next.subject})` : ''}`); } emit(next); return next; }) .finally(() => { if (checking?.promise === promise) { checking = null; } }); checking = { generation: mine, promise }; return promise; };
+const answer = answerFor(view);
+const answerFor = (current: AcpToolsView): RuntimeAnswer => { switch (current.state) { case 'installed': return verified ? { ok: true, rt: runtimeOf(verified) } : { ok: false, code: 'unverified', reason: 'moved', error: problemText('unverified', 'moved') }; case 'installing': return { ok: false, code: 'installing', reason: null, error: problemText('installing') }; case 'unverified': return { ok: false, code: 'unverified', reason: current.reason, error: problemText('unverified', current.reason, current.subject) }; case 'unavailable': return { ok: false, code: 'unavailable', reason: current.reason, error: problemText('unavailable', current.reason, current.subject) }; default: return { ok: false, code: 'absent', reason: null, error: problemText('absent') }; } };
+export type RuntimeAnswer = { ok: true; rt: AcpToolsRuntime; } | { ok: false; code: AcpToolsProblem; reason: AcpToolsReason | null; error: string; };
+const auditOnce = (kind: AcpToolsAudit['kind'], reason: string) => { if (!audited.has(reason)) { audited.add(reason); deps.audit?.({ kind, reason }); } };
+let verified: Checked['verified'] = null;
+const pin = pinOf();
+const pinOf = (): LoadedPin | { reason: AcpToolsReason; } => { if (loaded) { return loaded; } try { const lockText = readFileSync(path.join(deps.pinDir, 'package-lock.json'), 'utf8'); const pin = parsePin(readFileSync(path.join(deps.pinDir, 'package.json'), 'utf8'), lockText); loaded = existsSync(deps.launcher) ? { pin, lockSha256: sha256Hex(lockText), rows: runtimeClosure(pin, deps.target) } : { reason: 'launcher-missing' }; } catch (error) { deps.log(`[iclone-acp-tools] the pin does not parse: ${logText(error)}`); loaded = { reason: 'pin-invalid' }; } return loaded; };
+const sweep = (keep: string | null) => { if (!existsSync(deps.root)) { return; } for (const name of readdirSafe(deps.root)) { const leftover = name.startsWith('.install-') || name.startsWith('.trash-'); if ((leftover && !installing) || (HEX64.test(name) && name !== keep)) { rmSync(path.join(deps.root, name), { recursive: true, force: true }); } } };
+interface LoadedPin { pin: AcpPin; lockSha256: string; rows: PinRow[]; }
 == iclone-acp.ts keychainPromptShowing 3427d9346951 [system]
 execFileSync('/usr/bin/pgrep', ['-x', 'SecurityAgent'], { encoding: 'utf8', timeout: 2000 })
-
 == iclone-acp.ts openFile f245ec560339 [open]
 deps.openFile?.(file)
-
 == iclone-acp.ts selftestPty e59b2bd7e440 [pty]
 pty.spawn('/bin/echo', ['ok'], { name: 'xterm', cols: 80, rows: 24, cwd: os.tmpdir(), env: sealTelemetryEnv({}) })
-
 == iclone-acp.ts startCli 080fd056859a [acp]
 utilityProcess.fork(launch.modulePath, launch.args, { serviceName: 'iclone-acp', stdio: 'pipe', cwd, env })
 const launch = launchArgv(rt, args);
 type AcpLaunch = { kind: 'utility'; modulePath: string; args: string[]; } | { kind: 'spawn'; command: string; args: string[]; };
-
 == iclone-acp.ts startCli 9f22aededc45 [acp]
 spawn(launch.command, launch.args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
 const launch = launchArgv(rt, args);
 type AcpLaunch = { kind: 'utility'; modulePath: string; args: string[]; } | { kind: 'spawn'; command: string; args: string[]; };
-
 == iclone-acp.ts startWatchCli 4332ce4a6be2 [acp]
 utilityProcess.fork(launch.modulePath, launch.args, { serviceName: 'iclone-acp-watch', stdio: 'pipe', cwd, env })
 const launch = launchArgv(rt, [...argv]);
 type AcpLaunch = { kind: 'utility'; modulePath: string; args: string[]; } | { kind: 'spawn'; command: string; args: string[]; };
-
 == iclone-agentcard-status.ts createAgentcardRun b1b06ae5e851 [acp]
 execFileFn(binary, [...args], { cwd: workdir, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, maxBuffer: OUTPUT_CAP, windowsHide: true, env: agentcardEnv(base) }, (error, stdout, stderr) => { const code = !error ? 0 : typeof error.code === 'number' && !error.killed ? error.code : null; resolve({ code, stdout: String(stdout), stderr: String(stderr) }); })
 const binary = resolveOnPath('agentcard', base.PATH);
 const base = env();
 export function createAgentcardRun({ ensurePath = ensureLoginShellPath, env = () => process.env, cwd = agentcardScratchCwd, execFileFn = execFile }: AgentcardRunDeps = {}): AgentcardRun { return async (args) => { await ensurePath(); const base = env(); const binary = resolveOnPath('agentcard', base.PATH); if (!binary) { return { code: null, stdout: '', stderr: '', missing: true }; } let workdir: string; try { workdir = cwd(); } catch { return { code: null, stdout: '', stderr: '' }; } return new Promise(resolve => { const child = execFileFn(binary, [...args], { cwd: workdir, encoding: 'utf8', timeout: RUN_TIMEOUT_MS, maxBuffer: OUTPUT_CAP, windowsHide: true, env: agentcardEnv(base) }, (error, stdout, stderr) => { const code = !error ? 0 : typeof error.code === 'number' && !error.killed ? error.code : null; resolve({ code, stdout: String(stdout), stderr: String(stderr) }); }); child.stdin?.end(); }); }; }
-
 == iclone-claude-code.ts createClaudeCodeStatus 0fc74a5d1280 [acp]
 deps.exec(found, ['--version'])
 const found = await discoverClaudeBinary(deps);
-
 == iclone-claude-code.ts createClaudeCodeStatus e027e55bf5d1 [acp]
 deps.exec(binary.path, ['auth', 'status', '--json'])
 let binary: { path: string | null; version: string | null; } | null = null;
-
 == iclone-claude-code.ts defaultExec 54a2db43ddf8 [forward]
 execFile(file, args, { timeout: 10000 }, (error, stdout) => { if (error && !stdout) { reject(error); } else { resolve(String(stdout)); } })
-
 == iclone-claude-code.ts discoverClaudeBinary 2d6e9043b177 [acp]
 deps.exec('/bin/zsh', ['-lic', 'command -v claude'])
-
 == iclone-compat/adoption.ts upstreamDay 328154dfe10a [compat]
 execFileSync('python3', ['-B', p.served, '--repo', repo, '--rev', rev, '--out', specFile], { cwd: repo, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1' } })
-
 == iclone-compat/runtime-git.ts repoGit d2dc5ebecaa2 [git]
 execFileSync('git', argv, { cwd, encoding: 'utf8', env: repoGitEnv(), input: opts.input, maxBuffer: opts.maxBuffer ?? 256 * 1024 * 1024, stdio: ['pipe', 'pipe', 'pipe'] })
-
 == iclone-compat/runtime-git.ts runtimeInstallTip 20763f9ff2bd [git]
 execFile('git', argv, { cwd, env, encoding: 'utf8', timeout: opts.timeoutMs ?? LS_REMOTE_TIMEOUT_MS, killSignal: 'SIGKILL', maxBuffer: 1 << 16 }, (error, stdout) => { const tip = error ? undefined : stdout .split('\n') .find(line => line.endsWith(`\t${ref}`)) ?.split('\t')[0]; resolve(tip && SHA.test(tip) ? tip : null); })
-
-== iclone-confinement/backend-seatbelt.ts spawn 848f4aad4a65 [confinement]
+== iclone-confinement/backend-seatbelt.ts spawn fc31122a8ff0 [confinement]
 spawnChild(deps.sandboxExec ?? SANDBOX_EXEC, ['-p', profile.text, ...defines, '/bin/bash', '-c', script, marker], { cwd: request.cwd, detached: true, env: { ...request.env, TMPDIR: path.join(scratch, 'tmp'), GIT_CONFIG_GLOBAL: path.join(scratch, '.gitconfig') }, stdio: ['ignore', 'pipe', 'pipe'] })
-interface SeatbeltDeps { paths: ConfinementPaths; profiles: () => readonly GeneratedProfile[]; scan: () => Promise<Snapshot>; probe?: () => Promise<BackendStatusView>; hardlinks: Pick<HardlinkGuard, 'check'>; storeRoots?: readonly string[]; onHardlinkAppeared?: (event: HardlinkAppearedEvent) => void; sandboxExec?: string; }
+interface SeatbeltDeps { paths: ConfinementPaths; profiles: () => readonly GeneratedProfile[]; scan: () => Promise<Snapshot>; probe?: () => Promise<BackendStatusView>; hardlinks: Pick<HardlinkGuard, 'check'> & Partial<Pick<HardlinkGuard, 'firstScanProgress'>>; storeRoots?: readonly string[]; onHardlinkAppeared?: (event: HardlinkAppearedEvent) => void; sandboxExec?: string; }
+== iclone-confinement/hardlinks-walker.ts startWalkWorker 93b2bbc4061c [confinement]
+new Worker(new URL('./hardlinks-walk.ts', import.meta.url), { workerData, env: {}, resourceLimits })
 
-== iclone-confinement/index.ts createConfinement 61a4fb61e491 [forward]
-createMemberProbe(paths.membersDir, deps.memberPython)
+== iclone-confinement/hardlinks-walker.ts startWalkWorker d9900039f3c3 [confinement]
+new Worker(code, { eval: true, workerData, env: {}, resourceLimits })
+const code = await bundledWorkerCode(import.meta.url);
+== iclone-confinement/iclone-fsevents.ts loadIcloneFsevents 4ad2963c3c82 [confinement]
+requireNative(candidate)
+addonCandidates()
+== iclone-confinement/index.ts currentProbe 33f9ebbd19c1 [forward]
+createMemberProbe(paths.membersDir, python)
+const python = helperPython();
+const helperPython = (): string | null => { const { python, refusals } = helperInterpreter(); const said = refusals.join('; '); if (said && said !== helperRefusalSaid) { log(`[confinement] an interpreter is not trusted to run outside the sandbox: ${said}`); } helperRefusalSaid = said; return python; };
+const { python, refusals } = helperInterpreter();
+const helperInterpreter = (): { python: string | null; refusals: string[]; } => { const refusals: string[] = []; for (const candidate of [spawnPython, deps.memberPython]) { if (!candidate || !fs.existsSync(candidate)) { continue; } const verdict = judgeHelperInterpreter(paths, candidate, launcherFacts); if (verdict.trusted) { return { python: candidate, refusals }; } refusals.push(verdict.reason); } return { python: null, refusals }; };
+const refusals: string[] = [];
+[spawnPython, deps.memberPython]
+let spawnPython: string | null = null;
+export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; log?: (line: string) => void; }
+const verdict = judgeHelperInterpreter(paths, candidate, launcherFacts);
 const paths = confinementPaths(deps);
-
+let launcherFacts: RuntimeFacts | null = null;
+return { python: candidate, refusals };
+export type InterpreterTrust = { trusted: true; path: string; real: string; } | { trusted: false; path: string; reason: string; };
+return { python: null, refusals };
+const said = refusals.join('; ');
+let helperRefusalSaid: string | null = null;
+const log = deps.log ?? (() => undefined);
+== iclone-confinement/index.ts ensureLauncher ec934a6a8628 [confinement]
+(deps.createLauncher ?? createLauncher)({ python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log })
+launcher = (deps.createLauncher ?? createLauncher)({ python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log });
+let launcher: Launcher | null = null;
+export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; log?: (line: string) => void; }
+const launcherSocket = path.join(runDir, 'launcher.sock');
+const paths = confinementPaths(deps);
+let profiles: GeneratedProfile[] = generateProfiles(paths);
+const storeRoots = deps.pnpmStoreRoots ?? pnpmStoreRoots(process.env.PNPM_HOME, deps.home, storeDenied);
+let launcherFacts: RuntimeFacts | null = null;
 == iclone-confinement/index.ts xcrunCacheFile cbfdec72e4bb [confinement]
 execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8', timeout: 2000 })
-
-== iclone-confinement/ipc.ts registerConfinement 2a82bb9a548a [confinement]
-createConfinement({ ...deps, audit: deps.audit ?? permissionsAudit })
-const confinement = createConfinement({ ...deps, audit: deps.audit ?? permissionsAudit });
-interface RegisterConfinementDeps extends Omit<ConfinementDeps, 'audit'> { ipcMain: IpcMainLike; isTrustedSender: ConsentSenderGuard; broadcast?: (channel: string) => void; audit?: () => AuditSlice[]; lastInputAt?: (event: unknown) => number; recordAudit?: Parameters<typeof createRefusalAudit>[0]['record']; refusalStream?: Pick<Parameters<typeof startRefusalStream>[0], 'spawnLog' | 'spawnShow'>; }
-
+== iclone-confinement/launcher-live-harness.ts createLauncherWorld c29d0a8ee7e6 [harness]
+execFileSync('/usr/bin/git', ['init', '-q', project])
+== iclone-confinement/launcher-live-harness.ts createLauncherWorld f745bfa9cf5a [harness]
+execFileSync(RUNTIME_PYTHON, ['-I', '-S', '-c', 'import sys; print(sys.base_prefix)'], { encoding: 'utf8' })
+== iclone-confinement/launcher-live-harness.ts run b94e08beadd0 [harness]
+spawn(command, argv, { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
+const { command, args: argv } = launch(args, confined);
+== iclone-confinement/launcher.ts launch 5d6fa468688f [confinement]
+spawn(options.python, ['-I', '-S', options.script], { env: launcherEnv({ hermesHome: options.hermesHome, home: options.home, journalDir: options.journalDir, roots: roots(), socketPath: options.socketPath, spec: spec() }), stdio: ['ignore', 'pipe', 'pipe'] })
+const roots = () => (typeof options.roots === 'function' ? options.roots() : options.roots);
+const spec = () => (typeof options.spec === 'function' ? options.spec() : options.spec);
+== iclone-confinement/launcher.ts spawn 1c878270cf35 [forward]
+nodeSpawn(command, args, spawnOptions)
 == iclone-confinement/live-harness.ts createLiveWorld 4e8065348828 [harness]
 createMemberProbe(paths.membersDir, MEMBER_PYTHON)
 export const MEMBER_PYTHON = [ process.env.V3G_PY, path.join(import.meta.dirname, '../../../..', 'venv/bin/python'), '/usr/bin/python3' ].find((candidate): candidate is string => Boolean(candidate) && existsSync(candidate as string));
-
 == iclone-confinement/live-harness.ts runPlain 522fcb9408a0 [harness]
 spawn('/bin/sh', ['-c', command], { cwd, env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), LANG: 'C' }, stdio: ['ignore', 'pipe', 'pipe'] })
-
-== iclone-confinement/members.ts createMemberProbe 59e66abea64b [forward]
+== iclone-confinement/members.ts createMemberProbe 7c2d9d18a0d6 [forward]
 execFile(python, ['-I', '-S', '-c', PROBE_SCRIPT, realpathSync(membersDir)], { encoding: 'utf8', timeout: 5000, maxBuffer: 4 * 1024 * 1024, env: {} }, (error, stdout) => { if (error) { reject(error); return; } try { const raw = JSON.parse(String(stdout)) as Record<string, unknown>; resolve(new Map(Object.entries(raw).map(([pid, token]) => [Number(pid), typeof token === 'string' ? token : null]))); } catch (parseError) { reject(parseError instanceof Error ? parseError : new Error(String(parseError))); } })
-const PROBE_SCRIPT = ` import ctypes, json, os, sys d = sys.argv[1] check = ctypes.CDLL(None).sandbox_check check.restype = ctypes.c_int check.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int] P = ctypes.c_char_p op = b"file-read-data" mark, decoy = os.path.join(d, ".member").encode(), os.path.join(d, ".decoy").encode() tokens = [(n, os.path.join(d, n).encode()) for n in os.listdir(d) if not n.startswith(".")] me, out = os.getpid(), {} for line in sys.stdin: pid = int(line) if pid <= 1 or pid == me or check(pid, None, 0) != 1: continue if check(pid, op, 1, P(mark)) != 0 or check(pid, op, 1, P(decoy)) != 1: continue out[str(pid)] = next((n for n, f in tokens if check(pid, op, 1, P(f)) == 0), None) sys.stdout.write(json.dumps(out)) `;
+const PROBE_SCRIPT = ` import ctypes, json, os, sys d = sys.argv[1] check = ctypes.CDLL(None).sandbox_check check.restype = ctypes.c_int check.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int] P = ctypes.c_char_p op = b"file-read-data" F = ${PROBE_PATH_FILTER} mark, decoy = os.path.join(d, ".member").encode(), os.path.join(d, ".decoy").encode() rt = os.path.join(d, ".runtime").encode() tokens = [(n, os.path.join(d, n).encode()) for n in os.listdir(d) if not n.startswith(".")] me, out = os.getpid(), {} for line in sys.stdin: pid = int(line) if pid <= 1 or pid == me or check(pid, None, 0) != 1: continue if check(pid, op, F, P(decoy)) != 1: continue if check(pid, op, F, P(rt)) == 0: out[str(pid)] = ".runtime" continue if check(pid, op, F, P(mark)) != 0: continue out[str(pid)] = next((n for n, f in tokens if check(pid, op, F, P(f)) == 0), None) sys.stdout.write(json.dumps(out)) `;
+export const PROBE_PATH_FILTER = SANDBOX_FILTER_PATH | SANDBOX_CHECK_NO_REPORT;
+const SANDBOX_FILTER_PATH = 1;
+export const SANDBOX_CHECK_NO_REPORT = 0x40000000;
 const raw = JSON.parse(String(stdout)) as Record<string, unknown>;
 resolve(new Map(Object.entries(raw).map(([pid, token]) => [Number(pid), typeof token === 'string' ? token : null])));
 try { const raw = JSON.parse(String(stdout)) as Record<string, unknown>; resolve(new Map(Object.entries(raw).map(([pid, token]) => [Number(pid), typeof token === 'string' ? token : null]))); } catch (parseError) { reject(parseError instanceof Error ? parseError : new Error(String(parseError))); }
-
 == iclone-confinement/probe.ts probeContainer 46034aa8f4fe [confinement]
 host.run(binary, ['--version'], CONTAINER_VERSION_TIMEOUT_MS)
 const binary = containerBinary(host.exists);
 export const containerBinary = (exists: (file: string) => boolean): string | null => CONTAINER_CANDIDATES.find(candidate => exists(candidate)) ?? null;
 export const CONTAINER_CANDIDATES = ['/usr/local/bin/container', '/opt/homebrew/bin/container'] as const;
 interface ProbeHost { run: Runner; exists: (file: string) => boolean; executable: (file: string) => boolean; platform: NodeJS.Platform; arch: string; darwinMajor: number; }
-
 == iclone-confinement/probe.ts probeSeatbelt b06b79a783da [confinement]
 host.run(SANDBOX_EXEC, ['-p', '(version 1)(allow default)', '/usr/bin/true'], 5000)
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
-
 == iclone-confinement/probe.ts probeSeatbelt b135d4665680 [confinement]
 host.run(SANDBOX_EXEC, ['-p', `(version 1)(allow default)(deny file-read* (literal "${canary}"))`, '/bin/cat', canary], 5000)
 export const SANDBOX_EXEC = '/usr/bin/sandbox-exec';
-
 == iclone-confinement/probe.ts runFile 755ad63d84db [forward]
 spawn(file, args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'] })
-
 == iclone-confinement/refusals.ts startRefusalStream 6e7e982ff668 [confinement]
 spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', PREDICATE], { stdio: ['ignore', 'pipe', 'ignore'] })
-
 == iclone-confinement/refusals.ts startRefusalStream e98a8bed4717 [confinement]
 spawn('/usr/bin/log', ['show', '--style', 'ndjson', '--last', `${backfill}s`, '--predicate', PREDICATE], { stdio: ['ignore', 'pipe', 'ignore'] })
-
+== iclone-confinement/runtime-live-harness.ts collectDenials f8437cdf6a53 [harness]
+spawn('/usr/bin/log', ['stream', '--style', 'ndjson', '--predicate', 'sender == "Sandbox" AND eventMessage CONTAINS "iclone-runtime"'], { stdio: ['ignore', 'pipe', 'ignore'] })
+== iclone-confinement/runtime-live-harness.ts createRuntimeWorld 5461c4e23f90 [harness]
+execFileSync(RUNTIME_PYTHON, ['-I', '-S', '-c', 'import sys; print(sys.base_prefix)'], { encoding: 'utf8' })
+export const RUNTIME_PYTHON = path.join(RUNTIME_VENV, 'bin', 'python');
+export const RUNTIME_VENV = realOrSelf(VENV_LINK);
+const VENV_LINK = path.join(RUNTIME_ROOT, 'venv');
+export const RUNTIME_ROOT = path.resolve(import.meta.dirname, '../../../..');
+== iclone-confinement/runtime-live-harness.ts packagedRuntime dcd4fc633008 [harness]
+execFileSync('git', ['-C', RUNTIME_ROOT, 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
+== iclone-confinement/runtime-live-harness.ts pmEnvironment edc4bf7ad818 [harness]
+execFileSync(realOrSelf(RUNTIME_PYTHON), ['-I', '-S', '-c', 'import sys; print("python%d.%d" % sys.version_info[:2])'], { encoding: 'utf8' })
+export const RUNTIME_PYTHON = path.join(RUNTIME_VENV, 'bin', 'python');
+export const RUNTIME_VENV = realOrSelf(VENV_LINK);
+const VENV_LINK = path.join(RUNTIME_ROOT, 'venv');
+export const RUNTIME_ROOT = path.resolve(import.meta.dirname, '../../../..');
+== iclone-confinement/runtime-live-harness.ts spawnRun 060f107eb239 [harness]
+spawn(argv[0], argv.slice(1), { cwd: where.cwd, env: where.env, stdio: ['pipe', 'pipe', 'pipe'], detached: true })
 == iclone-confinement/state.ts readPs 1d53a4f20b61 [confinement]
 execFile('/bin/ps', [...PS_ARGS], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024, timeout: 5000 }, (error, out) => (error ? reject(error) : resolve(parsePs(String(out)))))
-
 == iclone-consent.ts registerIcloneConsent 6a9bd93ca13d [open]
 deps.openExternal(BUNDLED_POLICY.url)
 export const BUNDLED_POLICY = { version: '1.1', effective: '2026-10-22', effectiveLabel: '22 October 2026', title: 'icloneOS Policies & Privacy', url: 'https://cloneframe.io/privacy/', sha256: 'f9917cebe13c3419edba963652543c3590c31a5d8a42085b07f0dc26f65d1c01', short: [ { lead: 'Your agent lives on your device.', text: 'Its conversations, memory, persona and your files stay on your device. We run no servers that receive them.' }, { lead: 'You choose the AI provider.', text: 'When your agent works, your messages and the context it needs go directly from your device to the provider you connected, under that provider’s terms. Nothing is sent to any AI provider until you connect one.' }, { lead: 'Sign-in uses Privy, with an email address or a wallet.', text: 'We can see the account record Privy keeps for our app. Neither we nor the app ever see your wallet’s private keys.' }, { lead: 'The agent economy runs on accounts you open with other companies.', text: 'The marketplace, agent email and trading views come from Virtuals, and virtual cards come from AgentCard. You open those accounts yourself, under their terms.' }, { lead: 'Blockchains are public.', text: 'Wallet addresses, iNFT ownership and on-chain transactions can be seen by anyone, and they cannot be deleted.' }, { lead: 'No ads, no tracking, no selling of data, and no analytics SDK in the app.', text: 'The one exception to be aware of: the Privy and WalletConnect code in the sign-in window does its own event reporting to those companies.' }, { lead: 'You control deletion.', text: 'You can delete an agent profile, sign out, remove everything the app stores, or ask us to delete your account.' }, { lead: 'icloneOS is for adults.', text: 'You must be 18 or older to use it.' } ], permissionsIntro: 'icloneOS asks for each permission through the system’s own prompt, only when a feature needs it. Every permission is optional. If you say no, the app keeps working, and only the feature that needs that permission is unavailable.', permissions: [ { key: 'microphone', name: 'Microphone', purpose: 'Voice features, such as speaking to your agent' }, { key: 'screen', name: 'Screen recording', purpose: 'Letting your agent take a screenshot or recording of the screen when a task needs it, and reading the titles of other apps’ windows' }, { key: 'automation', name: 'Automation (Apple Events)', purpose: 'Letting your agent control other apps on your Mac when you ask it to' }, { key: 'localNetwork', name: 'Local network', purpose: 'Connecting to an agent gateway you run on your own network' }, { key: 'files', name: 'Files and folders', purpose: 'Opening the files, folders and projects you choose. On macOS your agent can read and write files with your user account’s access, and the app’s file browser blocks known sensitive files.' }, { key: 'notifications', name: 'Notifications', purpose: 'Showing you alerts from the app and your agent' }, { key: 'clipboard', name: 'Clipboard', purpose: 'Copying and pasting between you, the app and your agent' }, { key: 'keychain', name: 'Keychain', purpose: 'Storing the Virtuals signing key and sign-in token, and, if you turn it on, encrypting connection secrets. macOS may ask you to allow access.' } ] } as const;
-
 == iclone-diagnostics-file.ts collectMacNames f583a8788399 [system]
 read('/usr/bin/id', ['-F'])
-
 == iclone-diagnostics-file.ts macOnly c10985ea35a4 [system]
 read('/usr/sbin/scutil', ['--get', key])
-
 == iclone-diagnostics-file.ts read f21bcae69f63 [forward]
 sources.read(file, args)
-
 == iclone-doctor-checks.ts accessibility 8ae669897f4c [doctor]
 env.exec(driver, ['permissions', 'status', '--json'], { timeoutMs: 2500, signal: env.signal, env: sealTelemetryEnv({ PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: env.home }) })
 const driver = cuaDriverBinary(env);
-
 == iclone-doctor-checks.ts codesignFacts 6d5803d89ed8 [doctor]
 env.exec('/usr/bin/xcrun', ['stapler', 'validate', app], opts)
-
 == iclone-doctor-checks.ts codesignFacts 921510d7117a [doctor]
 env.exec('/usr/sbin/spctl', ['-a', '-vv', '-t', 'exec', app], opts)
-
 == iclone-doctor-checks.ts codesignFacts fe04fa320632 [doctor]
 env.exec('/usr/bin/codesign', ['-dv', '--verbose=4', app], opts)
-
 == iclone-doctor-checks.ts execAbsolute 45b7f816b7d7 [forward]
 execFile(file, [...args], { encoding: 'utf8', env: options.env ?? process.env, killSignal: 'SIGKILL', maxBuffer: 4 * MIB, signal: options.signal, timeout: options.timeoutMs, windowsHide: true }, (error, stdout, stderr) => { const err = error as (NodeJS.ErrnoException & { code?: number | string; killed?: boolean; }) | null; const timedOut = Boolean(err?.killed) || err?.name === 'AbortError'; resolve({ code: err ? (typeof err.code === 'number' ? err.code : null) : 0, stdout: String(stdout ?? ''), stderr: String(stderr ?? ''), timedOut, error: err && typeof err.code !== 'number' && !timedOut ? err.message : undefined }); })
 const MIB = 1024 ** 2;
 const err = error as (NodeJS.ErrnoException & { code?: number | string; killed?: boolean; }) | null;
 const timedOut = Boolean(err?.killed) || err?.name === 'AbortError';
-
 == iclone-doctor-checks.ts hermesDoctor f9cb6922485b [doctor]
 env.exec(venvPythonPath(env), ['-m', 'hermes_cli.main', 'doctor'], { timeoutMs: 45000, signal: env.signal, env: { ...process.env, HERMES_HOME: env.hermesHome, NO_COLOR: '1' } })
 export const venvPythonPath = (env: DoctorEnv) => path.join(env.venvDir, 'bin', 'python');
 export interface DoctorEnv { platform: NodeJS.Platform; home: string; userData: string; hermesHome: string; venvDir: string; icloneHome: string; appBundle: string | null; packaged: boolean; mainPid: number; bundleId: string; crashDumpsDir: string | null; live: boolean; actor?: 'agent' | 'user'; signal: AbortSignal; exec: DoctorExec; now(): number; interpreters?: readonly string[]; cuaDriverCmd?: string | null; electron?: { mediaStatus?(kind: MediaKind): string; translated?(): boolean; inApplications?(): boolean; encryptionOn?(): boolean; safeStorage?(): boolean; privyCookieCount?(): Promise<number | null>; cacheSize?(): Promise<number>; clearCache?(): Promise<void>; netOnline?(): boolean; openExternal?(url: string): Promise<void>; }; gateway?: { claim?(): { port: number; pid: number; } | null; health?(): Promise<{ ok: boolean; detail: string; }>; stop?(): Promise<void>; start?(): Promise<void>; }; acp?: { wrapperSource?(): string | null; registryText?(): string | null; }; native?: { expectedAbi?: string | null; abi?: string; spawnHelper?: string | null; }; net?: { lookup(host: string): Promise<string>; }; }
-
 == iclone-doctor-checks.ts interpreterVersion a5abcdd7d2ec [forward]
 env.exec(file, ['-I', '-c', 'import sys;print("%d.%d"%sys.version_info[:2])'], { timeoutMs: 5000, signal: env.signal })
-
 == iclone-doctor-checks.ts listenerPid 9726a2987217 [doctor]
 env.exec(lsofBin(env), ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], { timeoutMs: 3000, signal: env.signal })
-
 == iclone-doctor-checks.ts networkQuality fc95009919a7 [doctor]
 env.exec('/usr/bin/networkQuality', ['-c', '-s'], { timeoutMs: 22000, signal: env.signal })
-
 == iclone-doctor-checks.ts openHolders 8200b1d1607c [doctor]
 env.exec(lsofBin(env), ['-t', '--', ...present], { timeoutMs: 5000, signal: env.signal })
-
 == iclone-doctor-checks.ts processInfo 25ec071c8b70 [doctor]
 env.exec('/bin/ps', ['-o', 'ppid=', '-o', 'command=', '-p', String(pid)], { timeoutMs: 2000, signal: env.signal })
-
 == iclone-doctor-checks.ts quickCheck 9c93efae458a [doctor]
 env.exec(python, [ '-I', '-c', 'import sqlite3,sys;print(sqlite3.connect(sys.argv[1]).execute("pragma quick_check").fetchone()[0])', copy ], { timeoutMs: 12000, signal: env.signal })
 const python = realInterpreter(env);
-
 == iclone-doctor-checks.ts quickCheck ca10f65d86a0 [doctor]
 env.exec('/usr/bin/sqlite3', ['-readonly', copy, 'PRAGMA quick_check;'], { timeoutMs: 12000, signal: env.signal })
-
 == iclone-doctor-checks.ts timeOffset 00033bf0b550 [doctor]
 env.exec('/usr/bin/sntp', ['-t', '3', 'time.apple.com'], { timeoutMs: 4500, signal: env.signal })
-
 == iclone-doctor-checks.ts venvPython 51b826bbdc7d [doctor]
 interpreterVersion(env, real)
 const real = realInterpreter(env);
-
 == iclone-doctor-fixes.ts applySteps ab51c9db8b48 [doctor]
 runStep(env, step, stamp, moved)
 steps
-
 == iclone-doctor-fixes.ts interpreterFor 33aed06f4f75 [doctor]
 interpreterVersion(env, candidate)
 new Set(candidates)
-
 == iclone-doctor-fixes.ts runStep 40ba0f99e98d [forward]
 env.exec(step.file, step.args, { timeoutMs: step.timeoutMs, signal: env.signal, env: step.env })
-
 == iclone-doctor-fixes.ts runStep 7bda12d82089 [open]
 env.electron?.openExternal?.(step.url)
-
 == iclone-doctor-fixes.ts venvRepair 51b826bbdc7d [doctor]
 interpreterVersion(env, real)
 const real = realInterpreter(env);
-
 == iclone-doctor-main.ts initIcloneDoctor efc485bb3d06 [open]
 shell.openPath(app.getPath('logs'))
-
 == iclone-doctor-main.ts openExternal b294026502a3 [open]
 shell.openExternal(url)
-
 == iclone-doctor-main.ts read f20007f49164 [forward]
 execFile(file, [...args], { encoding: 'utf8', timeout: 2000 }, (error, stdout) => resolve(error ? null : String(stdout).trim() || null))
-
-== iclone-setup.ts actOnSetupSystemItem 5a04eef0f056 [open]
-seam.openExternal(SETUP_PANES[item])
-export const SETUP_PANES: Readonly<Record<SetupSystemItem, string>> = { microphone: `${PRIVACY}_Microphone`, screen: `${PRIVACY}_ScreenCapture`, notifications: 'x-apple.systempreferences:com.apple.preference.notifications' };
-const PRIVACY = 'x-apple.systempreferences:com.apple.preference.security?Privacy';
-const item = raw.item;
-const raw = (input ?? {}) as { item?: unknown; title?: unknown; body?: unknown; };
-
 == iclone-hermes-plugins.ts ensureIcloneHermesPlugins eebc30c36c1c [forward]
 deps.probe(deps.backend.command, [...PYTHON_ISOLATION_FLAGS, '-c', PROBE_SCRIPT], { cwd: deps.cwd, env })
 export const PROBE_SCRIPT = [ 'import json, os, sys', 'profile = os.environ.pop("ICLONE_GATE_PROBE_PROFILE", "")', 'if profile:', ' from hermes_cli.profiles import resolve_profile_env', ' os.environ["HERMES_HOME"] = str(resolve_profile_env(profile))', 'from hermes_cli.plugins import discover_plugins, get_plugin_manager', 'discover_plugins()', 'pm = get_plugin_manager()', 'rows = {}', 'for key, lp in pm._plugins.items():', ' if str(key).startswith("iclone-"):', ' m = lp.manifest', ' rows[str(key)] = {"enabled": bool(lp.enabled), "error": lp.error, "path": str(m.path or ""), "source": m.source}', 'finders = []', 'for f in list(sys.meta_path):', ' mod = sys.modules.get(getattr(type(f), "__module__", None) or "")', ' finders.append(str(getattr(mod, "__file__", None) or ""))', 'hooks = []', 'for cb in list(pm._hooks.get("pre_tool_call", [])):', ' mod = sys.modules.get(getattr(cb, "__module__", None) or "")', ' hooks.append(str(getattr(mod, "__file__", None) or ""))', `print(${JSON.stringify(PROBE_MARK)} + json.dumps({"plugins": rows, "pre_tool_call": hooks, "meta_path": finders}), flush=True)`, 'os._exit(0)' ].join('\n');
@@ -342,26 +335,20 @@ export const PROBE_MARK = 'ICLONE-GATE-PROBE';
 const env: NodeJS.ProcessEnv = isolatePythonEnv(composed, root);
 const composed: Record<string, string | undefined> = {};
 const root = deps.backend.root ? path.resolve(deps.backend.root) : null;
-
 == iclone-ownership.ts applyDeactivation 358a50fc6e98 [forward]
 currentAgentName(opts, slug, n)
 const n = record.inft.tokenId;
-
 == iclone-ownership.ts applyDeactivation e0259db21478 [forward]
 opts.run(opts.acpBin, ['--inft', slug, ...doorRenameArgv(record)], { timeoutMs: 90000 })
-
 == iclone-ownership.ts archive b7fa7171076e [git]
 opts.run(cmd, args, { cwd: dir, timeoutMs: 60000 })
 steps
-
 == iclone-ownership.ts currentAgentName 5f284c884659 [forward]
 opts.run(opts.acpBin, ['--inft', slug, 'agent', 'whoami', '--json'], { timeoutMs: 30000 })
-
 == iclone-ownership.ts execRunner c5f2cc83ac68 [forward]
 execFile(cmd, args, { cwd: opts.cwd, env: opts.env, timeout: opts.timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (error, stdout, stderr) => { const code = error ? (typeof error.code === 'number' ? error.code : error.code === 'ENOENT' ? NOT_FOUND : 1) : 0; resolve({ code, stdout: String(stdout), stderr: String(stderr) }); })
 const code = error ? (typeof error.code === 'number' ? error.code : error.code === 'ENOENT' ? NOT_FOUND : 1) : 0;
 export const NOT_FOUND = 127;
-
 == iclone-ownership.ts initIcloneOwnership 7e8a942c7682 [acp]
 createDeactivationDoor({ root, acpBin: path.join(home, '.iclone-os', 'bin', 'acp'), run: execRunner })
 const service = createOwnershipService({ root, now, registry: () => source.get(), verify: (entry, tokenId, wallet, sinceBlock) => verifyOwnership({ entry, tokenId, wallet, sinceBlock, fetch: fetchImpl }), door: createDeactivationDoor({ root, acpBin: path.join(home, '.iclone-os', 'bin', 'acp'), run: execRunner }), archiver: createArchiver({ root, home, hermesHome: path.join(home, '.hermes'), run: execRunner, now }), emit: view => { const state = emittedOwnershipState(view, launchedAt, lastEmittedCheck.get(view.slug)); if (view.checkedAt !== null) { lastEmittedCheck.set(view.slug, view.checkedAt); } for (const listener of listeners) { listener(view.slug, state); } const win = getMainWindow(); if (win && !win.isDestroyed()) { win.webContents.send('iclone:ownership-changed', view); } } });
@@ -378,18 +365,17 @@ listeners
 const listeners = new Set<(slug: string, state: OwnershipRecord['state']) => void>();
 const win = getMainWindow();
 export function initIcloneOwnership({ getMainWindow }: { getMainWindow: () => BrowserWindow | null; }): OwnershipWatch | null { if (initialized) { return null; } initialized = true; const listeners = new Set<(slug: string, state: OwnershipRecord['state']) => void>(); const root = app.getPath('userData'); setOwnershipGateRoot(root); const now = () => Date.now(); const fetchImpl: FetchLike = (url, init) => fetch(url, init); const source: RegistrySource = createRegistrySource({ fetch: fetchImpl as typeof fetch, now, cacheFile: path.join(root, 'inft', 'registry-remote.json') }); const home = os.homedir(); const launchedAt = now(); const lastEmittedCheck = new Map<string, number>(); const service = createOwnershipService({ root, now, registry: () => source.get(), verify: (entry, tokenId, wallet, sinceBlock) => verifyOwnership({ entry, tokenId, wallet, sinceBlock, fetch: fetchImpl }), door: createDeactivationDoor({ root, acpBin: path.join(home, '.iclone-os', 'bin', 'acp'), run: execRunner }), archiver: createArchiver({ root, home, hermesHome: path.join(home, '.hermes'), run: execRunner, now }), emit: view => { const state = emittedOwnershipState(view, launchedAt, lastEmittedCheck.get(view.slug)); if (view.checkedAt !== null) { lastEmittedCheck.set(view.slug, view.checkedAt); } for (const listener of listeners) { listener(view.slug, state); } const win = getMainWindow(); if (win && !win.isDestroyed()) { win.webContents.send('iclone:ownership-changed', view); } } }); ipcMain.handle('iclone:ownership-observe', (_e, wallet: unknown, items: unknown) => { const list = asItems(items); return typeof wallet === 'string' && list ? service.observe(wallet, list) : Promise.resolve([]); }); ipcMain.handle('iclone:ownership-list', () => service.list()); ipcMain.handle('iclone:ownership-recheck', (_e, slug: unknown) => isSafeSlug(slug) ? service.check(slug) : Promise.resolve(null)); ipcMain.handle('iclone:ownership-choose', (_e, slug: unknown, choice: unknown, confirm: unknown) => isSafeSlug(slug) && CHOICES.has(choice as OwnerChoice) ? service.choose(slug, choice as OwnerChoice, typeof confirm === 'string' ? confirm : '') : Promise.resolve({ ok: false, error: 'bad request' })); ipcMain.handle('iclone:ownership-prepare-sell', (_e, slug: unknown, github: unknown) => isSafeSlug(slug) ? service.prepareSell(slug, github === true) : Promise.resolve({ ok: false, error: 'bad request' })); ipcMain.handle('iclone:ownership-presale-detached', (_e, slug: unknown, removed: unknown) => isSafeSlug(slug) ? service.presaleDetached(slug, typeof removed === 'number' ? removed : 0) : null); ipcMain.handle('iclone:ownership-prompt-header', (_e, profileSlug: unknown) => typeof profileSlug === 'string' && profileSlug.length < 200 ? service.promptHeaderWritten(profileSlug) : 0); ipcMain.handle('iclone:ownership-gh-status', () => createArchiver({ root, home, hermesHome: path.join(home, '.hermes'), run: execRunner, now }).ghStatus()); ipcMain.handle('iclone:ownership-registry', async () => { const r = await source.get(); return { version: r.version, origin: source.origin(), contracts: r.entries.length }; }); const timer = setInterval(() => void service.tick(), HELD_RECHECK_MS); timer.unref?.(); setTimeout(() => void service.tick(), 30000).unref?.(); return { check: slug => { const startedAt = now(); return (isSafeSlug(slug) ? service.check(slug) : Promise.resolve(null)).then(view => freshOwnershipAnswer(view, startedAt)); }, walletOf: slug => (isSafeSlug(slug) ? (readRecord(root, slug, now())?.wallet ?? null) : null), onChange: listener => { listeners.add(listener); return () => listeners.delete(listener); } }; }
-
-== iclone-ownership.ts runGh c92c85fdec69 [git]
+== iclone-ownership.ts runGh c6875145d235 [git]
 opts.run(bin, args, { cwd, timeoutMs, env: ghEnv(bin) })
 const bin = findGh();
 const findGh = opts.gh ?? (() => resolveGh());
-export function createArchiver(opts: { root: string; home: string; hermesHome: string; run: CommandRunner; now: () => number; gh?: () => string | null; }): Archiver { const gitId = ['-c', 'user.name=iclone os archive', '-c', 'user.email=archive@iclone-os.invalid']; const findGh = opts.gh ?? (() => resolveGh()); const runGh = async (args: string[], cwd: string | undefined, timeoutMs: number) => { const bin = findGh(); if (!bin) { return { code: NOT_FOUND, stdout: '', stderr: 'gh: not found' }; } return opts.run(bin, args, { cwd, timeoutMs, env: ghEnv(bin) }); }; return { ghStatus: async () => { const r = await runGh(['auth', 'status'], undefined, 15000); if (r.code === NOT_FOUND) { return { ok: false, detail: GH_NOT_INSTALLED }; } return { ok: r.code === 0, detail: (r.stdout + r.stderr) .split('\n') .find(l => /Logged in|not logged/i.test(l)) ?.trim() ?? '' }; }, archive: async (record, github) => { const dir = path.join(opts.home, 'iclone-os-archive', record.slug); const profile = profileSlugFor(record.inft.contract, record.inft.tokenId); const budget: CopyBudget = { files: 0, skipped: [] }; try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; } const steps: [ string, string[] ][] = [ ['git', ['init', '-q']], ['git', ['add', '-A']], ['git', [...gitId, 'commit', '-q', '--allow-empty', '-m', `archive of iNFT #${record.inft.tokenId}`]] ]; for (const [cmd, args] of steps) { const r = await opts.run(cmd, args, { cwd: dir, timeoutMs: 60000 }); if (r.code !== 0) { return { ok: false, dir, remote: null, error: `${cmd} ${args[0]} failed: ${r.stderr.trim().slice(0, 200)}` }; } } if (!github) { return { ok: true, dir, remote: null }; } const status = await runGh(['auth', 'status'], undefined, 15000); if (status.code === NOT_FOUND) { return { ok: false, dir, remote: null, error: GH_NOT_INSTALLED }; } if (status.code !== 0) { return { ok: false, dir, remote: null, error: 'GitHub CLI is not signed in — run `gh auth login`, then try again.' }; } const name = `iclone-os-archive-${record.slug}`.slice(0, 100); const created = await runGh(['repo', 'create', name, '--private', '--source', dir, '--remote', 'origin', '--push'], dir, 180000); if (created.code !== 0) { return { ok: false, dir, remote: null, error: `gh repo create failed: ${created.stderr.trim().slice(0, 200)}` }; } return { ok: true, dir, remote: created.stdout.trim().split('\n').pop() || name }; } }; }
+export function createArchiver(opts: { root: string; home: string; hermesHome: string; run: CommandRunner; now: () => number; gh?: () => string | null; }): Archiver { const gitId = ['-c', 'user.name=iclone os archive', '-c', 'user.email=archive@iclone-os.invalid']; const findGh = opts.gh ?? (() => resolveGh()); const runGh = async (args: string[], cwd: string | undefined, timeoutMs: number) => { const bin = findGh(); if (!bin) { return { code: NOT_FOUND, stdout: '', stderr: 'gh: not found' }; } return opts.run(bin, args, { cwd, timeoutMs, env: ghEnv(bin) }); }; return { ghStatus: async () => { const r = await runGh(['auth', 'status'], undefined, 15000); if (r.code === NOT_FOUND) { return { ok: false, detail: GH_NOT_INSTALLED }; } return { ok: r.code === 0, detail: (r.stdout + r.stderr) .split('\n') .find(l => /Logged in|not logged/i.test(l)) ?.trim() ?? '' }; }, archive: async (record, github) => { const dir = path.join(opts.home, 'iclone-os-archive', record.slug); const profile = profileSlugFor(record.inft.contract, record.inft.tokenId); const budget: CopyBudget = { files: 0, skipped: [] }; try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(opts.hermesHome, path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(opts.root, path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; } const steps: [ string, string[] ][] = [ ['git', ['init', '-q']], ['git', ['add', '-A']], ['git', [...gitId, 'commit', '-q', '--allow-empty', '-m', `archive of iNFT #${record.inft.tokenId}`]] ]; for (const [cmd, args] of steps) { const r = await opts.run(cmd, args, { cwd: dir, timeoutMs: 60000 }); if (r.code !== 0) { return { ok: false, dir, remote: null, error: `${cmd} ${args[0]} failed: ${r.stderr.trim().slice(0, 200)}` }; } } if (!github) { return { ok: true, dir, remote: null }; } const status = await runGh(['auth', 'status'], undefined, 15000); if (status.code === NOT_FOUND) { return { ok: false, dir, remote: null, error: GH_NOT_INSTALLED }; } if (status.code !== 0) { return { ok: false, dir, remote: null, error: 'GitHub CLI is not signed in — run `gh auth login`, then try again.' }; } const name = `iclone-os-archive-${record.slug}`.slice(0, 100); const created = await runGh(['repo', 'create', name, '--private', '--source', dir, '--remote', 'origin', '--push'], dir, 180000); if (created.code !== 0) { return { ok: false, dir, remote: null, error: `gh repo create failed: ${created.stderr.trim().slice(0, 200)}` }; } return { ok: true, dir, remote: created.stdout.trim().split('\n').pop() || name }; } }; }
 const gitId = ['-c', 'user.name=iclone os archive', '-c', 'user.email=archive@iclone-os.invalid'];
 const runGh = async (args: string[], cwd: string | undefined, timeoutMs: number) => { const bin = findGh(); if (!bin) { return { code: NOT_FOUND, stdout: '', stderr: 'gh: not found' }; } return opts.run(bin, args, { cwd, timeoutMs, env: ghEnv(bin) }); };
 return { code: NOT_FOUND, stdout: '', stderr: 'gh: not found' };
 export const NOT_FOUND = 127;
 return opts.run(bin, args, { cwd, timeoutMs, env: ghEnv(bin) });
-return { ghStatus: async () => { const r = await runGh(['auth', 'status'], undefined, 15000); if (r.code === NOT_FOUND) { return { ok: false, detail: GH_NOT_INSTALLED }; } return { ok: r.code === 0, detail: (r.stdout + r.stderr) .split('\n') .find(l => /Logged in|not logged/i.test(l)) ?.trim() ?? '' }; }, archive: async (record, github) => { const dir = path.join(opts.home, 'iclone-os-archive', record.slug); const profile = profileSlugFor(record.inft.contract, record.inft.tokenId); const budget: CopyBudget = { files: 0, skipped: [] }; try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; } const steps: [ string, string[] ][] = [ ['git', ['init', '-q']], ['git', ['add', '-A']], ['git', [...gitId, 'commit', '-q', '--allow-empty', '-m', `archive of iNFT #${record.inft.tokenId}`]] ]; for (const [cmd, args] of steps) { const r = await opts.run(cmd, args, { cwd: dir, timeoutMs: 60000 }); if (r.code !== 0) { return { ok: false, dir, remote: null, error: `${cmd} ${args[0]} failed: ${r.stderr.trim().slice(0, 200)}` }; } } if (!github) { return { ok: true, dir, remote: null }; } const status = await runGh(['auth', 'status'], undefined, 15000); if (status.code === NOT_FOUND) { return { ok: false, dir, remote: null, error: GH_NOT_INSTALLED }; } if (status.code !== 0) { return { ok: false, dir, remote: null, error: 'GitHub CLI is not signed in — run `gh auth login`, then try again.' }; } const name = `iclone-os-archive-${record.slug}`.slice(0, 100); const created = await runGh(['repo', 'create', name, '--private', '--source', dir, '--remote', 'origin', '--push'], dir, 180000); if (created.code !== 0) { return { ok: false, dir, remote: null, error: `gh repo create failed: ${created.stderr.trim().slice(0, 200)}` }; } return { ok: true, dir, remote: created.stdout.trim().split('\n').pop() || name }; } };
+return { ghStatus: async () => { const r = await runGh(['auth', 'status'], undefined, 15000); if (r.code === NOT_FOUND) { return { ok: false, detail: GH_NOT_INSTALLED }; } return { ok: r.code === 0, detail: (r.stdout + r.stderr) .split('\n') .find(l => /Logged in|not logged/i.test(l)) ?.trim() ?? '' }; }, archive: async (record, github) => { const dir = path.join(opts.home, 'iclone-os-archive', record.slug); const profile = profileSlugFor(record.inft.contract, record.inft.tokenId); const budget: CopyBudget = { files: 0, skipped: [] }; try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(opts.hermesHome, path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(opts.root, path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; } const steps: [ string, string[] ][] = [ ['git', ['init', '-q']], ['git', ['add', '-A']], ['git', [...gitId, 'commit', '-q', '--allow-empty', '-m', `archive of iNFT #${record.inft.tokenId}`]] ]; for (const [cmd, args] of steps) { const r = await opts.run(cmd, args, { cwd: dir, timeoutMs: 60000 }); if (r.code !== 0) { return { ok: false, dir, remote: null, error: `${cmd} ${args[0]} failed: ${r.stderr.trim().slice(0, 200)}` }; } } if (!github) { return { ok: true, dir, remote: null }; } const status = await runGh(['auth', 'status'], undefined, 15000); if (status.code === NOT_FOUND) { return { ok: false, dir, remote: null, error: GH_NOT_INSTALLED }; } if (status.code !== 0) { return { ok: false, dir, remote: null, error: 'GitHub CLI is not signed in — run `gh auth login`, then try again.' }; } const name = `iclone-os-archive-${record.slug}`.slice(0, 100); const created = await runGh(['repo', 'create', name, '--private', '--source', dir, '--remote', 'origin', '--push'], dir, 180000); if (created.code !== 0) { return { ok: false, dir, remote: null, error: `gh repo create failed: ${created.stderr.trim().slice(0, 200)}` }; } return { ok: true, dir, remote: created.stdout.trim().split('\n').pop() || name }; } };
 const r = await runGh(['auth', 'status'], undefined, 15000);
 export type CommandRunner = (cmd: string, args: string[], opts: { cwd?: string; timeoutMs: number; env?: NodeJS.ProcessEnv; }) => Promise<{ code: number; stdout: string; stderr: string; }>;
 return { ok: false, detail: GH_NOT_INSTALLED };
@@ -402,7 +388,7 @@ const budget: CopyBudget = { files: 0, skipped: [] };
 fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
 fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`);
 interface CopyBudget { files: number; skipped: string[]; }
-try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; }
+try { fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); copyTree(opts.hermesHome, path.join(opts.hermesHome, 'profiles', profile), path.join(dir, 'hermes-profile'), budget); copyTree(opts.root, path.join(opts.root, 'inft', record.slug), path.join(dir, 'app-data'), budget); fs.writeFileSync(path.join(dir, 'README.md'), [ `# ${record.inft.name} — archive (NO iNFT — agent deactivated)`, '', `This is a copy of the agent's memory, profile and notes made by iclone os on ${new Date(opts.now()).toISOString()}.`, `It carries no iNFT: the token #${record.inft.tokenId} (${record.inft.chain} ${record.inft.contract}) is the only proof of ownership.`, 'Secrets were removed (keychain sign-ins never leave the Mac).', '' ].join('\n')); fs.writeFileSync(path.join(dir, 'MANIFEST.json'), `${JSON.stringify({ inft: record.inft, wallet: record.wallet, state: record.state, transfer: record.transfer, files: budget.files, leftOut: budget.skipped.slice(0, 200), createdAt: opts.now() }, null, 2)}\n`); } catch (e) { return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' }; }
 return { ok: false, dir: null, remote: null, error: e instanceof Error ? e.message : 'copy failed' };
 const steps: [ string, string[] ][] = [ ['git', ['init', '-q']], ['git', ['add', '-A']], ['git', [...gitId, 'commit', '-q', '--allow-empty', '-m', `archive of iNFT #${record.inft.tokenId}`]] ];
 steps
@@ -429,144 +415,164 @@ export function initPaneBus({ getMainWindow, isTrustedSender, findOnPath }: Init
 
 == iclone-pane-bus/ipc.ts runTmux 5eb21e90cf4b [forward]
 execFile(tmux, args, { timeout: 3000 }, (error, stdout, stderr) => resolve({ ok: !error, out: String(error ? stderr || error.message : stdout) }))
-
 == iclone-pane-remote/probe.ts branchOf 7b9b8b453317 [git]
 run('git', ['-C', cwd, 'rev-parse', '--abbrev-ref', 'HEAD'], GIT_TIMEOUT_MS)
-
 == iclone-pane-remote/probe.ts portsByPane 138e11af29e9 [system]
 run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn'], LSOF_TIMEOUT_MS)
-
 == iclone-pane-remote/probe.ts portsByPane e00312dd06fd [system]
 run('ps', ['-A', '-o', 'pid=,ppid='], LSOF_TIMEOUT_MS)
-
 == iclone-pane-remote/probe.ts runFile 3a4016461683 [forward]
 execFile(file, [...args], { timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024 }, (error, stdout) => resolve(error ? '' : String(stdout)))
-
 == iclone-runtime-integrity.test-helpers.ts canBuildPinnedArtifact fb0094303dd8 [harness]
 spawnSync(candidate, ['-I', '-c', 'import platform;print(platform.python_version())'], { encoding: 'utf8' })
 const candidate = process.env.ICLONE_RUNTIME_PY;
-
 == iclone-runtime-integrity.test-helpers.ts runtimeFixture efa4a6634f5a [harness]
 import(BUILDER)
 const BUILDER = pathToFileURL(path.resolve(__dirname, '../scripts/runtime-artifact.mjs')).href;
-
+== iclone-setup.ts actOnSetupSystemItem 43456230c51f [open]
+seam.openExternal(CUA_DRIVER_PANES[raw.item])
+export const CUA_DRIVER_PANES = { 'cua:accessibility': `${PRIVACY}_Accessibility`, 'cua:screen': `${PRIVACY}_ScreenCapture` } as const;
+const PRIVACY = 'x-apple.systempreferences:com.apple.preference.security?Privacy';
+const raw = (input ?? {}) as { item?: unknown; title?: unknown; body?: unknown; };
+== iclone-setup.ts actOnSetupSystemItem 5a04eef0f056 [open]
+seam.openExternal(SETUP_PANES[item])
+export const SETUP_PANES: Readonly<Record<SetupSystemItem, string>> = { microphone: `${PRIVACY}_Microphone`, screen: `${PRIVACY}_ScreenCapture`, notifications: 'x-apple.systempreferences:com.apple.preference.notifications' };
+const PRIVACY = 'x-apple.systempreferences:com.apple.preference.security?Privacy';
+const item = raw.item;
+const raw = (input ?? {}) as { item?: unknown; title?: unknown; body?: unknown; };
 == iclone-updates.ts git d14653fa0201 [git]
 execFile('git', args, { cwd, env, maxBuffer: 8 * 1024 * 1024, timeout }, (error, stdout, stderr) => { if (!error) { resolve(stdout.trim()); return; } const said = String(stderr ?? '') .split('\n') .map(line => line.trim()) .filter(Boolean) .slice(0, 2) .join(' '); const why = error.killed ? `timed out after ${Math.round(timeout / 1000)} s` : said; reject(new Error(why ? `git ${args[0]}: ${why}` : error.message)); })
-
 == install-liveness.ts sampleTreeCpu 0477ad2ee9dc [system]
 execFile('/bin/ps', ['-A', '-o', 'pid=,ppid=,time='], { timeout: 4000, maxBuffer: 8 * 1024 * 1024 }, (error, stdout) => resolve(error ? null : treeCpuFromPs(String(stdout), root)))
-
 == lib/git.ts runGit 7f44c977b1e0 [git]
 spawn(options.bin ?? 'git', gitArgv(args, options.platform), { cwd: options.cwd, env: gitEnv(options.env), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
 export interface RunGitOptions { bin?: string | undefined; cwd?: string | undefined; env?: NodeJS.ProcessEnv | undefined; timeoutMs?: number | undefined; maxBuffer?: number | undefined; onOutput?: ((stream: GitStream, text: string) => void) | undefined; platform?: NodeJS.Platform | undefined; }
-
 == main.ts openExternal b294026502a3 [open]
 shell.openExternal(url)
-
 == main.ts openFile d08ce94bb111 [open]
 shell.openPath(file)
-
 == main/agent-runtime-status.ts openAgentRuntimeFix 207102cfebbd [open]
 shell.openExternal(SYSTEM_SETTINGS_PANES[fix])
 const SYSTEM_SETTINGS_PANES: Record<'open-network-settings' | 'open-storage-settings', string> = { 'open-network-settings': 'x-apple.systempreferences:com.apple.Network-Settings.extension', 'open-storage-settings': 'x-apple.systempreferences:com.apple.settings.Storage' };
-
 == main/agent-update.ts applyAgentUpdate 34b4eb53b70b [update]
 spawnUpdaterProcess('/bin/bash', args, { cwd: HERMES_HOME, detached: true, env: { ...process.env, HERMES_HOME }, stdio: 'ignore' })
-
 == main/agent-update.ts applyAgentUpdate c619d79d6cb6 [update]
 ensureFullPreUpdateBackup({ hermesBin, hermesHome: HERMES_HOME, log: rememberLog, readConfig: file => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } }, run: spawnCapped })
 await ensureFullPreUpdateBackup({ hermesBin, hermesHome: HERMES_HOME, log: rememberLog, readConfig: file => { try { return fs.readFileSync(file, 'utf8'); } catch { return null; } }, run: spawnCapped });
-
 == main/agent-update.ts lsRemote 7d342b4ec8bc [git]
 runGit(lsRemoteArgv(), { cwd, env, maxBuffer: 1 << 20, timeoutMs })
 return runGit(lsRemoteArgv(), { cwd, env, maxBuffer: 1 << 20, timeoutMs });
-
 == main/backend-ownership.ts backendCommandForPid 5d7a3086277f [system]
 execText(command, args)
 const command = IS_WINDOWS ? 'powershell.exe' : 'ps';
-
 == main/backend-ownership.ts forceKillProcessTree 730b8d217e10 [system]
 execFileSync('taskkill', ['/PID', String(pid), '/T', '/F'], hiddenWindowsChildOptions({ stdio: 'ignore' }))
-
 == main/backend-pool.ts handOffWindowsBootstrapRecovery ab5fbb15f9a7 [update]
 spawnUpdaterProcess(updater, updaterArgs, { cwd: HERMES_HOME, env: { ...process.env, HERMES_HOME, PATH: pathWithHermesManagedNode(venvBin) }, detached: true, stdio: 'ignore' })
 const updater = resolveUpdaterBinary();
-
 == main/connection-config-ipc.ts openExternal b294026502a3 [open]
 shell.openExternal(url)
-
-== main/setup-ipc.ts openExternal b294026502a3 [open]
-shell.openExternal(url)
-
 == main/connections-ipc.ts registerConnectionsIpc 8aa3edff8ac7 [ssh]
 spawn(ssh, ['-G', '--', value], hiddenWindowsChildOptions({ stdio: ['ignore', 'pipe', 'pipe'] }))
 const ssh = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe') : 'ssh';
-
 == main/executables.ts backendSupportsServe 0d1c893b6526 [forward]
 execProbeSync(backend.command, [...isolation, ...prefix, 'serve', '--help'], { cwd: backend.root || undefined, env: { ...isolatePythonEnv({ ...process.env, HERMES_HOME, ...(backend.env || {}) }, backend.root || path.sep), ...pycacheEnv(NO_BYTECODE_PREFIX) }, timeout: PROBE_TIMEOUT_MS, stdio: 'ignore', shell: Boolean(backend.shell), windowsHide: true })
 const isolation = prefix.length ? PYTHON_ISOLATION_FLAGS : [];
 const prefix = backend.args && backend.args[0] === '-m' ? backend.args.slice(0, 2) : [];
-
 == main/executables.ts findSystemPython 1737b10074ff [probe]
 execFileSync(pyExe, [`-${version}`, '-c', 'import sys; print(sys.executable)'], hiddenWindowsChildOptions({ encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: PROBE_TIMEOUT_MS }))
 const pyExe = findOnPath('py.exe');
-
 == main/executables.ts findSystemPython ec1624828de8 [system]
 execFileSync('reg', ['query', `${hive}\\SOFTWARE\\Python\\PythonCore\\${version}\\InstallPath`, '/ve', '/reg:64'], hiddenWindowsChildOptions({ encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 }))
-
 == main/executables.ts getBackendArgsForRuntime bcacf7675e2c [forward]
 backendSupportsServe(backend)
-
 == main/executables.ts runResolvedGit 9dd9043bc6d4 [git]
 runGit(args, { ...options, bin: resolveGitBinary() })
 return runGit(args, { ...options, bin: resolveGitBinary() });
-
 == main/iclone-gate.ts ensureIcloneGate 742b35327c36 [gate]
 ensureIcloneHermesPlugins({ activeRoot: managedHermesRuntimeRoot(), devOverlayRoot: devPluginOverlayRoot(), devRoots: devBackendRoots(), pin: managedRuntimePin(), backend: options.backend, baseEnv: process.env, confinement: options.confinement, cwd: options.cwd, hermesHome: HERMES_HOME, log: rememberLog, probe, profile: options.profile, pycacheRoot: hermesPycacheRoot(), source: () => loadPluginSource({ packaged: app.isPackaged, repoRoot: SOURCE_REPO_ROOT, resourcesPath: (process as { resourcesPath?: string; }).resourcesPath ?? '' }) })
 return ensureIcloneHermesPlugins({ activeRoot: managedHermesRuntimeRoot(), devOverlayRoot: devPluginOverlayRoot(), devRoots: devBackendRoots(), pin: managedRuntimePin(), backend: options.backend, baseEnv: process.env, confinement: options.confinement, cwd: options.cwd, hermesHome: HERMES_HOME, log: rememberLog, probe, profile: options.profile, pycacheRoot: hermesPycacheRoot(), source: () => loadPluginSource({ packaged: app.isPackaged, repoRoot: SOURCE_REPO_ROOT, resourcesPath: (process as { resourcesPath?: string; }).resourcesPath ?? '' }) });
 function ensureIcloneGate(options: { backend: SpawnBackend; confinement: boolean; cwd: string; profile: null | string; }): Promise<GateReport> { return ensureIcloneHermesPlugins({ activeRoot: managedHermesRuntimeRoot(), devOverlayRoot: devPluginOverlayRoot(), devRoots: devBackendRoots(), pin: managedRuntimePin(), backend: options.backend, baseEnv: process.env, confinement: options.confinement, cwd: options.cwd, hermesHome: HERMES_HOME, log: rememberLog, probe, profile: options.profile, pycacheRoot: hermesPycacheRoot(), source: () => loadPluginSource({ packaged: app.isPackaged, repoRoot: SOURCE_REPO_ROOT, resourcesPath: (process as { resourcesPath?: string; }).resourcesPath ?? '' }) }); }
-
+== main/iclone-gate.ts prepareHermesSpawn 7cfe24a437c3 [forward]
+runtimeFacts({ command, cwd: options.cwd, paySocket: options.role === 'primary' ? path.join(app.getPath('userData'), 'run', PAY_SOCKET_NAME) : null, permissions: permissions.env, pluginsDir: report.env.HERMES_BUNDLED_PLUGINS ?? null, pycacheDir: prefix, runtimeRoot: report.runtimeRoot, tmpDir: runtimeTmp, webDist: options.webDist })
+facts = await runtimeFacts({ command, cwd: options.cwd, paySocket: options.role === 'primary' ? path.join(app.getPath('userData'), 'run', PAY_SOCKET_NAME) : null, permissions: permissions.env, pluginsDir: report.env.HERMES_BUNDLED_PLUGINS ?? null, pycacheDir: prefix, runtimeRoot: report.runtimeRoot, tmpDir: runtimeTmp, webDist: options.webDist });
+let facts: RuntimeSpawnFacts;
+export async function prepareHermesSpawn(options: { backend: SpawnBackend; cwd: string; profile: null | string; role: HermesSpawnRole; webDist?: string; }): Promise<PreparedHermesSpawn> { if (options.role === 'external-terminal') { throw new IcloneGateError('a Hermes opened in another terminal app is not started by icloneOS, so it cannot receive its permission key. Continue this chat in icloneOS.'); } const confinementEnv = confinementSpawnEnv(); const runtimeConfined = confinementEnv.ICLONE_RUNTIME_CONFINED === '1'; const layer = runtimeConfined ? currentConfinement() : null; const settingsRefusal = homeSettingsRefusal(profileHermesHome(HERMES_HOME, options.profile), { doing: 'start', linksOutsideRefused: runtimeConfined, root: HERMES_HOME }); if (settingsRefusal) { rememberLog(`[home-settings] ${settingsRefusal}`); throw new Error(settingsRefusal); } if (runtimeConfined) { if (!layer?.runtimeConfined()) { throw new IcloneGateError('confinement is on but its runtime layer is not ready, so the agent was not started'); } if (!options.backend.command) { throw new IcloneGateError('the agent runtime has no interpreter to confine, so it was not started'); } const refusal = layer.interpreterRefusal(options.backend.command); if (refusal) { throw new IcloneGateError(`the agent runtime's interpreter is not trusted to run outside the sandbox (${refusal}), so the agent was not started`); } } let integrity: Awaited<ReturnType<typeof ensureRuntimeIntegrity>> | null = null; if (options.backend.root) { const resources = (process as { resourcesPath?: string; }).resourcesPath; integrity = await checkRuntimeIntegrity(options.backend.root, resources); } const report = await ensureIcloneGate({ backend: options.backend, confinement: confinementEnv.ICLONE_CONFINEMENT === '1', cwd: options.cwd, profile: options.profile }); const permissions = permissionsSpawn(path.join(app.getPath('userData'), 'run')); if (options.role !== 'primary' && !permissions.keyLine) { throw new IcloneGateError(`icloneOS could not issue a permission key for the agent of profile "${options.profile ?? 'default'}", so it was not started`); } const shippedBytecode = integrity?.action === 'verified' || integrity?.action === 'repaired'; let prefix: null | string = null; if (!shippedBytecode) { try { prefix = freshPycachePrefix(hermesPycacheRoot(), 'spawn'); } catch (error) { throw new IcloneGateError(`the app's Python bytecode cache could not be prepared (${(error as Error).message})`); } } let wrap: ((command: string, args: readonly string[]) => { args: string[]; command: string; }) | null = null; let releaseLauncher: (() => Promise<void>) | null = null; let runtimeTmp: null | string = null; if (runtimeConfined && layer && options.backend.command) { const command = options.backend.command; let facts: RuntimeSpawnFacts; try { runtimeTmp = layer.runtimeTmpDir(); facts = await runtimeFacts({ command, cwd: options.cwd, paySocket: options.role === 'primary' ? path.join(app.getPath('userData'), 'run', PAY_SOCKET_NAME) : null, permissions: permissions.env, pluginsDir: report.env.HERMES_BUNDLED_PLUGINS ?? null, pycacheDir: prefix, runtimeRoot: report.runtimeRoot, tmpDir: runtimeTmp, webDist: options.webDist }); layer.runtimeSpawn(confinedInterpreter(command), [], facts); } catch (error) { throw new IcloneGateError(`the agent runtime's confinement profile could not be built (${(error as Error).message}), so it was not started`); } refuseWhileQuitting('the confinement launcher'); releaseLauncher = layer.leaseLauncher(); const launcher = await layer.ensureLauncher(report.runtimeRoot, facts); if (launcher !== 'up') { rememberLog('[confinement] the launcher is not answering: Hermes starts confined and its commands are refused until it is back'); } wrap = (target, args) => { const launch = layer.runtimeSpawn(confinedInterpreter(target), args, facts); return { command: launch.command, args: launch.args }; }; } const gateEnv: Record<string, string> = { ...permissions.env, ...confinementEnv, ...(prefix === null ? shippedBytecodeEnv() : pycacheEnv(prefix)), ...report.env, ...(runtimeTmp === null ? {} : { TMPDIR: `${runtimeTmp}/` }) }; const role = options.role; const isolated = (args: readonly string[]) => [ ...PYTHON_ISOLATION_FLAGS, ...(prefix === null ? CHECKED_BYTECODE_FLAGS : []), ...args ]; return { command: command => (wrap ? wrap(command, []).command : command), argv: (args, command) => (wrap && command !== undefined ? wrap(command, isolated(args)).args : isolated(args)), seal: composed => sealHermesSpawnEnv(composed, { gateEnv, role, runtimeRoot: report.runtimeRoot }), stdio: GATED_STDIO, attach: child => { child.once('exit', () => { if (prefix !== null) { releasePycachePrefix(prefix); } void releaseLauncher?.(); }); const keyPipe = child.stdio[3]; if (keyPipe && 'end' in keyPipe) { keyPipe.on('error', () => undefined); keyPipe.end(permissions.keyLine ?? ''); } permissions.attach(child); }, report }; }
+const confinementEnv = confinementSpawnEnv();
+const runtimeConfined = confinementEnv.ICLONE_RUNTIME_CONFINED === '1';
+const layer = runtimeConfined ? currentConfinement() : null;
+const settingsRefusal = homeSettingsRefusal(profileHermesHome(HERMES_HOME, options.profile), { doing: 'start', linksOutsideRefused: runtimeConfined, root: HERMES_HOME });
+const layer = { paths, refusals, backend: (id: ConfinementBackendId) => backends[id], active: () => backends[settings().backend], settings, setBackend(id: ConfinementBackendId): void { writeSettings(settingsDir, { ...settings(), backend: id }, sealedKey.key); }, setEnabled(enabled: boolean): void { turnedOnThisSession = enabled; writeSettings(settingsDir, { ...settings(), enabled }, sealedKey.key); }, settingsPersist: (): boolean => sealedKey.persistent, runtimeConfined, ensureLauncher, publishLauncherPolicy: launcherPolicy.publish, seatbeltOff: (): boolean => (deps.platform ?? process.platform) === 'darwin' && !settings().enabled, oneShotAvailable(cwd: string): boolean { return oneShotFolder(cwd) !== null && fs.existsSync(launcherSocketFile(deps.userDataDir)); }, issueOneShot(command: string, cwd: string): boolean { return oneShots.issue(command, cwd); }, oneFileAvailable(file: string, home: string, ask: { link?: string | null; ignore?: boolean; } = {}): boolean { return (oneShotRoute(file, home, oneFileRules(), { by: ask.ignore ? 'ignore' : undefined, link: ask.link }) && fs.existsSync(launcherSocketFile(deps.userDataDir))); }, oneFileLinkTarget, issueOneFile(file: string, home: string, by?: 'ignore', link?: string | null): boolean { return oneShots.issueFile(file, home, oneFileRules(), by, link); }, issueOneRead(file: string, home: string, by?: 'ignore', link?: string | null): boolean { return oneShots.issueRead(file, home, oneFileRules(), by, link); }, oneFileRuns(file: string, home: string): boolean { const spec = profiles[0]?.spec; return spec ? fileRunsOrHoldsKeys(file, spec, home) : false; }, passFolder(pass: LauncherPass & { readonly shown: boolean; readonly grantId?: string | null; }): void { launcherPolicy.noteAllowedAsk(pass); }, noteProject: launcherPolicy.noteProject, interpreterRefusal(command: string): string | null { const trust = judgeHelperInterpreter(paths, command, launcherFacts); return trust.trusted ? null : trust.reason; }, helperInterpreter, leaseLauncher(): () => Promise<void> { const lease = (nextLease += 1); leases.add(lease); return () => { if (!leases.delete(lease) || leases.size > 0) { return Promise.resolve(); } runtimeProfile = null; return stopLauncher(); }; }, stopLauncher, launcherState(): 'down' | 'off' | 'up' { if (!runtimeConfined()) { return 'off'; } return launcher?.state() ?? 'down'; }, launcherSince(): null | number { return launcher?.state() === 'up' ? launcherStartedAt : null; }, runtimeView(): RuntimeView | null { if (!runtimeConfined() || !runtimeProfile) { return null; } const { reads, writes, denied } = runtimeProfile.view; return { profileSha: runtimeProfile.sha256, reads: [...reads], writes: [...writes], denied: [...denied] }; }, runtimeTmpDir(): string { const dir = runtimeTmpFolder(paths.scratchRoot); fs.mkdirSync(dir, { recursive: true, mode: 0o700 }); const stat = fs.lstatSync(dir); if (!stat.isDirectory() || (typeof process.getuid === 'function' && stat.uid !== process.getuid())) { throw new Error('the runtime temp folder is not a directory of this user'); } chmodFolderInRoot(path.dirname(dir), dir, 0o700); return realOrSelf(dir); }, runtimeSpawn(command: string, args: readonly string[], facts: RuntimeSpawnFacts): RuntimeLaunch { const params = requiredRuntimeParams(paths, facts); const links = interpreterLinks(paths, [...new Set([command, facts.python])], facts); const trust = judgeHelperInterpreter(paths, command, facts); if (!trust.trusted) { throw new Error(`the agent runtime's interpreter is not trusted: ${trust.reason}`); } if (!runtimeText || runtimeTextLinks !== links.join('\n')) { runtimeText = generateRuntimeProfile(paths, { links }); runtimeTextLinks = links.join('\n'); } const profile = runtimeText; const [head, flag, text, ...rest] = runtimeSandboxArgv(profile, params, command, args); if (head !== SANDBOX_EXEC_PATH || flag !== '-p' || text !== profile.text) { throw new Error('the runtime profile did not produce a sandbox-exec launch'); } runtimeProfile = profile; spawnPython = command; return { command: head, args: [flag, text, ...rest], profile }; }, regenerate(): Promise<void> { profiles = generateProfiles(paths); return restartLauncher(); }, profiles: () => profiles, scan, async state(): Promise<ConfinementStateView> { const current = settings(); const [snapshot, ...statuses] = await Promise.all([scan(), probe('seatbelt'), probe('container')]); const disk = profilesOnDisk(profiles); const events = readRunEvents(ledgerFiles); const starts = runStarts(events); const specs = profiles.map(profile => profile.spec); const explained = explainRefusals(refusals.recent(RUN_REFUSALS_WINDOW), specs, starts, current.defaultClass); if (snapshot.verified && now().getTime() - lastSweep > SWEEP_EVERY_MS) { lastSweep = now().getTime(); const live = membersOf(snapshot); sweepTokens(paths.membersDir, live, lastSweep); refusals.sweepRuns(lastSweep, [ ...starts.keys(), ...[...live.values()].filter((run): run is string => run !== null) ]); } const listed = capRuns(foldAllRuns({ nowMs: snapshot.readAtMs ?? now().getTime(), events, rows: snapshot.rows, verified: snapshot.verified, refusals: refusals.runCounts(starts.keys()) })); return foldState({ now: now(), backend: current.backend, enabled: current.enabled, settingsPersist: sealedKey.persistent, defaultClass: current.defaultClass, backends: statuses, profiles: profiles.map(profileView), known: [...profiles.map(knownProfile), ...disk.variants], tampered: disk.tampered, rows: snapshot.rows, verified: snapshot.verified, membership: snapshot.probe, hermesPids: deps.hermesPids(), primaryPid: deps.primaryPid?.(), pluginAckPids: readAckPids(ackFile), pluginCommands: readAckCommands(ackFile), audit: deps.audit(), refusals: explained.slice(0, REFUSALS_LISTED), hardlinks: blockedProjects(), notes: [...(settingsIgnored ? [{ code: 'settings-ignored' } as const] : []), ...appearedNotes()], runs: listed.runs, runsCut: listed.cut, runtimeProfile: deps.runtime ? deps.runtime() : layer.runtimeView(), launcher: deps.launcher ? deps.launcher() : layer.launcherState(), darwin: (deps.platform ?? process.platform) === 'darwin' }); }, async kill(pid: number): Promise<KillResultView> { const snapshot = await scan(); for (const backend of Object.values(backends)) { if (backend.list(snapshot).some(item => item.pid === pid)) { return backend.kill(pid); } } return { ok: false, pid, reason: 'not-confined', survivors: [], error: 'not a confined process' }; }, async stopRun(run: string): Promise<StopRunResultView> { if (!isRunToken(run)) { return { ok: false, run: '', reason: 'invalid', survivors: [], error: 'invalid run' }; } const snapshot = await scan().catch((error: unknown) => { log(`[confinement] the scan for the stop of ${run} failed: ${String(error)}`); return null; }); if (!snapshot?.verified) { return { ok: false, run, reason: 'unverified', survivors: [], error: 'the kernel could not be asked which processes belong to this run' }; } const own = snapshot.rows.filter(row => row.run === run); const adopted = orphanOwners({ events: readRunEvents(ledgerFiles), nowMs: snapshot.readAtMs ?? now().getTime(), rows: snapshot.rows, verified: true }).owners.get(run) ?? []; const members = [...own, ...adopted].sort((a, b) => b.elapsedSec - a.elapsedSec); const backend = Object.values(backends).find(item => item.list(snapshot).some(process => members.some(member => member.pid === process.pid))); if (members.length === 0) { const group = outsideGroupOf(readRunEvents(ledgerFiles), run); if (group !== undefined && outsideGroupMembers(group, snapshot.rows).length > 0 && !snapshot.rows.some(row => row.pid === process.pid && row.pgid === group)) { return stopOutsideGroup(run, group); } } if (members.length === 0 || !backend) { return { ok: false, run, reason: 'not-running', survivors: [], error: 'no process of this run is alive' }; } const pressedAt = now().toISOString(); const recordStop = (outcome?: 'failed') => { try { appendStop(ledgerFiles.stopsFile, run, pressedAt, outcome); } catch (error) { log(`[confinement] could not record the stop of ${run}: ${String(error)}`); } }; recordStop(); const listed = new Set(backend.list(snapshot).map(process => process.pid)); const target = members.find(member => listed.has(member.pid)) as (typeof members)[number]; const result = await backend.kill(target.pid).catch((error: unknown) => { log(`[confinement] the kill of ${run} failed: ${String(error)}`); return { ok: false as const, pid: target.pid, reason: 'survivors' as const, survivors: members.map(member => member.pid), error: String(error) }; }); const killed = result.ok ? [...result.killed] : []; const survivors = result.ok ? [] : [...result.survivors]; let failure = result.ok ? null : result; for (const other of adopted.filter(row => row.pid !== target.pid)) { const answer = await backend.kill(other.pid).catch((error: unknown) => ({ ok: false as const, pid: other.pid, reason: 'survivors' as const, survivors: [other.pid], error: String(error) })); if (answer.ok) { killed.push(...answer.killed); } else if (answer.reason !== 'not-confined') { survivors.push(...answer.survivors); failure = failure ?? answer; } } if (failure) { recordStop('failed'); return { ok: false, run, reason: failure.reason, survivors, error: failure.error }; } return { ok: true, run, killed }; }, async acknowledgeHardlink(root: string, dir: string, digest: string): Promise<HardlinkAckResultView> { const result = await hardlinks.acknowledgeGroup(root, dir, digest); measuredAt.delete(root); return result.ok ? { ok: true, dir: result.dir, count: result.count } : result; }, async explain(pid: number): Promise<string[]> { return backends[settings().backend].explain(pid, await scan()); }, spawnEnv(): Record<string, string> { const current = settings(); if ((deps.platform ?? process.platform) !== 'darwin') { return {}; } if (!current.enabled) { return { ICLONE_CONFINEMENT: 'off' }; } sweepAcks(ackFile); return { ICLONE_CONFINEMENT: '1', ICLONE_CONFINEMENT_DIR: paths.profilesDir, ICLONE_CONFINEMENT_CLASS: current.defaultClass, ICLONE_CONFINEMENT_SPEC: pluginSpec(paths, profiles, storeRoots), ICLONE_CONFINEMENT_ACK: ackFile, ICLONE_CONFINEMENT_LINK_KEY: hardlinks.keyHex(), TERMINAL_ENV: HERMES_BACKEND_NAME[current.backend], ICLONE_CONFINEMENT_LAUNCHER: launcherSocket, ICLONE_RUNTIME_CONFINED: '1', ...gitIdentityEnv(deps.gitIdentity ? deps.gitIdentity() : readGlobalGitIdentity(deps.home, process.env.XDG_CONFIG_HOME)) }; } };
+interface SpawnBackend { command?: null | string; env?: Record<string, string | undefined>; root?: null | string; }
+const refusal = layer.interpreterRefusal(options.backend.command);
+let integrity: Awaited<ReturnType<typeof ensureRuntimeIntegrity>> | null = null;
+const resources = (process as { resourcesPath?: string; }).resourcesPath;
+const report = await ensureIcloneGate({ backend: options.backend, confinement: confinementEnv.ICLONE_CONFINEMENT === '1', cwd: options.cwd, profile: options.profile });
+const permissions = permissionsSpawn(path.join(app.getPath('userData'), 'run'));
+interface PermissionsSpawn { env: Record<string, string>; keyLine: string | null; attach: (child: SpawnedChild) => void; }
+const shippedBytecode = integrity?.action === 'verified' || integrity?.action === 'repaired';
+export interface IntegrityReport { action: 'repaired' | 'skipped' | 'verified' | 'verified-checkout'; files: number; ms: number; repaired?: string[]; }
+let prefix: null | string = null;
+try { prefix = freshPycachePrefix(hermesPycacheRoot(), 'spawn'); } catch (error) { throw new IcloneGateError(`the app's Python bytecode cache could not be prepared (${(error as Error).message})`); }
+let wrap: ((command: string, args: readonly string[]) => { args: string[]; command: string; }) | null = null;
+let releaseLauncher: (() => Promise<void>) | null = null;
+let runtimeTmp: null | string = null;
+const command = options.backend.command;
+export interface GateReport { env: Record<string, string>; loaded: string[]; mode: RuntimeMode['kind']; ms: number; plugins: PluginOutcome[]; runtimeRoot: string; }
+try { runtimeTmp = layer.runtimeTmpDir(); facts = await runtimeFacts({ command, cwd: options.cwd, paySocket: options.role === 'primary' ? path.join(app.getPath('userData'), 'run', PAY_SOCKET_NAME) : null, permissions: permissions.env, pluginsDir: report.env.HERMES_BUNDLED_PLUGINS ?? null, pycacheDir: prefix, runtimeRoot: report.runtimeRoot, tmpDir: runtimeTmp, webDist: options.webDist }); layer.runtimeSpawn(confinedInterpreter(command), [], facts); } catch (error) { throw new IcloneGateError(`the agent runtime's confinement profile could not be built (${(error as Error).message}), so it was not started`); }
+const launcher = await layer.ensureLauncher(report.runtimeRoot, facts);
+const launch = layer.runtimeSpawn(confinedInterpreter(target), args, facts);
+return { command: launch.command, args: launch.args };
+export interface RuntimeLaunch { command: string; args: string[]; profile: RuntimeProfile; }
+const gateEnv: Record<string, string> = { ...permissions.env, ...confinementEnv, ...(prefix === null ? shippedBytecodeEnv() : pycacheEnv(prefix)), ...report.env, ...(runtimeTmp === null ? {} : { TMPDIR: `${runtimeTmp}/` }) };
+const role = options.role;
+const isolated = (args: readonly string[]) => [ ...PYTHON_ISOLATION_FLAGS, ...(prefix === null ? CHECKED_BYTECODE_FLAGS : []), ...args ];
+return { command: command => (wrap ? wrap(command, []).command : command), argv: (args, command) => (wrap && command !== undefined ? wrap(command, isolated(args)).args : isolated(args)), seal: composed => sealHermesSpawnEnv(composed, { gateEnv, role, runtimeRoot: report.runtimeRoot }), stdio: GATED_STDIO, attach: child => { child.once('exit', () => { if (prefix !== null) { releasePycachePrefix(prefix); } void releaseLauncher?.(); }); const keyPipe = child.stdio[3]; if (keyPipe && 'end' in keyPipe) { keyPipe.on('error', () => undefined); keyPipe.end(permissions.keyLine ?? ''); } permissions.attach(child); }, report };
+export const GATED_STDIO: [ 'ignore', 'pipe', 'pipe', 'pipe' ] = ['ignore', 'pipe', 'pipe', 'pipe'];
+const keyPipe = child.stdio[3];
 == main/iclone-gate.ts probe 40c9200fcb97 [forward]
 execFile(command, args, hiddenWindowsChildOptions({ ...options, maxBuffer: PROBE_MAX_BUFFER, timeout: PROBE_TIMEOUT_MS }), (error, stdout, stderr) => { if (error) { const tail = String(stderr || '') .trim() .split('\n') .slice(-3) .join(' | '); reject(new Error(tail ? `${error.message.split('\n')[0]}: ${tail}` : error.message)); } else { resolve(String(stdout)); } })
 const PROBE_MAX_BUFFER = 1024 * 1024;
 const PROBE_TIMEOUT_MS = 30000;
 const tail = String(stderr || '') .trim() .split('\n') .slice(-3) .join(' | ');
-
+== main/iclone-gate.ts runtimeFacts 0e1a1b7fe2d0 [probe]
+probe(input.command, ['-I', '-S', '-c', PREFIX_PROBE], { cwd: input.cwd, env: { LANG: 'C', PATH: LAUNCHER_PATH } })
+const PREFIX_PROBE = 'import os, sys; print(os.path.realpath(sys.prefix)); print(os.path.realpath(sys.base_prefix))';
 == main/link-metadata.ts fetchHtmlTitleWithCurl a2d3ee32acc7 [system]
 spawn('curl', args, hiddenWindowsChildOptions({ stdio: ['ignore', 'pipe', 'ignore'] }))
-
 == main/managed-ssh-update.ts spawnPoolBackend 6e63cde75e03 [probe]
 getBackendArgsForRuntime(backend)
 const backend = await ensureRuntime(resolveHermesBackend(backendArgs));
 const backendArgs = ['--profile', profile, 'serve', '--host', '127.0.0.1', '--port', '0'];
-
 == main/managed-ssh.ts effectiveSshConfigFingerprint 9393441b0e20 [ssh]
 execText(ssh, args, { timeout: 10000 })
 const ssh = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe') : 'ssh';
-
+== main/setup-ipc.ts freshScreenStatus 4cd1c91a97a7 [system]
+execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', SCREEN_PREFLIGHT_JXA], { timeout: 4000, env: { PATH: '/usr/bin:/bin' } }, (error, stdout) => resolve(error ? null : parseScreenPreflight(String(stdout))))
+== main/setup-ipc.ts openExternal b294026502a3 [open]
+shell.openExternal(url)
 == main/shell-open.ts ensureWslWindowsFonts bd5331b11ff9 [system]
 spawn('fc-cache', ['-f', fontsDir], { detached: true, stdio: 'ignore' })
-
 == main/shell-open.ts openExternalUrl c41e3434fc1c [open]
 shell.openExternal(url)
 const url = parsed.toString();
 let parsed;
-
+== main/shell-open.ts openExternalUrl c41e3434fc1c [open]
+shell.openExternal(url)
+const url = parsed.toString();
+let parsed;
 == main/shell-open.ts openExternalUrl fb845614ceed [system]
 spawn('cmd.exe', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore', windowsHide: true })
-
 == main/shell-open.ts openExternalUrl fdea688b7613 [open]
 shell .openPath(decision.path)
 const decision = decideFileOpen(localPath, 'open');
 let localPath;
 export type FileOpenDecision = { action: 'open'; path: string; type: string; } | { action: 'reveal'; reason: string; };
-
 == main/shell-open.ts openPreviewInBrowser b197a64cfce8 [open]
 shell.openExternal(pathToFileURL(decision.path).toString())
 const decision = decideFileOpen(localPath, 'browser');
 let localPath;
 export type FileOpenDecision = { action: 'open'; path: string; type: string; } | { action: 'reveal'; reason: string; };
-
 == main/start-hermes.ts connectionPromise 82a5b4c26962 [probe]
 getBackendArgsForRuntime(backend)
 const backend = setup.backend;
@@ -576,7 +582,6 @@ let attemptedRemote = managedPrimaryRestoreOwners.size > 0 || primaryBackendIsRe
 const primaryProfile = primaryProfileKey();
 return resolveRemoteBackend(primaryProfile, { primary: true });
 type PrimaryBackendStartupResult<RuntimeBackend, Connection> = { kind: 'local'; backend: RuntimeBackend; } | { kind: 'remote'; connection: Connection; };
-
 == main/update-apply.ts applyUpdates 3d263fca6807 [update]
 spawnUpdaterProcess(wrapped.command, wrapped.args, { cwd: HERMES_HOME, env: { ...process.env, HERMES_HOME, HERMES_UPDATE_STARTED_AT: String(updateStartedAt), PATH: pathWithHermesManagedNode(venvBin) }, detached: true, stdio: 'ignore' })
 const wrapped = wrapHandoffForDetachedConsole(scriptHandoff, [ '-InstallRoot', updateRoot, '-Branch', branch, '-DesktopPid', String(process.pid), '-RelaunchExe', process.execPath ]);
@@ -588,58 +593,47 @@ return { branch: branch || DEFAULT_UPDATE_BRANCH };
 export function wrapHandoffForDetachedConsole(handoff: UpdateScriptHandoff, extraArgs: string[]): { command: string; args: string[]; } { return { command: 'cmd.exe', args: ['/d', '/s', '/c', 'start', '', '/min', handoff.command, ...handoff.args, ...extraArgs] }; }
 return { command: 'cmd.exe', args: ['/d', '/s', '/c', 'start', '', '/min', handoff.command, ...handoff.args, ...extraArgs] };
 interface UpdateScriptHandoff { command: string; args: string[]; scriptPath: string; }
-
 == main/update-apply.ts applyUpdates ab5fbb15f9a7 [update]
 spawnUpdaterProcess(updater, updaterArgs, { cwd: HERMES_HOME, env: { ...process.env, HERMES_HOME, PATH: pathWithHermesManagedNode(venvBin) }, detached: true, stdio: 'ignore' })
 const updater = resolveUpdaterBinary();
-
 == main/updates-ipc.ts probeUninstallSummary d1e941024f50 [uninstall]
 spawn(py, ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary'], hiddenWindowsChildOptions({ cwd: agentRoot, env: { ...process.env, HERMES_HOME, NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'ignore'] }))
 const py = uninstallVenvPython();
-
 == main/updates-ipc.ts runDesktopUninstall d711e200f684 [uninstall]
 spawn(runner, runnerArgs, { detached: true, stdio: 'ignore', windowsHide: true })
 let runner;
-
 == main/updates.ts applyUpdatesPosixHandoff d6cb4f290088 [update]
 spawnUpdaterProcess(handoff.command, args, { cwd: HERMES_HOME, env: { ...process.env, HERMES_HOME, HERMES_UPDATE_STARTED_AT: String(updateStartedAt), PATH: pathWithHermesManagedNode(path.join(updateRoot, 'venv', 'bin')) }, detached: true, stdio: 'ignore' })
 const handoff = resolvePosixScriptHandoff(updateRoot);
 const updateRoot = resolveUpdateRoot();
 interface UpdateScriptHandoff { command: string; args: string[]; scriptPath: string; }
-
 == main/updates.ts isActiveRuntimeUsable 76496a28bbee [probe]
 canImportHermesCli(venvPython, { env: { PYTHONPATH: [ACTIVE_HERMES_ROOT, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter) } })
 const venvPython = getVenvPython(activeVenvRoot());
-
 == main/updates.ts repairMacUpdaterHelper 163a21f1706f [system]
 execFileSync('/usr/bin/codesign', ['--verify', updater], { stdio: 'ignore' })
-
 == main/updates.ts repairMacUpdaterHelper 171fb1ab950d [system]
 execFileSync('/usr/bin/xattr', ['-cr', updater], { stdio: 'ignore' })
-
 == main/updates.ts repairMacUpdaterHelper 8b231c46fd32 [system]
 execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', updater], { stdio: 'ignore' })
-
 == main/updates.ts resolveHermesBackend b594a284f6c9 [probe]
 verifyHermesCli(hermesCommand, { shell: shellForProbe })
 let hermesCommand = null;
-
 == main/updates.ts resolveHermesBackend d111ba4ee0d3 [probe]
 canImportHermesCli(python)
 const python = repairRequested || IS_PACKAGED ? null : findSystemPython();
 const repairRequested = bootState.bootstrapRepairRequested;
 export const bootState = { bootstrapFailure: null as any, backendStartFailure: null as Error | null, remoteReauthFailure: null as Error | null, bootstrapAbortController: null as AbortController | null, bootstrapRepairRequested: false, bootstrapRepairAttempt: 0 };
-
 == native-oauth-login.ts runNativeLogin 740a73f2b18c [open]
 deps.openExternal(authorizeUrl)
 const authorizeUrl = buildNativeAuthorizeUrl(baseUrl, { challenge, redirectUri, state, provider: opts.provider });
 export async function runNativeLogin(baseUrl: string, deps: NativeLoginDeps, opts: { provider?: string; } = {}): Promise<NativeTokenSet> { const createServer = deps.createServer || http.createServer; const timeoutMs = deps.timeoutMs ?? DEFAULT_LOGIN_TIMEOUT_MS; const log = deps.rememberLog || (() => undefined); const { verifier, challenge } = generatePkcePair(); const state = generateState(); return new Promise<NativeTokenSet>((resolve, reject) => { let settled = false; let timer: NodeJS.Timeout | null = null; const server = createServer((req, res) => { const url = req.url || '/'; res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); res.end(DONE_HTML); if (settled) { return; } if (!/[?&](code|error)=/.test(url)) { return; } try { const { code } = parseLoopbackCallback(url, state); finishWith(async () => { const tokenBody = await deps.postJson(nativeTokenUrl(baseUrl), { code, code_verifier: verifier }, { timeoutMs: 15000 }); return parseTokenResponse(tokenBody); }); } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); } }); const cleanup = () => { if (timer) { clearTimeout(timer); } try { server.close(); } catch { } }; const fail = (error: Error) => { if (settled) { return; } settled = true; cleanup(); reject(error); }; const finishWith = (produce: () => Promise<NativeTokenSet>) => { if (settled) { return; } settled = true; produce() .then(tokens => { cleanup(); resolve(tokens); }) .catch(error => { cleanup(); reject(error instanceof Error ? error : new Error(String(error))); }); }; server.on('error', err => fail(err instanceof Error ? err : new Error(String(err)))); server.listen(0, '127.0.0.1', () => { const addr = server.address() as AddressInfo | null; if (!addr || typeof addr === 'string') { fail(new Error('Failed to bind loopback listener for native login')); return; } const redirectUri = `http://127.0.0.1:${addr.port}/callback`; const authorizeUrl = buildNativeAuthorizeUrl(baseUrl, { challenge, redirectUri, state, provider: opts.provider }); timer = setTimeout(() => { fail(new Error('Native sign-in timed out. The browser window may not have completed ' + 'sign-in; open Settings → Gateway and try again.')); }, timeoutMs); log(`[native-oauth] loopback listening on 127.0.0.1:${addr.port}; opening system browser`); deps.openExternal(authorizeUrl).catch(error => { fail(new Error(`Could not open the system browser for native sign-in: ${error instanceof Error ? error.message : String(error)}`)); }); }); }); }
-
+== perf-v007/gate-helpers.ts makeFixture e16f5e206ba0 [harness]
+spawnSync(process.execPath, [MAKE_FIXTURE, root, ...args], { encoding: 'utf8', maxBuffer: 1 << 24 })
 == shell-path.ts captureLoginShellPath 2539b05024d7 [shell]
 runProbe(shell, flags, execFileFn, timeoutMs)
 const shell = loginShellExecutable(env, platform);
 async function captureLoginShellPath({ env = process.env, platform = process.platform, execFileFn = execFile, timeoutMs = ATTEMPT_TIMEOUT_MS }: LoginShellPathOptions = {}) { if (platform === 'win32') { return null; } const shell = loginShellExecutable(env, platform); for (const flags of [['-ilc'], ['-lc']]) { const captured = await runProbe(shell, flags, execFileFn, timeoutMs); if (captured) { return captured; } } return null; }
-
 == shell-path.ts runProbe b136afc56cc8 [forward]
 execFileFn(shell, [...flags, PROBE_COMMAND], { encoding: 'utf8', timeout: timeoutMs, windowsHide: true }, (_error, stdout) => { finish(extractSentinelPath(stdout)); })
 const PROBE_COMMAND = "printf '%s' \"" + PATH_START + '${PATH}' + PATH_END + '"';
@@ -647,19 +641,14 @@ const PATH_START = '__HERMES_LOGIN_PATH_START__';
 const PATH_END = '__HERMES_LOGIN_PATH_END__';
 const finish = (value: string | null) => { if (!settled) { settled = true; resolve(value); } };
 let settled = false;
-
 == ssh-connection.ts <module> a04afb368a49 [ssh]
 spawn
-
 == ssh-connection.ts runSsh a04afb368a49 [ssh]
 spawn
-
 == terminal-ipc.ts readProcessCwd f932c4530ce4 [system]
 execFile('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn'], { timeout: 2000 }, (err, stdout) => { if (err) { resolve(null); return; } const line = String(stdout || '') .split('\n') .find(entry => entry.startsWith('n')); resolve(line ? line.slice(1) : null); })
-
 == terminal-ipc.ts registerTerminalIpc 06fa48d7bd1b [pty]
 nodePty.spawn(process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'OpenSSH', 'ssh.exe') : 'ssh', buildInteractiveSshArgs(sshTarget.ssh, String(payload?.cwd || '').trim(), undefined, remoteCommand), { cols, cwd: app.getPath('home'), env: sealTelemetryEnv(env), name: 'xterm-256color', rows })
-
 == terminal-ipc.ts registerTerminalIpc 9fd62ffc6ffb [pty]
 nodePty.spawn(tmuxBinary, pane.tmux.localArgs, { cols, cwd, env: sealTelemetryEnv(env), name: 'xterm-256color', rows })
 const tmuxBinary = pane?.tmux && !remote ? findOnPath('tmux') : null;
@@ -671,35 +660,28 @@ const sshTarget = await resolveTerminalConnectionForSender(event.sender.id, acti
 interface SshTerminalTarget { scope: string; ssh: SshEndpoint; }
 interface SshEndpoint { host: string; user?: string; port?: number | string; keyPath?: string; controlPath?: string; }
 export interface PreparedPane { paneId: string; env: Record<string, string>; identity: null | Record<string, string>; initialInput: null | string; tmux: null | { session: string; localArgs: string[]; remoteCommand: null | string; }; }
-
-== update-runtime-align.ts ensureCuratedRuntimeConfig f7223e5d499f [forward]
-deps .run(cmd, args, { env, timeoutMs: deps.timeoutMs ?? CURATED_CONFIG_TIMEOUT_MS })
-const [cmd, args, env] = deps.sealed ? [ deps.sealed.python, ['-s', '-P', '--check-hash-based-pycs', 'always', '-m', 'hermes_cli.main', ...cliArgs], { ...deps.sealed.sealEnv({ ...process.env, HERMES_HOME: deps.hermesHome }), PYTHONDONTWRITEBYTECODE: '1' } ] : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome }];
 == terminal-ipc.ts registerTerminalIpc e56f2dcc77f2 [pty]
 nodePty.spawn(command, args, { cols, cwd, env: sealTelemetryEnv(env), name: 'xterm-256color', rows })
 const { args, command, name } = terminalShellCommand();
-
+== update-runtime-align.ts ensureCuratedRuntimeConfig af753e2675ff [forward]
+deps .run(cmd, args, { env, timeoutMs: deps.timeoutMs ?? CURATED_CONFIG_TIMEOUT_MS })
+const [cmd, args, env] = deps.sealed ? [ deps.sealed.python, ['-s', '-P', '--check-hash-based-pycs', 'always', '-m', 'hermes_cli.main', ...cliArgs], { ...deps.sealed.sealEnv({ ...process.env, HERMES_HOME: deps.hermesHome }), PYTHONDONTWRITEBYTECODE: '1', ...NO_LINKS_ENV } ] : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome, ...NO_LINKS_ENV }];
 == update-runtime-align.ts spawnCapped 05d3a399ed9a [forward]
 spawnFn(cmd, args, { env: opts.env, stdio: 'ignore' })
-
 == updater-process.ts spawnUpdaterProcess 079cebda2add [forward]
 spawn(updater, updaterArgs, spawnOptions)
 const spawnOptions = hiddenWindowsChildOptions(options, isWindows) as SpawnOptions;
 const isWindows = deps.isWindows ?? process.platform === 'win32';
-
 == venv-blocker-scan.ts scanVenvBlockers bf2f9693acc8 [update]
 execFn(venvPython, ['-m', SCAN_MODULE], { cwd: updateRoot, encoding: 'utf-8', timeout: SCAN_TIMEOUT_MS, windowsHide: true } as any)
 const venvPython = resolveFn(updateRoot);
 const resolveFn = resolveOverride || resolveVenvPython;
-
 == venv-blocker-scan.ts stopSafeVenvBlockers 080e9420e569 [update]
 execFn(pythonPath, ['-m', 'hermes_cli._scan_venv_blockers', '--terminate-safe', String(process.pid), String(process.createTime)], { cwd: updateRoot, windowsHide: true, timeout: 10000, maxBuffer: 256 * 1024 })
 const pythonPath = resolvePython(updateRoot);
-
 == window-below.ts loadGetWindows ecb7e3d9787a [dynamic]
 import(pathToFileURL(staged).href)
 const staged = path.join(app.getAppPath(), 'dist', 'node_modules', 'get-windows', 'index.js');
-
 == windows-hermes-path.ts resolveVenvHermesCommand 4c8b69b9010a [probe]
 canImportHermesCli(python, { env: { PYTHONPATH: [...(directoryExists(root) ? [root] : []), process.env.PYTHONPATH] .filter((entry): entry is string => Boolean(entry)) .join(path.delimiter) } })
 const python = getVenvPython(venvRoot);
@@ -707,36 +689,12 @@ const { isWindows, isCommandScript, fileExists, directoryExists, canImportHermes
 const venvRoot = dirname(scriptsDir);
 const scriptsDir = dirname(resolved);
 const resolved = resolvePath(String(command));
-
 == windows-sandbox-fallback.ts grantAllApplicationPackagesAcl 4a423d770d62 [system]
 execFileSync('icacls', buildIcaclsGrantArgs(dir), { windowsHide: true, timeout: 30000, stdio: 'ignore' })
-
 == windows-user-env.ts readWindowsUserEnvVar ede46b2de1e3 [system]
 exec('reg', ['query', 'HKCU\\Environment', '/v', name], { encoding: 'utf8', windowsHide: true, timeout: 5000 })
-
 == wsl-clipboard-image.ts readWslWindowsClipboardImage f8f6c0277411 [system]
 exec(ps, ['-NoProfile', '-NonInteractive', '-STA', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], { encoding: 'utf8', windowsHide: true, timeout: 8000, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })
 candidates
-
 == wsl-path-bridge.ts resolveDefaultWslDistro 791d319fbd21 [system]
 execFileSync('wsl.exe', ['-l', '-q'], { encoding: 'utf8', env: { ...process.env, WSL_UTF8: '1' }, stdio: ['ignore', 'pipe', 'ignore'], timeout: 2000, windowsHide: true })
-
-== iclone-acp-tools/ipc.ts registerAcpToolsIpc dd66b4850c0e [open]
-deps.openFile(file)
-const file = which === 'installed' ? deps.tools.noticesFile() : which === 'app' ? deps.appNotices : null;
-const which = (input as Record<string, unknown> | null)?.which;
-export interface AcpToolsIpcDeps { ipcMain: IpcMainLike; isTrustedSender: ConsentSenderGuard | undefined; tools: AcpTools; gestureOk(event: unknown, input: unknown): boolean; audit: InstallAuditSink; openFile(file: string): Promise<unknown>; appNotices: string; }
-return { view: (): AcpToolsView => view, cliVersion, refresh: (): Promise<AcpToolsView> => { if (!installing) { sweepLeftovers(deps.root); } return check(); }, install, cancel: (): boolean => { if (!installing) { return false; } installing.controller.abort(); return true; }, runtime, problem: (): string | null => { const answer = answerFor(view); return answer.ok ? null : answer.error; }, noticesFile, launcherReport: (report: { type: 'escape' | 'integrity'; what: string; }): void => { if (report.type === 'escape') { auditOnce('refuse', `acp tools: refused a module outside the verified tree (${report.what})`); } else { auditOnce('refuse', `acp tools: a file changed after the check and was refused at load (${report.what})`); verified = null; void check(); } }, sweep: () => { const pin = pinOf(); sweep('reason' in pin ? null : pin.lockSha256); } };
-let view: AcpToolsView = { state: 'checking', cliVersion: null };
-let installing: { controller: AbortController; promise: Promise<InstallAnswer>; } | null = null;
-export interface AcpToolsDeps { root: string; pinDir: string; launcher: string; target: PinTarget; fetch(url: string, signal: AbortSignal): Promise<Buffer>; sealer: KeySealer | null; noSealReason?: 'keychain-off' | 'unsealable'; record: InstallRecordStore; native: NativeAddons; audit?(entry: AcpToolsAudit): void; log(line: string): void; onChange?(view: AcpToolsView): void; now?(): Date; beforeCheck?(): Promise<void>; }
-const check = (): Promise<AcpToolsView> => { if (installing) { return Promise.resolve(view); } if (checking && checking.generation === generation) { return checking.promise; } const mine = generation; const promise = fullCheck() .then(({ view: next, verified: tree }) => { if (mine !== generation || installing) { return next; } verified = tree; if (next.state === 'unverified') { auditOnce('refuse', `acp tools: ${next.reason}${next.subject ? ` (${next.subject})` : ''}`); } emit(next); return next; }) .finally(() => { if (checking?.promise === promise) { checking = null; } }); checking = { generation: mine, promise }; return promise; };
-const answer = answerFor(view);
-const answerFor = (current: AcpToolsView): RuntimeAnswer => { switch (current.state) { case 'installed': return verified ? { ok: true, rt: runtimeOf(verified) } : { ok: false, code: 'unverified', reason: 'moved', error: problemText('unverified', 'moved') }; case 'installing': return { ok: false, code: 'installing', reason: null, error: problemText('installing') }; case 'unverified': return { ok: false, code: 'unverified', reason: current.reason, error: problemText('unverified', current.reason, current.subject) }; case 'unavailable': return { ok: false, code: 'unavailable', reason: current.reason, error: problemText('unavailable', current.reason, current.subject) }; default: return { ok: false, code: 'absent', reason: null, error: problemText('absent') }; } };
-export type RuntimeAnswer = { ok: true; rt: AcpToolsRuntime; } | { ok: false; code: AcpToolsProblem; reason: AcpToolsReason | null; error: string; };
-const auditOnce = (kind: AcpToolsAudit['kind'], reason: string) => { if (!audited.has(reason)) { audited.add(reason); deps.audit?.({ kind, reason }); } };
-let verified: Checked['verified'] = null;
-const pin = pinOf();
-const pinOf = (): LoadedPin | { reason: AcpToolsReason; } => { if (loaded) { return loaded; } try { const lockText = readFileSync(path.join(deps.pinDir, 'package-lock.json'), 'utf8'); const pin = parsePin(readFileSync(path.join(deps.pinDir, 'package.json'), 'utf8'), lockText); loaded = existsSync(deps.launcher) ? { pin, lockSha256: sha256Hex(lockText), rows: runtimeClosure(pin, deps.target) } : { reason: 'launcher-missing' }; } catch (error) { deps.log(`[iclone-acp-tools] the pin does not parse: ${logText(error)}`); loaded = { reason: 'pin-invalid' }; } return loaded; };
-const sweep = (keep: string | null) => { if (!existsSync(deps.root)) { return; } for (const name of readdirSafe(deps.root)) { const leftover = name.startsWith('.install-') || name.startsWith('.trash-'); if ((leftover && !installing) || (HEX64.test(name) && name !== keep)) { rmSync(path.join(deps.root, name), { recursive: true, force: true }); } } };
-interface LoadedPin { pin: AcpPin; lockSha256: string; rows: PinRow[]; }

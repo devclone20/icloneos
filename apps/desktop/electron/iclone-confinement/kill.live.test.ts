@@ -60,8 +60,8 @@ async function waitFor(check: () => Promise<boolean>, ms: number): Promise<void>
   throw new Error(`condition not met within ${ms} ms`)
 }
 
-function start(script: string, sessionId: string): number {
-  const result = world.backend.spawn({
+async function start(script: string, sessionId: string): Promise<number> {
+  const result = await world.backend.spawn({
     cls: 'project',
     argv: ['/bin/bash', '-c', script],
     cwd: world.project,
@@ -87,7 +87,7 @@ const DAEMON = `/usr/bin/perl -MPOSIX -e 'exit if fork; POSIX::setsid(); exit if
 
 describe.runIf(LIVE)('F1 — Kill stops every process the kernel holds in the run, not just the tree', () => {
   it('a double-forked setsid daemon is listed with its run and dead after Kill', async () => {
-    const root = start(`${DAEMON}; /bin/sleep 60`, 'v3g-f1-daemon')
+    const root = await start(`${DAEMON}; /bin/sleep 60`, 'v3g-f1-daemon')
     let daemon: PsRow | undefined
 
     await waitFor(async () => {
@@ -111,7 +111,7 @@ describe.runIf(LIVE)('F1 — Kill stops every process the kernel holds in the ru
   })
 
   it('Kill on the daemon itself stops its whole run, the marked root included', async () => {
-    const root = start(`${DAEMON}; /bin/sleep 60`, 'v3g-f1-orphan')
+    const root = await start(`${DAEMON}; /bin/sleep 60`, 'v3g-f1-orphan')
     let daemonPid = 0
 
     await waitFor(async () => {
@@ -127,7 +127,7 @@ describe.runIf(LIVE)('F1 — Kill stops every process the kernel holds in the ru
   })
 
   it('a fork bomb capped at 31 shells (+31 sleeps) is frozen and killed: 0 survivors', async () => {
-    const root = start(
+    const root = await start(
       'b(){ if [ $1 -gt 0 ]; then b $(($1-1)) & b $(($1-1)) & fi; /bin/sleep 60; }; b 4',
       'v3g-f1-bomb'
     )
@@ -143,7 +143,7 @@ describe.runIf(LIVE)('F1 — Kill stops every process the kernel holds in the ru
   })
 
   it('a process that ignores SIGTERM dies by SIGKILL after the grace period', async () => {
-    const root = start(
+    const root = await start(
       `trap '' TERM; /usr/bin/perl -e '$SIG{TERM} = "IGNORE"; $0 = "v3g-stubborn"; sleep 60'`,
       'v3g-f1-term'
     )
@@ -169,7 +169,7 @@ describe.runIf(LIVE)('F1 — Kill stops every process the kernel holds in the ru
   })
 
   it('the pane count is the number of run processes really alive, before and after Kill', async () => {
-    const root = start(`${DAEMON}; /bin/sleep 60 & /bin/sleep 60 & wait`, 'v3g-f1-count')
+    const root = await start(`${DAEMON}; /bin/sleep 60 & /bin/sleep 60 & wait`, 'v3g-f1-count')
 
     await waitFor(async () => (await runOf(root)).length >= 4, 3_000)
 

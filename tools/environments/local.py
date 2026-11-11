@@ -442,6 +442,8 @@ def served_profile_child_env(
         if _is_routed_home(target):
             strip_launch_profile_env(env, target)
             _scrub_credentials(env, inherit_credentials=False)
+    from hermes_cli.iclone_policy_env import overlay_refused, settle_child  # iclone-seam: fx35b — a child stays pinned, routed or not
+
     if inherit_credentials:
         if target:
             secrets = build_profile_secret_scope(Path(target))
@@ -452,7 +454,8 @@ def served_profile_child_env(
                     "", "served_profile_child_env(inherit_credentials=True) called with no target home and "
                     "no profile secret scope bound while multiplexing is on; the child would inherit the "
                     "launch profile's credentials. Bind the profile scope (or pass target_home) at the spawn site.")
-        env.update((k, v) for k, v in (secrets or {}).items() if v is not None)
+        env.update((k, v) for k, v in (secrets or {}).items() if v is not None and not overlay_refused(k))
+    settle_child(env)
     env = _bind_pay_env(env)  # icloneOS V3-J: bound to the home this child runs in
     from hermes_cli.iclone_sinks import reseal_environ  # iclone-seam: v3fx-sinks — THE env seal (ruling 57.4, r7) — both modes
 
@@ -931,8 +934,10 @@ def _kill_process_group_posix(proc) -> None:
     try:
         pgid = os.getpgid(proc.pid)
     except ProcessLookupError:
+        # macOS answers ESRCH for an unreaped zombie too: a child that exited between the caller's poll() and here
+        # is not an error, and with no recorded group there is nothing left to signal.
         if (pgid := getattr(proc, "_hermes_pgid", None)) is None:
-            raise
+            return
     if not _leader_is_ours(pgid, expected_start):
         # Leader exited and its PID/PGID may have been recycled onto an unrelated
         # process group; signalling the stale number is unsafe. Bail out — a rare

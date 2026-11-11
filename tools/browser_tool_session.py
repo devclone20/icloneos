@@ -4,6 +4,7 @@
 Split out of ``tools/browser_tool.py``. Facade-owned state is read through ``_bt`` (``tools.browser_tool``, resolved per call) — no import cycle.
 """
 
+import errno
 import base64
 import json
 import logging
@@ -143,11 +144,17 @@ def _unwrap_batch_result(result: Any, command: str) -> Dict[str, Any]:
     return {"success": bool(entry.get("success")), "data": entry.get("result"), "error": entry.get("error")}
 
 
+# macOS: ``sun_path`` holds 104 bytes with its terminator.
+_SOCKET_PATH_MAX = 103
+
+
 def _prepare_session_socket_dir(session_name: str) -> str:
     """Create the per-session socket dir (parallel workers must not share one) and claim it
     with our PID BEFORE first use — another hermes process's orphan reaper rmtree's any
     ownerless agent-browser-* dir in the shared tmpdir."""
-    socket_dir = os.path.join(_bt._socket_safe_tmpdir(), f"agent-browser-{session_name}")
+    socket_dir = _bt._session_socket_dir(session_name)
+    if _bt._confined_runtime() and len(os.path.join(socket_dir, f"{session_name}.sock")) > _SOCKET_PATH_MAX:
+        raise OSError(errno.ENAMETOOLONG, f"The browser's socket path is too long for macOS: {socket_dir}")
     os.makedirs(socket_dir, mode=0o700, exist_ok=True)
     _lifecycle._write_owner_pid(socket_dir, session_name)
     return socket_dir
@@ -232,11 +239,12 @@ def _popen_agent_browser(argv: List[str], env: Dict[str, str], socket_dir: str, 
             _si = subprocess.STARTUPINFO()
             _si.dwFlags |= subprocess.STARTF_USESTDHANDLES
             _popen_extra = {"creationflags": windows_hide_flags(), "close_fds": True, "startupinfo": _si}
-        # icloneOS V3-UP r5 (ruling 56): confined, agent-browser and its browser run inside the agent's Seatbelt,
-        # with the session's socket dir as their own folder.
-        from tools.environments.host_lane import confine_program
+        # icloneOS ruling R1 (narrows ruling 56 for this one site): with the Seatbelt on, agent-browser runs outside it
+        # through the launcher's door, after the permission gate. With the Seatbelt off this changes nothing.
+        from tools.environments import host_lane
 
-        argv, env = confine_program(argv, kind="browser", env=env)
+        if host_lane.confined_process():
+            argv, env = host_lane.browser_door_argv(argv, env)
         return subprocess.Popen(argv, stdout=fds[0], stderr=fds[1], stdin=stdin, env=env, **_popen_extra)
     finally:
         for fd in fds:
@@ -354,6 +362,7 @@ def _get_session_info(task_id: Optional[str] = None) -> Dict[str, Any]:
     if task_id is None:
         task_id = "default"
 
+    _lifecycle.wait_for_cleanup(task_id)
     _lifecycle._start_browser_cleanup_thread()
     _lifecycle._update_session_activity(task_id)
 
@@ -682,17 +691,19 @@ def _sandbox_wrap(cmd_parts: List[str], browser_env: Dict[str, str], task_socket
     return wrapped, host_env
 
 
-def _browser_command_preflight() -> Dict[str, Any]:
+def _browser_command_preflight(ends_a_recording: bool = False) -> Dict[str, Any]:
     """Fail fast before spawning (missing CLI, Termux gap, interrupt, no Chromium in local
-    mode — else every call hangs for command_timeout). Error result, or ``{"browser_cmd": path}``."""
+    mode — else every call hangs for command_timeout). Error result, or ``{"browser_cmd": path}``.
+    An interrupt does not stop what ends a recording: a turn's cleanup runs interrupted, at a Stop and at a quit, and
+    a stop that never goes out leaves the daemon capturing with nobody left to tell it otherwise."""
     from tools.bot_desktop import placement, runtime as _bd_runtime
     try:
-        where = _bd_runtime.tool_placement()  # starts the sandbox screen on demand; raises for refused / down
+        where = _bd_runtime.tool_placement(browser=True)  # starts the sandbox screen on demand; raises for refused / down
     except RuntimeError as e:
         return {"success": False, "error": f"The browser cannot run here: {e}"}
     if where == placement.TERMINAL:
         from tools.interrupt import is_interrupted
-        if is_interrupted():
+        if is_interrupted() and not ends_a_recording:
             return {"success": False, "error": "Interrupted"}
         return {"browser_cmd": _SANDBOX_AGENT_BROWSER}  # resolved inside the sandbox, not on this host
     try:
@@ -708,14 +719,21 @@ def _browser_command_preflight() -> Dict[str, Any]:
         and _cloud._get_browser_engine() != "lightpanda"
         and not _install._maybe_autoinstall_chromium()
     ):
-        hint = _CHROMIUM_MISSING_DOCKER_HINT if _install._running_in_docker() else _CHROMIUM_MISSING_HINT
+        hint = (_install.ICLONEOS_BROWSER_MISSING if _install._under_icloneos()
+                else _CHROMIUM_MISSING_DOCKER_HINT if _install._running_in_docker() else _CHROMIUM_MISSING_HINT)
         _bt.logger.warning("browser command blocked: %s", hint)
         return {"success": False, "error": hint}
 
     from tools.interrupt import is_interrupted
-    if is_interrupted():
+    if is_interrupted() and not ends_a_recording:
         return {"success": False, "error": "Interrupted"}
     return {"browser_cmd": browser_cmd}
+
+
+def _ends_a_recording(command: str, tail: List[str]) -> bool:
+    """A record stop, or the removal of its empty file. A stop is slow by nature and only the capture's fate is at stake: neither ever
+    costs the user the browser they are watching, and a fresh session would have no capture to stop."""
+    return command == "record" and (tail[-1:] == ["stop"] or tail[-2:-1] == ["discard"])
 
 
 def _spawn_and_collect(
@@ -743,6 +761,7 @@ def _spawn_and_collect(
 
     stdout_path = os.path.join(task_socket_dir, f"_stdout_{command}")
     stderr_path = os.path.join(task_socket_dir, f"_stderr_{command}")
+    record_end = _ends_a_recording(command, cmd_parts)
     cmd_parts, browser_env = _sandbox_wrap(cmd_parts, browser_env, task_socket_dir)
     proc = _popen_agent_browser(cmd_parts, browser_env, task_socket_dir, command, stdin_payload)
 
@@ -753,12 +772,13 @@ def _spawn_and_collect(
         proc.wait()
         stdout, stderr = _read_command_output_files(stdout_path, stderr_path)
         _unlink_command_output_files(stdout_path, stderr_path)
-        _handle_browser_command_timeout(task_id, session_info, task_socket_dir)
+        if not record_end:
+            _handle_browser_command_timeout(task_id, session_info, task_socket_dir)
         if stderr and stderr.strip():
             _bt.logger.warning("browser '%s' stderr after timeout: %s", command, stderr.strip()[:500])
         _bt.logger.warning("browser '%s' timed out after %ds (task=%s, socket_dir=%s)",
                        command, timeout, task_id, task_socket_dir)
-        return {"success": False, "error": _format_browser_timeout_error(command, timeout, stdout, stderr)}
+        return {"success": False, "error": _format_browser_timeout_error(command, timeout, stdout, stderr), "timed_out": True}
     with open(stdout_path, "r", encoding="utf-8-sig") as f:
         stdout = f.read()
     with open(stderr_path, "r", encoding="utf-8-sig") as f:
@@ -881,7 +901,7 @@ def _run_browser_command(
         timeout = _bt._safe_command_timeout()
     args = args or []
 
-    preflight = _browser_command_preflight()
+    preflight = _browser_command_preflight(_ends_a_recording(command, args))
     if "browser_cmd" not in preflight:
         return preflight
     browser_cmd = preflight["browser_cmd"]
@@ -901,7 +921,7 @@ def _run_browser_command(
         # the same way and retry once on the replacement before handing the caller the error.
         # ``close`` is exempt: a dead daemon is already closed, and cleanup must never spawn
         # a fresh session just to close it.
-        if attempt == 0 and command != "close" and _is_recoverable_local_backend_failure(session_info, result):
+        if attempt == 0 and command != "close" and not _ends_a_recording(command, args) and _is_recoverable_local_backend_failure(session_info, result):
             _bt.logger.warning("browser '%s' failed at the backend level (task=%s, rc=%s); recycling the session "
                                "and retrying once", command, task_id, result.get("returncode"))
             _recycle_local_session(task_id, session_info, _prepare_session_socket_dir(session_info["session_name"]),

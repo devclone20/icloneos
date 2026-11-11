@@ -5,10 +5,21 @@
  * quotes, earnings, refused spends, drain refusals). Everything the WORK tab shows is folded from it on read: the
  * level, the declined set, the earned total. Nothing is a cached counter.
  *
- * Crash safety. Every write replaces the whole file: a temp file in the same directory, fsync, rename, fsync of the
- * directory. A kill at any instant leaves either the old file or the new one, never a half record. The head (the last
- * seq and sha) is kept beside it in `ledger.head`, written the same way, so a cut tail is detected on load (an unkeyed
- * chain alone cannot see it). A torn last line from anywhere else (an older build's append, a disk fault) is
+ * Crash safety. A record is appended as one whole line (`appendLineSync`: one write(2) to an O_APPEND, no-follow
+ * descriptor, rolled back on a short write), then the head (the last seq and sha, `ledger.head`) is replaced
+ * atomically (temp, rename), so a cut tail is detected on load (an unkeyed chain alone cannot see it) and the head is
+ * at most the one record behind the file that `headProblem` accepts. A kill leaves the file without the record or with
+ * all of it. A torn recovery and the owner's Repair still replace the whole file (temp, fsync, rename).
+ *
+ * Durability (L4-04). A record that narrows what the iNFT may do or that the owner decided (`DURABLE_KINDS`: offline,
+ * decline, stop, level, a refusal, a gap) is fsynced before `append` returns: after a power cut an iNFT never comes
+ * back online, re-opens a declined job or regains a level the owner took away because the record was still in the page
+ * cache. A record whose loss only makes the iNFT more careful or repeats work (online, approve, offer, quote, earn,
+ * fix) and the head are fsynced off the main thread (`ledgerSync`); `flush()` resolves when they are on disk. A head
+ * that reached the disk while such a record did not reads as a break and folds to L0 until Repair: a power cut can only
+ * fail closed. An append costs O(1) whatever the file's size (it used to rewrite the file and the head, 4 fsyncs).
+ *
+ * A torn last line (a power cut mid-append, an older build's append, a disk fault) is
  * recovered on load: the file is cut back to the last valid record, a `gap` record says what was lost, and the chain
  * goes on. Any other break is kept visible (the level folds to L0) until the owner's Repair archives the damaged file
  * and starts again from the last verified record, again through a `gap`. No state blocks an iNFT for good.
@@ -31,6 +42,7 @@ import {
   type WorkHold
 } from '../../src/iclone-shared/acp-work'
 import { redactSecrets } from '../../src/iclone-shared/redact'
+import { appendLineSync, expectationOf, ledgerSync, stampOf } from '../lib/append-log'
 import { isAtomicTempName, writeFileAtomicSync } from '../lib/atomic-write'
 
 const LEDGER_KINDS = [
@@ -237,12 +249,26 @@ interface LedgerOptions {
    * the process dying there: the temp file stays behind, exactly as after a kill.
    */
   beforeRename?: (temp: string, target: string) => void
+  /** Test seam (crash injection): runs right before a record's append. A throw stands for a kill there. */
+  beforeAppend?: (file: string) => void
 }
+
+/** Records fsynced before `append` returns: what narrows the iNFT's freedom, or the owner's decision (file header). */
+const DURABLE_KINDS: ReadonlySet<LedgerKind> = new Set<LedgerKind>([
+  'offline',
+  'decline',
+  'stop',
+  'level',
+  'drain-refuse',
+  'spend-refused',
+  'gap'
+])
 
 export function createLedger(options: LedgerOptions) {
   const now = options.now ?? (() => new Date())
   const dir = path.dirname(options.file)
   const base = path.basename(options.file)
+  const files = [options.file, headFileOf(options.file)] as const
   let cache: { stamp: string; read: LedgerRead } | null = null
 
   // A temp file is what a kill before the rename leaves: never the ledger, always safe to drop. (Reading creates
@@ -261,21 +287,16 @@ export function createLedger(options: LedgerOptions) {
     }
   }
 
-  const stamp = (): string =>
-    [options.file, headFileOf(options.file)]
-      .map(target => {
-        try {
-          const stat = fs.statSync(target)
+  const stamp = (): string => stampOf(files)
 
-          return `${stat.ino}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`
-        } catch {
-          return '-'
-        }
-      })
-      .join('|')
+  /** `durable: false` is for the head after an append: it is fsynced off the main thread, after the record. */
+  const replace = (target: string, data: string, durable = true) => {
+    writeFileAtomicSync(target, data, { mode: 0o600, beforeRename: options.beforeRename, durable })
 
-  const replace = (target: string, data: string) =>
-    writeFileAtomicSync(target, data, { mode: 0o600, beforeRename: options.beforeRename })
+    if (!durable) {
+      ledgerSync.mark(target)
+    }
+  }
 
   /** The records become the file, then the head follows. False when the records could not be written. */
   const commit = (records: readonly LedgerRecord[]): boolean => {
@@ -297,6 +318,50 @@ export function createLedger(options: LedgerOptions) {
     }
 
     cache = { stamp: stamp(), read: { records: [...records], ok: true, brokenAt: null, problem: null, torn: null } }
+
+    return true
+  }
+
+  /**
+   * One record after the verified tail `read` (the current cache): the line, then the head. The file must still be
+   * the one verified (same inode, same size) or nothing is written and the cache is dropped, so the next load verifies
+   * whatever is there now. The cache advances by the record only when the file grew by exactly that line.
+   */
+  const appendRecord = (read: LedgerRead, record: LedgerRecord): boolean => {
+    if (!cache || cache.read !== read) {
+      return false
+    }
+
+    const verified = expectationOf(cache.stamp)
+    let size: { before: number; after: number }
+
+    try {
+      size = appendLineSync(options.file, lineOf(record), {
+        durable: DURABLE_KINDS.has(record.kind),
+        mode: 0o600,
+        expect: verified,
+        beforeAppend: options.beforeAppend
+      })
+    } catch {
+      // A failed write, or a file that moved since its verify: the next load verifies whatever is there now.
+      cache = null
+
+      return false
+    }
+
+    try {
+      replace(headFileOf(options.file), JSON.stringify({ seq: record.seq, sha: record.sha }), false)
+    } catch {
+      // The record is on disk; a head one behind is accepted on load and rewritten by the next write.
+    }
+
+    const now = stamp()
+    const after = expectationOf(now)
+
+    cache =
+      after.size === size.after && (verified.ino === null || after.ino === verified.ino)
+        ? { stamp: now, read: { records: [...read.records, record], ok: true, brokenAt: null, problem: null, torn: null } }
+        : null
 
     return true
   }
@@ -363,8 +428,10 @@ export function createLedger(options: LedgerOptions) {
       const tail = read.records[read.records.length - 1]
       const record = seal(entry, (tail?.seq ?? 0) + 1, tail?.sha ?? GENESIS, now())
 
-      return commit([...read.records, record]) ? record : null
+      return appendRecord(read, record) ? record : null
     },
+    /** Resolves once every record and head written so far is on stable storage. */
+    flush: (): Promise<void> => ledgerSync.flush(),
     read: load,
     /**
      * The owner's Repair: the damaged file is archived whole beside the ledger, the verified records are kept, and a

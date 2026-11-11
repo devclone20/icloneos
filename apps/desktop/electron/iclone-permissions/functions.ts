@@ -326,6 +326,13 @@ export function orderFunctions(fns: readonly unknown[]): PermissionFunction[] {
  * or tighten the outcome.
  */
 export function decideFunctions(input: FunctionDecideInput): FunctionDecision {
+  // F40: in Ignore no level, switch or unread reading decides. A floor on the line or on any part it read still refuses.
+  if (input.mode === 'ignore') {
+    const floor = input.floor ?? input.parts?.find(part => part.floor)?.floor ?? null
+
+    return { ...decide({ mode: 'ignore', cls: input.cls, floor }), fn: null, level: 'mode', by: null }
+  }
+
   // R4-UNREAD: an unread call is decided by every row at a user level too, whatever functions it names
   const userRows = unreadCall(input)
     ? PERMISSION_FUNCTIONS.filter(fn => input.levels[fn] !== undefined && input.levels[fn] !== 'mode')
@@ -411,6 +418,7 @@ export const NO_FUNCTION_TOOLS: readonly string[] = [
   'read_file',
   'read_terminal',
   'read_window_below',
+  'screen_record',
   'search_files',
   'session_search',
   'setup_mcp',

@@ -1,5 +1,5 @@
 // The electron-builder config contract of V3-R2: what the pack must not carry (K146) and the Bluetooth purpose
-// strings macOS shows (K149). The pack itself is proved by an unsigned --dir listing (RESUME/run.nosync/scratch).
+// strings macOS shows (K149). The pack itself is proved by an unsigned --dir listing (in a scratch folder outside this repository).
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'

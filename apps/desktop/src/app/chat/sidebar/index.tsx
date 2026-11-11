@@ -27,7 +27,7 @@ import {
   toggleSidebarMessagingOpen,
   unpinSession
 } from '@/store/layout'
-import { $newChatProfile } from '@/store/profile'
+import { pointNewChatAtLiveProfile } from '@/store/profile'
 import { exitProjectScope, openProjectCreate } from '@/store/projects'
 import { openRouteTile } from '@/store/route-tiles'
 import { markAllSessionsRead } from '@/store/session'
@@ -281,7 +281,7 @@ export function ChatSidebar({
                       // no swap. The switcher header is the single place to
                       // change which profile that is.
                       if (isNewSession) {
-                        $newChatProfile.set(null)
+                        pointNewChatAtLiveProfile()
                       }
 
                       onNavigate(item)

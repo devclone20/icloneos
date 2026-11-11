@@ -1,4 +1,4 @@
-// One fixture test per §3.4 rule id (RESUME/contracts/P4_upstream.md). fixtures/lock.json against fixtures/spec.json
+// One fixture test per §3.4 rule id (the P4 upstream contract). fixtures/lock.json against fixtures/spec.json
 // is GREEN with zero findings; each test changes one fact and asserts exactly the rule that fact must raise.
 import fs from 'node:fs'
 

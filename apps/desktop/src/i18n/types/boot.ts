@@ -1,3 +1,5 @@
+import type { HomeSettingsReplaceFailure } from '@/iclone-shared/home-settings'
+
 export type BootTranslations = {
   ready: string
   desktopBootFailedWithMessage: (message: string) => string
@@ -41,6 +43,12 @@ export type BootTranslations = {
     gateTitle: string
     gateDescription: string
     gateHint: string
+    homeSettingsHint: string
+    homeSettingsReplace: string
+    homeSettingsReplaceExplain: (target: string, file: string) => string
+    homeSettingsReplaced: (file: string) => string
+    homeSettingsTerminal: string
+    homeSettingsCopyFailed: Record<HomeSettingsReplaceFailure, (target: string) => string>
     gateHintUnmanaged: string
     cloudDownCheckPortal: string
     cloudDownDiscord: string

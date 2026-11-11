@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -16,9 +17,14 @@ import {
 import { decideFunctions } from './iclone-permissions/functions'
 import {
   actOnSetupSystemItem,
+  APP_BUNDLE_ID,
   createSetupAttempts,
+  CUA_DRIVER_PANES,
   microphoneAccess,
+  parseScreenPreflight,
+  readSetupSystem,
   registerIcloneSetup,
+  SCREEN_PREFLIGHT_JXA,
   SETUP_PANES,
   setupSystemAction,
   setupSystemRows,
@@ -65,12 +71,16 @@ function seam(
       attempted = true
     }),
     showNotification: vi.fn(() => true),
-    openExternal: vi.fn(async () => undefined)
+    openExternal: vi.fn(async () => undefined),
+    confirmRestart: vi.fn(async () => true),
+    relaunch: vi.fn(() => undefined)
   }
 
   const value: SetupSystemSeam = {
     platform: 'darwin',
     mediaStatus: kind => media[kind],
+    freshScreenStatus: async () => null,
+    appBundleId: () => APP_BUNDLE_ID,
     screenAttempted: () => attempted,
     consentAllows: key => !(over.off ?? []).includes(key),
     ...calls,
@@ -84,22 +94,22 @@ const statuses = (rows: { id: string; status: string; action: string }[]) =>
   Object.fromEntries(rows.map(row => [row.id, `${row.status}/${row.action}`]))
 
 describe('V3-ON system permissions — status and the one action main picks', () => {
-  it('lists the three items the app itself uses, with macOS status mapped and the action per status', () => {
+  it('lists the three items the app itself uses, with macOS status mapped and the action per status', async () => {
     const { value } = seam({ media: { microphone: 'granted', screen: 'denied' } })
 
     // A fresh install: macOS says `denied` for screen, but the app never tried a capture → Not set up + Allow.
-    expect(statuses(setupSystemRows(value, createSetupAttempts()))).toEqual({
+    expect(statuses(await setupSystemRows(value, createSetupAttempts()))).toEqual({
       microphone: 'granted/none',
       screen: 'notSetUp/request',
       notifications: 'unknown/request'
     })
   })
 
-  it('r2 M1: screen `denied` means "Not allowed" + the pane only after an attempt was made (persisted)', () => {
+  it('r2 M1: screen `denied` means "Not allowed" + the pane only after an attempt was made (persisted)', async () => {
     const { value } = seam({ attempted: true })
 
-    expect(statuses(setupSystemRows(value, createSetupAttempts())).screen).toBe('denied/openSettings')
-    expect(statuses(setupSystemRows(seam({ media: { screen: 'granted' } }).value, createSetupAttempts())).screen).toBe(
+    expect(statuses(await setupSystemRows(value, createSetupAttempts())).screen).toBe('denied/openSettings')
+    expect(statuses(await setupSystemRows(seam({ media: { screen: 'granted' } }).value, createSetupAttempts())).screen).toBe(
       'granted/none'
     )
   })
@@ -108,8 +118,8 @@ describe('V3-ON system permissions — status and the one action main picks', ()
     expect(() => seam({ media: { screen: 'not-determined' as ScreenStatus } })).toThrow(/never reports/)
   })
 
-  it('off macOS there is nothing to set up (the section hides)', () => {
-    expect(setupSystemRows(seam({ platform: 'linux' }).value, createSetupAttempts())).toEqual([])
+  it('off macOS there is nothing to set up (the section hides)', async () => {
+    expect(await setupSystemRows(seam({ platform: 'linux' }).value, createSetupAttempts())).toEqual([])
   })
 
   it('every status has exactly one action; restricted, declined and granted offer none', () => {
@@ -161,15 +171,20 @@ describe('V3-ON system permissions — status and the one action main picks', ()
 
     await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'screen' })
     expect(calls.markScreenAttempted).toHaveBeenCalledTimes(1)
-    expect(statuses(setupSystemRows(value, createSetupAttempts())).screen).toBe('denied/openSettings')
+    expect(statuses(await setupSystemRows(value, createSetupAttempts())).screen).toBe('denied/openSettings')
   })
 
-  it('restricted (managed Mac) never shows the restart note or an action', () => {
+  it('restricted (managed Mac) never shows the restart note or an action', async () => {
     const { value } = seam({ off: [] })
     const restricted = { ...value, mediaStatus: () => 'restricted' }
-    const screen = setupSystemRows(restricted, createSetupAttempts()).find(row => row.id === 'screen')
+    const screen = (await setupSystemRows(restricted, createSetupAttempts())).find(row => row.id === 'screen')
 
-    expect(screen).toEqual({ id: 'screen', status: 'restricted', action: 'none' })
+    expect(screen).toEqual({
+      id: 'screen',
+      status: 'restricted',
+      action: 'none',
+      identity: { bundleId: APP_BUNDLE_ID, expected: true }
+    })
   })
 
   it('a denied item opens its own pane (fixed in main), never a request', async () => {
@@ -215,7 +230,7 @@ describe('V3-ON system permissions — status and the one action main picks', ()
     }
 
     expect(Object.values(calls).every(call => call.mock.calls.length === 0)).toBe(true)
-    expect(Object.values(statuses(setupSystemRows(value, attempts)))).toEqual([
+    expect(Object.values(statuses(await setupSystemRows(value, attempts)))).toEqual([
       'declined/none',
       'declined/none',
       'declined/none'
@@ -497,5 +512,147 @@ describe('r2 minor 4 — main validates Set up decisions with the shared functio
     const shared = await import('../src/iclone-shared/setup-decisions')
 
     expect(setupDecisions).toBe(shared.setupDecisions)
+  })
+})
+
+describe('G-99 — Screen recording says what macOS says, for the identity macOS judges', () => {
+  const screenOf = async (value: SetupSystemSeam, attempts = createSetupAttempts()) =>
+    (await setupSystemRows(value, attempts)).find(row => row.id === 'screen')!
+
+  it('fresh install: not set up, the one attempt, no restart offered', async () => {
+    const { value, calls } = seam({ media: { screen: 'denied' } })
+
+    value.freshScreenStatus = async () => 'denied'
+    const row = await screenOf(value)
+
+    expect([row.status, row.action]).toEqual(['notSetUp', 'request'])
+    await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'screen' })
+    expect(calls.attemptScreenCapture).toHaveBeenCalledTimes(1)
+    expect(calls.relaunch).not.toHaveBeenCalled()
+  })
+
+  it('granted at launch: allowed, nothing to press, no notice', async () => {
+    const { value, calls } = seam({ media: { screen: 'granted' } })
+
+    value.freshScreenStatus = async () => 'granted'
+    const rows = await readSetupSystem(value, createSetupAttempts())
+
+    expect(rows.find(row => row.id === 'screen')).toMatchObject({ status: 'granted', action: 'none' })
+    expect(calls.confirmRestart).not.toHaveBeenCalled()
+  })
+
+  it('denied: both reads say no, so the pane opens and no restart is offered', async () => {
+    const { value, calls } = seam({ media: { screen: 'denied' }, attempted: true })
+
+    value.freshScreenStatus = async () => 'denied'
+    const row = await screenOf(value)
+
+    expect([row.status, row.action]).toEqual(['denied', 'openSettings'])
+    await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'screen' })
+    expect(calls.openExternal).toHaveBeenCalledWith(SETUP_PANES.screen)
+    expect(calls.relaunch).not.toHaveBeenCalled()
+  })
+
+  it('revoked while running: the old in-process yes loses to the new read', async () => {
+    const { value } = seam({ media: { screen: 'granted' }, attempted: true })
+
+    value.freshScreenStatus = async () => 'denied'
+    const row = await screenOf(value)
+
+    expect([row.status, row.action]).toEqual(['denied', 'openSettings'])
+  })
+
+  it('switch on, process blind (the owner report): restart needed, the notice once, the app relaunches', async () => {
+    const { value, calls } = seam({ media: { screen: 'denied' }, attempted: true })
+
+    value.freshScreenStatus = async () => 'granted'
+    const attempts = createSetupAttempts()
+    const rows = await readSetupSystem(value, attempts)
+
+    expect(rows.find(row => row.id === 'screen')).toMatchObject({ status: 'restartNeeded', action: 'restart' })
+    await vi.waitFor(() => expect(calls.relaunch).toHaveBeenCalledTimes(1))
+    await readSetupSystem(value, attempts)
+    expect(calls.confirmRestart).toHaveBeenCalledTimes(1)
+  })
+
+  it('"Later": no relaunch, no second notice, the row\'s own button restarts', async () => {
+    const { value, calls } = seam({ media: { screen: 'denied' }, attempted: true })
+
+    value.freshScreenStatus = async () => 'granted'
+    calls.confirmRestart.mockResolvedValue(false)
+    value.confirmRestart = calls.confirmRestart
+    const attempts = createSetupAttempts()
+
+    await readSetupSystem(value, attempts)
+    await vi.waitFor(() => expect(calls.confirmRestart).toHaveBeenCalledTimes(1))
+    await Promise.resolve()
+    expect(calls.relaunch).not.toHaveBeenCalled()
+    await actOnSetupSystemItem(value, attempts, { item: 'screen' })
+    expect(calls.relaunch).toHaveBeenCalledTimes(1)
+  })
+
+  it('the renderer can never restart the app by asking: granted and denied rows do nothing', async () => {
+    for (const fresh of ['granted', 'denied'] as const) {
+      const { value, calls } = seam({ media: { screen: fresh }, attempted: true })
+
+      value.freshScreenStatus = async () => fresh
+      await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'screen', restart: true })
+      expect(calls.relaunch).not.toHaveBeenCalled()
+    }
+  })
+
+  it('an unreadable new-process read leaves the running process answer standing', async () => {
+    const { value } = seam({ media: { screen: 'denied' }, attempted: true })
+
+    value.freshScreenStatus = async () => {
+      throw new Error('osascript gone')
+    }
+
+    expect((await screenOf(value)).status).toBe('denied')
+  })
+
+  it('Privacy switch off: the app reads nothing from macOS for it', async () => {
+    const fresh = vi.fn(async () => 'granted' as const)
+    const { value } = seam({ off: ['screen'], media: { screen: 'denied' } })
+
+    value.freshScreenStatus = fresh
+    expect((await screenOf(value)).status).toBe('declined')
+    expect(fresh).not.toHaveBeenCalled()
+  })
+
+  it('the row names the identity: the shipped id, or a plain flag on a dev build', async () => {
+    const shipped = seam().value
+    const dev = seam().value
+
+    dev.appBundleId = () => 'com.github.Electron'
+    expect((await screenOf(shipped)).identity).toEqual({ bundleId: 'io.cloneframe.icloneos', expected: true })
+    expect((await screenOf(dev)).identity).toEqual({ bundleId: 'com.github.Electron', expected: false })
+  })
+
+  it('CuaDriver panes: main picks the URL, an unknown name opens nothing', async () => {
+    const { value, calls } = seam()
+
+    await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'cua:accessibility' })
+    expect(calls.openExternal).toHaveBeenLastCalledWith(CUA_DRIVER_PANES['cua:accessibility'])
+    await actOnSetupSystemItem(value, createSetupAttempts(), { item: 'cua:screen' })
+    expect(calls.openExternal).toHaveBeenLastCalledWith(CUA_DRIVER_PANES['cua:screen'])
+    calls.openExternal.mockClear()
+
+    for (const item of ['cua:evil', 'toString', 'x-apple.systempreferences:anything']) {
+      await actOnSetupSystemItem(value, createSetupAttempts(), { item })
+    }
+
+    expect(calls.openExternal).not.toHaveBeenCalled()
+  })
+
+  it('the preflight really runs on this Mac, and answers only yes or no', () => {
+    const stdout = execFileSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', SCREEN_PREFLIGHT_JXA], {
+      env: { PATH: '/usr/bin:/bin' },
+      timeout: 8_000
+    }).toString()
+
+    expect(['granted', 'denied']).toContain(parseScreenPreflight(stdout))
+    expect(SCREEN_PREFLIGHT_JXA).not.toMatch(/Request/)
+    expect(parseScreenPreflight('garbage')).toBeNull()
   })
 })

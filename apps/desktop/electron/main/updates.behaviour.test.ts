@@ -8,6 +8,11 @@
  *   - critic r2 M1: the curated (pinned) update path never records the Python environment; only an install from
  *     nothing does.
  */
+import type * as ChildProcess from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const h = vi.hoisted(() => ({
@@ -133,5 +138,61 @@ describe('the update module, exercised (critics panel minor 5)', () => {
 
     expect(h.runPinnedRuntimeUpdate).toHaveBeenCalledTimes(1)
     expect(h.seal).not.toHaveBeenCalled()
+  })
+})
+
+describe('preflightStateDb, against what the confined runtime can plant at state.db', () => {
+  const makeHome = () => {
+    const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'preflight-')))
+    const home = path.join(base, 'home')
+    // A long path: the link's own size passes the pre-flight's 100-byte floor, so the copy is what is tested.
+    const secret = path.join(base, 'k'.repeat(120))
+
+    fs.mkdirSync(home)
+    fs.writeFileSync(secret, `PRIVATE KEY ${'x'.repeat(200)}\n`)
+
+    return { base, home, secret, backups: () => fs.readdirSync(home).filter(f => f.endsWith('.bak')) }
+  }
+
+  it('a link is never copied into the folder the runtime reads: no key file through an emergency backup', async () => {
+    const { preflightStateDb } = await import('./updates')
+    const { base, home, secret, backups } = makeHome()
+
+    fs.symlinkSync(secret, path.join(home, 'state.db'))
+    preflightStateDb(home, vi.fn())
+
+    expect(backups()).toEqual([])
+    fs.rmSync(base, { force: true, recursive: true })
+  })
+
+  it('a FIFO does not hang the update', async () => {
+    const { preflightStateDb } = await import('./updates')
+    const { base, home, backups } = makeHome()
+
+    const { execFileSync } = await vi.importActual<typeof ChildProcess>('node:child_process')
+
+    execFileSync('/usr/bin/mkfifo', [path.join(home, 'state.db')])
+    preflightStateDb(home, vi.fn())
+
+    expect(backups()).toEqual([])
+    fs.rmSync(base, { force: true, recursive: true })
+  })
+
+  it('a real database still gets its backup, and the older ones are pruned to two', async () => {
+    const { preflightStateDb } = await import('./updates')
+    const { base, home, backups } = makeHome()
+
+    fs.writeFileSync(path.join(home, 'state.db'), Buffer.concat([Buffer.from('SQLite format 3\0'), Buffer.alloc(200)]))
+
+    for (const old of ['a', 'b', 'c']) {
+      fs.writeFileSync(path.join(home, `state.db.pre-update-emergency-${old}.bak`), 'old')
+    }
+
+    preflightStateDb(home, vi.fn())
+
+    expect(backups()).toHaveLength(3)
+    expect(backups().filter(name => !/-[abc]\.bak$/.test(name))).toHaveLength(1)
+    expect(backups()).not.toContain('state.db.pre-update-emergency-a.bak')
+    fs.rmSync(base, { force: true, recursive: true })
   })
 })

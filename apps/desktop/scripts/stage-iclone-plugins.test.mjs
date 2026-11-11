@@ -12,9 +12,11 @@ import {
 } from '../electron/iclone-plugin-tree.ts'
 
 import afterPack from './after-pack.mjs'
+import { ADDON_OUTPUT, assertPinnedAddon } from './build-iclone-fsevents.mjs'
 import { electronDistDir } from './electron-dist.mjs'
 import { CHROMIUM_LICENSES_FILE } from './electron-licenses.mjs'
 import { bundleRepoRuntime, PIN_PATH, readPin } from './fetch-runtime-pin.mjs'
+import { packedAddonPath } from './iclone-fsevents-check.mjs'
 import { tryRuntimePython } from './runtime-artifact.mjs'
 import {
   REPO_PLUGINS,
@@ -204,6 +206,29 @@ test('m5: afterPack accepts a pack fixture staged with stagePackedIclonePlugins,
     // Building the real bundle needs the pin's exact CPython for its bytecode (V3RT_gates.sh sets ICLONE_RUNTIME_PY).
     if (!pin.python || tryRuntimePython(pin.python, pin.pythonBuild?.executable_sha256)) {
       bundleRepoRuntime({ pin, outDir: path.join(resources, 'hermes-runtime') })
+
+      // FSEV (e1de8634fd): a macOS pack must also carry the pinned FSEvents addon, unpacked from the asar. Without it,
+      // or with a stub of other bytes at its path, afterPack refuses; with the pinned build (`npm run build` makes it;
+      // assertPinnedAddon throws if this tree has none) it accepts. Linux packs carry no addon and are not asked for one.
+      if (platform === 'darwin') {
+        const addon = packedAddonPath(path.join(appOutDir, 'iclone os.app'))
+
+        await assert.rejects(
+          quiet(() => afterPack(context)),
+          /the FSEvents addon is not packed correctly: no app\.asar\.unpacked\/dist\/native\/iclone_fsevents\.node in the app$/,
+          platform
+        )
+        fs.mkdirSync(path.dirname(addon), { recursive: true })
+        fs.writeFileSync(addon, 'not the pinned addon')
+        await assert.rejects(
+          quiet(() => afterPack(context)),
+          /the FSEvents addon is not packed correctly: iclone_fsevents\.node is not the pinned build$/,
+          platform
+        )
+        assertPinnedAddon(ADDON_OUTPUT)
+        fs.copyFileSync(ADDON_OUTPUT, addon)
+      }
+
       await quiet(() => afterPack(context))
     }
   }

@@ -68,6 +68,7 @@ vi.mock(import('@/store/notifications'), async importOriginal => ({
 
 type Listener = (ev: unknown) => void
 let connectionApplied: null | (() => void) = null
+let backendRestarted: null | (() => void) = null
 let powerResume: null | (() => void) = null
 
 describe('primaryRuntimeConnectionId', () => {
@@ -224,11 +225,19 @@ function fakeDesktop() {
       bootProgressHandler?.(payload)
     },
     onBackendExit: vi.fn(() => () => undefined),
+    onBackendRestarted: vi.fn(callback => {
+      backendRestarted = callback
+
+      return () => {
+        backendRestarted = null
+      }
+    }),
     onConnectionApplied: vi.fn(callback => {
       connectionApplied = callback
 
       return () => {
         connectionApplied = null
+  backendRestarted = null
       }
     }),
     onPowerResume: vi.fn(callback => {
@@ -1231,6 +1240,52 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     })
 
     expect($desktopBoot.get().error).toBeTruthy()
+  })
+
+  it('a restart of the same backend keeps the conversation: no draft, no wipe, no switch, and the window dials again (F41b)', async () => {
+    const beforeConnectionSwitch = vi.fn()
+    const refreshSessions = vi.fn(async () => undefined)
+    render(<Harness beforeConnectionSwitch={beforeConnectionSwitch} refreshSessions={refreshSessions} />)
+    await flushAsync()
+    expect($gatewayState.get()).toBe('open')
+    expect(backendRestarted).not.toBeNull()
+    refreshSessions.mockClear()
+    const socketsBefore = FakeWebSocket.instances.length
+
+    // Main killed the old backend: the old socket is gone by the time main reports the new one is up.
+    act(() => FakeWebSocket.instances[socketsBefore - 1].drop())
+    act(() => backendRestarted?.())
+    expect($gatewaySwitching.get()).toBe(false)
+    await flushAsync()
+
+    expect(beforeConnectionSwitch).not.toHaveBeenCalled()
+    expect($gatewaySwitching.get()).toBe(false)
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(socketsBefore)
+    expect($gatewayState.get()).toBe('open')
+    expect(refreshSessions).toHaveBeenCalled()
+  })
+
+  it('a restart in a window whose boot never finished goes the full way, so the window still comes up (F41b)', async () => {
+    const desktop = fakeDesktop()
+    const originalGetConnection = desktop.getConnection
+    let calls = 0
+
+    desktop.getConnection = vi.fn((profile?: null | string) => {
+      calls += 1
+
+      return calls === 1 ? Promise.reject(new Error('no backend yet')) : originalGetConnection(profile)
+    })
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    const beforeConnectionSwitch = vi.fn()
+    render(<Harness beforeConnectionSwitch={beforeConnectionSwitch} />)
+    await flushAsync()
+    expect($gatewayState.get()).not.toBe('open')
+
+    act(() => backendRestarted?.())
+    await flushAsync()
+
+    expect(beforeConnectionSwitch).toHaveBeenCalled()
+    expect($gatewayState.get()).toBe('open')
   })
 
   it('softSwitch(): a getConnection() that hangs on a connection-apply switch does not latch $gatewaySwitching forever (#93454)', async () => {

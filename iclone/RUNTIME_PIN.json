@@ -1,8 +1,8 @@
 {
-  "sha": "fb0f640ea3bd67e6c99f87b12e96b7669b608348",
-  "date": "2026-11-04",
+  "sha": "fc5c4e2d9101d0c120f2cfe8e9ba9086f13a554a",
+  "date": "2026-11-11",
   "python": "3.14.7",
-  "pycs": 2302,
+  "pycs": 2308,
   "python_build": {
     "version": "3.14.7 (main, Sep  1 2026, 14:05:28) [Clang 22.1.3 ]",
     "build": [
@@ -15,12 +15,12 @@
   "node": "v26.8.1",
   "source": "repo",
   "upstream": "1ac3f97fbe0958aa2743c0c26202b20b3b4e760e",
-  "tarball_sha256": "dd86caff487be0515ecaaa3560c8625803b246a02c1f530e6a338486ba853b0e",
-  "tarball_bytes": 46239896,
-  "install_sh_sha256": "14b4c89518cf0e4e71841708dd5d8a28f1f494d22cd20e12f4d5eeb29c7d2fdb",
-  "manifest_sha256": "07ffb6767ddb23b447f347d55231d54bbc81e1dd9a79ec2c211b474f737b9e79",
-  "files": 6434,
-  "bytes": 128377637,
+  "tarball_sha256": "ded5b46e312b440900c634a5618bfdeedfa84dc65ede8cab797ba680532528cb",
+  "tarball_bytes": 46614717,
+  "install_sh_sha256": "a19c2c01737669167f3d28e7264b46e7e6fb6ac5f736f0fcb7dbbb32dc099d80",
+  "manifest_sha256": "7f061de7da1ede8c54ef79c1c20e5e086104c58008a9249e58cccb71605fda58",
+  "files": 6452,
+  "bytes": 129446328,
   "min_app": "1.1.0",
   "verified": "amber:3-roots"
 }

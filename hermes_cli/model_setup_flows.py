@@ -396,8 +396,12 @@ def _model_flow_openai_codex(config, current_model=""):
     selected = _prompt_model_selection(
         codex_models, current_model=current_model, confirm_provider="openai-codex",
         confirm_base_url=_codex_base or DEFAULT_CODEX_BASE_URL, confirm_api_key=_codex_token or "")
-    _activate_provider_model(selected, "openai-codex", DEFAULT_CODEX_BASE_URL,
-                             f"Default model set to: {selected} (via OpenAI Codex)")
+    # A working gateway in model.base_url stays (FX34 R38); the env override is never written to the file.
+    model_cfg = config.get("model") if isinstance(config, dict) else None
+    model_cfg = model_cfg if isinstance(model_cfg, dict) else {}
+    kept_base = str(model_cfg.get("base_url") or "").strip() if model_cfg.get("provider") == "openai-codex" else ""
+    _activate_provider_model(selected, "openai-codex", kept_base or DEFAULT_CODEX_BASE_URL,
+                             f"Default model set to: {selected} (via OpenAI Codex){_codex_kept_base_note(kept_base)}")
 
 
 def _model_flow_xai_oauth(_config, current_model="", *, args=None):
@@ -1191,3 +1195,19 @@ def _model_flow_plugin_provider(config, provider_id, current_model=""):
         confirm_base_url=base_url, confirm_api_key=api_key, notes=notes)
     _finish_model(selected, provider_id, f"Default model set to: {selected} (via {profile.display_name or provider_id})",
                   base_url=base_url or None, api_mode=profile.api_mode or None)
+
+
+def _codex_kept_base_note(kept_base: str) -> str:
+    """Empty unless chat would be refused on the line this flow keeps: then what it holds and what to do."""
+    from hermes_cli.auth_codex import CODEX_HOST_UNKNOWN_CODE
+    from hermes_cli.auth_constants import AuthError
+    from hermes_cli.runtime_provider import resolve_runtime_provider
+    if kept_base:
+        try:
+            resolve_runtime_provider(requested="openai-codex")
+        except AuthError as exc:
+            if exc.code == CODEX_HOST_UNKNOWN_CODE:
+                return (f", but chat will be refused: model.base_url in config.yaml holds {kept_base}.\n{exc}")
+        except Exception:
+            pass
+    return ""

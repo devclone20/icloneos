@@ -24,7 +24,7 @@ def _jwt_with_exp(offset_seconds: int) -> str:
     def _b64(payload: dict) -> str:
         return base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).rstrip(b"=").decode("utf-8")
 
-    return f"{_b64({'alg': 'none'})}.{_b64({'exp': int(time.time()) + offset_seconds})}.sig"
+    return f"{_b64({'alg': 'none'})}.{_b64({'iss': 'https://auth.openai.com', 'exp': int(time.time()) + offset_seconds})}.sig"
 
 
 def _pool_only_codex_home(tmp_path, monkeypatch, *, access_tokens: list):

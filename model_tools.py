@@ -728,7 +728,7 @@ def _dispatch_bridge_tool(function_name: str, function_args: Dict[str, Any],
         return ts.dispatch_tool_describe(args, current_tool_defs=current_defs), None
     underlying_name, underlying_args, err = ts.resolve_underlying_call(args)
     if err or not underlying_name:
-        return tool_error(err or "tool_call could not be resolved"), None
+        return tool_error(ts.tool_not_in_session(args, current_defs) or err or "tool_call could not be resolved"), None
     if underlying_name == ts.CONNECTOR_BATCH_SENTINEL:
         if not ts.connections_in_scope(current_defs):
             return tool_error("Connectors are not available in this session."), None

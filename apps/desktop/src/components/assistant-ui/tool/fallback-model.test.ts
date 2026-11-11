@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import path from 'node:path'
+
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { setRuntimeI18nLocale } from '@/i18n'
@@ -8,6 +11,7 @@ import {
   countDiffLineStats,
   inlineDiffFromResult,
   MAX_TOOL_RENDER_CHARS,
+  OWNER_PERMISSION_PENDING,
   prettyJson,
   type ToolPart
 } from './fallback-model'
@@ -486,5 +490,42 @@ describe('buildToolView memory status', () => {
     expect(view.status).toBe('warning')
     expect(view.title).toBe('Memory write noted')
     expect(view.subtitle).toContain('Memory is full')
+  })
+})
+
+describe('buildToolView: a call the permission gate holds for the owner', () => {
+  const WAITING = `${OWNER_PERMISSION_PENDING} (the request stays open for two minutes). Tell the owner what you asked for.`
+  const args = { command: 'pwd && ls && id && date && whoami && uname && env && df' }
+
+  it('is the wording the plugin blocks with (vitest runs with cwd = apps/desktop)', () => {
+    const plugin = readFileSync(path.join(process.cwd(), '../../plugins/iclone-permissions/__init__.py'), 'utf8')
+
+    expect(plugin).toContain(`"${OWNER_PERMISSION_PENDING} (`)
+  })
+
+  it.each([
+    ['the error field', { error: WAITING }, false],
+    ['a JSON string', JSON.stringify({ error: WAITING }), false],
+    ['an error envelope', { error: WAITING }, true]
+  ])('neither failed nor ran, through %s', (_shape, result, isError) => {
+    const view = buildToolView(part({ args, isError, result, toolName: 'terminal' }), '')
+
+    expect(view.status).toBe('asked')
+    expect(view.title).toBe('Asked for your permission')
+    expect(view.subtitle).not.toContain(OWNER_PERMISSION_PENDING)
+  })
+
+  it('a refusal stays a red error, and a real failure too', () => {
+    const refused = { error: 'BLOCKED by icloneOS permissions: the owner denied it.' }
+
+    expect(buildToolView(part({ args, result: refused, toolName: 'terminal' }), '').status).toBe('error')
+    expect(buildToolView(part({ args, result: { error: 'boom' }, toolName: 'terminal' }), '').status).toBe('error')
+  })
+
+  it('the retry that ran after Allow reads as a command that ran', () => {
+    const view = buildToolView(part({ args, result: { exit_code: 0, output: '/tmp' }, toolName: 'terminal' }), '')
+
+    expect(view.status).toBe('success')
+    expect(view.title).toMatch(/^Ran /)
   })
 })

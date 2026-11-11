@@ -76,7 +76,8 @@ function persistHudState() {
   try {
     const { x, y, width, height } = windowsState.hudWindow.getNormalBounds()
     fs.mkdirSync(path.dirname(HUD_STATE_PATH), { recursive: true })
-    writeFileAtomicSync(HUD_STATE_PATH, JSON.stringify({ x, y, width, height }, null, 2))
+    // L4-05: HUD geometry is cheap to lose; atomic, not fsynced (schedulePersistHudState debounces drags to 250 ms).
+    writeFileAtomicSync(HUD_STATE_PATH, JSON.stringify({ x, y, width, height }, null, 2), { durable: false })
   } catch (err) {
     rememberLog(`[hud-state] persist failed: ${errorMessage(err) || err}`)
   }

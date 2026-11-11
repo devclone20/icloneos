@@ -956,8 +956,27 @@ def _by_status(c: _Ctx) -> Optional[Verdict]:
 # Stage order: plugin hooks → the provider's own profile hook → provider-specific special cases →
 # HTTP status → MoA shapes → structured error code → message patterns → SSL → disconnect +
 # large session → transport types → unknown (retryable with backoff).
+def codex_refused_send(error: Optional[BaseException]) -> Optional[BaseException]:
+    """The Codex judge's refusal under whatever wrapped it (the SDK reports it as a connection error), or None."""
+    seen: set = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if getattr(error, "code", None) == "codex_credential_host_unknown":
+            return error
+        error = error.__cause__ or error.__context__
+    return None
+
+
+def _codex_refused_send_verdict(c: _Ctx) -> Optional[Verdict]:
+    """Nothing left the process and the same send gets the same answer: no retry, no fallback, the fix by name."""
+    refusal = codex_refused_send(c.error)
+    if refusal is None:
+        return None
+    return {"reason": _R.auth_permanent, "retryable": False, "should_fallback": False, "message": str(refusal)}
+
+
 _STAGES: Sequence[Callable[[_Ctx], Optional[Verdict]]] = (
-    _plugin_verdict, _profile_verdict, _provider_special_cases, _by_status, _moa_special_cases,
+    _codex_refused_send_verdict, _plugin_verdict, _profile_verdict, _provider_special_cases, _by_status, _moa_special_cases,
     _by_error_code, _by_message, _by_transport,
 )
 

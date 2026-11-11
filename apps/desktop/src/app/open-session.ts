@@ -24,6 +24,7 @@ import {
   reuseBlankDraftTile,
   setSessionTileWorkspaceScope
 } from '@/store/session-states'
+import { $sessionTilesRender } from '@/store/tile-render'
 import { canOpenSessionWindow, openSessionInNewWindow } from '@/store/windows'
 
 import { $workspaceIsPage, sessionRoute } from './routes'
@@ -128,6 +129,12 @@ export function openSession(
   if (resolved === 'stack') {
     spendBlankDraft = mainChatOccupied($activeSessionId.get(), $selectedStoredSessionId.get())
     resolved = spendBlankDraft ? 'tab' : 'in-place'
+  }
+
+  // No pane renders a tile in this version, so a tile would show nothing: the
+  // chat opens where the user can see it.
+  if (resolved === 'tab' && !$sessionTilesRender.get()) {
+    resolved = 'in-place'
   }
 
   if (resolved === 'tab') {

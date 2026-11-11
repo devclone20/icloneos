@@ -6,7 +6,7 @@
 //   node scripts/ic-style-ratchet.mjs            check
 //   node scripts/ic-style-ratchet.mjs --update   lower the baseline to today's counts (never raises one; creates it once)
 //
-// The counting rules mirror the P5 gate counter (RESUME/run/gates/P5/p5_static.py) so the two never disagree.
+// The counting rules mirror the P5 gate counter (kept outside this repository) so the two never disagree.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'

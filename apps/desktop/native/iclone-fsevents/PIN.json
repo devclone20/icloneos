@@ -1,0 +1,9 @@
+{
+  "sha256": "3415cd2f031825de3108194e2079379a60f583d6db78d355b8bbfd0c04bc32e8",
+  "sha256Unsigned": "09d8207a7defaa703f3a4d957c13b3d2e146d903a0abbfc30ea303c4ba4d7032",
+  "source": "580d70ba6f4fc26152f3bae86d941a427a7ae73c7d056a8984355c47c81452a1",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+  "sdk": "27.2",
+  "minimumSystemVersion": "13.0",
+  "arch": "arm64"
+}

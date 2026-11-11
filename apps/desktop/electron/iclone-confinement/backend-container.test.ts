@@ -43,7 +43,7 @@ describe('container backend — not used in this version', () => {
   it('refuses every spawn, lists nothing, kills nothing — never falls back to running unconfined', async () => {
     await backend.probe()
 
-    const result = backend.spawn(REQUEST)
+    const result = await backend.spawn(REQUEST)
 
     expect(result.ok).toBe(false)
     expect(!result.ok && result.error).toMatch(/not available in this version of icloneOS: not installed on this Mac/)
@@ -60,7 +60,7 @@ describe('container backend — not used in this version', () => {
 
     await installed.probe()
 
-    const result = installed.spawn(REQUEST)
+    const result = await installed.spawn(REQUEST)
 
     expect(result.ok).toBe(false)
     expect(!result.ok && result.error).toBe(
@@ -100,7 +100,7 @@ describe('G3-3 — the refusal follows every probe, at the same time as the pane
 
     for (let i = 0; i < answers.length; i += 1) {
       const view = await backend.probe()
-      const result = backend.spawn(REQUEST)
+      const result = await backend.spawn(REQUEST)
 
       expect(!result.ok && result.error).toBe(containerRefusal(view))
       expect(backend.explain(5, { rows: [], verified: false })[0]).toContain(containerRefusal(view))
@@ -139,7 +139,7 @@ describe('G3-3 — the refusal follows every probe, at the same time as the pane
       evidence: 'XPC gone',
       ownerStep: null
     })
-    expect(backend.spawn(REQUEST)).toEqual({ ok: false, error: containerRefusal(await backend.probe()) })
+    expect(await backend.spawn(REQUEST)).toEqual({ ok: false, error: containerRefusal(await backend.probe()) })
   })
 })
 
@@ -155,7 +155,7 @@ describe('G3 r2 m-3 — overlapping probes: an older answer landing last never r
     pending[0]({ ...INSTALLED, status: 'unknown', version: null, detail: 'probe-timeout' })
     expect((await older).status).toBe('unknown')
 
-    expect(backend.spawn(REQUEST)).toEqual({ ok: false, error: containerRefusal(INSTALLED) })
+    expect(await backend.spawn(REQUEST)).toEqual({ ok: false, error: containerRefusal(INSTALLED) })
     expect(backend.explain(5, { rows: [], verified: false })[0]).toContain(containerRefusal(INSTALLED))
   })
 })

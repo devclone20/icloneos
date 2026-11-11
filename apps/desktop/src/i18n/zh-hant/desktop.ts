@@ -25,6 +25,13 @@ export const desktop: TranslationOverrides['desktop'] = {
   readOnlyTranscriptBody:
     '尚無已連線的後端認領這個較早的對話，因此它以唯讀逐字稿方式開啟。歷史紀錄完好；在有後端認領之前無法傳送訊息。',
   readOnlyTranscriptSendBlocked: '此對話目前以唯讀逐字稿方式開啟——傳送已停用。',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: '無法載入此工作階段',
   resumeStrandedBody: '與此工作階段的連線失敗，自動重試已停止。請確認閘道正在執行，然後重試。',
   resumeRetry: '重試',
@@ -171,9 +178,14 @@ export const desktop: TranslationOverrides['desktop'] = {
       browserUnknown: '瀏覽器可見性 — 無法讀取設定；點擊重試',
       browserWorking: '正在切換瀏覽器模式並重新啟動代理…',
       recordOff:
-        '錄製已關閉 — 點擊讓代理錄製其瀏覽過程（內建瀏覽器會把每次工作階段的影片存到其錄製資料夾；Browser-Use CLI 會把影格記錄到其工作區）',
-      recordOn: '錄製已開啟 — 代理正在錄製它在瀏覽器中的操作。點擊停止。',
+        '錄製已關閉。點擊讓代理錄製它在瀏覽器中的操作，影片存到 Movies/icloneOS Recordings。',
+      recordOn: '錄製已開啟，尚未擷取 — 代理將從開啟的下一個頁面開始錄製它在瀏覽器中的操作。點擊關閉。',
+      recordCapturing: '正在錄製瀏覽器 — 點擊停止並將影片存到 Movies/icloneOS Recordings。',
+      recordShowFile: '在 Finder 中顯示',
+      recordStopRanOut:
+        '執行環境重新啟動前，瀏覽器影片未能儲存完成。無法確認是否已儲存：請檢查 Movies/icloneOS Recordings。檔案可能不完整。',
       recordUnknown: '瀏覽器錄製 — 無法讀取設定；點擊重試',
+      recordSaving: '正在儲存瀏覽器影片。可能需要約半分鐘，最多一分鐘。',
       recordWorking: '正在切換錄製…',
       themeCycle: (natural, dark, light) => `主題 — ${natural} · ${dark} · ${light}`,
       themeNatural: '自然',

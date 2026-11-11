@@ -1,7 +1,7 @@
 # iclone/contract — the runtime contract
 
 The app's dependency on the Hermes runtime, written down as data and checked against the runtime's own spec.
-Contract: `RESUME/contracts/P4_upstream.md` (v2). Nothing here merges upstream code; upstream is a reference.
+Contract: The P4 upstream contract (v2). Nothing here merges upstream code; upstream is a reference.
 
 | file | role | edited by |
 |---|---|---|

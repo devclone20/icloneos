@@ -14,6 +14,8 @@ tool calls or reasoning.
 import logging
 import time
 import weakref
+
+from hermes_cli.auth_constants import AuthError
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -430,7 +432,7 @@ def _build_children(
                 model=creds["model"], max_iterations=max_iterations, task_count=len(task_list),
                 parent_agent=parent_agent, role=_normalize_role(t.get("role") or top_role), **overrides,
             )
-        except ValueError as exc:
+        except (ValueError, AuthError) as exc:
             return [], str(exc)
         if _task_schema is not None:
             with _quiet("Could not attach output schema to child %d", i):

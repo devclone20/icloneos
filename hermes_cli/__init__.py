@@ -1,6 +1,15 @@
 """Hermes CLI - Unified command-line interface for Hermes Agent."""
 
+import os
 import sys
+
+# First code of every `python -m hermes_cli.main` and `hermes` the app starts unconfined: nothing has opened a file yet.
+# Only when armed: this package is the launch repair's own import, so an unarmed start must keep working on a tree a
+# killed update left without the guard's file. Armed, that same missing file stops the start: never unguarded.
+if os.environ.get("HERMES_HOME_NO_LINKS") == "1":
+    from hermes_cli.no_follow import arm_from_env
+
+    arm_from_env()
 
 __release_date__ = "2026.9.24"
 # Declared for type checkers and the old-updater surface audit; served lazily by __getattr__.

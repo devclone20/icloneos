@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // release-mac.mjs — the signed, notarized arm64 release (contract P7 decisions 1, 3, 4, 5, 15).
 //
-//   npm run release:mac -- --team <TEAMID> --gates <abs path to RESUME/run/gates/P7_gates.sh> [--staple-only] [--sign-sums]
+//   npm run release:mac -- --team <TEAMID> --gates <absolute path to the gates script> [--staple-only] [--sign-sums]
 //
 // Runs in the owner's Terminal, from a fresh clone outside iCloud. Third-party code (npm ci, vite, tsc) runs while the
 // release keychain is LOCKED; the keychain is unlocked (the owner types its password at the `security` prompt) only for
@@ -617,6 +617,13 @@ export async function releaseMac(opts, deps = {}) {
         '--team',
         opts.team
       ])
+      step('the FSEvents addon in the signed app: Team-signed, pinned bytes under the signature (FSEV, L1-4)', 'node', [
+        'scripts/iclone-fsevents-check.mjs',
+        appPath,
+        '--signed',
+        '--team',
+        opts.team
+      ])
 
       const leaf = step('read the app signature', 'codesign', ['-dvv', appPath])
 
@@ -625,7 +632,7 @@ export async function releaseMac(opts, deps = {}) {
       }
 
       step('stapler validate app', 'xcrun', ['stapler', 'validate', appPath])
-      // RESUME/scout/R7_pack_hang_macos26.md decision 2: the signed, notarized app is LAUNCHED and self-tested here,
+      // Decision from the macOS 26 packaged-launch hang investigation: the signed, notarized app is LAUNCHED and self-tested here,
       // before the DMG is notarized, stapled or listed for upload. A hang (SIGKILL after 180 s) fails the release.
       step('launch the signed app: packaged self-test (--iclone-selftest=all)', 'node', [
         'scripts/verify-packaged-acp.mjs',

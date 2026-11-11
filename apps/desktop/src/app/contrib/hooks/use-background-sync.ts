@@ -18,7 +18,7 @@ import {
   $sessions,
   getSessionOwnerHint,
   sessionMatchesStoredId,
-  setCurrentCwd
+  setCurrentCwdTransient
 } from '@/store/session'
 import type { SessionProfileRoute } from '@/store/session-request-router'
 import {
@@ -617,7 +617,8 @@ export function useBackgroundSync({
       void requestGateway<{ cwd?: string }>('config.get', { key: 'project', cwd })
         .then(info => {
           if (info.cwd && !$activeSessionId.get()) {
-            setCurrentCwd(info.cwd)
+            // fx17 (lens4-pass H2): the gateway's answer moves the view only; it never lists a folder.
+            setCurrentCwdTransient(info.cwd)
           }
         })
         .catch(() => undefined)

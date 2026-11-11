@@ -98,6 +98,11 @@ if __name__ == "__main__":
 '''
 
 
+# iclone-seam: fx35f — the HUP stays ignored across exec, as nohup did on every backend, without its question to the
+# kernel about another process, which confinement refuses ("nohup: can't detach from console").
+RUNNER_LAUNCH = '''( trap '' HUP; exec python3 kernel_runner.py > runner.log 2>&1 ) & echo "PID:$!"'''
+
+
 def _sh(env, cmd: str, timeout: int = 15) -> str:
     """Run *cmd* on the remote from ``/`` and return its output text."""
     result = env.execute(cmd, cwd="/", timeout=timeout)
@@ -232,11 +237,11 @@ def _spawn_remote_kernel(env, env_type: str, owner: str, task_env_id: str,
         # values, so the token file need not sit at rest for the kernel's
         # lifetime. runner.log is pre-created 600 so the launch redirect never
         # lands at the remote's default umask. The inner `&` stays inside the
-        # subshell where `$!` resolves to the runner pid.
+        # subshell where `$!` resolves to the runner pid; exec keeps that pid the runner's.
         launch_cmd = _ship_env_file_and_launch(
             env, kernel_dir, "kernel.env",
             "rm -f ./kernel.env && touch runner.log && chmod 600 runner.log && "
-            '{ nohup python3 kernel_runner.py > runner.log 2>&1 & echo "PID:$!"; }',
+            f"{{ {RUNNER_LAUNCH}; }}",
             rpc_dir=f"{kernel_dir}/rpc", rpc_token=rpc_token,
             HERMES_KERNEL_DIR=kernel_dir, PYTHONPATH=kernel_dir)
         started = _sh(env, launch_cmd, timeout=20)

@@ -25,6 +25,13 @@ export const desktop: TranslationOverrides['desktop'] = {
   readOnlyTranscriptBody:
     'لا يوجد بعد خادم متصل يملك هذه المحادثة القديمة، لذا فُتحت كنصّ محفوظ للقراءة فقط. السجل سليم؛ الإرسال معطّل حتى يتبنّاها خادم.',
   readOnlyTranscriptSendBlocked: 'هذه المحادثة مفتوحة كنصّ محفوظ للقراءة فقط — الإرسال معطّل.',
+  sendHeldReconnecting: 'Reconnecting to the backend. Your message will send as soon as it is back.',
+  sendKeptNoBackend: 'Message not sent: the backend did not come back. Your text is still in the composer.',
+  sendKeptRebind: 'Message not sent: this chat could not reconnect to the backend. Your text is still in the composer.',
+  sendKeptInFlight:
+    'The connection dropped while sending. This message may have reached the model, so check the chat before sending it again. Your text is still in the composer.',
+  sendKeptChatChanged: 'Message not sent: the chat changed while it was sending. Your text is kept in that chat.',
+  sendKeptStillSending: 'Message not sent: the previous one is still going. Your text is still in the composer.',
   resumeStrandedTitle: 'تعذّر تحميل هذه الجلسة',
   resumeStrandedBody: 'فشل الاتصال بهذه الجلسة وتوقفت إعادة المحاولة التلقائية. تأكد من تشغيل البوابة، ثم حاول مجددا.',
   resumeRetry: 'إعادة المحاولة',
@@ -173,9 +180,14 @@ export const desktop: TranslationOverrides['desktop'] = {
       browserUnknown: 'ظهور المتصفح — تعذّر قراءة الإعداد؛ انقر لإعادة المحاولة',
       browserWorking: 'جارٍ تبديل وضع المتصفح وإعادة تشغيل الوكيل…',
       recordOff:
-        'التسجيل متوقف — انقر لتطلب من الوكيل تسجيل تصفّحه (المتصفح المدمج يحفظ فيديو لكل جلسة في مجلد تسجيلاته؛ وأداة Browser-Use لسطر الأوامر تسجّل الإطارات في مساحة عملها)',
-      recordOn: 'التسجيل يعمل — الوكيل يسجّل ما يفعله في المتصفح. انقر للإيقاف.',
+        'التسجيل متوقف. انقر لتطلب من الوكيل تسجيل ما يفعله في متصفحه، كفيديو في Movies/icloneOS Recordings.',
+      recordOn: 'التسجيل يعمل ولم يبدأ الالتقاط بعد — يسجّل الوكيل ما يفعله في المتصفح ابتداءً من الصفحة التالية التي يفتحها. انقر للإيقاف.',
+      recordCapturing: 'يجري تسجيل المتصفح الآن — انقر للإيقاف وحفظ الفيديو في Movies/icloneOS Recordings.',
+      recordShowFile: 'إظهار في Finder',
+      recordStopRanOut:
+        'لم يكتمل حفظ فيديو المتصفح قبل إعادة تشغيل وقت التشغيل. لم يتأكد الحفظ: تحقق من Movies/icloneOS Recordings. قد يكون الملف غير مكتمل.',
       recordUnknown: 'تسجيل المتصفح — تعذّر قراءة الإعداد؛ انقر لإعادة المحاولة',
+      recordSaving: 'جارٍ حفظ فيديو المتصفح. قد يستغرق ذلك نحو نصف دقيقة، وبحد أقصى دقيقة واحدة.',
       recordWorking: 'جارٍ تبديل التسجيل…',
       themeCycle: (natural, dark, light) => `السمة — ${natural} · ${dark} · ${light}`,
       themeNatural: 'طبيعي',

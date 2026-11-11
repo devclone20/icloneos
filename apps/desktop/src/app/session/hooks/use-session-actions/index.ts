@@ -38,6 +38,7 @@ import {
 import { $gatewaySwitching } from '@/store/gateway-switch'
 import { $pinnedSessionIds } from '@/store/layout'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
+import { claimWindowChoice } from '@/store/permissions'
 import {
   $activeGatewayProfile,
   $gatewaySwapTarget,
@@ -547,6 +548,11 @@ export function useSessionActions({
           releaseCreateLease()
         }
 
+        // S11: before any prompt can run: this session takes what the empty chat's selector chose in this window.
+        if (stored) {
+          await claimWindowChoice(stored)
+        }
+
         // Only a genuine move to a DIFFERENT chat mid-create should orphan the
         // session we just minted. The active runtime ref is deliberately not a
         // prong: background gateway events retarget it while other sessions
@@ -672,6 +678,9 @@ export function useSessionActions({
       }
     ) => {
       const listed = options?.listed ?? true
+      // A8: the held choice lands only where its selector was on screen at this click. With a chat open, the selector in
+      // front is that chat's, so the tile takes the Setting and the hold stays for the empty chat that shows it.
+      const holdOnScreen = !selectedStoredSessionIdRef.current
 
       try {
         // Fresh tile → the caller's workspace when one was named (the sidebar
@@ -739,6 +748,10 @@ export function useSessionActions({
 
         createdThisRun.add(stored)
 
+        if (holdOnScreen) {
+          await claimWindowChoice(stored)
+        }
+
         // Seed the per-runtime cache so the tile renders immediately without a
         // redundant resume. Only add the row to the SIDEBAR when `listed` — an
         // unlisted (draft) tab stays out of the session list until its first
@@ -773,7 +786,7 @@ export function useSessionActions({
         notifyError(error, copy.createSessionFailed)
       }
     },
-    [copy, requestGateway, updateSessionState]
+    [copy, requestGateway, selectedStoredSessionIdRef, updateSessionState]
   )
 
   const openSettings = useCallback(() => {

@@ -22,9 +22,11 @@ vi.mock('@/store/starmap', () => ({ resetStarmapGraph }))
 
 const {
   $activeGatewayProfile,
+  $newChatProfile,
   $profiles,
   ensureGatewayProfile,
   invalidateProfileListFetches,
+  pointNewChatAtLiveProfile,
   prewarmProfileBackend,
   refreshProfiles
 } = await import('./profile')
@@ -295,5 +297,39 @@ describe('stale profile-list fetches across a backend switch (#85731)', () => {
     await oldFetch
 
     expect($profiles.get().map(profile => profile.name)).toEqual(['default', 'coder'])
+  })
+})
+
+describe('a plain new chat while a profile is waking', () => {
+  beforeEach(() => {
+    $activeGatewayProfile.set('default')
+    $newChatProfile.set(null)
+    $gateway.set({ id: 'live-socket' })
+  })
+
+  it('goes to the profile being woken, not the one being left', async () => {
+    let finish = () => {}
+    ensureGatewayForProfile.mockImplementationOnce(
+      () => new Promise<undefined>(resolve => (finish = () => resolve(undefined)))
+    )
+
+    $newChatProfile.set('inft-i01')
+    const swap = ensureGatewayProfile('inft-i01')
+
+    await vi.waitFor(() => expect(ensureGatewayForProfile).toHaveBeenCalledWith('inft-i01'))
+    expect($activeGatewayProfile.get()).toBe('default')
+
+    pointNewChatAtLiveProfile()
+    expect($newChatProfile.get()).toBe('inft-i01')
+
+    finish()
+    await swap
+    expect($activeGatewayProfile.get()).toBe('inft-i01')
+  })
+
+  it('drops an older pick when nothing is switching', () => {
+    $newChatProfile.set('stale-quick-create')
+    pointNewChatAtLiveProfile()
+    expect($newChatProfile.get()).toBeNull()
   })
 })

@@ -7,7 +7,7 @@
 //
 //   node scripts/verify-packaged-acp.mjs [--static] [<app.app>]   # default: the app under release/
 //
-// `--static` runs proof 1 only (a locally signed build cannot launch on this Mac: RESUME/scout/R7_pack_hang_macos26.md).
+// `--static` runs proof 1 only (a locally signed build cannot launch on this Mac: the macOS 26 packaged-launch hang investigation).
 //
 // Why this exists: the dock apps were verified for weeks against a dev run
 // that resolved a system `acp` binary, while the packaged app ran the bundled
@@ -78,7 +78,7 @@ export function verifyPackagedAcp(appPath, { staticOnly = false } = {}) {
     return {
       ok: false,
       error: timedOut
-        ? 'the packaged app did not finish its self-test in 180 s (child processes never connected — see RESUME/scout/R7_pack_hang_macos26.md)'
+        ? 'the packaged app did not finish its self-test in 180 s (child processes never connected — see the macOS 26 packaged-launch hang investigation)'
         : result.error.message
     }
   }

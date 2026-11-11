@@ -61,7 +61,7 @@ import { existsSync, readFileSync, rmSync, renameSync } from 'node:fs'
 import path from 'node:path'
 import { Arch } from 'electron-builder'
 import { packedElectronDist, stageChromiumLicenses } from './electron-licenses.mjs'
-import { stageNodePty, stageGetWindows } from './stage-native-deps.mjs'
+import { stageGetWindows, stageIcloneFsevents, stageNodePty } from './stage-native-deps.mjs'
 import { BUNDLE_DIR, PIN_PATH, readPin, verifyRuntimeBundle } from './fetch-runtime-pin.mjs'
 import { findRuntimePython, runtimeEqualsRepo } from './runtime-artifact.mjs'
 import { stageIclonePlugins } from './stage-iclone-plugins.mjs'
@@ -187,6 +187,10 @@ export default async function beforePack(context) {
       // Pass the target arch so an ARM64 package never stages an x64 binding.
       stageGetWindows({ platform, arch: archName })
       console.log(`[before-pack] re-staged get-windows for target ${platform}-${archName}`)
+      // FSEV: the hard-link guard's own FSEvents addon (darwin only; arm64; only the pinned bytes).
+      if (stageIcloneFsevents({ platform })) {
+        console.log(`[before-pack] re-staged iclone_fsevents.node (pinned) for target ${platform}-${archName}`)
+      }
       // V3-S (K139): the iclone Hermes plugins + their content manifest, for extraResources → hermes-plugins/.
       const plugins = stageIclonePlugins()
       console.log(`[before-pack] staged iclone Hermes plugins: ${plugins.names.join(', ')} (${plugins.files} files)`)

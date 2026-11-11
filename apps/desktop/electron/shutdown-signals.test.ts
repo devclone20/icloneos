@@ -1160,8 +1160,10 @@ describe('main.ts wiring', () => {
   })
 
   it('the flag the signal sets is the one main.ts reads to skip the quit confirmation', () => {
-    expect(main).toContain(
-      'quitPromptFor(mergeActiveWork(activeWorkByWebContents.values()), quitState.isQuittingForHandoff)'
+    // fx21 added a third argument, the background count. The flag stays the second one, and quit-guard.test.ts proves
+    // it answers first, whatever the count says.
+    expect(main).toMatch(
+      /quitPromptFor\(\s*mergeActiveWork\(activeWorkByWebContents\.values\(\)\),\s*quitState\.isQuittingForHandoff,/
     )
   })
 

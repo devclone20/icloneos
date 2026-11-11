@@ -82,6 +82,12 @@ def _shutdown_grace_seconds() -> float:
     return value if value > 0 else _DEFAULT_SHUTDOWN_GRACE_S
 
 
+def _shutdown_grace_for_recordings(grace: float) -> float:
+    """A browser video being captured gets its bounded save before the hard exit; otherwise the grace is as it was."""
+    tool = sys.modules.get("tools.browser_tool")
+    return max(grace, tool._RECORD_EXIT_WAIT_S + 1.0) if tool is not None and tool._live_captures() else grace
+
+
 def _mcp_startup_call(name: str, *args, default=None, log=None, **kwargs):
     """Call ``hermes_cli.mcp_startup.<name>`` (lazy import); ``default`` on any failure,
     optionally logged as ``(level, message)``."""
@@ -143,7 +149,7 @@ def _log_signal(signum: int, frame) -> None:
     _append_crash_log(f"{name} received · {time.strftime('%Y-%m-%d %H:%M:%S')}", _dump)
     print(f"[gateway-signal] {name}", file=sys.stderr, flush=True)
     # ``os._exit`` skips atexit but breaks the mid-flush deadlock; the crash log is the trail.
-    timer = threading.Timer(_shutdown_grace_seconds(), _hard_exit)
+    timer = threading.Timer(_shutdown_grace_for_recordings(_shutdown_grace_seconds()), _hard_exit)
     timer.daemon = True
     timer.start()
     # atexit (_shutdown_sessions) can be blocked past the grace window by a worker holding

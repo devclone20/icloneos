@@ -11,10 +11,20 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 import hermes_cli.local_runtime.load_progress as lp
 
 
-def setup_function(_fn):
+@pytest.fixture(autouse=True)
+def _no_live_watcher(monkeypatch):
+    """The real SSE watcher (started by the first get_loading_progress()) clears the snapshot whenever it has
+    no endpoint, every _RECONNECT_DELAY_S, for the life of the process. These tests apply the events
+    themselves, so the watcher is never started here, and one already running in this process (an earlier
+    test reached the getter) cannot wipe the snapshot under an assertion. v0.0.7 C2 gate run 2026-11-11:
+    `assert 'm1' in {}` when the thread won the lock first; passed alone 3/3."""
+    monkeypatch.setattr(lp, "_ensure_watcher", lambda: None)
+    monkeypatch.setattr(lp, "_clear_snapshot", lambda: None)
     with lp._lock:
         lp._snapshot.clear()
 

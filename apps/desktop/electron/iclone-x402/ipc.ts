@@ -35,10 +35,14 @@ import { chmodSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } f
 import net from 'node:net'
 import path from 'node:path'
 
+import { withCallingSession } from '../iclone-permissions/calling-session'
+
 import type { PaymentAuditSink } from './client'
 import { paymentsVerb, type PaymentsVerbDeps } from './verb'
 
-const SOCKET_NAME = 'pay.sock'
+/** The pay socket's name in main's socket folder (the runtime profile names it as the confined Hermes' pay socket). */
+export const PAY_SOCKET_NAME = 'pay.sock'
+const SOCKET_NAME = PAY_SOCKET_NAME
 const REQUEST_MAX_BYTES = 16 * 1024
 const REQUEST_WAIT_MS = 10_000
 const ARGV_MAX = 8
@@ -149,7 +153,9 @@ function clearStaleSocket(file: string): void {
 
 /** Pure: one request line → `{token, home, argv}`, or null for anything malformed. The request never carries an agent;
  *  `home` is the identity of the folder the caller runs in (absent: an older client, refused as unbound). */
-export function parsePayRequest(line: string): { token: string; home: null | string; argv: string[] } | null {
+export function parsePayRequest(
+  line: string
+): { token: string; home: null | string; argv: string[]; session: unknown } | null {
   try {
     const value: unknown = JSON.parse(line)
 
@@ -157,7 +163,7 @@ export function parsePayRequest(line: string): { token: string; home: null | str
       return null
     }
 
-    const { v, token, home, argv } = value as Record<string, unknown>
+    const { v, token, home, argv, session } = value as Record<string, unknown>
 
     if (v !== 1 || typeof token !== 'string' || !TOKEN_RE.test(token)) {
       return null
@@ -175,7 +181,7 @@ export function parsePayRequest(line: string): { token: string; home: null | str
       return null
     }
 
-    return { token, home: typeof home === 'string' ? home : null, argv: argv as string[] }
+    return { token, home: typeof home === 'string' ? home : null, argv: argv as string[], session }
   } catch {
     return null
   }
@@ -318,7 +324,9 @@ export async function startPaySocketServer(deps: PaySocketDeps): Promise<PaySock
       deps.log(`[iclone-x402] ${entry.slug} ${request.argv[0]}`)
 
       try {
-        const result = await paymentsVerb(deps.verb(), entry.slug, request.argv)
+        const result = await withCallingSession(request.session, () =>
+          paymentsVerb(deps.verb(), entry.slug, request.argv)
+        )
 
         if (result.stdout) {
           send({ t: 'o', d: result.stdout })

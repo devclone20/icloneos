@@ -38,7 +38,8 @@
       "src\/plugins\/hermes-bots\/plugin.js:1714"
     ],
     "browser.manage": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:905"
+      "src\/app\/session\/hooks\/use-prompt-actions\/slash.ts:905",
+      "src\/app\/home\/browser-tool.tsx:180"
     ],
     "clarify.lock": [
       "src\/store\/clarify.ts:416"
@@ -76,9 +77,9 @@
     "config.get": [
       "src\/app\/contrib\/hooks\/use-background-sync.ts:617",
       "src\/app\/settings\/plugins-settings.tsx:83",
-      "src\/app\/session\/hooks\/use-cwd-actions.ts:34",
-      "src\/app\/session\/hooks\/use-cwd-actions.ts:68",
-      "src\/app\/session\/workspace-session-target.ts:53"
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:35",
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:71",
+      "src\/app\/session\/workspace-session-target.ts:54"
     ],
     "config.set": [
       "src\/store\/reactions-enabled.ts:34",
@@ -97,27 +98,27 @@
       "src\/plugins\/hermes-bots\/plugin.js:11821"
     ],
     "file.attach": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:195",
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:203",
       "src\/plugins\/hermes-bots\/plugin.js:7629"
     ],
     "handoff.fail": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:600"
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:608"
     ],
     "handoff.request": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:555"
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:563"
     ],
     "handoff.state": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:579"
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:587"
     ],
     "image.attach": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:175"
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:183"
     ],
     "image.attach_bytes": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:170",
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:178",
       "src\/plugins\/hermes-bots\/plugin.js:7639"
     ],
     "image.detach": [
-      "src\/app\/chat\/hooks\/use-composer-actions.ts:716"
+      "src\/app\/chat\/hooks\/use-composer-actions.ts:734"
     ],
     "image.generate": [
       "src\/plugins\/hermes-bots\/plugin.js:4167",
@@ -126,7 +127,7 @@
       "src\/plugins\/hermes-bots\/plugin.js:12351"
     ],
     "llm.oneshot": [
-      "src\/store\/projects.ts:836",
+      "src\/store\/projects.ts:837",
       "src\/lib\/oneshot.ts:46",
       "electron\/iclone-compat.ts:566"
     ],
@@ -167,7 +168,7 @@
       "src\/plugins\/hermes-bots\/plugin.js:7623"
     ],
     "ping": [
-      "src\/app\/gateway\/hooks\/use-gateway-boot.ts:487"
+      "src\/app\/gateway\/hooks\/use-gateway-boot.ts:494"
     ],
     "plugins.manage": [
       "src\/store\/agent-plugins.ts:92",
@@ -236,40 +237,40 @@
       "src\/plugins\/hermes-bots\/plugin.js:10554"
     ],
     "projects.add_folder": [
-      "src\/store\/projects.ts:1096"
+      "src\/store\/projects.ts:1097"
     ],
     "projects.create": [
-      "src\/store\/projects.ts:931"
+      "src\/store\/projects.ts:932"
     ],
     "projects.delete": [
-      "src\/store\/projects.ts:1142"
+      "src\/store\/projects.ts:1143"
     ],
     "projects.discover_repos": [
-      "src\/store\/projects.ts:703"
+      "src\/store\/projects.ts:704"
     ],
     "projects.list": [
-      "src\/store\/projects.ts:427"
+      "src\/store\/projects.ts:428"
     ],
     "projects.project_sessions": [
-      "src\/store\/projects.ts:589"
+      "src\/store\/projects.ts:590"
     ],
     "projects.record_repos": [
-      "src\/store\/projects.ts:766",
-      "src\/store\/projects.ts:784"
+      "src\/store\/projects.ts:767",
+      "src\/store\/projects.ts:785"
     ],
     "projects.set_active": [
-      "src\/store\/projects.ts:1148"
+      "src\/store\/projects.ts:1149"
     ],
     "projects.tree": [
-      "src\/store\/projects.ts:492",
-      "src\/store\/projects.ts:506"
+      "src\/store\/projects.ts:493",
+      "src\/store\/projects.ts:507"
     ],
     "projects.update": [
-      "src\/store\/projects.ts:1017"
+      "src\/store\/projects.ts:1018"
     ],
     "prompt.submit": [
       "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:336",
-      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:790",
+      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:822",
       "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:319",
       "src\/plugins\/hermes-bots\/plugin.js:5759",
       "src\/plugins\/hermes-bots\/plugin.js:7353",
@@ -292,20 +293,20 @@
       "src\/lib\/server-requests\/legacy.ts:174"
     ],
     "session.activate": [
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1032"
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1045"
     ],
     "session.active_list": [
-      "src\/app\/contrib\/hooks\/use-background-sync.ts:648"
+      "src\/app\/contrib\/hooks\/use-background-sync.ts:649"
     ],
     "session.branch": [
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1890"
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1903"
     ],
     "session.close": [
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:573",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:576",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:729",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:732",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:2176"
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:579",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:582",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:738",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:741",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:2189"
     ],
     "session.compress": [
       "src\/app\/session\/compact\/run-compaction.ts:216"
@@ -315,23 +316,23 @@
       "src\/app\/context-panel\/use-context-panel.ts:175"
     ],
     "session.create": [
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:520",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:526",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:706",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:712",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1894",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:521",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:527",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:715",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:721",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1907",
       "src\/plugins\/hermes-bots\/plugin.js:5673",
       "src\/plugins\/hermes-bots\/plugin.js:7269"
     ],
     "session.cwd.set": [
-      "src\/app\/session\/hooks\/use-cwd-actions.ts:95"
+      "src\/app\/session\/hooks\/use-cwd-actions.ts:97"
     ],
     "session.history": [
       "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:226"
     ],
     "session.interrupt": [
       "src\/app\/session\/hooks\/use-prompt-actions\/rewind.ts:329",
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:744",
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:773",
       "src\/app\/chat\/session-tile-actions.ts:356",
       "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:175",
       "src\/plugins\/hermes-bots\/plugin.js:8066"
@@ -340,14 +341,14 @@
       "src\/plugins\/hermes-bots\/plugin.js:5590"
     ],
     "session.redirect": [
-      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:805",
+      "src\/app\/session\/hooks\/use-prompt-actions\/index.ts:834",
       "src\/app\/chat\/session-tile-actions.ts:415"
     ],
     "session.resume": [
       "src\/app\/session\/hooks\/use-prompt-actions\/resolve-target-session.ts:104",
-      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:606",
+      "src\/app\/session\/hooks\/use-prompt-actions\/submit.ts:637",
       "src\/app\/session\/hooks\/use-prompt-actions\/utils.ts:125",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1402",
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1415",
       "src\/app\/contrib\/hooks\/use-session-tile-delegate.ts:226",
       "src\/plugins\/hermes-bots\/plugin.js:7241",
       "src\/plugins\/hermes-bots\/plugin.js:7361",
@@ -367,10 +368,10 @@
       "src\/plugins\/hermes-bots\/plugin.js:5699"
     ],
     "session.usage": [
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1045"
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1058"
     ],
     "session.workspace.move": [
-      "src\/store\/projects.ts:627"
+      "src\/store\/projects.ts:628"
     ],
     "setup.runtime_check": [
       "src\/lib\/runtime-readiness.ts:64"
@@ -621,7 +622,7 @@
     "session.usage": [
       "src\/app\/context-panel\/use-context-panel.ts:27",
       "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/session-info.ts:393",
-      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1045"
+      "src\/app\/session\/hooks\/use-session-actions\/index.ts:1058"
     ],
     "sessions.changed": [
       "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/lifecycle.ts:47"
@@ -736,7 +737,7 @@
       "src\/lib\/server-requests\/policy.ts:19"
     ],
     "wake.detected": [
-      "src\/app\/contrib\/wiring.tsx:806"
+      "src\/app\/contrib\/wiring.tsx:818"
     ],
     "window.read": [
       "src\/app\/session\/hooks\/use-message-stream\/gateway-event\/desktop-bridge.ts:47",

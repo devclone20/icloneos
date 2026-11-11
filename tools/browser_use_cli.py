@@ -244,6 +244,11 @@ def is_browser_use_cli_mode() -> bool:
     if confined_process():
         return False
     backend = get_browser_backend()
+    # G8 (R1): under the app the built-in tools are the browser in both Seatbelt states, the same tools, the same answers.
+    # browser_exec stays for a user who names the backend.
+    from hermes_cli.iclone_policy_env import locked
+    if not backend and locked():
+        return False
     return backend == _BACKEND_KEY if backend else (is_legacy_browser_use_cloud_config(_read_browser_cfg()) or _find_cli() is not None)
 
 

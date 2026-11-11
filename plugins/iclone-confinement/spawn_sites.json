@@ -1,11 +1,11 @@
 {
- "_": "V3-UP r5, rulings 50 + 56: the sites the spawn guard lets start a program in a confined process \u2014 fixed: an app-fixed program, only as the sandbox-exec argv confine_program sealed (inside the agent's Seatbelt); hermes: this runtime's own interpreter, confined. Generated from tests/fixtures/host_exec_sites.json, never edited by hand",
+ "_": "V3-UP r5, rulings 50 + 56: the sites the spawn guard lets start a program in a confined process \u2014 fixed: an app-fixed program, only as the sandbox-exec argv confine_program sealed (inside the agent's Seatbelt); hermes: this runtime's own interpreter, confined; door (ruling R1): only the launcher's door to the browser, outside the Seatbelt. Generated from tests/fixtures/host_exec_sites.json, never edited by hand",
  "fixed": [
   "gateway/platforms/base.py::_detect_macos_system_proxy",
   "gateway/platforms/base.py::transcode_to_ogg_opus",
   "hermes_constants.py::_run_version_probe",
   "plugins/iclone-confinement/providers.py::_run_version",
-  "tools/browser_tool_session.py::_popen_agent_browser",
+  "tools/approval_floor.py::_bash_output",
   "tools/env_probe.py::_run",
   "tools/transcription_audio.py::_run_quiet",
   "tools/transcription_local.py::_sysctl_value",
@@ -24,5 +24,8 @@
   "tools/tts_tool_local.py::_run_helper",
   "tui_gateway/host_supervisor.py::HostSupervisor._spawn_locked",
   "tui_gateway/server.py::_SlashWorker.__init__"
+ ],
+ "door": [
+  "tools/browser_tool_session.py::_popen_agent_browser"
  ]
 }

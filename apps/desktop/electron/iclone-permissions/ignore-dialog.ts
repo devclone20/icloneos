@@ -6,7 +6,7 @@
 import type { BrowserWindow, MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 
 import { raiseConfirmText } from '../../src/iclone-shared/permission-function-copy'
-import { ignoreConfirmCopy } from '../../src/iclone-shared/permission-ignore-copy'
+import { ignoreConfirmCopy, NEW_SESSION_SCOPE_LINE } from '../../src/iclone-shared/permission-ignore-copy'
 import type { FunctionLevel, PermissionFunction } from '../../src/iclone-shared/permissions'
 
 import type { KeySealer } from './keys'
@@ -47,7 +47,7 @@ export async function confirmIgnoreNatively(
   locale: string,
   request: { scope: string; key: string | null }
 ): Promise<boolean> {
-  const copy = ignoreConfirmCopy(locale)
+  const copy = ignoreConfirmCopy(locale, request.scope)
 
   const options: MessageBoxOptions = {
     type: 'warning',
@@ -56,7 +56,19 @@ export async function confirmIgnoreNatively(
     cancelId: 0,
     noLink: true,
     message: copy.title,
-    detail: [request.key ?? '', copy.lead, ...copy.lifts.map(item => `• ${item}`), '', copy.still]
+    detail: [
+      request.scope === 'new-session'
+        ? NEW_SESSION_SCOPE_LINE
+        : request.scope === 'session'
+          ? '' // the title says this session; its key is an id nobody can read
+          : (request.key ?? 'Every project that has no mode of its own.'),
+      copy.lead,
+      ...copy.lifts.map(item => `• ${item}`),
+      '',
+      copy.still,
+      '',
+      copy.once
+    ]
       .filter((line, index) => index > 0 || line.length > 0)
       .join('\n')
   }

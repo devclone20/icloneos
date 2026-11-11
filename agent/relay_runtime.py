@@ -883,7 +883,12 @@ class RelayHostRegistry:
             try:
                 host = RelayRuntime(profile_key=key)
             except Exception as exc:
-                logger.warning("Hermes Relay runtime initialization failed", exc_info=True)
+                # iclone-seam: f55. Relay is not in icloneOS' runtime by design (iclone/telemetry/runtime-venv-exclusions.txt)
+                # and Noop stands in for it everywhere: its absence is a line, not a traceback per profile per process.
+                if isinstance(exc, ModuleNotFoundError) and (exc.name or "").split(".")[0] == "nemo_relay":
+                    _note_relay_absent()
+                else:
+                    logger.warning("Hermes Relay runtime initialization failed", exc_info=True)
                 host = NoopRelayRuntime(profile_key=key, reason=str(exc))
             self._hosts[key] = host
             return host
@@ -1335,6 +1340,16 @@ def current_profile_key() -> str:
     if not home.is_absolute():
         return str(home.resolve())
     return _PROFILE_KEY_CACHE.get(str(home)) or _PROFILE_KEY_CACHE.setdefault(str(home), str(home.resolve()))
+
+
+_relay_absent_noted = False
+
+
+def _note_relay_absent() -> None:
+    global _relay_absent_noted
+    if not _relay_absent_noted:
+        _relay_absent_noted = True
+        logger.info("Hermes Relay is not installed in this runtime; running without it")
 
 
 def _load_nemo_relay() -> Any:

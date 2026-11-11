@@ -77,6 +77,7 @@ export const install: Translations['install'] = {
     diagnosis: {
       cancelled: 'The install was cancelled.',
       disk: 'There is not enough free disk space to finish the install.',
+      homeSettings: 'The install stopped at one of your settings files.',
       integrity: 'A downloaded file did not match its expected fingerprint, so it was not used.',
       interpreter: 'The Python interpreter the agent needs is missing.',
       killed: 'The system stopped the install before it finished.',

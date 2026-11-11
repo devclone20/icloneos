@@ -1,5 +1,5 @@
 /**
- * V3-A — the ONE registry of background work (RESUME/contracts/V3A_background_tasks.md §2.1).
+ * V3-A — the ONE registry of background work (contract V3-A §2.1).
  *
  * Five places already knew about background work (shell processes, sub-agents, cron runs, desktop actions, iT
  * panes) and none of them knew about the others. Each is adapted into a `TaskSource`; this module folds their

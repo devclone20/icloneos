@@ -12,7 +12,7 @@
 //   node scripts/verify-packaged-acp-tree.mjs <dir | app.app>  # an acp-cli dir, or the one inside a bundle
 //
 // Complements verify-packaged-acp.mjs (the signed app's own `--iclone-selftest`), which a locally signed build
-// cannot run on this Mac (RESUME/scout/R7_pack_hang_macos26.md).
+// cannot run on this Mac (the macOS 26 packaged-launch hang investigation).
 
 import { spawn } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'

@@ -100,6 +100,7 @@ import { HomeView } from '../home/home-view'
 import { initItCommands } from '../home/it-commands'
 import { ItTerminalHost } from '../home/it-host'
 import { closeAllTerminals } from '../home/it/engine/terminals'
+import { useScreenFrameDelivery } from '../home/use-screen-frame-delivery'
 import { useKeybinds } from '../hooks/use-keybinds'
 import { useHudHandoff } from '../hud/handoff'
 import { ModelPickerOverlay } from '../model-picker-overlay'
@@ -110,6 +111,7 @@ import { RemoteFolderPicker } from '../remote-picker/remote-picker'
 import {
   CRON_ROUTE,
   HOME_ROUTE,
+  isNewChatRoute,
   NEW_CHAT_ROUTE,
   routeSessionId,
   sessionRoute,
@@ -151,6 +153,7 @@ import { $restartPreviewServer, setStatusbarItemGroup } from './panes'
 import { createSessionRpcDispatcher } from './session-rpc-dispatcher'
 import { ChatRoutesSurface, SidebarSurface } from './surfaces'
 import type { WiringActions, WiringApi } from './types'
+import { openNewChatDoor, plusStacksTile } from './wiring-routing'
 
 // Overlay views the controller mounts over the shell — lazy, load on demand.
 // skills is an overlay too (owner rule — see OVERLAY_VIEWS in routes.ts):
@@ -619,7 +622,9 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     (path: null | string, options?: { openTab?: boolean }) => {
       setWorkspaceScope('sessions')
 
-      if (options?.openTab && mainChatOccupied(activeSessionIdRef.current, $selectedStoredSessionId.get())) {
+      if (
+        plusStacksTile(options?.openTab, mainChatOccupied(activeSessionIdRef.current, $selectedStoredSessionId.get()))
+      ) {
         void openNewSessionTile('center', { cwd: path, listed: false })
 
         return
@@ -657,6 +662,13 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   }, [startSessionInWorkspace, startWorkSessionRequest])
 
   const composer = useComposerActions({ activeSessionId, currentCwd, requestGateway })
+
+  useScreenFrameDelivery({
+    addText: composer.addTextToDraft,
+    attachImagePath: composer.attachImagePath,
+    chatOpen: isNewChatRoute(location.pathname) || routedSessionId !== null,
+    enabled: !isAuxiliaryWindow()
+  })
 
   const branchInNewChat = useCallback(
     async (messageId?: string) => {
@@ -971,8 +983,8 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       return
     }
 
-    void openNewSessionTile('center', { listed: false })
-  }, [openNewSessionTile])
+    openNewChatDoor(startFreshSessionDraft, () => void openNewSessionTile('center', { listed: false }))
+  }, [openNewSessionTile, startFreshSessionDraft])
 
   // Archive the selected session (rebindable `session.archive` hotkey).
   const archiveSelectedSession = useCallback(() => {

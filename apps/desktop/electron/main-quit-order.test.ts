@@ -28,6 +28,10 @@ describe("main.ts's before-quit marks the quit only at its teardown", () => {
 })
 
 describe('the active-work dialog', () => {
+  it('fx21: a background command the launcher still holds counts in the decision', () => {
+    expect(main).toMatch(/quitPromptFor\(\s*mergeActiveWork\(activeWorkByWebContents\.values\(\)\),\s*quitState\.isQuittingForHandoff,\s*leftRunningCount\(runFiles\(app\.getPath\('userData'\)\), undefined, currentConfinement\(\)\?\.launcherSince\(\) \?\? null\)\s*\)/)
+  })
+
   it('"Quit Anyway" latches the choice before it quits again (else the dialog reopens on every pass)', () => {
     expect(main).toMatch(
       /if \(response === 1\) \{\n\s+quitConfirmedWithActiveWork = true\n\s+requitAfter\('quit confirmation'\)/

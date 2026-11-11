@@ -18,11 +18,14 @@ import time
 from contextlib import ExitStack
 from pathlib import Path
 
-from agent.file_safety import get_nt_namespace_error, get_read_block_error
+from agent.file_safety import get_nt_namespace_error, get_read_block_error, is_home_credential_path
 from agent.tool_result_classification import GUARDRAIL_REFUSAL_KEY
 from tools.binary_extensions import has_binary_extension
 from tools.skill_provenance import is_background_review
+from collections.abc import Callable
 from tools.file_operations import (
+    one_file_answered,
+    one_file_read_answered,
     ShellFileOperations, normalize_read_pagination, normalize_search_pagination)
 from tools.file_operations_common import DEFAULT_READ_LIMIT, count_conflict_blocks
 from tools import file_state
@@ -233,17 +236,31 @@ def _resolved_match_path(path: str, task_id: str) -> str:
         return path
 
 
-def _filter_read_blocked_search_results(result, task_id: str = "default") -> int:
+def _credential_list_needs_the_ask(search_root: str) -> bool:
+    """iclone-seam: G28, with the Seatbelt off the permission gate asks once for a search that starts on the credential list.
+    A search that starts above it got no such ask, so outside Ignore those lines do not come back from it."""
+    from agent.file_safety import _seatbelt_off
+    from tools.approval import iclone_ignore_in_force
+
+    if not _seatbelt_off():
+        return False
+
+    return not iclone_ignore_in_force() and not is_home_credential_path(search_root)
+
+
+def _filter_read_blocked_search_results(result, task_id: str = "default", search_root: str | None = None) -> int:
     """Remove credential/cache/env paths from a SearchResult in-place; return the omitted count.
 
     Each path is resolved against the task cwd first (search backends may
     return cwd-relative paths; the process cwd can differ).
     """
     omitted = 0
+    list_held = search_root is not None and _credential_list_needs_the_ask(search_root)
 
     def _allowed(path: str) -> bool:
         nonlocal omitted
-        if get_read_block_error(_resolved_match_path(path, task_id)):
+        resolved = _resolved_match_path(path, task_id)
+        if get_read_block_error(resolved) or (list_held and is_home_credential_path(resolved)):
             omitted += 1
             return False
         return True
@@ -648,7 +665,9 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, 
         # credential stores). Runs BEFORE document extraction so a
         # protected SQLite store (state.db) cannot be read through the extractor. Pass the RESOLVED path: the denylist's own
         # resolve() uses the process cwd and would miss a relative "auth.json".
-        block_error = get_read_block_error(str(_resolved))
+        # iclone-seam: G24, main answered for reading this exact file, in Manual or in Ignore: the agent gets what the sheet said.
+        route_read = _answered(str(_resolved), task_id, one_file_read_answered)
+        block_error = get_read_block_error(str(_resolved), route_answered=route_read)
         if block_error:
             return tool_error(block_error)
 
@@ -680,12 +699,19 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, 
         # Same rule as skill_view: the review fork shares the parent's task_id and its
         # read-before-write guard needs a real read, which the stub path never records (#95976).
         file_ops = _get_file_ops(task_id)
-        version_before = _file_metadata(resolved_str) if _file_ops_uses_host_paths(file_ops) else None
-        if (cached_version is not None and not is_background_review()
+        from tools.environments.host_lane import env_reads_this_host
+
+        host_lane_read = _file_ops_uses_host_paths(file_ops)
+        # iclone-seam: f55. A confining LocalEnvironment reads this host too: without this record no read ever counted as
+        # full, and write_file refused every existing file after a full read, the agent's own SOUL.md included. Not with
+        # the dedup below: under a Seatbelt a repeated read still goes to the kernel, whose answer may have changed.
+        version_before = (_file_metadata(resolved_str)
+                          if host_lane_read or env_reads_this_host(getattr(file_ops, "env", None)) else None)
+        if (host_lane_read and cached_version is not None and not is_background_review()
                 and version_before == cached_version and content_served_in_generation):
             return _dedup_stub_or_block(task_data, dedup_key, path)
 
-        result = file_ops.read_file(resolved_str if _file_ops_uses_host_paths(file_ops) else path, offset, limit)
+        result = file_ops.read_file(resolved_str if host_lane_read else path, offset, limit)
         result_dict = result.to_dict()
 
         # Failed reads cannot establish whole-file knowledge.
@@ -707,7 +733,7 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, 
         redacted = False
         if result.content:
             unredacted = result.content
-            result.content = redact_sensitive_text(
+            result.content = unredacted if route_read else redact_sensitive_text(
                 unredacted, file_read=True, secret_file=_is_secret_file_arg(resolved_str))
             redacted = result.content != unredacted
             result_dict["content"] = result.content
@@ -748,6 +774,10 @@ def read_file_tool(path: str, offset: int = 1, limit: int = DEFAULT_READ_LIMIT, 
                 path=path,
                 already_read=count,
                 **{GUARDRAIL_REFUSAL_KEY: True})
+        route_view = getattr(result, "_route_view", None)
+        note_view = getattr(getattr(file_ops, "env", None), "note_route_view", None)
+        if route_view is not None and note_view is not None and not result_dict.get("truncated_lines"):
+            note_view(route_view[0], route_view[1], offset, end_line, total_lines)
         if count >= 3:
             result_dict["_warning"] = (
                 f"You have read this exact file region {count} times consecutively. "
@@ -786,6 +816,9 @@ def _write_precheck_error(paths: list[str], content_paths: list[str], task_id: s
         err = _check_binary_document_write(p, task_id)
         if err:
             return err
+    # iclone-seam: G23-W2, a patch of the file main just answered for never asks again, as for write_file.
+    if paths and all(_answered(p, task_id) for p in paths):
+        return None
     return (_check_protected_instruction_write(paths, task_id)
             or _check_approval_required_write(paths, task_id))
 
@@ -861,6 +894,26 @@ def _whole_file_rewrite_hint(task_id: str, resolved: str | None, new_content: st
     )
 
 
+def _answered(path: str, task_id: str, waiting: Callable[[object, str], bool] | None = None) -> bool:
+    """Only a process icloneOS confined has a route; anything else must not build file ops for a gate that never asks here."""
+    from hermes_cli.iclone_policy_env import confined_at_exec
+
+    if not confined_at_exec():
+        return False
+    from tools.terminal_scope import TerminalPolicyUnavailable
+
+    resolved = _resolve_or_none(path, task_id)
+    try:
+        return bool(resolved) and (waiting or one_file_answered)(getattr(_get_file_ops(task_id), "env", None), resolved)
+    except TerminalPolicyUnavailable:  # no backend, so no route: the write's own path says the plain refusal
+        return False
+
+
+def _answered_or(path: str, task_id: str, gate: Callable[[], str | None]) -> str | None:
+    """iclone-seam: G23, the owner already answered for this exact file on main's sheet, so a gate of its own never asks twice."""
+    return None if _answered(path, task_id) else gate()
+
+
 def write_file_tool(path: str, content: str, task_id: str = "default",
                     cross_profile: bool = False,
                     session_id: str | None = None) -> str:
@@ -873,8 +926,8 @@ def write_file_tool(path: str, content: str, task_id: str = "default",
     # write_file checks the binary-document guard before the mirror guard.
     err = (_check_sensitive_path(path, task_id)
            or _check_binary_document_write(path, task_id)
-           or _check_protected_instruction_write([path], task_id)
-           or _check_approval_required_write([path], task_id)
+           or _answered_or(path, task_id, lambda: (_check_protected_instruction_write([path], task_id)
+                                                   or _check_approval_required_write([path], task_id)))
            or (None if cross_profile else _check_cross_profile_path(path, task_id)))
     if not err and _is_internal_file_tool_content(content):
         err = ("Refusing to write internal read_file display text as file content. "
@@ -1103,7 +1156,7 @@ def search_tool(pattern: str, target: str = "content", path: str = ".",
         result = _get_file_ops(task_id).search(
             pattern=pattern, path=path, target=target, file_glob=file_glob,
             limit=limit, offset=offset, output_mode=output_mode, context=context, order=order)
-        omitted = _filter_read_blocked_search_results(result, task_id)
+        omitted = _filter_read_blocked_search_results(result, task_id, resolved_search_path)
         for m in getattr(result, "matches", None) or ():
             if getattr(m, "content", None):
                 m.content = redact_sensitive_text(

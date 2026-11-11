@@ -45,6 +45,25 @@ export const boot: Translations['boot'] = {
     gateTitle: '权限关卡未生效',
     gateDescription:
       'icloneOS 没有启动智能体：无法在此智能体运行时中安装或加载权限关卡，因此任何命令都不会被检查。此处的操作不会删除你的聊天或设置。',
+    homeSettingsHint: '请在终端运行上方的命令，然后选择重试。你的设置不会改变。',
+    homeSettingsReplace: 'Replace with a copy',
+    homeSettingsReplaceExplain: (target, file) =>
+      `Copies ${target} to ${file} as a private file and removes the link. The agent can read that copy. The original stays where it is, and later edits to it no longer reach the agent.`,
+    homeSettingsReplaced: file => `${file} is now a plain file. Choose Retry to start the agent.`,
+    homeSettingsTerminal: 'Or run this in Terminal:',
+    homeSettingsCopyFailed: {
+      changed: () => 'The link changed since this was shown, so nothing was replaced. Check it, then try again.',
+      'hard-link': target =>
+        `${target} has a second name on disk (a hard link), so it could be any of your files and nothing was replaced. Move this file yourself.`,
+      'not-a-link': () => 'That file is no longer a link, so nothing was replaced. Choose Retry.',
+      'not-eligible': () => 'This file can no longer be replaced from here, so nothing was replaced. Choose Retry.',
+      'not-plain': target => `${target} is not a plain file, so nothing was replaced.`,
+      'not-written': () =>
+        "This app could not write the copy into the agent's home, so the link is still there. Check that the disk has room and your account can write there, then try again.",
+      'too-large': target => `${target} is larger than 16 MB, too large for a settings file, so nothing was replaced.`,
+      unreadable: target =>
+        `This app cannot read ${target}, so nothing was replaced. Let your account read that file, then try again.`
+    },
     gateHint:
       '“重试”会再次检查权限关卡。“修复安装”会重新安装智能体运行时，然后安装权限关卡。如果上方的方框显示权限关卡已在配置中被禁用，请先从 Hermes 的 config.yaml 中的 plugins.disabled 里移除 iclone-permissions 和 iclone-confinement，然后重试。',
     gateHintUnmanaged:

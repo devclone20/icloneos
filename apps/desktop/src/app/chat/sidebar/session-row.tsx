@@ -32,6 +32,7 @@ import { $sessionDotStateById, hasLiveTurn, showsRunningArc } from '@/store/sess
 import { $sessionListDensity } from '@/store/session-list-density'
 import { $openStoredSessionIds } from '@/store/session-states'
 import { sessionCostUsd } from '@/store/sidebar-archive'
+import { $sessionTilesRender } from '@/store/tile-render'
 import { $todoProgressBySession } from '@/store/todos'
 
 import { SessionStatusDot } from '../session-status-dot'
@@ -144,6 +145,16 @@ function SidebarSessionRowImpl({
 }: SidebarSessionRowProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
+
+  // Cmd-click and middle-click: a tab beside the chat, or the chat itself while no pane renders tiles.
+  const openBeside = () => {
+    if ($sessionTilesRender.get()) {
+      openSession(session.id, () => undefined, 'tab')
+    } else {
+      onResume()
+    }
+  }
+
   const { cancelPrewarm, startPrewarm } = useProfilePrewarm(session.profile)
   const title = sessionTitle(session)
   const density = useStore($sessionListDensity)
@@ -421,7 +432,7 @@ function SidebarSessionRowImpl({
           // Middle-click = open in a new tab (browser muscle memory).
           {...middleClickHandlers(() => {
             triggerHaptic('selection')
-            openSession(session.id, () => undefined, 'tab')
+            openBeside()
           })}
           onClick={event => {
             // Modifier-click gestures on a row (see `resolveSessionRowClick`):
@@ -451,7 +462,7 @@ function SidebarSessionRowImpl({
             } else if (action === 'pin') {
               onPin()
             } else if (action === 'newTab') {
-              openSession(session.id, () => undefined, 'tab')
+              openBeside()
             } else {
               openSession(session.id, () => undefined, 'window')
             }

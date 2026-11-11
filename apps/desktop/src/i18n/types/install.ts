@@ -66,6 +66,7 @@ export type InstallTranslations = {
 }
 
 export type InstallFailureClassKey =
+  | 'homeSettings'
   | 'cancelled'
   | 'disk'
   | 'integrity'

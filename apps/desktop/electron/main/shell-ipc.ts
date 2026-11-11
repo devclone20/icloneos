@@ -1,6 +1,5 @@
 // IPC: notifications, default project dir, link titles, favicons and logs.
 import fs from 'node:fs'
-import path from 'node:path'
 
 import { app, dialog, ipcMain, Notification, shell } from 'electron'
 
@@ -10,9 +9,8 @@ import { consentAllows } from '../iclone-consent'
 import { createNotificationFailureWatch } from '../notification-failure'
 import { formatRendererBoundaryReport } from '../renderer-log'
 
-import { fileExists } from './env'
 import { fetchLinkTitle, resolveFaviconCached } from './link-metadata'
-import { DESKTOP_LOG_PATH, flushDesktopLogBufferSync, hermesLog, rememberLog } from './log'
+import { DESKTOP_LOG_PATH, ensureDesktopLogFile, flushDesktopLogBufferSync, hermesLog, rememberLog } from './log'
 import { readDefaultProjectDir, resolveHermesCwd, sanitizeWorkspaceCwd, writeDefaultProjectDir } from './runtime'
 import type { windowsState } from './state'
 import { focusWindow } from './windows'
@@ -129,6 +127,9 @@ export function registerShellIpc({ windowsState }: ShellIpcDeps): void {
     resolvedCwd: resolveHermesCwd()
   }))
 
+  // fx17 (lens4-pass H2): this answer moves the renderer's view only. A folder is listed for the confinement
+  // launcher only when the user named it (iclone-permissions/ipc.ts), never a path the renderer merely resolved,
+  // which may be the runtime's answer.
   ipcMain.handle('hermes:workspace:sanitize', async (_event, cwd) => sanitizeWorkspaceCwd(cwd))
 
   ipcMain.handle('hermes:setting:defaultProjectDir:set', async (_event, dir) => {
@@ -167,12 +168,7 @@ export function registerShellIpc({ windowsState }: ShellIpcDeps): void {
 
   ipcMain.handle('hermes:logs:reveal', async () => {
     try {
-      await fs.promises.mkdir(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
-
-      if (!fileExists(DESKTOP_LOG_PATH)) {
-        await fs.promises.appendFile(DESKTOP_LOG_PATH, '')
-      }
-
+      ensureDesktopLogFile()
       shell.showItemInFolder(DESKTOP_LOG_PATH)
 
       return { ok: true, path: DESKTOP_LOG_PATH }

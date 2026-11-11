@@ -110,7 +110,11 @@ def check_sandbox_requirements() -> bool:
         from tools.terminal_tool import _get_env_config
         from tools.terminal_tool_backends import _check_vercel_sandbox_requirements
         config = _get_env_config()
-    except Exception:
+    except Exception as exc:
+        from tools.terminal_tool import _confined_refusal
+
+        if _confined_refusal(exc):  # iclone-seam: fx35b — stays offered; the call returns the reason
+            return True
         logger.debug("Could not resolve terminal config for execute_code availability", exc_info=True)
         return False
     return config.get("env_type") != "vercel_sandbox" or _check_vercel_sandbox_requirements(config)

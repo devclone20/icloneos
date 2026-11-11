@@ -999,7 +999,7 @@
     {
       "name": "sandbox-linux",
       "version": "1.0.0",
-      "description": "Use when asked about agent confinement on Linux. In icloneOS v0.0.3 it is not available: the same five activity classes are planned on bubblewrap and Landlock, so on Linux commands run as the user with the permission mode as the only gate, and this skill says what to tell the owner.",
+      "description": "Use when asked about agent confinement on Linux. In icloneOS it is not available: the same five activity classes are planned on bubblewrap and Landlock, so on Linux commands run as the user with the permission mode as the only gate, and this skill says what to tell the owner.",
       "whenToOpen": "Use when asked about agent confinement on Linux.",
       "tags": [
         "iclone-os",
@@ -1039,7 +1039,7 @@
     {
       "name": "sandbox-windows",
       "version": "1.0.0",
-      "description": "Use when asked about agent confinement on Windows. In icloneOS v0.0.3 it is not available: commands run as the user with the permission mode as the only gate; this skill says what is planned and what to tell the owner meanwhile.",
+      "description": "Use when asked about agent confinement on Windows. In icloneOS it is not available: commands run as the user with the permission mode as the only gate; this skill says what is planned and what to tell the owner meanwhile.",
       "whenToOpen": "Use when asked about agent confinement on Windows.",
       "tags": [
         "iclone-os",

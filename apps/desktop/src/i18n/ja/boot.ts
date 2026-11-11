@@ -49,6 +49,7 @@ export const boot: TranslationOverrides['boot'] = {
     gateTitle: '権限ゲートが有効になっていません',
     gateDescription:
       'icloneOS はエージェントを起動しませんでした。このエージェントランタイムに権限ゲートをインストールまたは読み込みできなかったため、どのコマンドも確認されません。ここでの操作でチャットや設定が削除されることはありません。',
+    homeSettingsHint: '上のコマンドをターミナルで実行してから、再試行を選んでください。設定は変更されません。',
     gateHint:
       '「再試行」で権限ゲートをもう一度確認します。「インストールを修復」はエージェントランタイムを再インストールしてから権限ゲートを入れ直します。上の枠に権限ゲートが設定で無効化されていると表示されている場合は、先に Hermes の config.yaml の plugins.disabled から iclone-permissions と iclone-confinement を削除してから再試行してください。',
     gateHintUnmanaged:

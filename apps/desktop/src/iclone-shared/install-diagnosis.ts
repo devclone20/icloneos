@@ -3,9 +3,12 @@
 // the runner reported: the stage, its error and the tail of its output. Shared by main (the persisted status Settings
 // shows) and the renderer (the install overlay and the post-install failure card).
 
+import { HOME_SETTINGS_INSTALL_STOPPED } from './home-settings'
+
 export type InstallFailureClass =
   | 'cancelled'
   | 'disk'
+  | 'homeSettings'
   | 'integrity'
   | 'interpreter'
   | 'killed'
@@ -39,6 +42,8 @@ interface Rule {
 
 // Order matters: the most specific evidence first (a hash mismatch during a download is integrity, not network).
 const RULES: Rule[] = [
+  // The owner's own file. A reinstall reaches the same stage and the same refusal, so Repair is never its way out.
+  { class: 'homeSettings', test: new RegExp(HOME_SETTINGS_INSTALL_STOPPED.replace('.', '\\.')) },
   { class: 'cancelled', test: /\bcancelled by user\b/i },
   // r2: the first-launch budget ran out while the install was still moving — a slow network or a busy Mac, not a hang.
   { class: 'slow', test: /\[iclone-install-watchdog\] ceiling/i },
@@ -73,6 +78,7 @@ const RULES: Rule[] = [
 const FIX: Record<InstallFailureClass, InstallFixAction> = {
   cancelled: 'retry',
   disk: 'open-storage-settings',
+  homeSettings: 'retry',
   integrity: 'repair',
   interpreter: 'repair',
   killed: 'retry',

@@ -40,7 +40,7 @@ describe('iT hit-testing (the one surface)', () => {
 })
 
 /**
- * OWNER DECISION 2026-10-19 (RESUME/contracts/M1_message_head_band.md): the 'iclone os' head band is in
+ * OWNER DECISION 2026-10-19 (contract M1, message head band): the 'iclone os' head band is in
  * BOTH Message views. The band was chat-only because a fixed band over a terminal that starts at the
  * window's top edge covers the shell's first lines — so the band could only move into iT together with
  * this: the terminal's top is the MEASURED body rect (window/rect.ts publishBodyRect = the window's top

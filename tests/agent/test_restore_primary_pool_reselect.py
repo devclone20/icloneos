@@ -10,6 +10,7 @@ exhausting remaining entries and falling through to cross-provider fallback.
 
 import time
 from unittest.mock import MagicMock
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 
 from agent.credential_pool import (
@@ -112,10 +113,10 @@ class TestRestorePrimaryPoolReselect:
     def test_restore_uses_freshest_available_entry(self):
         """When multiple entries are available, restore should select the pool's best pick."""
         entries = [
-            _make_entry("entry-1", "key-1", priority=0,
+            _make_entry("entry-1", chatgpt_jwt("key-1"), priority=0,
                          last_status="exhausted", last_status_at=time.time() + 3600),
-            _make_entry("entry-2", "key-2", priority=1),
-            _make_entry("entry-3", "key-3", priority=2),
+            _make_entry("entry-2", chatgpt_jwt("key-2"), priority=1),
+            _make_entry("entry-3", chatgpt_jwt("key-3"), priority=2),
         ]
         pool = _build_mock_pool(entries)
 
@@ -124,12 +125,23 @@ class TestRestorePrimaryPoolReselect:
 
         assert result is True
         # entry-1 is exhausted, so pool should select entry-2
-        assert agent.api_key == "key-2"
-        assert agent._client_kwargs["api_key"] == "key-2"
+        assert agent.api_key == chatgpt_jwt("key-2")
+        assert agent._client_kwargs["api_key"] == chatgpt_jwt("key-2")
 
 
 
 
+
+    def test_restore_logs_the_reselect_only_after_a_true_swap(self, caplog):
+        pool = _build_mock_pool([_make_entry("entry-1", chatgpt_jwt("key-1"), priority=0)])
+        agent = self._make_agent(pool)
+        agent._swap_credential = MagicMock(return_value=False)
+
+        with caplog.at_level("INFO"):
+            agent._restore_primary_runtime()
+
+        agent._swap_credential.assert_called_once()
+        assert "Restore re-selected" not in caplog.text
 
     def test_restore_updates_base_url_from_pool_entry(self):
         """If pool entry has a different base_url, restore should update it."""

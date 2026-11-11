@@ -16,6 +16,13 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 
+class _RangeServer(HTTPServer):
+    """The downloader opens 8 parallel connections to this one-threaded server; with the default backlog of 5,
+    macOS resets the overflow and the download fails on the test server, not on the code under test."""
+
+    request_queue_size = 128
+
+
 class RangeHandler(BaseHTTPRequestHandler):
     payloads: dict = {}
     ranges_seen: list = []           # (path, start, end) from real Range requests
@@ -110,7 +117,7 @@ def dl_server():
     RangeHandler.no_range = False
     RangeHandler.etags = True
     RangeHandler.chunk = 1 << 20
-    server = HTTPServer(("127.0.0.1", 0), RangeHandler)
+    server = _RangeServer(("127.0.0.1", 0), RangeHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:

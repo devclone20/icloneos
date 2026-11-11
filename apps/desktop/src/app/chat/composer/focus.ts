@@ -45,6 +45,7 @@ interface AttachImagesDetail {
 
 const FOCUS_EVENT = 'hermes:composer-focus'
 const INSERT_EVENT = 'hermes:composer-insert'
+const REPLACE_TEXT_EVENT = 'hermes:composer-replace-text'
 const ATTACH_IMAGES_EVENT = 'hermes:composer-attach-images'
 const INSERT_REFS_EVENT = 'hermes:composer-insert-refs'
 const SUBMIT_EVENT = 'hermes:composer-submit'
@@ -148,6 +149,11 @@ const resolveActive = (): ComposerTarget => {
 }
 
 const resolve = (target: ComposerTarget | 'active') => (target === 'active' ? resolveActive() : target)
+
+interface ReplaceTextDetail {
+  from: string
+  to: string
+}
 
 const dispatch = <T>(name: string, detail: T) => {
   if (typeof window === 'undefined') {
@@ -256,6 +262,12 @@ export const requestComposerInsert = (
 
   dispatch<InsertDetail>(INSERT_EVENT, { mode, target: resolve(target), text: trimmed })
 }
+
+/** A recording's text after a frame came off: whichever composer holds `from` changes it. */
+export const requestComposerReplaceText = (from: string, to: string) => dispatch<ReplaceTextDetail>(REPLACE_TEXT_EVENT, { from, to })
+
+export const onComposerReplaceText = (handler: (detail: ReplaceTextDetail) => void) =>
+  subscribe<ReplaceTextDetail>(REPLACE_TEXT_EVENT, handler)
 
 export const onComposerFocusRequest = (handler: (detail: FocusDetail) => void) =>
   subscribe<FocusDetail>(FOCUS_EVENT, handler)

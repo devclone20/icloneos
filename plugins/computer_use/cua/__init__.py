@@ -19,8 +19,9 @@ class CuaDriverProvider(ComputerUseProvider):
         """macOS/Windows/Linux + cua-driver binary (or env override). `hermes computer-use doctor` names blocked checks."""
         if sys.platform not in ("darwin", "win32", "linux"):
             return False
-        from tools.computer_use.cua_backend_driver import cua_driver_binary_available
-        if cua_driver_binary_available():
+        from tools.computer_use.cua_backend_driver import cua_driver_binary_available, icloneos_started
+        # S10: under icloneOS it is offered in every state; a missing driver answers with what to do, never a silent gap.
+        if (sys.platform == "darwin" and icloneos_started()) or cua_driver_binary_available():
             return True
         # No host driver: the tool is still real when the desktop is placed inside a terminal backend whose image
         # carries cua-driver (nousresearch/hermes-sandbox:desktop). Placement is config; the binary is probed lazily

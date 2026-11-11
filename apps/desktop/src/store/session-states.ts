@@ -58,6 +58,7 @@ import {
 import { assertSessionOwnerResolved } from './session-owner-resolution'
 import { requestForSessionProfile, type SessionOwnerRoute, type SessionOwnerScope } from './session-request-router'
 import { ackStoredSessionId, markSessionUnreadFinished } from './session-unread'
+import { $sessionTilesRender } from './tile-render'
 import { isBrowserWindow, isSecondaryWindow } from './windows'
 
 // ---------------------------------------------------------------------------
@@ -1416,7 +1417,9 @@ export function focusOpenSession(
   storedSessionId: string,
   workspaceScope: SessionTileWorkspaceScope = { workspaceMode: 'sessions' }
 ): 'main' | 'tile' | null {
-  if ($sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
+  // A tile nothing renders is not on screen, however it got into the store (one
+  // restored from localStorage after an upgrade included): the caller loads main.
+  if ($sessionTilesRender.get() && $sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
     const paneId = `${TILE_PANE_PREFIX}${storedSessionId}`
     revealTreePane(paneId) // un-dismiss + adopt + front in its group
     const tree = $layoutTree.get()

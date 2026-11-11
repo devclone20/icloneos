@@ -399,7 +399,7 @@ export const FIELD_LABELS: Record<string, string> = defineFieldCopy({
   },
   terminal: {
     cwd: 'The folder your agent works in by default',
-    backend: "Where your agent's commands actually run",
+    backend: "Where your agent's commands run while isolation is off. While it is on, they run in the Seatbelt sandbox and this setting is not used.",
     timeout: 'How long one command may run before it is stopped',
     persistentShell: 'Keep one terminal alive between commands',
     envPassthrough: "Which of your machine's settings the agent's tools can see",
@@ -613,7 +613,7 @@ export const FIELD_DESCRIPTIONS: Record<string, string> = defineFieldCopy({
   checkpoints: {
     maxSnapshots: 'The oldest copy is removed when a new one is made.',
     enabled:
-      'A copy of each file is kept before your agent changes it, so you can go back. Off while your agent is confined: choose This Mac in Containers to use it.'
+      'A copy of each file is kept before your agent changes it, so you can go back. Off while your agent is confined.'
   },
   memory: {
     provider: 'Built-in memory works with no setup.',

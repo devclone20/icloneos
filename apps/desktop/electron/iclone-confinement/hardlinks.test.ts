@@ -161,27 +161,27 @@ afterEach(() => {
 })
 
 describe('F7 — the scan', () => {
-  it('finds a planted link to an outside inode and names its inside path', () => {
+  it('finds a planted link to an outside inode and names its inside path', async () => {
     const { outside, project } = tree()
 
     linkSync(path.join(outside, 'secret'), path.join(project, 'src', 'deep', 'planted'))
 
-    const scan = scanTree(project)
+    const scan = await scanTree(project)
 
     expect(scan.linked.map(inode => inode.paths)).toEqual([[path.join(project, 'src', 'deep', 'planted')]])
     expect(scan.linked[0].nlink).toBe(2)
     expect(scan.unscannable).toEqual([])
   })
 
-  it('an inode whose every name is inside the project is the project’s own', () => {
+  it('an inode whose every name is inside the project is the project’s own', async () => {
     const { project } = tree()
 
     linkSync(path.join(project, 'README.md'), path.join(project, 'src', 'README.copy'))
 
-    expect(scanTree(project).linked).toEqual([])
+    expect((await scanTree(project)).linked).toEqual([])
   })
 
-  it('refuses with a sentence naming at most three paths and the rest as a count', () => {
+  it('refuses with a sentence naming at most three paths and the rest as a count', async () => {
     const { guard, outside, project } = tree()
 
     for (const name of ['a', 'b', 'c', 'd']) {
@@ -189,7 +189,7 @@ describe('F7 — the scan', () => {
       linkSync(path.join(outside, `s-${name}`), path.join(project, name))
     }
 
-    const result = guard.check(project)
+    const result = await guard.check(project)
 
     expect(result.ok).toBe(false)
 
@@ -212,7 +212,7 @@ describe('F7 — the scan', () => {
 })
 
 describe('F7 r3 T1 — a directory the scan cannot list is a refusal, never "nothing to scan"', () => {
-  it('chmod 311 on a folder hiding a link: refused as cannot-scan, naming the folder; readable again, the link is found', () => {
+  it('chmod 311 on a folder hiding a link: refused as cannot-scan, naming the folder; readable again, the link is found', async () => {
     const { guard, outside, project } = tree()
     const hidden = path.join(project, 'hidden')
 
@@ -223,7 +223,7 @@ describe('F7 r3 T1 — a directory the scan cannot list is a refusal, never "not
     // The critic's premise: the link is readable through the unlistable folder (traversal needs only x).
     expect(readFileSync(path.join(hidden, 'x'), 'utf8')).toBe('outside-secret\n')
 
-    const result = guard.check(project)
+    const result = await guard.check(project)
 
     expect(result).toMatchObject({
       ok: false,
@@ -238,42 +238,45 @@ describe('F7 r3 T1 — a directory the scan cannot list is a refusal, never "not
     }
 
     // The cached answer stays a refusal while nothing changed.
-    expect(guard.check(project)).toMatchObject({ ok: false, cached: true, block: { kind: 'cannot-scan' } })
+    expect(await guard.check(project)).toMatchObject({ ok: false, cached: true, block: { kind: 'cannot-scan' } })
 
     chmodSync(hidden, 0o755)
-    expect(guard.check(project)).toMatchObject({
+    expect(await guard.check(project)).toMatchObject({
       ok: false,
       cached: false,
       block: { kind: 'hard-links', paths: [path.join(hidden, 'x')], count: 1 }
     })
   })
 
-  it('an unlistable folder with nothing in it is refused all the same: the scan cannot know', () => {
+  it('an unlistable folder with nothing in it is refused all the same: the scan cannot know', async () => {
     const { guard, project } = tree()
     const empty = path.join(project, 'src', 'empty')
 
     mkdirSync(empty)
     hide(empty)
-    expect(guard.check(project)).toMatchObject({ ok: false, block: { kind: 'cannot-scan', paths: [empty] } })
+    expect(await guard.check(project)).toMatchObject({ ok: false, block: { kind: 'cannot-scan', paths: [empty] } })
   })
 
-  it('a folder that vanished between two steps is nothing to scan (not a refusal)', () => {
+  it('a folder that vanished between two steps is nothing to scan (not a refusal)', async () => {
     const { guard, project } = tree()
 
     rmSync(path.join(project, 'src', 'deep'), { recursive: true })
-    expect(guard.check(project).ok).toBe(true)
-    expect(scanTree(path.join(project, 'never-was')).unscannable).toEqual([])
+    expect((await guard.check(project)).ok).toBe(true)
+    expect((await scanTree(path.join(project, 'never-was'))).unscannable).toEqual([])
   })
 
-  it('cannot-scan has no group to allow: the gesture answers nothing-to-allow until the folder is readable', () => {
+  it('cannot-scan has no group to allow: the gesture answers nothing-to-allow until the folder is readable', async () => {
     const { guard, outside, project } = tree()
     const hidden = path.join(project, 'hidden')
 
     mkdirSync(hidden)
     linkSync(path.join(outside, 'secret'), path.join(hidden, 'x'))
     hide(hidden)
-    expect(guard.acknowledgeGroup(project, hidden, 'anything')).toEqual({ ok: false, reason: 'nothing-to-allow' })
-    expect(guard.acknowledgeGroup(project, project, 'anything')).toEqual({ ok: false, reason: 'nothing-to-allow' })
+    expect(await guard.acknowledgeGroup(project, hidden, 'anything')).toEqual({ ok: false, reason: 'nothing-to-allow' })
+    expect(await guard.acknowledgeGroup(project, project, 'anything')).toEqual({
+      ok: false,
+      reason: 'nothing-to-allow'
+    })
     expect(guard.acks()).toEqual([])
   })
 })
@@ -281,7 +284,7 @@ describe('F7 r3 T1 — a directory the scan cannot list is a refusal, never "not
 describe('F7 r4 T1′ — a folder that lists but hides its link counts is a refusal too (the critic’s chmod 400 / 600)', () => {
   it.each([0o400, 0o600])(
     'chmod %o on a folder hiding a link: cannot-scan naming the folder (and what it hides); x back, the link is found',
-    mode => {
+    async mode => {
       const { guard, outside, project } = tree()
       const hidden = path.join(project, 'hidden')
 
@@ -295,7 +298,7 @@ describe('F7 r4 T1′ — a folder that lists but hides its link counts is a ref
       expect(readdirSync(hidden).sort()).toEqual(['sub', 'x'])
       expect(() => lstatSync(path.join(hidden, 'x'))).toThrow(/EACCES/)
 
-      const result = guard.check(project)
+      const result = await guard.check(project)
       const sub = path.join(hidden, 'sub')
 
       expect(result).toMatchObject({
@@ -303,12 +306,15 @@ describe('F7 r4 T1′ — a folder that lists but hides its link counts is a ref
         cached: false,
         block: { root: project, kind: 'cannot-scan', paths: [hidden, sub], count: 2, groups: [] }
       })
-      expect(scanTree(project).unscannable).toEqual([hidden, sub])
-      expect(guard.check(project)).toMatchObject({ ok: false, cached: true, block: { kind: 'cannot-scan' } })
-      expect(guard.acknowledgeGroup(project, hidden, 'anything')).toEqual({ ok: false, reason: 'nothing-to-allow' })
+      expect((await scanTree(project)).unscannable).toEqual([hidden, sub])
+      expect(await guard.check(project)).toMatchObject({ ok: false, cached: true, block: { kind: 'cannot-scan' } })
+      expect(await guard.acknowledgeGroup(project, hidden, 'anything')).toEqual({
+        ok: false,
+        reason: 'nothing-to-allow'
+      })
 
       chmodSync(hidden, 0o755)
-      expect(guard.check(project)).toMatchObject({
+      expect(await guard.check(project)).toMatchObject({
         ok: false,
         cached: false,
         block: { kind: 'hard-links', paths: [path.join(hidden, 'x')], count: 1 }
@@ -316,7 +322,7 @@ describe('F7 r4 T1′ — a folder that lists but hides its link counts is a ref
     }
   )
 
-  it('a 400 folder with only ordinary files in it is refused all the same: the scan cannot know', () => {
+  it('a 400 folder with only ordinary files in it is refused all the same: the scan cannot know', async () => {
     const { guard, project } = tree()
     const plain = path.join(project, 'src', 'plain')
 
@@ -324,58 +330,61 @@ describe('F7 r4 T1′ — a folder that lists but hides its link counts is a ref
     writeFileSync(path.join(plain, 'a.txt'), 'a\n')
     chmodSync(plain, 0o400)
     restoreModes.push(plain)
-    expect(guard.check(project)).toMatchObject({ ok: false, block: { kind: 'cannot-scan', paths: [plain], count: 1 } })
+    expect(await guard.check(project)).toMatchObject({
+      ok: false,
+      block: { kind: 'cannot-scan', paths: [plain], count: 1 }
+    })
   })
 })
 
 describe('F7 — the cache', () => {
-  it('a repeat start with no change is answered from the cache, without a full scan', () => {
+  it('a repeat start with no change is answered from the cache, without a full scan', async () => {
     const { guard, project, scans } = tree()
 
-    expect(guard.check(project)).toMatchObject({ ok: true, cached: false })
-    expect(guard.check(project)).toMatchObject({ ok: true, cached: true })
+    expect(await guard.check(project)).toMatchObject({ ok: true, cached: false })
+    expect(await guard.check(project)).toMatchObject({ ok: true, cached: true })
     expect(scans).toHaveLength(1)
   })
 
-  it('a link planted deep in the tree after a clean start misses the cache and is refused', () => {
+  it('a link planted deep in the tree after a clean start misses the cache and is refused', async () => {
     const { guard, outside, project, scans } = tree()
 
-    expect(guard.check(project).ok).toBe(true)
+    expect((await guard.check(project)).ok).toBe(true)
     linkSync(path.join(outside, 'secret'), path.join(project, 'src', 'deep', 'late'))
-    expect(guard.check(project)).toMatchObject({ ok: false, cached: false })
+    expect(await guard.check(project)).toMatchObject({ ok: false, cached: false })
     expect(scans).toHaveLength(2)
   })
 
-  it('a link swapped in over an existing file (same name, same count) misses the cache', () => {
+  it('a link swapped in over an existing file (same name, same count) misses the cache', async () => {
     const { guard, outside, project } = tree()
 
-    expect(guard.check(project).ok).toBe(true)
+    expect((await guard.check(project)).ok).toBe(true)
     linkSync(path.join(outside, 'secret'), path.join(project, '.swap'))
     renameSync(path.join(project, '.swap'), path.join(project, 'README.md'))
-    expect(guard.check(project)).toMatchObject({ ok: false, cached: false })
+    expect(await guard.check(project)).toMatchObject({ ok: false, cached: false })
   })
 
-  it('a link planted with the file count kept and the directory mtime put back still misses the cache (ctime)', () => {
+  it('a link planted with the file count kept and the directory mtime put back still misses the cache (ctime)', async () => {
     const { guard, outside, project } = tree()
     const dir = path.join(project, 'src')
 
     writeFileSync(path.join(dir, 'decoy'), 'd')
     utimesSync(dir, new Date(1_000_000), new Date(1_000_000))
-    expect(guard.check(project).ok).toBe(true)
+    expect((await guard.check(project)).ok).toBe(true)
     rmSync(path.join(dir, 'decoy'))
     linkSync(path.join(outside, 'secret'), path.join(dir, 'sneaky'))
     utimesSync(dir, new Date(1_000_000), new Date(1_000_000))
-    expect(guard.check(project)).toMatchObject({ ok: false, cached: false })
+    expect(await guard.check(project)).toMatchObject({ ok: false, cached: false })
   })
 })
 
 describe('F7 r3 T2 — one gesture per inside directory group, recorded per inode', () => {
-  it('500 pnpm-shaped links are one group under node_modules/.pnpm, with 3 samples; one gesture allows them all', () => {
+  it('500 pnpm-shaped links are one group under node_modules/.pnpm (the sentence names 3, the group carries all 500 for Show all, CF4); one gesture allows them all', async () => {
     const { guard, outside, project } = tree()
     const planted = plantPnpm(project, outside, 500)
     const pnpm = path.join(project, 'node_modules', '.pnpm')
 
-    const refused = guard.check(project)
+    const refused = await guard.check(project)
 
     expect(refused.ok).toBe(false)
 
@@ -390,33 +399,33 @@ describe('F7 r3 T2 — one gesture per inside directory group, recorded per inod
     const [group] = refused.block.groups
 
     expect(group).toMatchObject({ dir: pnpm, count: 500 })
-    expect(group.paths).toHaveLength(3)
+    expect(group.paths).toHaveLength(500)
     expect(group.paths.every(file => planted.includes(file))).toBe(true)
     expect(group.digest).toMatch(/^[0-9a-f]{16}$/)
 
     // Exactly one gesture.
-    expect(guard.acknowledgeGroup(project, pnpm, group.digest)).toMatchObject({ ok: true, dir: pnpm, count: 500 })
+    expect(await guard.acknowledgeGroup(project, pnpm, group.digest)).toMatchObject({ ok: true, dir: pnpm, count: 500 })
     expect(guard.acks()).toHaveLength(500)
-    expect(guard.check(project).ok).toBe(true)
+    expect((await guard.check(project)).ok).toBe(true)
   }, 30_000)
 
-  it('the 501st link planted after the gesture asks again, on its own', () => {
+  it('the 501st link planted after the gesture asks again, on its own', async () => {
     const { guard, outside, project } = tree()
     const pnpm = path.join(project, 'node_modules', '.pnpm')
 
     plantPnpm(project, outside, 500)
 
-    const first = guard.check(project)
+    const first = await guard.check(project)
 
     if (first.ok) {
       throw new Error('expected a refusal')
     }
 
-    expect(guard.acknowledgeGroup(project, pnpm, first.block.groups[0].digest).ok).toBe(true)
-    expect(guard.check(project).ok).toBe(true)
+    expect((await guard.acknowledgeGroup(project, pnpm, first.block.groups[0].digest)).ok).toBe(true)
+    expect((await guard.check(project)).ok).toBe(true)
 
     const [late] = plantPnpm(project, outside, 1, 500)
-    const again = guard.check(project)
+    const again = await guard.check(project)
 
     expect(again).toMatchObject({
       ok: false,
@@ -424,35 +433,35 @@ describe('F7 r3 T2 — one gesture per inside directory group, recorded per inod
     })
   }, 30_000)
 
-  it('the gesture is bound to the set the pane showed: a link planted in between answers changed, allows nothing', () => {
+  it('the gesture is bound to the set the pane showed: a link planted in between answers changed, allows nothing', async () => {
     const { guard, outside, project } = tree()
     const pnpm = path.join(project, 'node_modules', '.pnpm')
 
     plantPnpm(project, outside, 5)
 
-    const shown = guard.check(project)
+    const shown = await guard.check(project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
     }
 
     plantPnpm(project, outside, 1, 5)
-    expect(guard.acknowledgeGroup(project, pnpm, shown.block.groups[0].digest)).toEqual({
+    expect(await guard.acknowledgeGroup(project, pnpm, shown.block.groups[0].digest)).toEqual({
       ok: false,
       reason: 'changed'
     })
     expect(guard.acks()).toEqual([])
-    expect(guard.check(project)).toMatchObject({ ok: false, block: { count: 6 } })
+    expect(await guard.check(project)).toMatchObject({ ok: false, block: { count: 6 } })
   })
 
-  it('groups: one per top-level entry, deepened to where the links fan out; files in the root are their own group', () => {
+  it('groups: one per top-level entry, deepened to where the links fan out; files in the root are their own group', async () => {
     const { guard, outside, project } = tree()
 
     plantPnpm(project, outside, 3)
     linkSync(path.join(outside, 'secret'), path.join(project, 'src', 'deep', 'planted'))
     linkSync(path.join(outside, 'other'), path.join(project, 'top-level'))
 
-    const result = guard.check(project)
+    const result = await guard.check(project)
 
     if (result.ok) {
       throw new Error('expected a refusal')
@@ -466,11 +475,11 @@ describe('F7 r3 T2 — one gesture per inside directory group, recorded per inod
 
     const src = result.block.groups[2]
 
-    expect(guard.acknowledgeGroup(project, src.dir, src.digest)).toMatchObject({ ok: true, count: 1 })
-    expect(guard.check(project)).toMatchObject({ ok: false, block: { count: 4 } })
+    expect(await guard.acknowledgeGroup(project, src.dir, src.digest)).toMatchObject({ ok: true, count: 1 })
+    expect(await guard.check(project)).toMatchObject({ ok: false, block: { count: 4 } })
   })
 
-  it('allows exactly those inodes: a new inode at the same path asks again, another project is not covered', () => {
+  it('allows exactly those inodes: a new inode at the same path asks again, another project is not covered', async () => {
     const { guard, outside, project, root } = tree()
     const planted = path.join(project, 'planted')
     const second = path.join(root, 'second-project')
@@ -479,58 +488,58 @@ describe('F7 r3 T2 — one gesture per inside directory group, recorded per inod
     linkSync(path.join(outside, 'secret'), planted)
     linkSync(path.join(outside, 'secret'), path.join(second, 'planted'))
 
-    const shown = guard.check(project)
+    const shown = await guard.check(project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
     }
 
-    expect(guard.acknowledgeGroup(project, project, shown.block.groups[0].digest)).toMatchObject({ ok: true })
-    expect(guard.check(project).ok).toBe(true)
-    expect(guard.check(second).ok).toBe(false)
+    expect(await guard.acknowledgeGroup(project, project, shown.block.groups[0].digest)).toMatchObject({ ok: true })
+    expect((await guard.check(project)).ok).toBe(true)
+    expect((await guard.check(second)).ok).toBe(false)
 
     rmSync(planted)
     linkSync(path.join(outside, 'other'), planted)
-    expect(guard.check(project)).toMatchObject({ ok: false, block: { paths: [planted], count: 1 } })
+    expect(await guard.check(project)).toMatchObject({ ok: false, block: { paths: [planted], count: 1 } })
   })
 
-  it('refuses a folder outside the root, a relative request, a wrong digest and a clean root', () => {
+  it('refuses a folder outside the root, a relative request, a wrong digest and a clean root', async () => {
     const { guard, outside, project } = tree()
 
-    expect(guard.acknowledgeGroup(project, outside, 'x')).toEqual({ ok: false, reason: 'not-in-project' })
-    expect(guard.acknowledgeGroup(project, path.join(project, '..', 'outside'), 'x')).toEqual({
+    expect(await guard.acknowledgeGroup(project, outside, 'x')).toEqual({ ok: false, reason: 'not-in-project' })
+    expect(await guard.acknowledgeGroup(project, path.join(project, '..', 'outside'), 'x')).toEqual({
       ok: false,
       reason: 'not-in-project'
     })
-    expect(guard.acknowledgeGroup('relative', 'also-relative', 'x')).toEqual({ ok: false, reason: 'invalid' })
-    expect(guard.acknowledgeGroup(project, project, 'x')).toEqual({ ok: false, reason: 'nothing-to-allow' })
+    expect(await guard.acknowledgeGroup('relative', 'also-relative', 'x')).toEqual({ ok: false, reason: 'invalid' })
+    expect(await guard.acknowledgeGroup(project, project, 'x')).toEqual({ ok: false, reason: 'nothing-to-allow' })
 
     linkSync(path.join(outside, 'secret'), path.join(project, 'planted'))
-    expect(guard.acknowledgeGroup(project, project, 'not-the-digest')).toEqual({ ok: false, reason: 'changed' })
+    expect(await guard.acknowledgeGroup(project, project, 'not-the-digest')).toEqual({ ok: false, reason: 'changed' })
     expect(guard.acks()).toEqual([])
   })
 })
 
 describe('F7 r4 T2′′ — build alone passes a link whose other names all resolve into the pnpm store; every other class asks', () => {
-  it('a pnpm fixture in build: 0 gestures, the run is clean, every store inode passed and nothing recorded', () => {
+  it('a pnpm fixture in build: 0 gestures, the run is clean, every store inode passed and nothing recorded', async () => {
     const { guard, project, resolves } = storeWorld()
 
-    expect(guard.check(project, 'build')).toMatchObject({ ok: true, cached: false, passed: 200 })
+    expect(await guard.check(project, 'build')).toMatchObject({ ok: true, cached: false, passed: 200 })
     expect(resolves).toHaveLength(1)
     expect(resolves[0]).toMatchObject({ timedOut: false, files: 300 })
     expect(resolves[0].passed.size).toBe(200)
     expect(guard.acks()).toEqual([])
     expect(guard.blocked()).toEqual([])
     // The cached tree keeps the resolved set: no second store walk.
-    expect(guard.check(project, 'build')).toMatchObject({ ok: true, cached: true, passed: 200 })
+    expect(await guard.check(project, 'build')).toMatchObject({ ok: true, cached: true, passed: 200 })
     expect(resolves).toHaveLength(1)
   })
 
-  it('the same fixture in project, offline, research, media and with no class: 1 group, 1 gesture, no store walk', () => {
+  it('the same fixture in project, offline, research, media and with no class: 1 group, 1 gesture, no store walk', async () => {
     const { guard, project, resolves } = storeWorld()
 
     for (const cls of ['project', 'offline', 'research', 'media', undefined] as const) {
-      const result = guard.check(project, cls)
+      const result = await guard.check(project, cls)
 
       expect(result.ok, cls ?? 'none').toBe(false)
 
@@ -543,30 +552,30 @@ describe('F7 r4 T2′′ — build alone passes a link whose other names all res
 
     expect(resolves).toEqual([])
     // Build still passes the same cached tree afterwards, and the gesture path is untouched by it.
-    expect(guard.check(project, 'build')).toMatchObject({ ok: true, passed: 200 })
-    expect(guard.check(project, 'project')).toMatchObject({ ok: false, block: { count: 200 } })
+    expect(await guard.check(project, 'build')).toMatchObject({ ok: true, passed: 200 })
+    expect(await guard.check(project, 'project')).toMatchObject({ ok: false, block: { count: 200 } })
   })
 
-  it('a link into a NON-store root is a gesture in build too, named alone next to the passed ones', () => {
+  it('a link into a NON-store root is a gesture in build too, named alone next to the passed ones', async () => {
     const { guard, outside, project, resolves } = storeWorld()
     const planted = path.join(project, 'node_modules', '.pnpm', 'pkg0', 'secret.js')
 
     linkSync(path.join(outside, 'secret'), planted)
 
-    const result = guard.check(project, 'build')
+    const result = await guard.check(project, 'build')
 
     expect(result).toMatchObject({ ok: false, block: { kind: 'hard-links', paths: [planted], count: 1 } })
     expect(resolves[0].passed.size).toBe(200)
-    expect(guard.check(project, 'project')).toMatchObject({ ok: false, block: { count: 201 } })
+    expect(await guard.check(project, 'project')).toMatchObject({ ok: false, block: { count: 201 } })
   })
 
-  it('an inode with a third name outside the store (store + project + elsewhere) still asks: every name must be accounted for', () => {
+  it('an inode with a third name outside the store (store + project + elsewhere) still asks: every name must be accounted for', async () => {
     const { guard, files, outside, project } = storeWorld()
 
     // h0 gets a third name under outside: 1 in the project + 1 in the store = 2 of nlink 3.
     linkSync(path.join(files, 'h0'), path.join(outside, 'h0-elsewhere'))
 
-    const result = guard.check(project, 'build')
+    const result = await guard.check(project, 'build')
 
     expect(result).toMatchObject({
       ok: false,
@@ -574,21 +583,21 @@ describe('F7 r4 T2′′ — build alone passes a link whose other names all res
     })
   })
 
-  it('the resolve past its budget passes nothing: the gesture stands', () => {
+  it('the resolve past its budget passes nothing: the gesture stands', async () => {
     const { guard, project, resolves } = storeWorld(0)
 
-    expect(guard.check(project, 'build')).toMatchObject({ ok: false, block: { kind: 'hard-links', count: 200 } })
+    expect(await guard.check(project, 'build')).toMatchObject({ ok: false, block: { kind: 'hard-links', count: 200 } })
     expect(resolves).toHaveLength(1)
     expect(resolves[0]).toMatchObject({ timedOut: true })
     expect(resolves[0].passed.size).toBe(0)
   })
 
-  it('a store root that cannot be read resolves nothing; no store roots at all means no auto-pass', () => {
+  it('a store root that cannot be read resolves nothing; no store roots at all means no auto-pass', async () => {
     const { guard, project, storeRoot } = storeWorld()
 
     chmodSync(storeRoot, 0o000)
     restoreModes.push(storeRoot)
-    expect(guard.check(project, 'build')).toMatchObject({ ok: false, block: { count: 200 } })
+    expect(await guard.check(project, 'build')).toMatchObject({ ok: false, block: { count: 200 } })
 
     const { guard: bare, project: bareProject } = tree()
     const bareStore = path.join(path.dirname(bareProject), 'Library', 'pnpm')
@@ -597,23 +606,26 @@ describe('F7 r4 T2′′ — build alone passes a link whose other names all res
     writeFileSync(path.join(bareStore, 'blob'), 'b\n')
     mkdirSync(path.join(bareProject, 'node_modules'))
     linkSync(path.join(bareStore, 'blob'), path.join(bareProject, 'node_modules', 'blob'))
-    expect(bare.check(bareProject, 'build')).toMatchObject({ ok: false, block: { count: 1 } })
+    expect(await bare.check(bareProject, 'build')).toMatchObject({ ok: false, block: { count: 1 } })
   })
 
-  it('resolveInStore counts names per inode and never follows a symlink or an unreadable directory', () => {
+  it('resolveInStore counts names per inode and never follows a symlink or an unreadable directory', async () => {
     const { files, outside, planted, storeRoot } = storeWorld()
-    const scan = scanTree(path.dirname(path.dirname(path.dirname(planted[0]))))
+    const scan = await scanTree(path.dirname(path.dirname(path.dirname(planted[0]))))
 
     // A symlink inside the store to the outside secret is not a name of anything.
     linkSync(path.join(outside, 'secret'), path.join(path.dirname(planted[0]), 'secret.js'))
     renameSync(path.join(files, 'h299'), path.join(storeRoot, 'moved'))
 
-    const result = resolveInStore([storeRoot], scanTree(path.dirname(path.dirname(path.dirname(planted[0])))).linked)
+    const result = await resolveInStore(
+      [storeRoot],
+      (await scanTree(path.dirname(path.dirname(path.dirname(planted[0]))))).linked
+    )
 
     expect(scan.linked).toHaveLength(200)
     expect(result.passed.size).toBe(200)
     expect(result.timedOut).toBe(false)
-    expect(resolveInStore([path.join(storeRoot, 'never')], scan.linked).passed.size).toBe(0)
+    expect((await resolveInStore([path.join(storeRoot, 'never')], scan.linked)).passed.size).toBe(0)
   })
 
   it('pnpmStoreRoots: the two pnpm homes under home and an absolute $PNPM_HOME; never /, home or an ancestor', () => {
@@ -670,7 +682,7 @@ describe('F7 r4 T2′′ — build alone passes a link whose other names all res
 })
 
 describe('F7 r5 MINOR-2 — a store root has the pnpm store shape, or it is no store', () => {
-  it('storeShaped: store/v<N> as a real directory under a real store, or a root named …/store/v<N>; nothing else', () => {
+  it('storeShaped: store/v<N> as a real directory under a real store, or a root named …/store/v<N>; nothing else', async () => {
     const { outside, root } = tree()
     const shaped = path.join(root, 'shaped')
     const bare = path.join(root, 'bare')
@@ -688,19 +700,19 @@ describe('F7 r5 MINOR-2 — a store root has the pnpm store shape, or it is no s
     mkdirSync(path.join(linkedVersion, 'store'), { recursive: true })
     symlinkSync(path.join(shaped, 'store', 'v10'), path.join(linkedVersion, 'store', 'v10'))
 
-    expect(storeShaped(shaped)).toBe(true)
-    expect(storeShaped(path.join(shaped, 'store', 'v10'))).toBe(true)
-    expect(storeShaped('/Volumes/x/pnpm/store/v3')).toBe(true)
-    expect(storeShaped(bare)).toBe(false)
-    expect(storeShaped(outside)).toBe(false)
-    expect(storeShaped(wrongName)).toBe(false)
-    expect(storeShaped(linkedStore)).toBe(false)
-    expect(storeShaped(linkedVersion)).toBe(false)
-    expect(storeShaped(path.join(root, 'never'))).toBe(false)
-    expect(storeShaped(path.join(shaped, 'store'))).toBe(false)
+    expect(await storeShaped(shaped)).toBe(true)
+    expect(await storeShaped(path.join(shaped, 'store', 'v10'))).toBe(true)
+    expect(await storeShaped('/Volumes/x/pnpm/store/v3')).toBe(true)
+    expect(await storeShaped(bare)).toBe(false)
+    expect(await storeShaped(outside)).toBe(false)
+    expect(await storeShaped(wrongName)).toBe(false)
+    expect(await storeShaped(linkedStore)).toBe(false)
+    expect(await storeShaped(linkedVersion)).toBe(false)
+    expect(await storeShaped(path.join(root, 'never'))).toBe(false)
+    expect(await storeShaped(path.join(shaped, 'store'))).toBe(false)
   })
 
-  it('both ways: a $PNPM_HOME-shaped root without the store layout passes nothing in build (the gesture stands); with it, the same link passes', () => {
+  it('both ways: a $PNPM_HOME-shaped root without the store layout passes nothing in build (the gesture stands); with it, the same link passes', async () => {
     const { project, root } = tree()
     const pnpmHome = path.join(root, 'pnpm-home')
     const planted = path.join(project, 'node_modules', 'blob.js')
@@ -718,23 +730,23 @@ describe('F7 r5 MINOR-2 — a store root has the pnpm store shape, or it is no s
     mkdirSync(path.dirname(planted), { recursive: true })
     linkSync(path.join(pnpmHome, 'files', 'blob'), planted)
 
-    expect(realStoreRoot(pnpmHome)).toBe(true)
-    expect(storeShaped(pnpmHome)).toBe(false)
-    expect(guardOn('a.json').check(project, 'build')).toMatchObject({
+    expect(await realStoreRoot(pnpmHome)).toBe(true)
+    expect(await storeShaped(pnpmHome)).toBe(false)
+    expect(await guardOn('a.json').check(project, 'build')).toMatchObject({
       ok: false,
       block: { paths: [planted], count: 1 }
     })
     expect(resolves[0]).toMatchObject({ files: 0 })
 
     mkdirSync(path.join(pnpmHome, 'store', 'v3'), { recursive: true })
-    expect(storeShaped(pnpmHome)).toBe(true)
-    expect(guardOn('b.json').check(project, 'build')).toMatchObject({ ok: true, passed: 1 })
+    expect(await storeShaped(pnpmHome)).toBe(true)
+    expect(await guardOn('b.json').check(project, 'build')).toMatchObject({ ok: true, passed: 1 })
     expect(resolves[1]).toMatchObject({ files: 1 })
   })
 })
 
 describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one, is not the store: build asks', () => {
-  it('the critic’s form: the absent ~/.local/share/pnpm made a symlink to ~/.hermes; a project link to .env asks in build and the walk enters nothing', () => {
+  it('the critic’s form: the absent ~/.local/share/pnpm made a symlink to ~/.hermes; a project link to .env asks in build and the walk enters nothing', async () => {
     const { root } = tree()
     const home = path.join(root, 'home')
     const env = path.join(home, '.hermes', '.env')
@@ -764,9 +776,9 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     // The premise: main names that root, and listing it reaches the secret.
     expect(roots).toContain(absent)
     expect(readdirSync(absent)).toContain('.env')
-    expect(realStoreRoot(absent)).toBe(false)
-    expect(realStoreRoot(path.join(home, 'Library', 'pnpm'))).toBe(true)
-    expect(guard.check(project, 'build')).toMatchObject({
+    expect(await realStoreRoot(absent)).toBe(false)
+    expect(await realStoreRoot(path.join(home, 'Library', 'pnpm'))).toBe(true)
+    expect(await guard.check(project, 'build')).toMatchObject({
       ok: false,
       block: { kind: 'hard-links', paths: [path.join(project, 'node_modules', 'env.js')], count: 1 }
     })
@@ -775,7 +787,7 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     expect(resolves[0].passed.size).toBe(0)
   })
 
-  it('the same inode: under a real store root it passes; with the root replaced by a symlink to the secrets folder it asks', () => {
+  it('the same inode: under a real store root it passes; with the root replaced by a symlink to the secrets folder it asks', async () => {
     const { outside, project, root, storeRoot, files } = storeWorld()
     const secret = path.join(outside, 'secret')
     const planted = path.join(project, 'node_modules', '.pnpm', 'pkg0', 'secret.js')
@@ -786,7 +798,7 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     // Control: the secret moved INTO the real store is store content (store name + project name = nlink 2): passes.
     renameSync(secret, path.join(files, 'secret'))
     linkSync(path.join(files, 'secret'), planted)
-    expect(guardOn('real.json').check(project, 'build')).toMatchObject({ ok: true, passed: 201 })
+    expect(await guardOn('real.json').check(project, 'build')).toMatchObject({ ok: true, passed: 201 })
 
     // The attack: the root itself is a symlink to where the secret lives. Listing it reaches the secret.
     renameSync(path.join(files, 'secret'), secret)
@@ -795,18 +807,18 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     mkdirSync(path.join(outside, 'store', 'v3'), { recursive: true })
     expect(readdirSync(storeRoot)).toContain('secret')
 
-    const scan = scanTree(project)
+    const scan = await scanTree(project)
 
     expect(scan.linked).toHaveLength(1)
-    expect(resolveInStore([storeRoot], scan.linked)).toMatchObject({ files: 0, timedOut: false })
-    expect(resolveInStore([storeRoot], scan.linked).passed.size).toBe(0)
-    expect(guardOn('link.json').check(project, 'build')).toMatchObject({
+    expect(await resolveInStore([storeRoot], scan.linked)).toMatchObject({ files: 0, timedOut: false })
+    expect((await resolveInStore([storeRoot], scan.linked)).passed.size).toBe(0)
+    expect(await guardOn('link.json').check(project, 'build')).toMatchObject({
       ok: false,
       block: { kind: 'hard-links', paths: [planted], count: 1 }
     })
   })
 
-  it('a root under a symlinked ancestor: lstat sees a real directory, realpath does not; ignored', () => {
+  it('a root under a symlinked ancestor: lstat sees a real directory, realpath does not; ignored', async () => {
     const { project, root } = tree()
     const real = path.join(root, 'real', 'pnpm')
     const viaLink = path.join(root, 'link', 'pnpm')
@@ -820,17 +832,20 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     linkSync(path.join(files, 'blob'), planted)
 
     expect(lstatSync(viaLink).isDirectory()).toBe(true)
-    expect(realStoreRoot(viaLink)).toBe(false)
-    expect(realStoreRoot(real)).toBe(true)
+    expect(await realStoreRoot(viaLink)).toBe(false)
+    expect(await realStoreRoot(real)).toBe(true)
 
     const viaLinkGuard = createHardlinkGuard({ ackFile: path.join(root, 'a.json'), storeRoots: [viaLink] })
     const realGuard = createHardlinkGuard({ ackFile: path.join(root, 'b.json'), storeRoots: [real] })
 
-    expect(viaLinkGuard.check(project, 'build')).toMatchObject({ ok: false, block: { paths: [planted], count: 1 } })
-    expect(realGuard.check(project, 'build')).toMatchObject({ ok: true, passed: 1 })
+    expect(await viaLinkGuard.check(project, 'build')).toMatchObject({
+      ok: false,
+      block: { paths: [planted], count: 1 }
+    })
+    expect(await realGuard.check(project, 'build')).toMatchObject({ ok: true, passed: 1 })
   })
 
-  it('a symlinked directory inside a real store is not entered: a link to what it points at still asks', () => {
+  it('a symlinked directory inside a real store is not entered: a link to what it points at still asks', async () => {
     const { files, guard, outside, project, resolves } = storeWorld()
     const planted = path.join(project, 'node_modules', '.pnpm', 'pkg0', 'secret.js')
 
@@ -838,7 +853,7 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     linkSync(path.join(outside, 'secret'), planted)
     expect(readdirSync(path.join(files, 'elsewhere'))).toContain('secret')
 
-    expect(guard.check(project, 'build')).toMatchObject({
+    expect(await guard.check(project, 'build')).toMatchObject({
       ok: false,
       block: { kind: 'hard-links', paths: [planted], count: 1 }
     })
@@ -846,15 +861,15 @@ describe('F7 r5 MAJOR-1″ — a store root that is a symlink, or lies under one
     expect(resolves[0].passed.size).toBe(200)
   })
 
-  it('realStoreRoot: a real directory is one; a symlink, a file, a missing path and a path under a symlink are not', () => {
+  it('realStoreRoot: a real directory is one; a symlink, a file, a missing path and a path under a symlink are not', async () => {
     const { outside, root } = tree()
 
     symlinkSync(outside, path.join(root, 'to-outside'))
-    expect(realStoreRoot(outside)).toBe(true)
-    expect(realStoreRoot(path.join(root, 'to-outside'))).toBe(false)
-    expect(realStoreRoot(path.join(root, 'to-outside', 'secret'))).toBe(false)
-    expect(realStoreRoot(path.join(outside, 'secret'))).toBe(false)
-    expect(realStoreRoot(path.join(root, 'never'))).toBe(false)
+    expect(await realStoreRoot(outside)).toBe(true)
+    expect(await realStoreRoot(path.join(root, 'to-outside'))).toBe(false)
+    expect(await realStoreRoot(path.join(root, 'to-outside', 'secret'))).toBe(false)
+    expect(await realStoreRoot(path.join(outside, 'secret'))).toBe(false)
+    expect(await realStoreRoot(path.join(root, 'never'))).toBe(false)
     unlinkSync(path.join(root, 'to-outside'))
   })
 })
@@ -877,7 +892,7 @@ function secretInStoreWorld() {
 }
 
 describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ store), never a sum: no name counts twice', () => {
-  it('the critic’s D3: the project IS the store root (or its store/v3); the secret linked into the store asks in every class', () => {
+  it('the critic’s D3: the project IS the store root (or its store/v3); the secret linked into the store asks in every class', async () => {
     const { root, env, storeRoot, files } = secretInStoreWorld()
     const guard = createHardlinkGuard({ ackFile: path.join(root, 'acks.json'), storeRoots: [storeRoot] })
 
@@ -886,7 +901,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
 
     for (const project of [storeRoot, path.join(storeRoot, 'store', 'v3')]) {
       for (const cls of ['build', 'project', 'offline', 'research', 'media'] as const) {
-        expect(guard.check(project, cls), `${project} ${cls}`).toMatchObject({
+        expect(await guard.check(project, cls), `${project} ${cls}`).toMatchObject({
           ok: false,
           block: { kind: 'hard-links', paths: [path.join(files, 'evil-blob')], count: 1 }
         })
@@ -894,7 +909,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
     }
   })
 
-  it('the critic’s D4: the project HOLDS the store (a fake ~/.local/share with pnpm/store/v3); build asks', () => {
+  it('the critic’s D4: the project HOLDS the store (a fake ~/.local/share with pnpm/store/v3); build asks', async () => {
     const { root, home, env, files: libraryFiles } = secretInStoreWorld()
     const share = path.join(home, '.local', 'share')
     const storeRoot = path.join(share, 'pnpm')
@@ -908,17 +923,17 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
 
     const guard = createHardlinkGuard({ ackFile: path.join(root, 'acks.json'), storeRoots: [storeRoot] })
 
-    expect(guard.check(share, 'build')).toMatchObject({
+    expect(await guard.check(share, 'build')).toMatchObject({
       ok: false,
       block: { kind: 'hard-links', paths: [path.join(files, 'evil-blob')], count: 1 }
     })
     // A store file whose names are all under the project is the project's own, in every class.
     writeFileSync(path.join(files, 'own'), 'own\n')
     linkSync(path.join(files, 'own'), path.join(share, 'own-twin'))
-    expect(guard.check(share, 'project')).toMatchObject({ ok: false, block: { count: 1 } })
+    expect(await guard.check(share, 'project')).toMatchObject({ ok: false, block: { count: 1 } })
   })
 
-  it('the critic’s D1b: nested roots from $PNPM_HOME=…/Library/pnpm/store/v3 and one project link to a secret in the store: build asks', () => {
+  it('the critic’s D1b: nested roots from $PNPM_HOME=…/Library/pnpm/store/v3 and one project link to a secret in the store: build asks', async () => {
     const { root, home, env, storeRoot, files } = secretInStoreWorld()
     const project = path.join(home, 'proj')
     const roots = pnpmStoreRoots(path.join(storeRoot, 'store', 'v3'), home, [path.join(home, '.hermes')])
@@ -939,7 +954,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
       onStoreResolve: (_root, result) => resolves.push(result)
     })
 
-    expect(guard.check(project, 'build')).toMatchObject({
+    expect(await guard.check(project, 'build')).toMatchObject({
       ok: false,
       block: { kind: 'hard-links', paths: [path.join(project, 'node_modules', 'evil.js')], count: 1 }
     })
@@ -948,7 +963,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
     expect(resolves[0].files).toBe(2)
   })
 
-  it('the same names reached by every spelling — nested roots, a duplicate, an alias of the folder — count once', () => {
+  it('the same names reached by every spelling — nested roots, a duplicate, an alias of the folder — count once', async () => {
     const { storeRoot, files, root } = secretInStoreWorld()
     const project = path.join(root, 'proj')
 
@@ -956,7 +971,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
     linkSync(path.join(files, 'evil-blob'), path.join(project, 'evil.js'))
     linkSync(path.join(files, 'legit'), path.join(project, 'legit.js'))
 
-    const { linked } = scanTree(project)
+    const { linked } = await scanTree(project)
     const alias = path.join('/System/Volumes/Data', storeRoot)
     const spellings = [[storeRoot], [storeRoot, storeRoot], [storeRoot, path.join(storeRoot, 'store', 'v3'), files]]
 
@@ -965,7 +980,7 @@ describe('F7 r6 MAJOR-1‴ — the names of an inode are a set (project ∪ stor
     }
 
     for (const roots of spellings) {
-      const result = resolveInStore(roots, linked)
+      const result = await resolveInStore(roots, linked)
 
       expect(result.passed.size, roots.join(' ')).toBe(1)
       expect(result.files, roots.join(' ')).toBe(2)
@@ -1022,7 +1037,7 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     writeFileSync(file, JSON.stringify({ v: 2, body, sig: createHmac('sha256', 'guess').update(body).digest('hex') }))
   }
 
-  it('without safeStorage a forged record written while main is down is never read: 0 trusted, and overwritten', () => {
+  it('without safeStorage a forged record written while main is down is never read: 0 trusted, and overwritten', async () => {
     const { outside, project, root } = tree()
     const ackFile = path.join(root, 'acks.json')
     const planted = path.join(project, 'planted')
@@ -1035,10 +1050,10 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     expect(guard.persistent()).toBe(false)
     expect(guard.acks()).toEqual([])
     expect(readFileSync(ackFile, 'utf8')).not.toContain('forged')
-    expect(guard.check(project).ok).toBe(false)
+    expect((await guard.check(project)).ok).toBe(false)
   })
 
-  it('without safeStorage an allowance ends with main: the next start asks again', () => {
+  it('without safeStorage an allowance ends with main: the next start asks again', async () => {
     const { outside, project, root } = tree()
     const ackFile = path.join(root, 'acks.json')
     const planted = path.join(project, 'planted')
@@ -1046,25 +1061,25 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     linkSync(path.join(outside, 'secret'), planted)
 
     const first = createHardlinkGuard({ ackFile })
-    const shown = first.check(project)
+    const shown = await first.check(project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
     }
 
-    expect(first.acknowledgeGroup(project, project, shown.block.groups[0].digest).ok).toBe(true)
-    expect(first.check(project).ok).toBe(true)
+    expect((await first.acknowledgeGroup(project, project, shown.block.groups[0].digest)).ok).toBe(true)
+    expect((await first.check(project)).ok).toBe(true)
     // The plugin of this session verifies the record with this session's key.
     expect(readFileSync(ackFile, 'utf8')).toContain('planted')
 
     const second = createHardlinkGuard({ ackFile })
 
     expect(second.acks()).toEqual([])
-    expect(second.check(project).ok).toBe(false)
+    expect((await second.check(project)).ok).toBe(false)
     expect(second.keyHex()).not.toBe(first.keyHex())
   })
 
-  it('with safeStorage: one key is minted and sealed once, the record verifies across restarts, and a forged one is dropped and audited', () => {
+  it('with safeStorage: one key is minted and sealed once, the record verifies across restarts, and a forged one is dropped and audited', async () => {
     const { outside, project, root } = tree()
     const ackFile = path.join(root, 'acks-sealed.json')
     const keyFile = path.join(root, 'key.sealed')
@@ -1080,13 +1095,13 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     expect(existsSync(keyFile)).toBe(true)
     expect(store.calls).toEqual(['seal'])
 
-    const shown = first.check(project)
+    const shown = await first.check(project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
     }
 
-    expect(first.acknowledgeGroup(project, project, shown.block.groups[0].digest).ok).toBe(true)
+    expect((await first.acknowledgeGroup(project, project, shown.block.groups[0].digest)).ok).toBe(true)
 
     const signed = () => JSON.parse(readFileSync(ackFile, 'utf8')) as { body: string; sig: string }
 
@@ -1100,7 +1115,7 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     expect(store.calls).toEqual(['seal', 'open'])
     expect(second.keyHex()).toBe(first.keyHex())
     expect(second.acks()).toHaveLength(1)
-    expect(second.check(project).ok).toBe(true)
+    expect((await second.check(project)).ok).toBe(true)
     expect(audit).toEqual([])
 
     // Main down; a writer forges the record. Next start: 0 trusted, the drop is audited, the file is re-signed clean.
@@ -1109,12 +1124,12 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     const third = createHardlinkGuard({ ackFile, keyFile, keyStore: store, onAudit: event => audit.push(event) })
 
     expect(third.acks()).toEqual([])
-    expect(third.check(project).ok).toBe(false)
+    expect((await third.check(project)).ok).toBe(false)
     expect(audit).toEqual([{ kind: 'acks-rejected', file: ackFile, detail: 'signature' }])
     expect(readFileSync(ackFile, 'utf8')).not.toContain('forged')
   })
 
-  it('a sealed key another keychain cannot open, or a sealed key that is gone, mints a new one: old records drop', () => {
+  it('a sealed key another keychain cannot open, or a sealed key that is gone, mints a new one: old records drop', async () => {
     const { outside, project, root } = tree()
     const ackFile = path.join(root, 'acks-sealed.json')
     const keyFile = path.join(root, 'key.sealed')
@@ -1124,13 +1139,13 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     linkSync(path.join(outside, 'secret'), planted)
 
     const first = createHardlinkGuard({ ackFile, keyFile, keyStore: keyStore('mac-a') })
-    const shown = first.check(project)
+    const shown = await first.check(project)
 
     if (shown.ok) {
       throw new Error('expected a refusal')
     }
 
-    first.acknowledgeGroup(project, project, shown.block.groups[0].digest)
+    await first.acknowledgeGroup(project, project, shown.block.groups[0].digest)
 
     const other = createHardlinkGuard({
       ackFile,
@@ -1140,7 +1155,7 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     })
 
     expect(other.acks()).toEqual([])
-    expect(other.check(project).ok).toBe(false)
+    expect((await other.check(project)).ok).toBe(false)
     expect(audit.map(event => event.kind)).toEqual(['key-rejected', 'acks-rejected'])
     expect(other.persistent()).toBe(true)
 
@@ -1152,7 +1167,7 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     expect(existsSync(keyFile)).toBe(true)
   })
 
-  it('a keychain that cannot seal falls back to session-only, audited, never to trusting the disk', () => {
+  it('a keychain that cannot seal falls back to session-only, audited, never to trusting the disk', async () => {
     const { outside, project, root } = tree()
     const ackFile = path.join(root, 'acks-sealed.json')
     const keyFile = path.join(root, 'key.sealed')
@@ -1176,7 +1191,7 @@ describe('F7 r3 T5 — the record is signed with one key sealed in safeStorage, 
     expect(guard.persistent()).toBe(false)
     expect(guard.acks()).toEqual([])
     expect(audit.map(event => event.kind)).toEqual(['key-unsealable'])
-    expect(guard.check(project).ok).toBe(false)
+    expect((await guard.check(project)).ok).toBe(false)
   })
 })
 

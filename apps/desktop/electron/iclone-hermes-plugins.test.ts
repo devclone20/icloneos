@@ -1736,21 +1736,30 @@ describe.runIf(RUN_PY && Boolean(RUNTIME))('the gate on a copy of the pinned run
     await ensureIcloneHermesPlugins(liveDeps(home, root))
 
     // A venv of the attacker's: pyvenv.cfg next to bin/, the real deps on its path, and a .pth that runs DISARM.
+    // The version comes from the interpreter under test: a literal here stopped the probe on a newer pinned Python.
     const facts = (
-      await realProbe(PY!, ['-c', 'import site, sys; print(sys.base_prefix); print(site.getsitepackages()[0])'], {
-        cwd: home,
-        env: { PATH: '/usr/bin:/bin' }
-      })
+      await realProbe(
+        PY!,
+        [
+          '-c',
+          'import site, sys; print(sys.base_prefix); print(site.getsitepackages()[0]); print("python%d.%d" % sys.version_info[:2])'
+        ],
+        {
+          cwd: home,
+          env: { PATH: '/usr/bin:/bin' }
+        }
+      )
     )
       .trim()
       .split('\n')
 
+    const pythonName = facts[2]!
     const venv = temp()
-    const site = path.join(venv, 'lib', 'python3.11', 'site-packages')
+    const site = path.join(venv, 'lib', pythonName, 'site-packages')
     fs.mkdirSync(path.join(venv, 'bin'))
     fs.mkdirSync(site, { recursive: true })
     fs.writeFileSync(path.join(venv, 'pyvenv.cfg'), `home = ${facts[0]}/bin\ninclude-system-site-packages = false\n`)
-    fs.symlinkSync(path.join(facts[0]!, 'bin', 'python3.11'), path.join(venv, 'bin', 'python'))
+    fs.symlinkSync(path.join(facts[0]!, 'bin', pythonName), path.join(venv, 'bin', 'python'))
     fs.writeFileSync(path.join(site, 'a_real.pth'), `${facts[1]}\n`)
     fs.writeFileSync(path.join(site, 'zz_disarm.py'), DISARM)
     fs.writeFileSync(path.join(site, 'zz_disarm.pth'), 'import zz_disarm\n')

@@ -101,6 +101,7 @@ export const assistant: TranslationOverrides['assistant'] = {
     statusError: 'خطأ',
     statusRecovered: 'تم الاسترداد',
     statusDone: 'تم',
+    permissionAsked: 'طُلب إذنك',
     memoryWriteNoted: 'تم تسجيل كتابة الذاكرة',
     actions: {
       read: 'قراءة',

@@ -102,6 +102,7 @@ def _cli_run_json(cmd: List[str], env: Dict[str, str], name: str, timeout: float
     backoff, last_err = 0.5, ""
     for attempt in range(_CLI_ATTEMPTS):
         try:
+            env, cmd = _driver.spawn_env(cmd, env), _driver.spawn_argv(cmd)
             proc = _subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                                    timeout=max(15.0, timeout), creationflags=windows_hide_flags(), env=env,
                                    stdin=_subprocess.DEVNULL)
@@ -232,7 +233,8 @@ class _CuaDriverSession:
                 else _cb.sandbox_mcp_invocation() or (_driver._resolve_mcp_invocation(driver_cmd), _cb.cua_driver_child_env()))
             _t_manifest = _time.monotonic()
             # Telemetry policy first (default: disabled), then strip Hermes secrets.
-            params = StdioServerParameters(command=command, args=args, env=_sanitize_subprocess_env(child_env))
+            spawn, spawn_env = _driver.spawn_argv([command, *args]), _driver.spawn_env([command, *args], _sanitize_subprocess_env(child_env))
+            params = StdioServerParameters(command=spawn[0], args=spawn[1:], env=spawn_env)
             async with stdio_client(params) as (read, write):
                 self._startup_phase = "mcp-initialize"
                 async with ClientSession(read, write) as session:

@@ -7,7 +7,7 @@ import { $connection } from '@/store/session'
 
 import { useComposerActions } from '../../hooks/use-composer-actions'
 import type { QueueEditState } from '../composer-utils'
-import { type ComposerTarget, getActiveComposer, markActiveComposer } from '../focus'
+import { type ComposerTarget, getActiveComposer, markActiveComposer, requestComposerReplaceText } from '../focus'
 import { type ComposerScope, ComposerScopeProvider, MAIN_COMPOSER_SCOPE } from '../scope'
 
 import { useComposerDraft } from './use-composer-draft'
@@ -244,6 +244,27 @@ describe('useComposerDraft — draft survives full unmount (Settings navigation,
     expect(mockComposerApi.setText).toHaveBeenCalledWith('unsent thought')
 
     remount.unmount()
+  })
+})
+
+describe('useComposerDraft — a recording text after a frame came off', () => {
+  afterEach(() => {
+    cleanup()
+    mainComposerScope.clear()
+    clearSessionDraft('session-rec')
+  })
+
+  it('B5: the draft takes the rebuilt words and keeps what the user wrote; other words change nothing', async () => {
+    stashSessionDraft('session-rec', 'see this\n\nOLD TIMES', [])
+    render(<ProbeHarness activeQueueSessionKey="session-rec" onLayoutSnapshot={() => undefined} sessionId="session-rec" />)
+    mockComposerApi.setText.mockClear()
+
+    requestComposerReplaceText('NOT THERE', 'NEW TIMES')
+    await new Promise(resolve => setTimeout(resolve, 5))
+    expect(mockComposerApi.setText).not.toHaveBeenCalled()
+
+    requestComposerReplaceText('OLD TIMES', 'NEW TIMES')
+    await waitFor(() => expect(mockComposerApi.setText).toHaveBeenCalledWith('see this\n\nNEW TIMES'))
   })
 })
 

@@ -19,8 +19,9 @@
  * cannot resurface on a later boot.
  */
 
-import fs from 'fs'
 import path from 'path'
+
+import { readFileInRoot, unlinkInRoot } from './lib/no-follow-fs'
 
 const HANDOFF_RESULT_MAX_AGE_MS = 30 * 60 * 1000
 
@@ -48,7 +49,7 @@ export function readAndConsumeHandoffResult(
   let raw: string
 
   try {
-    raw = fs.readFileSync(file, 'utf8')
+    raw = readFileInRoot(hermesHome, file).toString('utf8')
   } catch {
     return null
   }
@@ -56,7 +57,7 @@ export function readAndConsumeHandoffResult(
   // Consume unconditionally — even a malformed/stale file must not be
   // re-reported on every subsequent boot.
   try {
-    fs.unlinkSync(file)
+    unlinkInRoot(hermesHome, file)
   } catch {
     // Best-effort; a locked file just gets consumed on the next boot.
   }

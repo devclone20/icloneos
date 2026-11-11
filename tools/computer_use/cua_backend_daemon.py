@@ -72,7 +72,13 @@ def _embedded_daemon_spawn_command(driver_cmd: str, serve_args: List[str], *, pl
     """Build the private-daemon launch while preserving macOS TCC identity."""
     if platform != "darwin":
         return [driver_cmd, *serve_args]
+    if driver_cmd == _driver._door_module().COMMAND:
+        return [driver_cmd, *serve_args]  # the launcher checks the signature and opens it
     resolved_app = app_path or _resolve_cua_driver_app_path(driver_cmd)
+    if resolved_app and _driver.icloneos_started():
+        problem = _driver._door_module().signature_problem(resolved_app)
+        if problem:
+            raise RuntimeError(f"Found {resolved_app}, but it is not the CuaDriver signed by Cua ({problem}), so it will not run. {_driver._door_module().ABSENT}")
     if not resolved_app:
         raise RuntimeError("CuaDriver.app is required for private computer-use sessions on macOS. Run `hermes computer-use install` to restore it.")
     _validate_cua_driver_app_signature(resolved_app)
@@ -104,7 +110,7 @@ class _EmbeddedCuaDaemon:
     _START_TIMEOUT_SECONDS = 15.0
 
     def __init__(self, driver_cmd: str, permission_mode: str, capability_manifest: Optional[str] = None) -> None:
-        if permission_mode not in {"unrestricted", "bounded"}:
+        if permission_mode not in {"unrestricted", "bounded"} and not (permission_mode == "standard" and _driver.icloneos_started()):
             raise ValueError("embedded permission override supports unrestricted or bounded only")
         manifest = str(capability_manifest or "").strip()
         if not manifest and permission_mode == "bounded":
@@ -127,7 +133,9 @@ class _EmbeddedCuaDaemon:
         self._stderr_tail: deque[str] = deque(maxlen=20)
         token = uuid.uuid4().hex[:12]
         self.socket_path = (rf"\\.\pipe\hermes-cua-{token}" if sys.platform == "win32"
+                            else f"hc-{token}" if _driver.door_socket()
                             else os.path.join(tempfile.gettempdir(), f"hc-{token}.sock"))
+        self._sitter: Any = None
 
     def child_env(self) -> Dict[str, str]:
         env = {**_cb().cua_driver_child_env(), "CUA_DRIVER_PERMISSION_MODE": self.permission_mode}
@@ -168,9 +176,13 @@ class _EmbeddedCuaDaemon:
         self._command, self._mcp_args = _driver._resolve_mcp_invocation(driver_cmd)
         env = self._sanitized_env()
         command = _embedded_daemon_spawn_command(self._command, self._serve_args(), platform=sys.platform)
+        env, command = _driver.spawn_env(command, env), _driver.spawn_argv(command)
         self._process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                          stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
                                          env=env)
+        if _driver.icloneos_started() and not _driver.door_socket() and sys.platform == "darwin":
+            # Seatbelt off: ``open`` makes the daemon launchd's child, and a runtime that main ends runs no atexit.
+            self._sitter = _driver._door_module().start_sitter(self._command, self.socket_path, sys.executable)
         self._owns_runtime = True
         threading.Thread(target=self._drain_stderr, args=(self._process,), name="hermes-cua-daemon-stderr", daemon=True).start()
         deadline = time.monotonic() + self._START_TIMEOUT_SECONDS
@@ -201,12 +213,15 @@ class _EmbeddedCuaDaemon:
 
     def stop(self) -> None:
         process, self._process = self._process, None
+        sitter, self._sitter = self._sitter, None
         owns_runtime, self._owns_runtime, self._running = self._owns_runtime, False, False
         if owns_runtime:
             _cb()._run_quiet([self._command, "stop", "--socket", self.socket_path], timeout=3.0, stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL, env=self._sanitized_env(), swallow=_QUIET_ERRORS)
         if process is not None:
             _wait_or_kill(process)
+        if sitter is not None:
+            _driver._door_module().stop_sitter(sitter)
         if sys.platform != "win32" and os.path.exists(self.socket_path):
             with contextlib.suppress(OSError):
                 os.remove(self.socket_path)

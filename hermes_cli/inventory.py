@@ -449,18 +449,20 @@ def _pool_entry_host(slug: str, entry) -> str:
     from agent.credential_pool import _norm_url
 
     if slug == "openai-codex":
-        from hermes_cli.auth_codex import _codex_pool_route_base_url
+        from hermes_cli.auth_codex import _codex_pool_route_unchecked
 
-        return _norm_url(_codex_pool_route_base_url(entry.runtime_base_url))
+        return _norm_url(_codex_pool_route_unchecked(entry.runtime_base_url))
     return _norm_url(getattr(entry, "runtime_base_url", None))
 
 
 def _pool_entry_route_base_url(slug: str, entry) -> Optional[str]:
     """The base URL a usage fetch for *entry* must target (its own route, never a sibling's)."""
     if slug == "openai-codex":
-        from hermes_cli.auth_codex import _codex_pool_route_base_url
+        # A login's usage is read at chatgpt.com whatever the route; a key's at its gateway (FX34 R37).
+        from hermes_cli.auth_codex import _codex_row_probe_route
 
-        return _codex_pool_route_base_url(entry.runtime_base_url)
+        return _codex_row_probe_route(getattr(entry, "runtime_api_key", None) or getattr(entry, "access_token", ""),
+                                      getattr(entry, "runtime_base_url", None) or getattr(entry, "base_url", None))
     return getattr(entry, "runtime_base_url", None) or None
 
 

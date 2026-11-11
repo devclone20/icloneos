@@ -16,7 +16,7 @@ import time
 from typing import Any, Dict, Optional
 
 from agent.api_error_summary import is_provider_stream_parse_error
-from agent.error_classifier import RETRYABLE_CLIENT_REASONS, FailoverReason, classify_api_error
+from agent.error_classifier import RETRYABLE_CLIENT_REASONS, FailoverReason, classify_api_error, codex_refused_send
 from agent.turn_overflow import recover_from_overflow
 from agent.turn_recovery import (
     _NONRETRYABLE_LABELS, abort_turn_on_interrupt, compute_error_backoff, free_tier_cooldown_ends_turn,
@@ -79,6 +79,7 @@ def handle_api_error(
     if agent.thinking_callback:
         agent.thinking_callback("")
 
+    api_error = codex_refused_send(api_error) or api_error  # every step below reads the fix, not the SDK's wrapper
     _recovered, active_system_prompt = recover_before_classification(
         agent, api_error, messages=messages, api_messages=api_messages, api_kwargs=api_kwargs,
         active_system_prompt=active_system_prompt,

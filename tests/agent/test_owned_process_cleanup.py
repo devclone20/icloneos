@@ -27,6 +27,17 @@ def test_child_close_kills_only_its_processes(tmp_path, monkeypatch):
     import tools.process_registry as processes
     registry = ProcessRegistry()
     monkeypatch.setattr(processes, "process_registry", registry)
+    # Gate run h8 went red on the consumed mark once and never again: if it returns, the message says
+    # which kill_process branch ran (an exception there is swallowed into an "error" result).
+    kills = []
+    real_kill = registry.kill_process
+
+    def recording_kill(session_id, **kwargs):
+        result = real_kill(session_id, **kwargs)
+        kills.append((session_id, kwargs.get("source"), result.get("status"), result.get("error")))
+        return result
+
+    monkeypatch.setattr(registry, "kill_process", recording_kill)
     parent, child, sibling, unstarted = [_agent() for _ in range(4)]
     try:
         parent_id = _spawn(parent, "parent-owner", tmp_path)
@@ -39,7 +50,7 @@ def test_child_close_kills_only_its_processes(tmp_path, monkeypatch):
         assert registry.poll(child_id)["status"] != "running"
         assert registry.poll(parent_id)["status"] == "running"
         assert registry.poll(sibling_id)["status"] == "running"
-        assert child_id in registry._completion_consumed
+        assert child_id in registry._completion_consumed, f"kills: {kills}"
         child.close()
         assert registry.poll(parent_id)["status"] == "running"
     finally:

@@ -4,6 +4,7 @@ import type { ChangeEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 
+import { TERMINAL_PLACE_LABELS, WhereCommandsRun } from '@/components/permissions/isolation-control'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { getElevenLabsVoices, getHermesConfigSchema, saveHermesConfig } from '@/hermes'
@@ -405,6 +406,25 @@ function ConfigSettingsInner({
         <div className="grid gap-1">
           {visibleFields.map(([key, field]) => (
             <div className="scroll-mt-6 rounded-lg" id={`setting-field-${key}`} key={key}>
+              {key === 'terminal.backend' ? (
+                <WhereCommandsRun
+                  field={
+                    <ConfigField
+                      enumOptions={enumOptionsFor(key, getNested(config, key), config)}
+                      onChange={value => updateConfig(setNested(config, key, value))}
+                      optionLabels={TERMINAL_PLACE_LABELS}
+                      schema={field}
+                      schemaKey={key}
+                      value={getNested(config, key)}
+                    />
+                  }
+                  onUseSandbox={() => {
+                    updateConfig(setNested(config, key, 'local'))
+                    void window.hermesDesktop?.restartBackend?.()
+                  }}
+                  value={getNested(config, key)}
+                />
+              ) : (
               <ConfigField
                 descriptionExtra={
                   key === 'memory.provider' && isExternalMemoryProvider(getNested(config, key)) ? (
@@ -422,6 +442,7 @@ function ConfigSettingsInner({
                 schemaKey={key}
                 value={getNested(config, key)}
               />
+              )}
               {key === 'memory.provider' && isExternalMemoryProvider(getNested(config, key)) ? (
                 <ProviderConfigPanel
                   key={String(getNested(config, key))}

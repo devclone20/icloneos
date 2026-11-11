@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import stat
+import sys
 import tempfile
 import threading
 import time
@@ -209,6 +210,9 @@ def atomic_replace(tmp_path: Union[str, Path], target: Union[str, Path]) -> str:
 
 def _publish_path(target_str: str) -> str:
     """The path :func:`atomic_replace` renames onto: a symlink's real file, else the target itself."""
+    # Lazy: the armed check must not make every importer of utils load the CLI package.
+    if "hermes_cli.no_follow" in sys.modules:
+        sys.modules["hermes_cli.no_follow"].refuse_if_link(target_str)
     return os.path.realpath(target_str) if os.path.islink(target_str) else target_str
 
 

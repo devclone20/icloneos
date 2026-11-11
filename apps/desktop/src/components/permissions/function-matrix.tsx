@@ -32,8 +32,8 @@ const GRID_COLUMNS: Readonly<Record<number, string>> = {
 
 /**
  * V3-ON r2 (lead, minor 3) — the Set up sheet's layout: the names wrap in the space left, every level column keeps its
- * header's own width (never overlapping), and below that minimum the matrix region scrolls sideways. Settings keeps
- * the base layout above (`layout` defaults to 'scroll').
+ * header's own width (never overlapping), and below that minimum the matrix region scrolls sideways. proof4 F5: the
+ * Settings pane uses it too, so at 900x700 every level column is in view (`layout` still defaults to 'scroll').
  */
 const FIT_GRID: Readonly<Record<number, string>> = {
   6: 'grid w-full grid-cols-[minmax(12rem,1fr)_repeat(6,max-content)]',

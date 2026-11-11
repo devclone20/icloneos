@@ -771,7 +771,7 @@ browser:
   record_sessions: true  # default: false
 ```
 
-When enabled, recording starts automatically on the first `browser_navigate` and saves to `~/.hermes/browser_recordings/` when the session closes. Works in both local and cloud (Browserbase) modes. Recordings older than 72 hours are automatically cleaned up.
+When enabled, recording starts automatically on the first `browser_navigate` and saves to `~/Movies/icloneOS Recordings/` when the session closes, or when you turn recording off. That usually takes under a second; with a visible browser and the Seatbelt off it can take up to about half a minute, and the record button says so while it saves. Works in both local and cloud (Browserbase) modes. Nothing deletes these videos, except the empty file a failed save leaves. Videos saved before v0.0.6 stay in `~/.hermes/browser_recordings/`, and nothing deletes those either.
 
 ## Headed Mode (Visible Browser Window)
 

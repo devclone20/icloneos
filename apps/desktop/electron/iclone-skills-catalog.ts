@@ -227,7 +227,7 @@ function blockSequence(lines: readonly string[], start: number, indent: number):
 /** The leading `---` block (one leading BOM skipped, as Hermes does): `key: value` lines nesting by indentation,
  *  quoted strings with YAML escapes, flow and block lists, `|` / `>` block scalars and multi-line plain values.
  *  Throws on anything else.
- * @public used by RESUME/run/gates/R14/extra/2026-10-17_r5_fuzz_vs_hermes.sh
+ * @public used by a gate probe kept outside this repository
  */
 export function parseFrontmatter(text: string): Frontmatter {
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(text.replace(/^\uFEFF/, ''))
@@ -336,7 +336,7 @@ function cueOf(description: string): string {
   return end < 0 ? description : description.slice(0, end + 1)
 }
 
-/** @public used by RESUME/run/gates/R14/extra/2026-10-17_r5_fuzz_vs_hermes.sh */
+/** @public used by a gate probe kept outside this repository */
 export function platformsOf(value: unknown): string[] {
   const list = Array.isArray(value) ? value : typeof value === 'string' && value.trim() ? [value] : []
 

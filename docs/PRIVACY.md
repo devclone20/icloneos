@@ -63,7 +63,7 @@ Nothing is sent to us. The app talks to other services only as listed here.
 
 - **Settings › Profile › Privacy** — switches for terminal, files, web browsing, automation, screen, clipboard,
   installs, scheduled tasks, messages, spending and trading, microphone and notifications. A switch that is off
-  refuses that kind of action in every mode.
+  refuses that kind of action in every mode but Ignore permissions, which does not read them.
 - **Settings › Agent › Permissions** — the mode, a level for each kind of action, and every grant you made, each
   one revocable.
 - **Background tasks › Permission log** — every ask, answer, grant and use, in a hash-chained record.

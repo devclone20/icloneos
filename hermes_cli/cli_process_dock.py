@@ -53,7 +53,9 @@ def process_rows(now: float | None = None) -> list:
             continue
         status = process_status(entry)
         exited_at = proc.exited_at if status != "running" else 0.0
-        if status != "running" and now - exited_at > RETAIN_SECONDS:
+        # exited_at 0: the exit is recorded, the move to finished has not stamped it yet (the reader thread between the
+        # two, or a kill in its grace wait). The row stays: it has no time to retire from.
+        if status != "running" and exited_at and now - exited_at > RETAIN_SECONDS:
             continue
         end = exited_at or now
         rows.append({

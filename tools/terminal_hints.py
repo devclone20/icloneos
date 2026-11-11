@@ -157,4 +157,7 @@ def annotate_failure(command: str, exit_code: int, output: str) -> Optional[str]
                 return hint
         except Exception:
             continue
+    # A kernel refusal (a cd into a folder the sandbox holds shut) is not a file missing its execute bit.
+    if exit_code == 126 and "Operation not permitted" in window:
+        return None
     return _EXIT_CODE_HINTS.get(exit_code)

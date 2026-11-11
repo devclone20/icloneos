@@ -256,13 +256,19 @@ def test_failed_fetch_keeps_sibling_visible_and_does_not_repair(monkeypatch, tmp
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "a"))
     _write_pool(tmp_path / "a", "openai-codex", [
         _entry("c1", "tok-1", auth_type="oauth"), _entry("c2", "tok-2", auth_type="oauth")])
+    # Gateway keys, so their route is the gateway and the fetch runs instead of a host refusal.
+    (tmp_path / "a" / "config.yaml").write_text(
+        "model:\n  provider: openai-codex\n  base_url: https://codex-gw.example/backend-api/codex\n")
     _clear_cache()
     # Read-only Codex fetcher: 401 on tok-1; the resolver must NOT be consulted again.
 
     class _Unauthorized(Exception):
         pass
 
+    fetched = []
+
     def fake_read_only(base_url, api_key):
+        fetched.append(api_key)
         if api_key == "tok-1":
             raise _Unauthorized()
         return _snapshot(11.0)
@@ -286,7 +292,7 @@ def test_failed_fetch_keeps_sibling_visible_and_does_not_repair(monkeypatch, tmp
 
 
 # ── cache scope: A→B→A profile isolation ────────────────────────────────────
-
+    assert "tok-1" in fetched  # the 401 came from the fetch, not from a refusal before it
 
 def test_cache_isolation_a_to_b_to_a(monkeypatch, tmp_path):
     """Snapshots are scoped per profile home: B's open must not read A's snapshot, and back on A

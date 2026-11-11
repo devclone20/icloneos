@@ -9,14 +9,17 @@ Sibling ``browser_tool_*`` modules hold extracted clusters.
 """
 
 import atexit
+import contextvars
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import uuid
 from typing import Dict, Any, Optional, Union
 from pathlib import Path
 from agent.redact import redact_cdp_url
@@ -371,9 +374,27 @@ def _last_session_key(task_id: str) -> str:
 
 def _socket_safe_tmpdir() -> str:
     """Temp root short enough for the agent-browser socket dir and Chrome's SingletonSocket
-    (``hermes_constants.socket_safe_tmpdir``)."""
+    (``hermes_constants.socket_safe_tmpdir``). Confined, /tmp is closed to the runtime and to the browser it launches:
+    the root is the runtime's own temp folder, its TMPDIR, which main made short enough for a socket."""
+    if _confined_runtime():
+        import tempfile
+        return os.path.realpath(os.environ.get("TMPDIR") or tempfile.gettempdir())
     from hermes_constants import socket_safe_tmpdir
     return socket_safe_tmpdir()
+
+
+def _confined_runtime() -> bool:
+    from hermes_cli.iclone_policy_env import confined_backend
+    return confined_backend() == "iclone_seatbelt"
+
+
+def _socket_dir_prefix() -> str:
+    """Confined, the root is deep and ``<dir>/<session>.sock`` must still fit the kernel's cap: a shorter name."""
+    return "ab-" if _confined_runtime() else "agent-browser-"
+
+
+def _session_socket_dir(session_name: str) -> str:
+    return os.path.join(_socket_safe_tmpdir(), f"{_socket_dir_prefix()}{session_name}")
 
 
 # Active sessions keyed by "session key": the bare task_id, or f"{task_id}::local"
@@ -381,6 +402,15 @@ def _socket_safe_tmpdir() -> str:
 # Values: session_name (always), bb_session_id + cdp_url (cloud).
 _active_sessions: Dict[str, Dict[str, Any]] = {}
 _recording_sessions: set = set()  # session_keys with active recordings
+_recording_files: Dict[str, str] = {}  # session_key -> the video's file name
+_record_notices: list = []  # what the user reads about a video; the renderer asks for these by browser.manage
+_record_notice_seq = 0
+_record_notice_read_seq = 0  # the last notice a window was handed: what an exit leaves unread waits on disk for the next start
+_record_locks: Dict[str, Any] = {}  # session_key -> its lock: one start or stop at a time, and a stop waits for a start in flight
+_record_starting: set = set()  # session_keys inside a start, so "off" can see them
+_record_exit_done = False
+_record_pending_read = False
+_RECORD_BOOT = uuid.uuid4().hex  # the app tells this runtime from the one before it: its notices count from 1 again
 # Most recent session_key per task_id (set by browser_navigate, read by every non-nav
 # tool) so click/snapshot land in the session that served the last navigation.
 _last_active_session_key: Dict[str, str] = {}
@@ -648,7 +678,7 @@ def _local_scheme_error(url: str) -> Optional[dict]:
     """icloneOS V3-UP r5 (ruling 56): while the agent is confined the browser opens web pages only — ``http(s)``
     (and ``about:blank``). ``file:`` and every scheme that names a local resource (``view-source:file:``,
     ``filesystem:``, ``blob:`` of a file, ``chrome:``/``about:`` pages, …) is refused, judged on the scheme left
-    after every wrapper is stripped. The browser itself also runs inside the agent's Seatbelt (programs.py)."""
+    after every wrapper is stripped. With the Seatbelt on the browser runs outside it (ruling R1), and the launcher's door refuses these schemes too."""
     from tools.environments.host_lane import confined_process
 
     if not confined_process():
@@ -803,7 +833,7 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
     is_first_nav = session_info.get("_first_nav", True)
     if is_first_nav:
         session_info["_first_nav"] = False
-        _maybe_start_recording(nav_session_key)
+        session_info["_record_after_open"] = True
 
     result = _session._run_browser_command(nav_session_key, "open", [url],
                                   timeout=_get_open_command_timeout(first_open=is_first_nav))
@@ -817,7 +847,15 @@ def browser_navigate(url: str, task_id: Optional[str] = None) -> str:
     if blocked is not None:
         return blocked
 
+    # After the first page, never before: a screencast started on the blank first tab gets 1 frame or none and its
+    # stop waits 25 s for a target that is gone (agent-browser 0.26, measured).
+    recording_note = None
+    if session_info.pop("_record_after_open", False):
+        recording_note = _maybe_start_recording(nav_session_key)
+
     response = {"success": True, "url": final_url, "title": title}
+    if recording_note:  # the record button is on and cannot work: the agent can say so, with what to do
+        response["recording"] = recording_note
     features = session_info.get("features") or {}
     if features.get("real_profile"):  # auditability: this ran on the user's real-profile copy-browser
         response["used_real_profile"] = True
@@ -1177,45 +1215,288 @@ def _camofox_eval(expression: str, task_id: Optional[str] = None) -> str:
         return tool_error(str(e), success=False)
 
 
-def _maybe_start_recording(task_id: str):
-    """Start recording if browser.record_sessions is enabled in config."""
+_RECORD_STOP_TIMEOUT_S = 40  # measured: under 1 s when healthy, 25 s for a target that is gone. Longer still is said as not confirmed
+_RECORD_EXIT_WAIT_S = 4.0  # at a quit or restart: Electron SIGKILLs the group 5 s after its SIGTERM (backend.ts waitForBackendExit), and what this has to say is written first
+_RECORD_SHOWN_FOLDER = "Movies/icloneOS Recordings"
+_RECORD_NOTICES_KEPT = 20
+
+
+RECORD_NEEDS_FFMPEG = ("Recording the browser needs ffmpeg, and this Mac has none. In icloneOS open Settings > Setup > Packages, "
+                       "install ffmpeg, then ask again. Browsing still works.")
+
+
+def _browser_door_module():
+    """The door's own file, so the Seatbelt-off path uses the same folder and the same name rule."""
+    name = "iclone_browser_door"
+    if name not in sys.modules:
+        import importlib.util
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "plugins", "iclone-confinement", "browser_door.py")
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
+def _say_recording(ok: bool, message: str, file: str = "", path: str = "") -> None:
+    """A sentence for the user, read by the app's notice: a log line alone is a video nobody hears about."""
+    global _record_notice_seq
+    with _cleanup_lock:
+        _record_notice_seq += 1
+        notice = {"seq": _record_notice_seq, "ok": ok, "message": message}
+        if file:
+            notice["file"] = file
+        if path:
+            notice["path"] = path
+        _record_notices.append(notice)
+        del _record_notices[:-_RECORD_NOTICES_KEPT]
+
+
+def _plain_error(error: Any) -> str:
+    text = " ".join(str(error).split())[:200].rstrip(".")
+    if _no_frames(text):
+        return "the page gave no frames, so there is no video"
+    return text
+
+
+def _no_frames(error: Any) -> bool:
+    return any(words in str(error) for words in ("does not contain any stream", "No frames captured"))
+
+
+def _record_lock(task_id: str):
+    with _cleanup_lock:
+        return _record_locks.setdefault(task_id, threading.RLock())  # re-entrant: a timed out start's recycle can reach the stop
+
+
+def _record_on(config: Any) -> bool:
+    """The way the app reads it, so a hand-written "false" is off here too."""
+    value = cfg_get(config, "browser", "record_sessions", default=False)
+    return value is True or str(value).strip().lower() == "true"
+
+
+def _maybe_start_recording(task_id: str) -> Optional[str]:
+    """Start recording if browser.record_sessions is enabled in config. Returns the plain sentence for the agent: the file, or that ffmpeg stands in the way."""
+    with _cleanup_lock:
+        _record_starting.add(task_id)
+    try:
+        # The setting is read under the lock, so "off" either finds this capture running or stops it from starting.
+        with _record_lock(task_id):
+            return _start_recording(task_id)
+    finally:
+        with _cleanup_lock:
+            _record_starting.discard(task_id)
+
+
+def _start_recording(task_id: str) -> Optional[str]:
     with _cleanup_lock:
         if task_id in _recording_sessions:
             return
     try:
         from hermes_cli.config import read_raw_config
-        hermes_home = get_hermes_home()
-        if not cfg_get(read_raw_config(), "browser", "record_sessions", default=False):
+        if not _record_on(read_raw_config()):
             return
-        recordings_dir = hermes_home / "browser_recordings"
-        recordings_dir.mkdir(parents=True, exist_ok=True)
-        _lifecycle._cleanup_old_recordings(max_age_hours=72)
-        recording_path = recordings_dir / f"session_{time.strftime('%Y%m%d_%H%M%S')}_{task_id[:16]}.webm"
-        result = _session._run_browser_command(task_id, "record", ["start", str(recording_path)])
+        # With the Seatbelt on the door decides, and answers in the same words; off, the daemon would fail only at the stop.
+        if not _confined_runtime() and not shutil.which("ffmpeg", path=_install._merge_browser_path(os.environ.get("PATH", ""))):
+            logger.warning("Could not start the browser recording for session %s: no ffmpeg", task_id)
+            _say_recording(False, RECORD_NEEDS_FFMPEG)
+            return RECORD_NEEDS_FFMPEG
+        name = f"browser-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.webm"
+        # With the Seatbelt on the runtime names the file and only the door names the folder; off, the same function here.
+        target = name if _confined_runtime() else _browser_door_module().record_path(_record_home(), name)
+        result = _session._run_browser_command(task_id, "record", ["start", target])
         if result.get("success"):
             with _cleanup_lock:
                 _recording_sessions.add(task_id)
-            logger.info("Auto-recording browser session %s to %s", task_id, recording_path)
-        else:
-            logger.debug("Could not start auto-recording: %s", result.get("error"))
+                _recording_files[task_id] = name
+            logger.info("Auto-recording browser session %s to %s", task_id, name)
+            return (f"This browser session is being recorded. The video goes to {_RECORD_SHOWN_FOLDER}/{name} in the user's home "
+                    "folder, and it is saved when the browser closes or the user turns recording off.")
+        logger.warning("Could not start the browser recording for session %s: %s", task_id, result.get("error"))
+        if "ffmpeg" in str(result.get("error")):
+            _say_recording(False, str(result.get("error")))
+            return str(result.get("error"))
+        _say_recording(False, f"The browser recording did not start: {_plain_error(result.get('error'))}.")
     except Exception as e:
-        logger.debug("Auto-recording setup failed: %s", e)
+        logger.warning("Could not start the browser recording for session %s: %s", task_id, e)
+        _say_recording(False, f"The browser recording did not start: {_plain_error(e)}.")
+
+
+def _record_home() -> str:
+    return os.environ.get("HOME") or os.path.expanduser("~")
+
+
+def _not_confirmed(name: str, why: str) -> str:
+    return f"The browser video {name} is not confirmed: {why}. Check {_RECORD_SHOWN_FOLDER}. The file may be incomplete or absent."
+
+
+def _discard_empty_record(task_id: str, name: str) -> None:
+    """The failed save's empty file goes, if that is what is there. The sentence does not depend on it, so a failure here changes nothing."""
+    try:
+        if _confined_runtime():
+            _session._run_browser_command(task_id, "record", ["discard", name])
+        else:
+            _browser_door_module().discard_empty_record(_record_home(), name)
+    except Exception as e:
+        logger.debug("Could not remove the empty browser video %s: %s", name, e)
 
 
 def _maybe_stop_recording(task_id: str):
-    """Stop recording if one is active for this session."""
-    with _cleanup_lock:
-        if task_id not in _recording_sessions:
-            return
-    try:
-        result = _session._run_browser_command(task_id, "record", ["stop"])
-        if result.get("success"):
-            logger.info("Saved browser recording for session %s: %s", task_id, result.get("data", {}).get("path", ""))
-    except Exception as e:
-        logger.debug("Could not stop recording for %s: %s", task_id, e)
-    finally:
+    """Stop recording if one is active for this session, save the file, and tell the user which, or why not. A partial file always stays."""
+    with _record_lock(task_id):
         with _cleanup_lock:
-            _recording_sessions.discard(task_id)
+            if task_id not in _recording_sessions:
+                return
+            name = _recording_files.get(task_id, "")
+        try:
+            result = _session._run_browser_command(task_id, "record", ["stop"], timeout=_RECORD_STOP_TIMEOUT_S)
+            if result.get("success"):
+                path = (result.get("data") or {}).get("path", "")
+                logger.info("Saved browser recording for session %s: %s", task_id, path)
+                _say_recording(True, f"Browser video saved: {name}, in {_RECORD_SHOWN_FOLDER}.", name, path if isinstance(path, str) else "")
+            else:
+                error = result.get("error")
+                why = ("the browser did not answer in time" if result.get("timed_out")
+                       else "the tab was closed before the video finished" if "Target closed" in str(error) else _plain_error(error))
+                logger.warning("Could not save the browser recording for session %s: %s", task_id, why)
+                # After a timeout, or a stop killed by a signal (the quit's group signal reaches its client), the daemon may still be writing: nothing goes.
+                killed = isinstance(result.get("returncode"), int) and result["returncode"] < 0
+                if not result.get("timed_out") and not killed:
+                    _discard_empty_record(task_id, name)
+                if _no_frames(error):
+                    _say_recording(False, f"The browser video was not saved: {why}.")
+                else:
+                    _say_recording(False, _not_confirmed(name, why), name)
+        except Exception as e:
+            logger.warning("Could not save the browser recording for session %s: %s", task_id, e)
+            _say_recording(False, _not_confirmed(name, _plain_error(e)), name)
+        finally:
+            with _cleanup_lock:
+                _recording_sessions.discard(task_id)
+                _recording_files.pop(task_id, None)
+
+
+def _record_dropped(task_id: str) -> None:
+    """The janitor gave up on this browser, so nothing can finish its video: the user hears it."""
+    with _cleanup_lock:
+        was_recording = task_id in _recording_sessions
+        name = _recording_files.pop(task_id, "")
+        _recording_sessions.discard(task_id)
+    if was_recording:
+        _say_recording(False, _not_confirmed(name, "the browser could not be closed cleanly"), name)
+
+
+def _record_pending_path() -> Path:
+    """What the last quit could still say, for the next start to read. Same name in methods_tools, which looks before it loads this file."""
+    from hermes_constants import get_process_hermes_home
+    return get_process_hermes_home() / "browser_record_notices.json"
+
+
+def _read_pending_notices() -> None:
+    global _record_pending_read
+    with _cleanup_lock:
+        if _record_pending_read:
+            return
+        _record_pending_read = True
+    try:
+        path = _record_pending_path()
+        if not path.exists():
+            return
+        said = None
+        try:
+            said = json.loads(path.read_text(encoding="utf-8"))
+        finally:
+            path.unlink(missing_ok=True)
+        for notice in said if isinstance(said, list) else []:
+            if isinstance(notice, dict) and isinstance(notice.get("message"), str):
+                _say_recording(notice.get("ok") is True, notice["message"], str(notice.get("file") or ""), str(notice.get("path") or ""))
+    except (OSError, ValueError) as e:
+        logger.debug("Could not read the browser video notices of the last run: %s", e)
+
+
+def recording_status() -> Dict[str, Any]:
+    """What the record button shows: the setting, the videos being captured now, the notices so far, and which runtime says so."""
+    global _record_notice_read_seq
+    _read_pending_notices()
+    armed = None
+    try:
+        from hermes_cli.config import read_raw_config
+        armed = _record_on(read_raw_config())
+    except Exception as e:
+        logger.debug("Could not read browser.record_sessions: %s", e)
+    with _cleanup_lock:
+        view = {"boot": _RECORD_BOOT, "capturing": sorted(_recording_files.get(key, "") for key in _recording_sessions),
+                "notices": list(_record_notices)}
+        _record_notice_read_seq = _record_notice_seq
+    if armed is not None:
+        view["armed"] = armed
+    return view
+
+
+def _stop_threads(keys) -> list:
+    """One thread a session, so one stuck stop costs no other video its time. Each carries this call's profile and session scope."""
+    threads = []
+    for key in keys:
+        context = contextvars.copy_context()
+        thread = threading.Thread(target=context.run, args=(_maybe_stop_recording, key), daemon=True, name="browser-record-stop")
+        thread.start()
+        threads.append(thread)
+    return threads
+
+
+def _live_captures() -> set:
+    with _cleanup_lock:
+        return set(_recording_sessions) | set(_record_starting)
+
+
+def stop_recordings() -> Dict[str, Any]:
+    """Every capture stops and saves, a start in flight included; the setting does not change and the browsers stay open."""
+    for thread in _stop_threads(_live_captures()):
+        thread.join()
+    return recording_status()
+
+
+def stop_recordings_for_exit(wait_s: float = _RECORD_EXIT_WAIT_S) -> None:
+    """A quit or a restart, once, within a bound. The window may be gone by the end, so what this has to say waits on disk for the next start."""
+    global _record_exit_done
+    with _cleanup_lock:
+        if _record_exit_done:
+            return
+        _record_exit_done = True
+        live = set(_recording_sessions) | set(_record_starting)
+    deadline = time.monotonic() + wait_s
+    for thread in _stop_threads(live):
+        thread.join(max(0.0, deadline - time.monotonic()))
+    with _cleanup_lock:
+        late = [_recording_files.get(key, "") for key in _recording_sessions]
+    for name in late:
+        _say_recording(False, f"The app closed before {name} finished saving. It is not confirmed: check {_RECORD_SHOWN_FOLDER}. The file may be incomplete.", name)
+    with _cleanup_lock:
+        # Everything no window was handed, not only what this exit said: an interrupted turn's cleanup can have ended the capture just before.
+        said = [notice for notice in _record_notices if notice["seq"] > _record_notice_read_seq]
+    if said:
+        try:
+            path = _record_pending_path()
+            temp = path.with_name(path.name + ".new")
+            fd = os.open(temp, os.O_CREAT | os.O_TRUNC | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(said, f)
+            os.replace(temp, path)
+        except OSError as e:
+            logger.warning("Could not keep the browser video notices for the next start: %s", e)
+
+
+def sync_recordings() -> Dict[str, Any]:
+    """The record button, now, not at the next session or the idle reaper. Off: every live recording stops and saves, headed
+    or not, and the browser stays open. On: every open session that already has a page starts; one still opening starts itself."""
+    from hermes_cli.config import read_raw_config
+    if not _record_on(read_raw_config()):
+        return stop_recordings()
+    with _cleanup_lock:
+        waiting = [key for key, info in _active_sessions.items()
+                   if key not in _recording_sessions and info.get("_first_nav", True) is False and not info.get("_record_after_open")]
+    for key in waiting:
+        _maybe_start_recording(key)
+    return recording_status()
 
 
 _GET_IMAGES_JS = "JSON.stringify([...document.images].map(img => ({src: img.src, alt: img.alt || '', width: img.naturalWidth, height: img.naturalHeight})).filter(img => img.src && !img.src.startsWith('data:')))"

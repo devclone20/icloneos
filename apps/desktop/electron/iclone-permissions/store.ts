@@ -42,7 +42,7 @@ import {
   type PermissionStateFile
 } from '../../src/iclone-shared/permissions'
 import { readJsonValidated } from '../iclone-acp-store'
-import { writeFileAtomicSync } from '../lib/atomic-write'
+import { syncFileAndDir, writeFileAtomicSync } from '../lib/atomic-write'
 
 import {
   DEFAULT_FUNCTION_LEVELS,
@@ -61,7 +61,6 @@ import {
   effectiveMode,
   isActionClass,
   isPermissionMode,
-  modeAllowedAt,
   type ModeScope,
   type PermissionMode
 } from './modes'
@@ -75,12 +74,19 @@ const FN_GRANTS_FILE = 'fn-grants.json'
 /** Session-scoped modes kept on disk; the oldest leave first. */
 const SESSIONS_MAX = 200
 const GRANTS_MAX = 500
+/** Folders the user allowed with "Allow this folder"; the oldest leave first. */
+const FOLDERS_MAX = 500
 
 export interface ModeRecord {
   v: 1
   standing: PermissionMode
   projects: Record<string, PermissionMode>
   sessions: Record<string, PermissionMode>
+  /** F40: when the owner accepted the native Ignore alert. Set once, by main, after the alert. */
+  ignoreAcknowledgedAt?: string
+  /** fx20 (lens5 H1): the folders "Allow this folder" named, by real path. No mode: main lists them for the launcher,
+   *  and only the modes above decide what a command in them may do. Absent in a record from before the button. */
+  folders?: string[]
   updatedAt: string
 }
 
@@ -179,9 +185,11 @@ function isModeRecord(value: unknown): value is ModeRecord {
     !!record &&
     record.v === 1 &&
     isPermissionMode(record.standing) &&
-    modeAllowedAt(record.standing, 'standing') &&
     isModeMap(record.projects) &&
     isModeMap(record.sessions) &&
+    (record.folders === undefined ||
+      (Array.isArray(record.folders) &&
+        record.folders.every(folder => typeof folder === 'string' && folder.startsWith('/')))) &&
     typeof record.updatedAt === 'string'
   )
 }
@@ -215,6 +223,42 @@ interface ModeQuery {
   /** The session, then its parents to the root (§2: delegated and compressed sessions inherit the parent's mode). */
   lineage?: readonly string[] | null
   project?: string | null
+}
+
+const NARROW_ORDER: readonly PermissionMode[] = ['plan', 'manual', 'acceptEdits', 'automatic', 'ignore']
+
+const narrower = (a: PermissionMode, b: PermissionMode): PermissionMode =>
+  NARROW_ORDER.indexOf(a) <= NARROW_ORDER.indexOf(b) ? a : b
+
+const narrowRows = (prior: Record<string, PermissionMode>, overlay: Record<string, PermissionMode>) =>
+  Object.fromEntries(
+    Object.keys(prior)
+      .filter(key => Object.hasOwn(overlay, key))
+      .map(key => [key, narrower(prior[key], overlay[key])])
+  )
+
+/**
+ * F50, S4: Keychain off and on again. The newest choice is in the unsealed overlay, which proves nothing, so it can only
+ * narrow: a sealed older Ignore never comes back over a later Manual, and a row the overlay no longer holds is gone.
+ */
+export function narrowestOfMode(prior: ModeRecord, overlay: ModeRecord): ModeRecord {
+  return {
+    ...prior,
+    standing: narrower(prior.standing, overlay.standing),
+    projects: narrowRows(prior.projects, overlay.projects),
+    sessions: narrowRows(prior.sessions, overlay.sessions)
+  }
+}
+
+/** fx47: the one lookup of a session's mode. The store's verified record and main's per-run record both read it. */
+export function modeFromRecord(record: Pick<ModeRecord, 'projects' | 'sessions' | 'standing'>, query: ModeQuery): PermissionMode {
+  const session = sessionChain(query).find(sid => Object.hasOwn(record.sessions, sid))
+
+  return effectiveMode({
+    standing: record.standing,
+    project: query.project && Object.hasOwn(record.projects, query.project) ? record.projects[query.project] : null,
+    session: session ? record.sessions[session] : null
+  })
 }
 
 const sessionChain = (query: ModeQuery): string[] => {
@@ -413,7 +457,7 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
     }
 
     if (loaded.state === 'unverified') {
-      return keys.sealed ? (loaded.prior ?? NARROWEST_MODE()) : loaded.body
+      return keys.sealed ? (loaded.prior ? narrowestOfMode(loaded.prior, loaded.body) : NARROWEST_MODE()) : loaded.body
     }
 
     return NARROWEST_MODE()
@@ -539,7 +583,7 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
     return envelope.unsealed === true ? envelope.prior : envelope
   }
 
-  const writeEnvelope = (file: StateFile, body: unknown) => {
+  const writeEnvelope = (file: StateFile, body: unknown, durable = true) => {
     const prior = keys.sealed ? undefined : priorEnvelope(file)
 
     const envelope = keys.sealed
@@ -548,7 +592,7 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
         // keeps its trusted base and makes pending only what changed here (ruling 71).
         { v: 2, unsealed: true, body, ...(prior === undefined ? {} : { prior }) }
 
-    writeFileAtomicSync(fileOf(file), `${JSON.stringify(envelope, null, 2)}\n`, { mode: 0o600, dirMode: 0o700 })
+    writeFileAtomicSync(fileOf(file), `${JSON.stringify(envelope, null, 2)}\n`, { mode: 0o600, dirMode: 0o700, durable })
   }
 
   /**
@@ -559,7 +603,7 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
    * `integrity()` until the user touches that file's own writer, never healed by an unrelated click. An unsealed
    * write touches nothing but its own file.
    */
-  const save = (file: StateFile, body: unknown) => {
+  const save = (file: StateFile, body: unknown, durable = true): string[] => {
     const resign: [StateFile, unknown][] = []
 
     if (keys.sealed) {
@@ -572,11 +616,45 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
       }
     }
 
-    writeEnvelope(file, body)
-
+    // Permfix (L3-5): the re-signed siblings (first sealed write only, so rare) are on stable storage BEFORE the file
+    // this write is for is renamed: a power cut can never keep a verified file beside a sibling it lost, which the
+    // deletion rule above would report as tampering. Only that one file may be flushed later (`durable` false).
     for (const [sibling, siblingBody] of resign) {
-      writeEnvelope(sibling, siblingBody)
+      writeEnvelope(sibling, siblingBody, true)
     }
+
+    writeEnvelope(file, body, durable)
+
+    return [fileOf(file)]
+  }
+
+  /** `mode` null takes a project or session layer off (the authority's roll-back of a change that was never saved). */
+  const nextMode = (mode: PermissionMode | null, scope: ModeScope, key: string | null): SetModeResult => {
+    if (scope !== 'standing' && !key) {
+      return { ok: false, error: `A ${scope} mode needs the ${scope} it applies to.` }
+    }
+
+    if (scope === 'standing' && mode === null) {
+      return { ok: false, error: 'The standing mode cannot be removed.' }
+    }
+
+    const record = readMode()
+    const next: ModeRecord = { ...record, updatedAt: now().toISOString() }
+
+    const without = (layer: Record<string, PermissionMode>) =>
+      Object.fromEntries(Object.entries(layer).filter(([name]) => name !== key))
+
+    if (scope === 'standing') {
+      next.standing = mode as PermissionMode
+    } else if (scope === 'project') {
+      next.projects = mode === null ? without(record.projects) : { ...record.projects, [key as string]: mode }
+    } else {
+      const sessions = Object.entries(mode === null ? without(record.sessions) : { ...record.sessions, [key as string]: mode })
+
+      next.sessions = Object.fromEntries(sessions.slice(-SESSIONS_MAX))
+    }
+
+    return { ok: true, record: next }
   }
 
   /**
@@ -678,41 +756,60 @@ export function createPermissionStore(dir: string, keys: StoreKeys, now: () => D
       )
     },
     effective(query: ModeQuery): PermissionMode {
-      const record = readMode()
-      const session = sessionChain(query).find(sid => Object.hasOwn(record.sessions, sid))
-
-      return effectiveMode({
-        standing: record.standing,
-        project: query.project && Object.hasOwn(record.projects, query.project) ? record.projects[query.project] : null,
-        session: session ? record.sessions[session] : null
-      })
+      return modeFromRecord(readMode(), query)
     },
-    /** The one writer of mode.json. Callers: ipc.ts `set-mode`, after the gesture lock, and nothing else. */
-    writeMode(mode: PermissionMode, scope: ModeScope, key: string | null): SetModeResult {
-      if (!modeAllowedAt(mode, scope)) {
-        return { ok: false, error: 'Ignore permissions cannot be the standing default.' }
+    /**
+     * The one writer of mode.json. Callers: ipc.ts `set-mode` (through authority.setMode), after the gesture lock, and
+     * the held choice it set; nothing else.
+     *
+     * V-3, `flush: 'deferred'` (setMode, which can await): the new file is in place atomically before this returns —
+     * every reader sees it at once, and the read-modify-write cannot interleave with another writer — and `durable`
+     * resolves once it and its directory are flushed, in the thread pool instead of an F_FULLFSYNC on the main thread.
+     * The caller (authority.ts, narrow-first) publishes a narrowing at once and a broadening, with its audit line, only
+     * after `durable`: a crash can lose a change, never leave a policy wider than the disk holds. A file a power cut
+     * leaves empty or torn is refused like any unreadable state file (the narrowest reading). `mode` null removes a
+     * project or session layer (a roll-back only).
+     */
+    writeMode(
+      mode: PermissionMode | null,
+      scope: ModeScope,
+      key: string | null,
+      flush: 'deferred' | 'now' = 'now'
+    ): SetModeResult & { durable?: Promise<void> } {
+      const next = nextMode(mode, scope, key)
+
+      if (!next.ok) {
+        return next
       }
 
-      if (scope !== 'standing' && !key) {
-        return { ok: false, error: `A ${scope} mode needs the ${scope} it applies to.` }
+      if (flush === 'now') {
+        save('mode', next.record)
+
+        return next
       }
 
+      const files = save('mode', next.record, false)
+
+      return { ...next, durable: Promise.all(files.map(syncFileAndDir)).then(() => undefined) }
+    },
+    /** Lists a folder for the launcher, or takes it off; `folders` never carries a mode. Callers: ipc.ts, after the gesture. */
+    ignoreAcknowledged(): boolean {
+      return typeof readMode().ignoreAcknowledgedAt === 'string'
+    },
+    acknowledgeIgnore(): void {
+      const at = now().toISOString()
+
+      save('mode', { ...readMode(), ignoreAcknowledgedAt: at, updatedAt: at })
+    },
+    writeFolder(folder: string, listed: boolean): void {
       const record = readMode()
-      const next: ModeRecord = { ...record, updatedAt: now().toISOString() }
+      const rest = (record.folders ?? []).filter(item => item !== folder)
 
-      if (scope === 'standing') {
-        next.standing = mode
-      } else if (scope === 'project') {
-        next.projects = { ...record.projects, [key as string]: mode }
-      } else {
-        const sessions = Object.entries({ ...record.sessions, [key as string]: mode })
-
-        next.sessions = Object.fromEntries(sessions.slice(-SESSIONS_MAX))
-      }
-
-      save('mode', next)
-
-      return { ok: true, record: next }
+      save('mode', {
+        ...record,
+        folders: listed ? [...rest, folder].slice(-FOLDERS_MAX) : rest,
+        updatedAt: now().toISOString()
+      })
     },
     addGrant(input: Omit<Grant, 'createdAt' | 'id'>): Grant {
       const grant: Grant = { ...input, id: `g-${randomUUID()}`, createdAt: now().toISOString() }

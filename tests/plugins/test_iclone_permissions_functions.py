@@ -1,4 +1,4 @@
-"""V3-F2 — per-function levels in the Hermes plugin (contract RESUME/contracts/V3F2_function_levels.md).
+"""V3-F2 — per-function levels in the Hermes plugin (the V3-F2 function-levels contract).
 
 F2-1 the vocabulary equals the TypeScript source (tests/fixtures/functions.json, written by functions.test.ts);
 F2-2 every row at ``mode`` is exactly V3-F; F2-3 the level semantics replay the fixture case by case; F2-4 the
@@ -18,9 +18,18 @@ from types import SimpleNamespace
 import pytest
 
 from tests.plugins.test_iclone_permissions import (  # noqa: F401
-    FIXTURE, INFT, KEY, KID, MODES, CLASSES, FakeMain, _body, _events, _isolated, _load, _spawn_env,
+    FIXTURE, INFT, KEY, KID, MODES, CLASSES, FakeMain, _body as _shared_body, _events, _isolated, _load, _spawn_env,
     _write_policy, plugin, wired,
 )
+
+
+def _body(**over):
+    """F40: in Ignore no level decides (test_iclone_ignore_no_layer_asks.py proves it). What a level does beside a lax
+    mode row is measured here under Automatic, the laxest row a level can still decide on."""
+    if over.get("standing") == "ignore":
+        over["standing"] = "automatic"
+    return _shared_body(**over)
+
 from tests.plugins.test_iclone_permissions import PLUGIN_DIR
 
 MONEY = ("payments", "trading", "shopping", "acp")
@@ -153,7 +162,7 @@ class TestF2Vocabulary:
         for n, case in enumerate(_parts_cases(table)):
             mode, levels, line, parts, classes, fns_granted, unread = case
             ceilings = {"kL": line["ceiling"], **{f"k{i}": part["ceiling"] for i, part in enumerate(parts)}}
-            body = _body(standing=mode, functions=levels, ceilings=ceilings,
+            body = _shared_body(standing=mode, functions=levels, ceilings=ceilings,
                          grants=[{"id": f"g{c}", "cls": c, "scope": "standing"} for c in classes],
                          fnGrants=[{"id": f"f{fn}", "fn": fn, "scope": "standing"} for fn in fns_granted])
             fns = Functions(_fns_of(line["mask"]), [
@@ -187,7 +196,7 @@ class TestF2Vocabulary:
                         for ceiling in order["ceilings"]:
                             for floor in order["floors"]:
                                 for class_grant, fn_grant in order["grants"]:
-                                    body = _body(
+                                    body = _shared_body(
                                         standing=mode, ceilings=_ceilings(ceiling), functions={"shell": level},
                                         grants=[{"id": "g1", "cls": cls, "scope": "standing"}] if class_grant and cls != "$" else [],
                                         fnGrants=[{"id": "fg1", "fn": "shell", "scope": "standing"}] if fn_grant else [],
@@ -492,7 +501,7 @@ class TestF2Mapping:
 
 
 # ---------------------------------------------------------------------------------------------------
-# Critic r1 probes (RESUME/run.nosync/scratch/V3F2_critic_r1_probes/): each one refuses or asks
+# Critic r1 probes (kept outside this repository): each one refuses or asks
 # ---------------------------------------------------------------------------------------------------
 
 def _real(tool, args):
@@ -721,10 +730,15 @@ class TestF2Floors:
                 for fn in FUNCTIONS:
                     for cls in CLASSES:
                         total += 1
-                        v = _decide(policy, body, cls, {"dangerous": False}, f"{name}: placeholder", (fn,))
-                        refused += (v.outcome, v.rule) == ("refuse", "floor")
-        assert len(FLOOR_RULES) == 7
-        assert refused == total == 7 * 6 * 9 * 10
+                        # F40, L1, the owner's rule changed the truth: four floors ask outside Ignore, none is ever allowed
+                        floor = "hardline: total destruction, x" if name == "destruction" else f"{name}: placeholder"
+                        v = _decide(policy, body, cls, {"dangerous": False}, floor, (fn,))
+                        # G28: a hardline outside total destruction asks too (the owner's order on shutdown, reboot, kill-all)
+                        # G28: stopping icloneOS (confinement) asks too; tcc's placeholder is not its privilege: text
+                        refused += (v.outcome != "allow" if name in ("inft", "secrets", "sudo", "policy", "hardline", "confinement")
+                                    else (v.outcome, v.rule) == ("refuse", "floor"))
+        assert len(FLOOR_RULES) == 8
+        assert refused == total == 8 * 6 * 9 * 10
 
     def test_f2_7_writing_the_gate_and_stopping_it_stay_refused_with_every_row_at_ignore(self, wired, tmp_path):
         guard = tmp_path / "permissions"
@@ -735,11 +749,14 @@ class TestF2Floors:
         writes = mod.on_pre_tool_call("write_file", {"path": str(guard / "functions.json"), "content": "{}"}, "t", "s1")
         stops = mod.on_pre_tool_call("terminal", {"command": "kill 987654"}, "t", "s1")
         mod._state["channel"].flush(3.0)
-        assert writes and writes["action"] == "block"
-        assert stops and stops["action"] == "block"
-        refusals = _events(main, "refuse")
-        assert len(refusals) == 2
-        assert all(r.get("floor") for r in refusals)
+        # F40, L1, the owner's rule changed the truth: its own guards now ask outside Ignore, so what main answered decides
+        # the write; exact ask pinned in test_iclone_floor_l1. G28: stopping the app asks too, every row at Ignore cannot
+        # skip that sheet, and main's answer decides it (FakeMain allows).
+        assert writes is None or writes["action"] == "block"
+        assert stops is None
+        stop_asks = [a for a in main.verbs("ask") if str(a.get("floor") or "").startswith("confinement:")]
+        assert len(stop_asks) == 1 and stop_asks[0]["mode"] == "automatic", main.verbs("ask")
+        assert all(r.get("floor") for r in _events(main, "refuse"))
 
 
 # ---------------------------------------------------------------------------------------------------

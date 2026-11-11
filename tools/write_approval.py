@@ -205,6 +205,9 @@ def evaluate_gate(subsystem: str, *, inline_summary: str = "", inline_detail: st
     is produced only when the user actively denies the inline prompt."""
     if not write_approval_enabled(subsystem):
         return GateDecision(allow=True)
+    from tools.approval import iclone_ignore_in_force
+    if iclone_ignore_in_force():  # icloneOS F40: nothing waits for a review in Ignore
+        return GateDecision(allow=True)
     # Skills are too big to review inline; a background write runs in a daemon thread with no user.
     if subsystem == SKILLS or current_origin() == "background_review":
         return _staged(subsystem)

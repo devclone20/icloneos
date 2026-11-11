@@ -14,6 +14,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from tests.chatgpt_token_fixture import chatgpt_jwt
 
 # The plugin directory uses a hyphen, which is not a valid Python identifier
 # for the dotted-import form. Load it via importlib so tests don't need to
@@ -59,7 +60,7 @@ def codex_backend(monkeypatch):
     # (token, base_url) binding; no pool present.
     from agent import auxiliary_client
     monkeypatch.setattr(auxiliary_client, "_select_pool_entry", lambda provider: (False, None))
-    monkeypatch.setattr(auxiliary_client, "_read_codex_singleton_token", lambda: "codex-token")
+    monkeypatch.setattr(auxiliary_client, "_read_codex_singleton_token", lambda: chatgpt_jwt("codex-token"))
     state = {"requests": [], "respond": None}
 
     def _default(request):
@@ -133,7 +134,7 @@ class TestGenerate:
         (request,) = codex_backend["requests"]
         path = "images/edits" if edit else "images/generations"
         assert str(request.url) == f"https://images.example.test/codex/{path}"
-        assert request.headers["Authorization"] == "Bearer codex-token"
+        assert request.headers["Authorization"] == f"Bearer {chatgpt_jwt('codex-token')}"
         assert request.headers["originator"] == "codex_cli_rs"
 
     @pytest.mark.parametrize("override", ["", "   "])
@@ -210,7 +211,7 @@ class TestGenerate:
 
         (request,) = codex_backend["requests"]
         assert request.url.path.endswith("/backend-api/codex/images/generations")
-        assert request.headers["Authorization"] == "Bearer codex-token"
+        assert request.headers["Authorization"] == f"Bearer {chatgpt_jwt('codex-token')}"
         assert request.headers["x-codex-image-turn-id"]
         body = json.loads(request.content)
         assert body == {

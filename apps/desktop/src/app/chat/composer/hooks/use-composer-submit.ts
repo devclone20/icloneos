@@ -38,6 +38,8 @@ interface UseComposerSubmitArgs {
   queueCurrentDraft: () => boolean
   queueEdit: QueueEditState | null
   queuedPrompts: QueuedPromptEntry[]
+  /** Disabled only because the gateway is reconnecting: a send is held for it, not refused. */
+  sendHolds?: boolean
   sessionId: string | null | undefined
   setComposerText: (value: string) => void
   stashAt: (scope: string | null, text?: string, attachments?: ComposerAttachment[]) => void
@@ -73,6 +75,7 @@ export function useComposerSubmit({
   queueCurrentDraft,
   queueEdit,
   queuedPrompts,
+  sendHolds = false,
   sessionId,
   setComposerText,
   stashAt
@@ -86,6 +89,12 @@ export function useComposerSubmit({
   const dispatchSubmit = (text: string, attachments?: ComposerAttachment[], displayKind?: 'hidden') => {
     const submittedScope = activeQueueSessionKeyRef.current
     const submittedAttachments = attachments ?? []
+
+    // A send held through a reconnect stays out for seconds, and that reconnect reloads this chat's stash into the composer: the
+    // words would come back beside the send and invite a second one. restore() stashes them again if it is refused.
+    if (sendHolds) {
+      clearSessionDraft(submittedScope)
+    }
 
     const restore = () => {
       loadIntoComposer(text, submittedAttachments)
@@ -129,7 +138,7 @@ export function useComposerSubmit({
   )
 
   const submitDraft = () => {
-    if (disabled) {
+    if (disabled && !sendHolds) {
       return
     }
 

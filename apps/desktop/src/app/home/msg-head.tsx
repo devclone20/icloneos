@@ -1,7 +1,7 @@
 /**
  * The Message window's head band — ONE band, BOTH views.
  *
- * OWNER DECISION(RESUME/contracts/M1_message_head_band.md):
+ * OWNER DECISION(contract M1, message head band):
  * "This top devision you have here in the message subsection with the name
  * 'iclone os', you have to put this top devision design also in the iT pane
  * also, aso we can have smooth transiction and others futures button there on

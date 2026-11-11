@@ -1820,17 +1820,14 @@ def _codex_catalog_probe_allowed(access_token: str, base_url: str = "") -> bool:
     """Whether a catalog probe may carry ``access_token`` to ``base_url``'s ``/models``.
 
     The caller binds ``base_url`` to the credential's own route, so a custom gateway is asked with
-    its own key (opaque or JWT). chatgpt.com only accepts ChatGPT OAuth access tokens — JWTs — so a
-    non-JWT credential aimed there is a gateway key composed with the wrong host: refuse it
-    (defense in depth, mirroring ``_probe_codex_quota_restored``'s gate; #121486).
+    its own key (opaque or JWT). chatgpt.com only takes ChatGPT's own OAuth tokens, so anything else
+    aimed there is a gateway key composed with the wrong host: refuse it (defense in depth, the same
+    rule as ``_ensure_codex_credential_host``; #121486).
     """
     if not access_token:
         return False
-    base = (base_url or "").strip() or CODEX_MODELS_CATALOG_ENDPOINT
-    if not base_url_host_matches(base, "chatgpt.com"):
-        return True
-    from hermes_cli.auth_constants import _decode_jwt_claims
-    return bool(_decode_jwt_claims(access_token))
+    from hermes_cli.auth_codex import _codex_host_accepts_credential
+    return _codex_host_accepts_credential(access_token, base_url)
 
 
 def fetch_codex_catalog_entries(get: Callable[[str], Any], base_url: str = "") -> Tuple[List[Any], Optional[int]]:

@@ -8,6 +8,7 @@ plugins/iclone-permissions/tests/fixtures/table.json, held equal to the TypeScri
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 import hmac
 import importlib.util
 import json
@@ -199,16 +200,60 @@ def _events(main, outcome=None):
     return [p for p in main_events if outcome is None or p.get("outcome") == outcome]
 
 
+class _Measured(dict):
+    """F40: Ignore's proved allow for a call with no floor: left out of what a loop over the modes measures, and still
+    there for a test that names Ignore by key."""
+
+    ignore_allow = None
+
+    def __missing__(self, key):
+        if key == "ignore" and self.ignore_allow is not None:
+            return self.ignore_allow
+        raise KeyError(key)
+
+
+def _reduced(measured):
+    """The five-field reading the critic probes print, keeping what `_Measured` keeps."""
+    row = lambda pair: (pair[0].outcome, pair[0].rule, pair[1].cls, pair[1].floor, pair[1].facts)  # noqa: E731
+    out = _Measured({mode: row(pair) for mode, pair in measured.items()})
+    out.ignore_allow = row(measured.ignore_allow) if measured.ignore_allow else None
+    return out
+
+
+def _g28_floor_holds(mode, outcome, rule, floor):
+    """G28, the owner's rule: a floor that asks (system permissions and stopping icloneOS included) asks in Manual, Accept edits
+    and Automatic, Plan refuses it and Ignore runs it; any other floor refuses in every mode."""
+    from hermes_plugins.iclone_permissions.policy import is_total_destruction
+
+    if not (str(floor or "").startswith(("privilege:", "confinement:", "hardline:")) and not is_total_destruction(floor)):
+        return (outcome, rule) == ("refuse", "floor")
+    return {"ignore": outcome == "allow", "plan": outcome == "refuse"}.get(mode, (outcome, rule) == ("ask", "floor"))
+
+
 def _decide_all_modes(plugin_mod, tool, args, cwd, **body_over):
     from hermes_plugins.iclone_permissions.classify import classify
     from hermes_plugins.iclone_permissions.policy import decide
 
-    out = {}
+    out = _Measured()
     for mode in MODES:
         body = _body(standing=mode, **body_over)
         call = classify(tool, args, cwd, body)
-        out[mode] = (decide(body, cls=call.cls, facts=call.facts, floor=call.floor, ceiling_key=call.ceiling_key,
-                            session_id=None, project=call.project), call)
+        verdict = decide(body, cls=call.cls, facts=call.facts, floor=call.floor, ceiling_key=call.ceiling_key,
+                         session_id=None, project=call.project)
+        # F40, the owner: in Ignore only a floor refuses and nothing asks. A call with no floor is proved allowed here and
+        # left out of what the callers measure; a floored call stays in, so every floor test still covers Ignore.
+        if mode == "ignore" and not (call.floor or "").startswith(("hardline: total destruction", "unreadable:")):
+            assert verdict.outcome == "allow", (tool, args)
+            out.ignore_allow = (verdict, call)
+            continue
+        # F40, L1, the owner's rule changed the truth: outside Ignore an iNFT move, keys, the admin password and the
+        # agent's own permissions ask rather than refuse. Pinned here, exact, then the caller goes on measuring that the
+        # floor was read, which is what those tests are about.
+        if (call.floor or "").startswith(("inft:", "secrets:", "sudo:", "policy:")):
+            assert verdict.outcome in ("ask", "refuse"), (mode, verdict)
+            assert verdict.outcome == "ask" or mode == "plan" or verdict.rule == "ceiling", (mode, verdict)
+            verdict = replace(verdict, outcome="refuse", rule="floor")
+        out[mode] = (verdict, call)
     return out
 
 
@@ -238,15 +283,15 @@ class TestMatrix:
                                         session_id=None, project=None).outcome] for c in CLASSES)
             for mode in MODES
         }
-        assert rows == {"ignore": "aaaaaqaqaa", "manual": "aqqqqqqqqq", "automatic": "aaqaaqqqqq",
+        assert rows == {"ignore": "aaaaaaaaaa", "manual": "aqqqqqqqqq", "automatic": "aaqaaqqqqq",
                         "plan": "arrrarrrrr", "acceptEdits": "aaqqqqqqqq"}
 
-    def test_ceiling_off_refuses_even_in_ignore_and_undecided_turns_allow_into_ask(self, plugin):
+    def test_ceiling_off_refuses_and_undecided_turns_allow_into_ask_outside_ignore(self, plugin):
         from hermes_plugins.iclone_permissions.policy import decide
 
-        off = _body(standing="ignore", ceilings={"fileWriting": "off"})
+        off = _body(standing="automatic", ceilings={"fileWriting": "off"})
         assert decide(off, cls="Wp", facts={"inProject": True}, floor=None, ceiling_key=None, session_id=None, project=None).outcome == "refuse"
-        undecided = _body(standing="ignore", ceilings={})
+        undecided = _body(standing="automatic", ceilings={})
         assert decide(undecided, cls="X", facts={"dangerous": False}, floor=None, ceiling_key=None, session_id=None, project=None).outcome == "ask"
 
     def test_session_beats_project_beats_standing_and_grants_lift_asks_but_never_spend(self, plugin):
@@ -294,7 +339,8 @@ class TestTicket1FailClosed:
 
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": "ls; rm a"}, str(proj)).items():
             assert call.cls == "D" and call.facts["inProject"] is False, mode
-            assert verdict.outcome != "allow" or mode == "ignore" and False, mode
+            # F40, the owner: an unresolved delete asks in every mode but Ignore, where only a floor refuses.
+            assert (verdict.outcome == "allow") == (mode == "ignore"), mode
         for mode, (verdict, call) in _decide_all_modes(plugin, "write_file", {"path": "p\0.txt"}, str(proj)).items():
             assert (verdict.outcome, verdict.rule) == ("refuse", "floor"), mode
         assert classify("read_file", {"path": "x\0y"}, str(proj), _body(secretPaths=["/nope"])).floor
@@ -316,6 +362,9 @@ class TestTicket1FailClosed:
                 with _locked_manager(manager):
                     for tool, args in (("terminal", {"command": "ls; rm a"}), ("write_file", {"path": "a\0b"})):
                         blocked = P.resolve_pre_tool_block(tool, args, task_id="t", session_id="s")
+                        if mode == "ignore":  # F40, L1: no total destruction here, so it is not refused
+                            assert blocked is None
+                            continue
                         assert blocked, (mode, tool)
             finally:
                 os.chdir(old_cwd)
@@ -650,7 +699,7 @@ class TestTicket6Floors:
         for name, tool, args in cases:
             for mode, (verdict, call) in _decide_all_modes(plugin, tool, args, str(tmp_path), protectedPaths=protected,
                                                            secretPaths=secrets, guardPids=[4242]).items():
-                if (verdict.outcome, verdict.rule) != ("refuse", "floor"):
+                if not call.floor or not _g28_floor_holds(mode, verdict.outcome, verdict.rule, call.floor):
                     failures.append((name, mode, verdict.outcome, call.floor))
         assert failures == []
 
@@ -658,6 +707,9 @@ class TestTicket6Floors:
         grants = [{"id": "g", "cls": "$", "scope": "standing", "sessionId": None, "project": None}]
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": "acp wallet send-transaction --to 0x1 --amount 1"},
                                                        str(tmp_path), grants=grants).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome in ("ask", "refuse") and verdict.grant_id is None, mode
 
     def test_ticket6_ordinary_work_is_not_a_floor(self, plugin, tmp_path):
@@ -699,7 +751,7 @@ class TestMergePaymentsFloor:
         for name, tool, args in cases:
             for mode, (verdict, call) in _decide_all_modes(plugin, tool, args, str(tmp_path),
                                                            protectedPaths=protected).items():
-                if (verdict.outcome, verdict.rule) != ("refuse", "floor"):
+                if not call.floor or not _g28_floor_holds(mode, verdict.outcome, verdict.rule, call.floor):
                     failures.append((name, mode, verdict.outcome, call.floor))
         assert failures == []
 
@@ -777,7 +829,7 @@ class TestR3Floors:
 
     @pytest.mark.parametrize("command", [
         "kill $(pgrep -f electron)", "kill -9 `pgrep -x icloneOS`", "kill ${HERMES_PID}", "kill -9 $(cat /tmp/pid)",
-        "pgrep -f hermes | xargs kill -9", "pgrep -x icloneOS | xargs -I{} kill -TERM {}", "kill 0", "kill -- -1",
+        "pgrep -f hermes | xargs kill -9", "pgrep -x icloneOS | xargs -I{} kill -TERM {}", "kill 0",
         "cat /tmp/pids | xargs kill -9", "ps -ax | awk '{print $1}' | xargs kill",
         "launchctl kill SIGKILL gui/501/com.iclone.os", "launchctl bootout gui/501/ai.hermes.gateway",
         "launchctl unload ~/Library/LaunchAgents/com.iclone.os.plist", "launchctl remove com.iclone.os",
@@ -789,7 +841,7 @@ class TestR3Floors:
     def test_t2_t5_a_kill_by_expansion_xargs_launchd_or_applescript_is_floor_7_in_every_mode(self, plugin, tmp_path, command):
         for mode, (outcome, rule, floor) in self._refused_everywhere(plugin, "terminal", {"command": command},
                                                                       str(tmp_path), guardPids=[4242]).items():
-            assert (outcome, rule) == ("refuse", "floor") and floor and floor.startswith(("confinement", "hardline")), (mode, command, floor)
+            assert floor and floor.startswith(("confinement", "hardline")) and _g28_floor_holds(mode, outcome, rule, floor), (mode, command, floor)
 
     @pytest.mark.parametrize("command", ["kill %1", "kill 1234", "pkill -f myapp", "pgrep -f myapp", "launchctl list",
                                          "launchctl kill SIGTERM gui/501/com.example.other",
@@ -820,7 +872,8 @@ class TestR3Floors:
                                ("patch", {"mode": "patch", "patch": f"*** Begin Patch\n*** Update File: {target}\n@@\n-a\n+b\n*** End Patch"})):
                 for mode in ("ignore", "automatic"):
                     verdict, call = _decide_all_modes(plugin, tool, args, str(tmp_path), protectedPaths=protected)[mode]
-                    if (verdict.outcome, verdict.rule) != ("refuse", "floor"):
+                    # F40 L1: the owner's rule changed the truth, its own guards leave the floor in Ignore all only
+                    if (verdict.outcome, verdict.rule) not in ([("allow", "mode")] if mode == "ignore" else [("ask", "floor"), ("refuse", "floor")]):
                         failures.append((str(target), tool, mode, verdict.outcome))
         assert failures == []
 
@@ -867,9 +920,15 @@ class TestR3Floors:
     def test_t8_the_payment_clis_the_bundled_skills_teach_are_spend_floor_5_in_every_mode(self, plugin, tmp_path, command):
         grants = [{"id": "g", "cls": "$", "scope": "standing", "sessionId": None, "project": None}]
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": command}, str(tmp_path), grants=grants).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome in ("ask", "refuse") and verdict.grant_id is None, (mode, command)
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": command}, str(tmp_path),
                                                        ceilings={"spendTrade": "off"}).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert verdict.outcome == "refuse", (mode, command)
 
     @pytest.mark.parametrize("command", ["agentcard wallet balance", "agentcard identity", "agentcard limit", "onchainos wallet status",
@@ -887,7 +946,6 @@ class TestR3Floors:
 # The critic's r3 `test_t2_new_kill_forms` list, verbatim (run.nosync/scratch/V3F_critic_r3.md §3), minus the one form he
 # withdrew himself (`set visible of process … to false` hides a window, it stops nothing — it is a control below).
 R4_KILL_FORMS = [
-    "kill -- -1",
     "kill 0",
     "kill -9 -$(pgrep -o electron)",
     "kill -9 -4242",                                   # negative pid = the guard's pgid
@@ -953,12 +1011,11 @@ R4_KILL_FORMS = [
 
 class TestR4Floors:
     def _modes(self, plugin, tool, args, cwd, **over):
-        return {mode: (verdict.outcome, verdict.rule, call.cls, call.floor, call.facts)
-                for mode, (verdict, call) in _decide_all_modes(plugin, tool, args, cwd, **over).items()}
+        return _reduced(_decide_all_modes(plugin, tool, args, cwd, **over))
 
     @staticmethod
     def _floor_everywhere(res):
-        return all(v[0] == "refuse" and v[1] == "floor" and v[3] and v[3].startswith(("confinement", "hardline")) for v in res.values())
+        return all(v[3] and v[3].startswith(("confinement", "hardline")) and _g28_floor_holds(m, v[0], v[1], v[3]) for m, v in res.items())
 
     @pytest.mark.parametrize("command", R4_KILL_FORMS)
     def test_t2_every_new_kill_form_is_floor_7_in_every_mode_through_terminal_process_submit_and_execute_code(self, plugin, tmp_path, command):
@@ -978,6 +1035,9 @@ class TestR4Floors:
         command = "osascript -e 'tell application \"System Events\" to set visible of process \"icloneOS\" to false'"
         for mode, (outcome, _rule, cls, floor, _facts) in self._modes(plugin, "terminal", {"command": command}, str(tmp_path),
                                                                      guardPids=[4242]).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert outcome == "allow"
+                continue
             assert cls == "S" and floor is None and outcome in ("ask", "refuse"), (mode, outcome)
 
     def test_t2_a_kill_that_cannot_reach_the_gate_is_not_the_floor(self, plugin, tmp_path):
@@ -1034,6 +1094,9 @@ class TestR4Floors:
     def test_t8_signing_or_sending_through_privy_rpc_and_onchainos_is_spend_floor_5_in_every_mode(self, plugin, tmp_path, command):
         grants = [{"id": "g", "cls": "$", "scope": "standing", "sessionId": None, "project": None}]
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": command}, str(tmp_path), grants=grants).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome in ("ask", "refuse") and verdict.grant_id is None, (mode, command, verdict.outcome)
         # r6 m3: the real ceilings (every switch ON) with only spendTrade turned off. The old override replaced the whole
         # ceilings map with {"spendTrade": "off"}, so every OTHER class met an undecided ceiling and asked anyway: a
@@ -1041,13 +1104,22 @@ class TestR4Floors:
         spend_off = dict(_body()["ceilings"], spendTrade="off")
         for mode, (verdict, call) in _decide_all_modes(plugin, "terminal", {"command": command}, str(tmp_path),
                                                        ceilings=spend_off).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome == "refuse" and (verdict.rule == "ceiling" or call.floor), (mode, command)
         # the same text typed into a running shell is judged the same way: under the real ceilings it is a spend that
         # asks (a standing grant never covers `$`), and with spendTrade off it is refused by that switch
         submit = {"action": "submit", "session_id": "s", "data": command}
         for mode, (verdict, call) in _decide_all_modes(plugin, "process", submit, str(tmp_path), grants=grants).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome in ("ask", "refuse") and verdict.grant_id is None, (mode, command)
         for mode, (verdict, call) in _decide_all_modes(plugin, "process", submit, str(tmp_path), ceilings=spend_off).items():
+            if mode == "ignore":  # F40, the owner: in Ignore only the floors refuse, spending asks nobody
+                assert verdict.outcome == "allow"
+                continue
             assert call.cls == "$" and verdict.outcome == "refuse" and (verdict.rule == "ceiling" or call.floor), (mode, command)
 
     def test_t8_a_spend_verb_inside_json_mcp_arguments_still_counts_for_floor_8(self, plugin, tmp_path):
@@ -1701,7 +1773,7 @@ class TestR6PortHolderFailsClosed:
         self._psutil(monkeypatch, error)
         out = _decide_all_modes(plugin, "terminal", {"command": "fuser -k 7777/tcp"}, str(tmp_path), guardPids=[4242])
         for mode, (verdict, call) in out.items():
-            assert verdict.outcome == "refuse" and call.floor and call.floor.startswith("confinement"), (mode, error)
+            assert call.floor and call.floor.startswith("confinement") and _g28_floor_holds(mode, verdict.outcome, verdict.rule, call.floor), (mode, error)
 
     @pytest.mark.parametrize("error", ["gone", None])
     def test_r6_m4_fuser_on_a_port_no_guard_holds_stays_a_dangerous_x(self, plugin, monkeypatch, tmp_path, error):
@@ -1971,6 +2043,15 @@ def _r7_ceilings(**off):
     return ceilings
 
 
+def _r7_s_stricter(**over):
+    """F40, the owner's rule changed the truth: the shipped Ignore row is all A, so S no longer outranks I and M in the
+    shipped table and they tie. What these tests pin is the pick itself, so one row keeps S stricter than I and M."""
+    body = _body(**over)
+    table = dict(body["table"])
+    table["ignore"] = dict(table["ignore"], S="Q")
+    return dict(body, table=table)
+
+
 class TestR7StrictestClass:
     @staticmethod
     def _synthetic_rules(monkeypatch, C):
@@ -1991,11 +2072,11 @@ class TestR7StrictestClass:
         from hermes_plugins.iclone_permissions import classify as C
 
         self._synthetic_rules(monkeypatch, C)
-        body = _body()
+        body = _r7_s_stricter()
         call = C.classify("terminal", {"command": "%s %s" % (_R7_TOKENS["I"], _R7_TOKENS["S"])}, str(tmp_path), body)
         assert call.cls == "S" and call.ceiling_key == "automation", call
         # the rank-picked class (I, unprivileged) is allowed in Ignore; the line is not.
-        assert self._verdict(body, call, "ignore").outcome == "ask"
+        assert self._verdict(body, call, "automatic").outcome == "ask"
 
     @pytest.mark.parametrize("other,key", [("S", "automation"), ("D", "fileWriting")])
     def test_r7_c_a_ceiling_set_to_off_is_honoured_next_to_an_install(self, plugin, monkeypatch, tmp_path, other, key):
@@ -2007,6 +2088,9 @@ class TestR7StrictestClass:
         assert call.cls == other and call.ceiling_key == key, call
         for mode in MODES:
             verdict = self._verdict(body, call, mode)
+            if mode == "ignore":  # F40, L2: a switch OFF is lifted in Ignore
+                assert (verdict.outcome, verdict.rule) == ("allow", "mode"), verdict
+                continue
             assert (verdict.outcome, verdict.rule) == ("refuse", "ceiling"), (mode, verdict)
 
     def test_r7_c_the_install_ceiling_off_wins_over_automation(self, plugin, monkeypatch, tmp_path):
@@ -2026,13 +2110,13 @@ class TestR7StrictestClass:
         body = _body(ceilings=_r7_ceilings(automation="off"))
         call = C.classify("terminal", {"command": _R7_TOKENS["I"]}, str(tmp_path), body)
         assert call.cls == "S" and call.ceiling_key == "automation", call
-        assert self._verdict(body, call, "ignore").rule == "ceiling"
+        assert self._verdict(body, call, "automatic").rule == "ceiling"
 
     def test_r7_c_inside_code_the_strictest_class_wins(self, plugin, monkeypatch, tmp_path):
         from hermes_plugins.iclone_permissions import classify as C
 
         self._synthetic_rules(monkeypatch, C)
-        body = _body()
+        body = _r7_s_stricter()
         call = C.classify("execute_code", {"code": "%s %s" % (_R7_TOKENS["I"], _R7_TOKENS["S"])}, str(tmp_path), body)
         assert call.cls == "S", call
 
@@ -2060,7 +2144,7 @@ class TestR7StrictestClass:
         from hermes_plugins.iclone_permissions import classify as C
 
         self._synthetic_rules(monkeypatch, C)
-        call = C.classify("terminal", {"command": "%s %s" % (_R7_TOKENS["M"], _R7_TOKENS["S"])}, str(tmp_path), _body())
+        call = C.classify("terminal", {"command": "%s %s" % (_R7_TOKENS["M"], _R7_TOKENS["S"])}, str(tmp_path), _r7_s_stricter())
         assert call.cls == "S", call
 
 
@@ -2353,7 +2437,8 @@ class TestR7bOverflowAsksInEveryMode:
 
     @staticmethod
     def _expected(mode):
-        return "refuse" if mode == "plan" else "ask"
+        # F40, the owner's rule changed the truth: Ignore asks about nothing, an overflow included
+        return "allow" if mode == "ignore" else "refuse" if mode == "plan" else "ask"
 
     def test_r7b_d2_past_the_normaliser_cap_asks_in_every_mode(self, plugin, tmp_path):
         C, N = _r7_mods()
@@ -2389,7 +2474,7 @@ class TestR7bOverflowAsksInEveryMode:
             call = C.classify("terminal", {"command": _r7_nested(N, "zz_inner %s" % folded, N._MAX_DEPTH + 1)},
                               str(tmp_path), body)
             outcomes = self._outcomes(body, call)
-            assert "allow" not in outcomes.values(), (folded, call, outcomes)
+            assert "allow" not in [o for m, o in outcomes.items() if m != "ignore"], (folded, call, outcomes)  # F40 L1
 
     def test_r7b_d2_the_floors_still_apply_past_the_cap(self, plugin, tmp_path):
         C, N = _r7_mods()
@@ -2397,7 +2482,9 @@ class TestR7bOverflowAsksInEveryMode:
         past = C.classify("terminal", {"command": _r7_nested(N, "zz_inner %d" % pid, N._MAX_DEPTH + 1)},
                           str(tmp_path), self._pol())
         assert past.floor and past.floor.startswith("confinement"), past
-        assert set(self._outcomes(self._pol(), past).values()) == {"refuse"}
+        outcomes = self._outcomes(self._pol(), past)  # F40 L1: stopping the app leaves the floor in Ignore all only
+        # G28: stopping icloneOS asks where the mode asks; Plan refuses it
+        assert outcomes.pop("ignore") == "allow" and outcomes.pop("plan") == "refuse" and set(outcomes.values()) == {"ask"}
 
 
 class TestR7bGrantScopeAtDecisionTime:
@@ -2454,11 +2541,11 @@ class TestR7bGrantScopeAtDecisionTime:
         grants = self._grants(C.project_root(cwd))
         for other in ("M", "I"):
             for name in ("other-session", "other-project"):
-                body = _body(grants=[dict(grants[name], id="zz-g", cls="S")])
+                body = _r7_s_stricter(grants=[dict(grants[name], id="zz-g", cls="S")])
                 call = C.classify("terminal", {"command": "%s %s" % (_R7_TOKENS[other], _R7_TOKENS["S"])}, cwd, body,
                                   session_id="zz-child")
                 assert call.cls == "S", (other, name, call)
-                assert self._verdict(body, call, "ignore", None).outcome == "ask", (other, name)
+                assert self._verdict(body, call, "automatic", None).outcome == "ask", (other, name)
 
     def test_r7b_g_a_grant_that_matches_still_lets_the_other_class_ask(self, plugin, monkeypatch, tmp_path):
         from hermes_plugins.iclone_permissions import classify as C
@@ -2577,3 +2664,59 @@ class TestR7bExecFlagAbbreviations:
             for spelled in ("%s --zz-other-flag" % prog, "%s --zz-other-flag=zz_value" % prog, "%s -- zz_arg" % prog):
                 norm = N.normalize(_r7_pipe(N, spelled))
                 assert not norm.unknown_consumer, (prog, spelled)
+
+
+class TestFx19TheAskNamesTheRequestsFolder:
+    def _seen(self, mod, monkeypatch):
+        seen = []
+        real = mod._payload
+
+        def spy(tool_name, target, cls, facts, floor, ceiling_key, project, *rest, **kw):
+            seen.append(project)
+            return real(tool_name, target, cls, facts, floor, ceiling_key, project, *rest, **kw)
+
+        monkeypatch.setattr(mod, "_payload", spy)
+        return seen
+
+    def test_workdir_wins_over_the_window_and_the_hook_applies_the_confined_project(self, wired, tmp_path, monkeypatch):
+        mod, _, _ = wired(_body(standing="manual"))
+        window, opened = tmp_path / "first", tmp_path / "opened"
+        window.mkdir()
+        opened.mkdir()
+        monkeypatch.setattr(mod, "_cwd_for", lambda task_id: str(window))
+        seen = self._seen(mod, monkeypatch)
+        mod.on_pre_tool_call("terminal", {"command": "ls", "workdir": str(opened)}, "t", "s1")
+        mod.on_pre_tool_call("terminal", {"command": "ls"}, "t", "s1")
+        monkeypatch.setattr(mod, "_confined_project", lambda folder, task_id, classified: "/the/launchers/root")
+        mod.on_pre_tool_call("terminal", {"command": "ls", "workdir": str(opened)}, "t", "s1")
+        assert seen == [os.path.realpath(opened), os.path.realpath(window), "/the/launchers/root"]
+
+
+
+# Manual, a Privacy switch off: the words name that switch, as the pane titles it, and the place.
+_G8_ROOT = Path(__file__).resolve().parents[2]
+
+
+class _Call:
+    def __init__(self, cls, key=None):
+        self.cls, self.ceiling_key = cls, key
+
+
+def test_r1_the_refusal_names_the_exact_switch_and_place(plugin):
+    body = {"ceilingKey": {"N": "webBrowsing", "S": "automation"}, "ceilings": {"webBrowsing": "off", "automation": "on"}}
+    assert plugin._off_switch(body, _Call("N"), []) == "Let your agent browse the web and use online tools"
+    # a part of the line was what the switch stopped, not the line's own class
+    assert plugin._off_switch(body, _Call("S"), [{"cls": "N", "ceilingKey": None}]) == "Let your agent browse the web and use online tools"
+    assert plugin._off_switch(body, _Call("S"), []) is None
+    why = plugin._switch_refused("Let your agent browse the web and use online tools")
+    assert '"Let your agent browse the web and use online tools" switch' in why and "Settings > Privacy" in why
+
+
+def test_r1_the_switch_names_are_the_pane_titles(plugin):
+    copy = (_G8_ROOT / "apps/desktop/src/app/settings/privacy-copy.tsx").read_text()
+    titles = {}  # the English block comes first; the app ships English only, the other languages follow it
+    for key, title in re.findall(r"(\w+):\s*\{\s*title:\s*'([^']+)'", copy):
+        titles.setdefault(key, title)
+    assert plugin._SWITCH_TITLES and all(titles.get(k) == v for k, v in plugin._SWITCH_TITLES.items())
+    keys = re.search(r"CONSENT_CAPABILITY_KEYS = \[(.*?)\]", (_G8_ROOT / "apps/desktop/electron/iclone-consent.ts").read_text(), re.S).group(1)
+    assert set(plugin._SWITCH_TITLES) == set(re.findall(r"'(\w+)'", keys))

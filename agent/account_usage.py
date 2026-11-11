@@ -10,7 +10,7 @@ import httpx
 
 from agent.anthropic_credentials import _is_oauth_token, resolve_anthropic_token
 from hermes_cli.auth import AuthError, _read_codex_tokens, resolve_codex_runtime_credentials
-from hermes_cli.auth_codex import _codex_pool_route_base_url
+from hermes_cli.auth_codex import _codex_pool_route_unchecked, _ensure_codex_credential_host
 from hermes_cli.runtime_provider import resolve_runtime_provider
 from hermes_time import safe_strftime
 
@@ -325,6 +325,16 @@ def _codex_backend_urls(base_url: str) -> tuple[str, str, str]:
 def _resolve_codex_usage_credentials(
     base_url: Optional[str], api_key: Optional[str], *, force_refresh: bool = False,
 ) -> tuple[str, str, Optional[str]]:
+    """Every /usage send, first try and 401 retry, passes here: the host is checked on the final pair."""
+    token, resolved_base_url, account_id = _codex_usage_credentials_unchecked(
+        base_url, api_key, force_refresh=force_refresh)
+    _ensure_codex_credential_host(token, resolved_base_url)
+    return token, resolved_base_url, account_id
+
+
+def _codex_usage_credentials_unchecked(
+    base_url: Optional[str], api_key: Optional[str], *, force_refresh: bool = False,
+) -> tuple[str, str, Optional[str]]:
     """Codex quota credentials: explicit live-agent creds → native runtime resolver (itself pool-aware) → direct
     pool select. Native OAuth stores device-code logins in the pool, so the singleton store alone is not enough."""
     explicit_key = str(api_key or "").strip()
@@ -342,7 +352,7 @@ def _resolve_codex_usage_credentials(
             entry = load_pool("openai-codex").try_refresh_matching(api_key_hint=explicit_key)
             if entry is None:
                 raise RuntimeError("Could not refresh the Codex credential this session runs on")
-            return entry.runtime_api_key, _codex_pool_route_base_url(entry.runtime_base_url or base_url), None
+            return entry.runtime_api_key, _codex_pool_route_unchecked(entry.runtime_base_url or base_url), None
     # Only AuthError is caught so tier 3 can run: a broad except would mask a transient refresh/network failure
     # and hand back a DIFFERENT pool account's usage; such errors must propagate to the fail-open outer guard.
     # account_id is best-effort: a partial singleton store must not sink a usable credential.
@@ -372,7 +382,7 @@ def _resolve_codex_usage_credentials(
     if entry is None:
         raise RuntimeError("No available openai-codex credential in credential pool")
     # Pool rows keep the canonical URL; a gateway key must go to its route host, not chatgpt.com (#121486).
-    return entry.runtime_api_key, _codex_pool_route_base_url(entry.runtime_base_url or base_url), None
+    return entry.runtime_api_key, _codex_pool_route_unchecked(entry.runtime_base_url or base_url), None
 
 
 def _codex_banked_resets(payload: dict) -> int:

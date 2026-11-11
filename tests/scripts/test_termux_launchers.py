@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -77,7 +78,7 @@ def test_postinst_refuses_foreign_path_and_prerm_preserves_it(tmp_path):
 @pytest.mark.platforms("posix")
 def test_verifier_stops_detached_descendants_before_cleanup(tmp_path):
     import psutil
-    from scripts.termux.validate_installed import stop_child_tree
+    from scripts.termux.validate_installed import _process_alive, stop_child_tree
 
     code = (
         "import subprocess, sys, time\n"
@@ -94,11 +95,37 @@ def test_verifier_stops_detached_descendants_before_cleanup(tmp_path):
     try:
         stop_child_tree(child)
         assert child.poll() is not None
-        assert not descendant.is_running() or descendant.status() == psutil.STATUS_ZOMBIE
+        assert not _process_alive(descendant)
     finally:
         if child.poll() is None:
             child.kill()
-        if descendant.is_running() and descendant.status() != psutil.STATUS_ZOMBIE:
+        if _process_alive(descendant):
             descendant.kill()
         child.wait(timeout=10)
         child.stdout.close()
+
+
+def test_verifier_counts_a_descendant_reaped_mid_check_as_gone(monkeypatch):
+    """is_running() then status(): init can reap the orphan between the two calls."""
+    import psutil
+    from scripts.termux.validate_installed import stop_child_tree
+
+    class Reaped:
+        pid = 1
+
+        def is_running(self):
+            return True
+
+        def status(self):
+            raise psutil.NoSuchProcess(1)
+
+    class Tree:
+        def __init__(self, _pid):
+            pass
+
+        def children(self, recursive=False):
+            return [Reaped()]
+
+    monkeypatch.setattr(psutil, "Process", Tree)
+    monkeypatch.setattr("agent.deadline.kill_process_tree", lambda _pid: None)
+    stop_child_tree(SimpleNamespace(pid=1, poll=lambda: None, wait=lambda timeout=None: 0))

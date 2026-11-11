@@ -6,6 +6,7 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 from utils import base_url_hostname, is_truthy_value
+from hermes_cli.route_identity import normalize_route_base_url
 from hermes_cli.fallback_config import scoped_fallback_chain
 
 logger = logging.getLogger("tools.delegate_tool")  # log-record parity with the origin module
@@ -420,7 +421,7 @@ def _runtime_provider_credentials(v: dict, explicit_request_overrides) -> dict:
 
 def _resolve_delegation_credentials(cfg: dict, parent_agent) -> dict:
     """Child credential bundle from the ``delegation`` config section. Three branches: ``base_url`` set → direct
-    endpoint (``api_key`` None means inherit the parent's key, so providers keyed outside OPENAI_API_KEY work);
+    endpoint (``api_key`` None means inherit the parent's key on the parent's own route, so providers keyed outside OPENAI_API_KEY work; any other URL is refused at child build until it has a key);
     ``provider`` set → full bundle via the runtime provider system (same path as CLI/gateway startup); neither →
     None values, child inherits everything. ``request_overrides`` is honored on every branch. Raises ValueError
     with a user-facing message."""
@@ -482,6 +483,31 @@ def _resolve_child_fallback_chain(parent_agent, routing_cfg: Any, pinned: bool) 
         getattr(parent_agent, "_fallback_chain", None),
         routing_cfg.get("fallback_providers") if isinstance(routing_cfg, dict) else None,
         pinned=pinned, owner="delegation")
+
+
+def _same_route(left: Any, right: Any) -> bool:
+    return normalize_route_base_url(_normalized_runtime_url(left)) == normalize_route_base_url(_normalized_runtime_url(right))
+
+
+def _check_child_key_route(parent_agent, parent_api_key, provider, base_url, override_api_key, override_base_url) -> Any:
+    """The key a child without its own gets. The child's final key and URL pass the Codex host rule, and a parent's key
+    only travels on the parent's own route, paired with the URL it was live with: a ``delegation.base_url`` that goes
+    elsewhere needs its own ``delegation.api_key``."""
+    if override_base_url and not override_api_key:
+        parent_url, live_key = _inherit_parent_endpoint(parent_agent, parent_agent.base_url, parent_api_key)
+        if not _same_route(parent_url, override_base_url):
+            host = base_url_hostname(override_base_url)
+            raise ValueError(
+                f"delegation.base_url points at {host!r}, not the parent's endpoint, so the parent's key does not go "
+                "with it. Set delegation.api_key in config.yaml." if parent_api_key else
+                f"delegation.base_url points at {host!r}, not the parent's endpoint, and the parent has no key. Set "
+                "delegation.api_key in config.yaml; a server that needs no key takes any placeholder.")
+        parent_api_key = live_key or parent_api_key
+    from hermes_cli.auth_codex import _ensure_codex_credential_host, _is_chatgpt_route
+    url = base_url if isinstance(base_url, str) else ""
+    if provider == "openai-codex" or (url and _is_chatgpt_route(url)):
+        _ensure_codex_credential_host(override_api_key or parent_api_key, url)
+    return parent_api_key
 
 
 def _resolve_child_runtime(
@@ -579,6 +605,8 @@ def _resolve_child_runtime(
     except Exception as exc:
         logger.debug("Could not load delegation reasoning_effort: %s", exc)
 
+    parent_api_key = _check_child_key_route(parent_agent, parent_api_key, effective_provider, effective_base_url,
+                                            override_api_key, override_base_url)
     kwargs: Dict[str, Any] = {
         "base_url": effective_base_url, "api_key": override_api_key or parent_api_key, "model": effective_model,
         "provider": effective_provider, "requested_provider": effective_requested_provider,

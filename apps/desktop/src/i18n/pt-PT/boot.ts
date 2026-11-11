@@ -50,6 +50,25 @@ export const boot: TranslationOverrides['boot'] = {
     gateTitle: 'O controlo de permissões não está ativo',
     gateDescription:
       'O icloneOS não iniciou o agente: não foi possível instalar ou carregar o controlo de permissões neste runtime do agente, por isso nenhum comando seria verificado. Nada aqui apaga as suas conversas ou definições.',
+    homeSettingsHint: 'Corrige acima e escolhe Tentar novamente. Nada mais muda nas tuas definições.',
+    homeSettingsReplace: 'Substituir por uma cópia',
+    homeSettingsReplaceExplain: (target, file) =>
+      `Copia ${target} para ${file} como ficheiro privado e remove a ligação. O agente pode ler essa cópia. O original fica onde está, e as edições futuras deixam de chegar ao agente.`,
+    homeSettingsReplaced: file => `${file} é agora um ficheiro normal. Escolhe Tentar novamente para iniciar o agente.`,
+    homeSettingsTerminal: 'Ou executa isto no Terminal:',
+    homeSettingsCopyFailed: {
+      changed: () => 'A ligação mudou desde que isto foi mostrado, por isso nada foi substituído. Verifica-a e tenta novamente.',
+      'hard-link': target =>
+        `${target} tem um segundo nome no disco (uma ligação física), por isso pode ser qualquer ficheiro teu e nada foi substituído. Move este ficheiro tu mesmo.`,
+      'not-a-link': () => 'Esse ficheiro já não é uma ligação, por isso nada foi substituído. Escolhe Tentar novamente.',
+      'not-eligible': () => 'Este ficheiro já não pode ser substituído aqui, por isso nada foi substituído. Escolhe Tentar novamente.',
+      'not-plain': target => `${target} não é um ficheiro normal, por isso nada foi substituído.`,
+      'not-written': () =>
+        'Esta app não conseguiu escrever a cópia na pasta do agente, por isso a ligação continua lá. Verifica se o disco tem espaço e se a tua conta pode escrever lá, e tenta novamente.',
+      'too-large': target => `${target} tem mais de 16 MB, demasiado para um ficheiro de definições, por isso nada foi substituído.`,
+      unreadable: target =>
+        `Esta app não consegue ler ${target}, por isso nada foi substituído. Dá à tua conta acesso de leitura a esse ficheiro e tenta novamente.`
+    },
     gateHint:
       'Tentar novamente volta a verificar o controlo. Reparar instalação reinstala o runtime do agente e depois o controlo. Se a caixa acima disser que o controlo está desativado na configuração, remova primeiro iclone-permissions e iclone-confinement de plugins.disabled no config.yaml do Hermes e depois tente novamente.',
     gateHintUnmanaged:

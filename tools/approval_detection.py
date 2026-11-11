@@ -166,6 +166,30 @@ def _contains_shell_carrier(command: str) -> bool:
     )
 
 
+# A word that may hand a single-quoted argument to something that runs it (a shell, xargs, a remote or an interpreter).
+_RUNS_QUOTED_TEXT = re.compile(
+    r"(?:^|[\s;&|(/=])(?:sh|bash|zsh|ksh|dash|fish|csh|tcsh|eval|source|xargs|parallel|find|su|sudo|doas|ssh|watch|script|"
+    r"expect|osascript|env|nohup|exec|time|timeout|python\d*(?:\.\d+)?|perl|ruby|node|deno|bun|php|lua|awk|gawk|sed|"
+    r"tclsh|wish|busybox|toybox|launchctl|at|batch|crontab|tmux|screen|open|command|builtin)(?=$|[\s;&|)])"
+    r"|(?:^|[;&|\n(])\s*\.\s")
+
+
+def _without_single_quoted_data(command: str) -> str:
+    """Single-quoted text given to a program that never runs it is data: ``cat '$(rm -rf /)'`` prints the text. It is
+    blanked for the position-anchored hardline rules (``$(`` and a backtick count as a command start), unless a word
+    that may run it is on the line (``bash -c '...'``, ``eval``, ``xargs sh -c``, ``find -exec``) or the program word
+    is itself only known when it runs (a ``$`` or a backtick left outside single quotes); then the line is read raw."""
+    if "'" not in command:
+        return command
+    masked = "".join(
+        command[i:j] if quote != "'" or kind == "quote" else " " * (j - i)
+        for kind, i, j, quote in _scan_shell(command, subst="q", naive_backtick=True)
+    )
+    if "$" in masked or "`" in masked or _RUNS_QUOTED_TEXT.search(masked.lower()):
+        return command
+    return masked
+
+
 def _mask_quoted_prose(command: str) -> str:
     """Blank out quoted string CONTENT for positionless hardline matching (detection-only).
     Quote characters stay; inside double quotes `$(...)` and backtick spans are kept RAW because
@@ -196,6 +220,28 @@ def _check_sudo_stdin_guard(command: str) -> tuple:
     return (False, None)
 
 
+def detect_floor_command(command: str, cwd: str | None = None) -> tuple:
+    """icloneOS F40, L1: total destruction, the one floor Ignore all keeps -> (is_floor, description).
+    Text that cannot be read cannot be checked, so it stays refused. See ``tools.approval_floor``."""
+    from tools.approval_floor import UNRESOLVED_DELETES, destruction_of
+
+    if _command_parser_limit_exceeded(command):
+        return (True, _PARSER_LIMIT_DESCRIPTION)
+    _, malformed_grep = _grep_safe_detection_variant(_mask_quoted_newlines(command))
+    if malformed_grep:
+        return (True, _MALFORMED_EXEC_DESCRIPTION)
+    unresolved = None
+    # P5b: the text as written is read too, because normalising undoes a backslash-escaped space and splits the word
+    # (rm -rf /Volumes/Macintosh\ HD/Users would read as two operands).
+    for command_variant in dict.fromkeys([command, *_command_detection_variants(command)]):
+        description = destruction_of(command_variant, cwd, categories=command_variant == command)  # P5y8
+        if description in UNRESOLVED_DELETES:
+            unresolved = unresolved or description
+        elif description:
+            return (True, description)
+    return (True, unresolved) if unresolved else (False, None)
+
+
 def detect_hardline_command(command: str) -> tuple:
     """Check hardline patterns (NEVER bypassable, even in YOLO) -> (is_hardline, description)."""
     if _command_parser_limit_exceeded(command):
@@ -208,7 +254,7 @@ def detect_hardline_command(command: str) -> tuple:
     if malformed_grep:
         return (True, _MALFORMED_EXEC_DESCRIPTION)
     for command_variant in _command_detection_variants(command):
-        variant_lower = command_variant.lower()
+        variant_lower = _without_single_quoted_data(command_variant).lower()
         masked_lower: str | None = None
         for pattern_re, description, quote_masked in HARDLINE_PATTERNS_COMPILED:
             if quote_masked and masked_lower is None:
@@ -221,6 +267,12 @@ def detect_hardline_command(command: str) -> tuple:
                 )
             if pattern_re.search(masked_lower if quote_masked else variant_lower):
                 return (True, description)
+    # icloneOS F40: the widened floor, in every mode, after the rules above so a command both catch keeps its exact name.
+    from tools.approval_floor import UNRESOLVED_DELETES
+
+    is_floor, floor_description = detect_floor_command(command)
+    if is_floor and floor_description not in UNRESOLVED_DELETES:  # F53: that one asks outside Ignore
+        return (True, floor_description)
     return (False, None)
 
 

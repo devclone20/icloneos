@@ -82,7 +82,7 @@ _NO_FUNCTION = frozenset({
     "a2a_discover", "a2a_history", "a2a_list", "annotate_preview", "apply_layout", "close_terminal", "desktop_preview",
     "drive_preview", "focus_pane", "gui_tour", "show_tip", "tour", "tip", "clarify", "todo_list", "todo", "browser_back",
     "browser_navigate", "browser_snapshot", "browser_get_images", "browser_vision", "browser_scroll", "browser_vault_list",
-    "browser_vault_unlock", "computer_use", "read_window_below", "read_terminal", "delegate_task", "feishu_doc_read",
+    "browser_vault_unlock", "computer_use", "screen_record", "read_window_below", "read_terminal", "delegate_task", "feishu_doc_read",
     "feishu_drive_list_comments", "feishu_drive_list_comment_replies", "web_search", "web_extract", "x_search",
     "yb_query_group_info", "yb_query_group_members", "yb_search_sticker", "image_generate", "video_generate",
     "video_analyze", "vision_analyze", "text_to_speech", "xai_video_edit", "xai_video_extend", "spotify_albums",

@@ -160,10 +160,11 @@ from tools.environments.base import EnvironmentConnectionError
 TERMINAL_TOOL_DESCRIPTION = """Execute shell commands. The host OS, shell, and terminal backend are stated in your environment section — write commands for THAT platform. Filesystem, current working directory, and exported environment variables persist between calls.
 
 Do NOT use cat/head/tail (use read_file), grep/rg/find/ls (use search_files), sed/awk (use patch), or echo/heredoc file creation (use write_file). Reserve terminal for: builds, installs, git, processes, scripts, network, package managers — anything that needs a shell. Output is auto-truncated with the full text saved to a file — never pipe through tail/head to shorten it.
-Environment state persists: activate a virtualenv or export variables once per session, not before every command.
+Environment state persists: activate a virtualenv or export variables once per session, not before every command. One exception: a command the owner approved that ran once outside the Seatbelt, as its result says; its cd and export do not carry to the next command, so chain them in one command or use absolute paths.
 
 Foreground (default): returns INSTANTLY when the command finishes, even with a high timeout — set timeout generously for long builds and fixed waits.
 Background: set background=true (returns a session_id) only for commands that must keep running independently after this tool call returns; add notify=true for bounded tasks, leave silent only for servers/daemons that never exit. Do not start sleep, timers, cooldowns, delays, or polling loops with background=true — to wait a fixed time, run the wait as a normal foreground command with a high enough timeout. After starting a server, verify readiness with a health check in a separate call (no blind sleep loops); manage with process(action="poll"/"wait").
+Inside the app's confinement nohup, ps, top, pgrep and lsof do not work, because they ask about other processes: use background=true for a long-running command, and process(action="list") to see what it started.
 Working directory: use 'workdir' for per-command cwd; when a command changes the session cwd (cd, pushd), trust the result's "cwd" field instead of prefixing every command with 'cd'.
 PTY: pty=true + background=true for interactive CLIs (they hang without a terminal); drive them with process(action="write"/"submit"). Local backend only.
 Persist: background=true, persist_on_release=true keeps the job alive across agent lifecycle cleanup (session end, /new, compression, error recovery, stop-on-max-iterations). Use ONLY for long-running jobs the user explicitly wants to outlive the conversation; the user can still stop it on purpose.
@@ -717,6 +718,11 @@ def _get_env_config() -> Dict[str, Any]:
     """Resolve the terminal configuration dict from TERMINAL_* env vars."""
     from hermes_cli.config_defaults import DEFAULT_SANDBOX_IMAGE as default_image
     _ensure_terminal_env_bridged()
+    # iclone-seam: fx35 — every tool that gets an environment passes here, read_file included (the plugin's hook covers
+    # only the shell tools): a confined process refuses the other backend its own config asked for.
+    from tools.terminal_scope import enforce_no_refusal
+
+    enforce_no_refusal()
     env_type = _tenv("TERMINAL_ENV", "local")
     mount_docker_cwd = _tenv_bool("TERMINAL_DOCKER_MOUNT_CWD_TO_WORKSPACE", "false")
 
@@ -1488,6 +1494,15 @@ def terminal_tool(
         return _metered(None if _host_local else plan, _fatal_error_json(e), error_class="exception")
 
 
+def _confined_refusal(exc: Exception) -> bool:
+    """iclone-seam: fx35b — under confinement a refusal keeps the tools offered, so the call reaches the hook and the
+    model gets the reason. A hidden tool tells nobody why. Nothing runs: every tool still refuses at the call."""
+    from hermes_cli.iclone_policy_env import confined_at_exec
+    from tools.terminal_scope import TerminalPolicyUnavailable
+
+    return isinstance(exc, TerminalPolicyUnavailable) and confined_at_exec()
+
+
 def check_terminal_requirements() -> bool:
     """Check if all requirements for the terminal tool are met. The reason for a failure is kept for
     :func:`terminal_backend_unavailable_reason` (CLI startup notice / doctor)."""
@@ -1496,6 +1511,8 @@ def check_terminal_requirements() -> bool:
         checker = _REQUIREMENT_CHECKERS.get(config["env_type"], _check_plugin_requirements)
         return checker(config)
     except Exception as e:
+        if _confined_refusal(e):
+            return True
         logger.error("Terminal requirements check failed: %s", e, exc_info=True)
         _record_unavailable_reason(f"the requirements check failed: {e}")
         return False

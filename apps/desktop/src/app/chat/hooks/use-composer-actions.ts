@@ -1,6 +1,11 @@
 import { useCallback } from 'react'
 
-import { requestComposerFocus, requestComposerInsert, requestComposerInsertRefs } from '@/app/chat/composer/focus'
+import {
+  requestComposerFocus,
+  requestComposerInsert,
+  requestComposerInsertRefs,
+  requestComposerReplaceText
+} from '@/app/chat/composer/focus'
 import { droppedFileInlineRef } from '@/app/chat/composer/inline-refs'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { useI18n } from '@/i18n'
@@ -20,6 +25,7 @@ import {
   updateComposerAttachment
 } from '@/store/composer'
 import { notify, notifyError } from '@/store/notifications'
+import { isScreenFramePath, screenRecordBridge, timelineAfterRemoval } from '@/store/screen-record'
 
 import type { ImageDetachResponse } from '../../types'
 
@@ -705,6 +711,18 @@ export function useComposerActions({
   const removeAttachment = useCallback(
     async (id: string) => {
       const removed = scope.remove(id)
+
+      // A screen frame the user took off the message goes from the disk too: it was never sent.
+      if (removed?.kind === 'image' && removed.path && isScreenFramePath(removed.path)) {
+        void screenRecordBridge()?.discard(removed.path)
+
+        // And from the recording's text: what the model reads has to match the images it gets.
+        const words = timelineAfterRemoval(removed.path)
+
+        if (words) {
+          requestComposerReplaceText(words.from, words.to)
+        }
+      }
 
       if (
         removed?.kind === 'image' &&

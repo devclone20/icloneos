@@ -123,6 +123,7 @@ export const assistant: TranslationOverrides['assistant'] = {
     statusError: '錯誤',
     statusRecovered: '已復原',
     statusDone: '完成',
+    permissionAsked: '已請求您的許可',
     memoryWriteNoted: '已記下記憶寫入',
     actions: {
       read: '已讀取',

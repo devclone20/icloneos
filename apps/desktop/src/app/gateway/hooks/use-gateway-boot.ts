@@ -151,6 +151,13 @@ interface GatewayBootOptions {
   refreshSessions: (shouldPublish?: () => boolean) => Promise<void>
 }
 
+/** Unconfined, a broken settings file does not stop the agent; it is only useful if the owner hears about it. Main says each once. */
+async function warnAboutHomeSettings(desktop: NonNullable<Window['hermesDesktop']>): Promise<void> {
+  const warnings = (await desktop.homeSettings?.warnings(null).catch(() => [])) ?? []
+
+  warnings.forEach(message => notify({ kind: 'warning', message }))
+}
+
 export function useGatewayBoot({
   beforeConnectionSwitch,
   handleGatewayEvent,
@@ -669,6 +676,7 @@ export function useGatewayBoot({
 
         completeDesktopBoot()
         bootCompleted = true
+        void warnAboutHomeSettings(desktop)
       } catch (err) {
         const mayPublishFailure =
           !cancelled && (switchToken === null ? !$gatewaySwitching.get() : isCurrentGatewaySwitch(switchToken))
@@ -853,6 +861,10 @@ export function useGatewayBoot({
     const forceReconnectNow = () => reconnectNow({ forceOpenSocket: true })
     const offPowerResume = desktop.onPowerResume?.(() => void forceReconnectNow())
     const offConnectionApplied = desktop.onConnectionApplied?.(() => void softSwitch())
+    // The same backend restarted (isolation on or off, a Settings restart): the sessions are still its sessions, so this is a
+    // reconnect, and use-route-resume brings the open conversation back on the closed->open edge. softSwitch would draft over
+    // it. A window whose boot never finished has nothing to keep and takes the full way.
+    const offBackendRestarted = desktop.onBackendRestarted?.(() => void (bootCompleted ? forceReconnectNow() : softSwitch()))
     const offGatewayReconnect = registerGatewayReconnect(forceReconnectNow)
 
     // Registry lifecycle: a removed connection's secondaries must close NOW
@@ -1177,6 +1189,7 @@ export function useGatewayBoot({
       window.removeEventListener('focus', onFocus)
       offPowerResume?.()
       offConnectionApplied?.()
+      offBackendRestarted?.()
       offConnectionsChanged?.()
       offGatewayReconnect()
       offState()

@@ -39,6 +39,9 @@ import {
   type PermissionMode
 } from './modes'
 
+// F40: in Ignore no level decides (decideFunctions), so what levels do is measured in the other four modes.
+const LEVELS_DECIDE = PERMISSION_MODES.filter(mode => mode !== 'ignore')
+
 const FIXTURE_PATH = path.join(__dirname, '../../../../plugins/iclone-permissions/tests/fixtures/functions.json')
 
 /** The fixture's fact sets: unmeasured, all false, and each footnote fact on its own. */
@@ -589,7 +592,7 @@ describe('V3-F2 R3-MONO — the families close over the union; a row decides on 
 
 describe('V3-F2 R4-UNREAD — main: what is not fully read fails closed', () => {
   const unread = {
-    mode: 'ignore' as PermissionMode,
+    mode: 'automatic' as PermissionMode,
     cls: 'X' as ActionClass,
     facts: { dangerous: false, privileged: false, inProject: true, getOnly: true },
     floor: null,
@@ -601,7 +604,7 @@ describe('V3-F2 R4-UNREAD — main: what is not fully read fails closed', () => 
   }
 
   it('every user level asks (Manual refuses), even a row the call does not name; no standing grant lifts it', () => {
-    for (const mode of PERMISSION_MODES) {
+    for (const mode of LEVELS_DECIDE) {
       for (const cls of ACTION_CLASSES.filter(c => c !== 'R')) {
         for (const level of FUNCTION_LEVELS.filter(l => l !== 'mode')) {
           for (const ceiling of ['on', 'undecided'] as Ceiling[]) {
@@ -774,7 +777,7 @@ function propRun(table: PropTable, seed: number, joined = mainDecides) {
     unread[range] += joinedUnread ? 1 : 0
 
     for (let k = 0; k < PROP_SAMPLES; k += 1) {
-      const mode = PERMISSION_MODES[r(PERMISSION_MODES.length)]
+      const mode = LEVELS_DECIDE[r(LEVELS_DECIDE.length)]
       let levels: Record<PermissionFunction, FunctionLevel>
 
       if (r(2) === 0) {
@@ -864,7 +867,7 @@ describe('V3-F2 R4-GEN — main: decide(A op B …) is never below decide(A), de
 
     for (const probe of r3) {
       const decides = (i: number) =>
-        mainDecides(table.payloads[i], table.envs[0], probe.standing, probe.functions, new Set())
+        mainDecides(table.payloads[i], table.envs[0], probe.standing === 'ignore' ? 'automatic' : probe.standing, probe.functions, new Set())
 
       expect(Math.max(...probe.pieces.map(decides)), probe.id).toBe(SEVERITY.ask)
       expect(decides(probe.joined), probe.id).toBe(SEVERITY.ask)
@@ -925,7 +928,7 @@ describe('V3-F2 R5-D — main: every critic r4 probe, as the plugin reads it', (
 
   it('decideFunctions: an unread call keeps its parts and meets every switch; a Follow-mode row takes a part’s OFF', () => {
     const base = {
-      mode: 'ignore' as PermissionMode,
+      mode: 'automatic' as PermissionMode,
       cls: 'X' as ActionClass,
       facts: { dangerous: false },
       floor: null,
@@ -936,7 +939,13 @@ describe('V3-F2 R5-D — main: every critic r4 probe, as the plugin reads it', (
     }
 
     const floored = { cls: 'X' as ActionClass, facts: {}, floor: PARTS_FLOOR, ceiling: 'on' as Ceiling }
-    const part = { ...floored, floor: null, classGranted: false, fns: ['shell'] as PermissionFunction[] }
+    const part = {
+      ...floored,
+      facts: { dangerous: false },
+      floor: null,
+      classGranted: false,
+      fns: ['shell'] as PermissionFunction[]
+    }
 
     expect(decideFunctions({ ...base, partsUnread: true }).outcome).toBe('ask')
     // (c) a part read beside the unread flag is a term
@@ -1003,7 +1012,7 @@ describe('V3-F2 F2-9 — raise or lower', () => {
   }
 
   it('the 36-pair table under each mode: only changes as strict as today skip the confirm', () => {
-    for (const mode of PERMISSION_MODES) {
+    for (const mode of LEVELS_DECIDE) {
       const lowerings = FUNCTION_LEVELS.flatMap(from =>
         FUNCTION_LEVELS.filter(to => from !== to && !isRaise(from, to, [mode])).map(to => `${from}>${to}`)
       )

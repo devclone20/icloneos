@@ -1,8 +1,22 @@
 // Desktop log: in-memory buffer, rotation and flushing of desktop.log.
-import fs from 'node:fs'
+import { rename, unlink as unlinkAsync } from 'node:fs/promises'
 import path from 'node:path'
 
+import { app } from 'electron'
+
 import { formatDesktopLogLine } from '../desktop-log-line'
+import { writeFileAtomicSync } from '../lib/atomic-write'
+import {
+  appendFileInRoot,
+  appendFileInRootAsync,
+  isRefusedPath,
+  lstatInRoot,
+  mkdirsInRoot,
+  pinRoot,
+  renameInRoot,
+  resolveInRoot,
+  unlinkInRoot
+} from '../lib/no-follow-fs'
 import {
   describeUpdatePolicy,
   readUpdatePolicyOverride,
@@ -16,7 +30,12 @@ import { logBufferState } from './state'
 // desktop.log lives under HERMES_HOME/logs/ so it sits next to agent.log,
 // errors.log, gateway.log produced by hermes_logging.setup_logging — one log
 // directory per user, regardless of which UI surface produced the line.
+//
+// The confined runtime can write that folder and this process is not confined, so every operation on the log goes
+// through lib/no-follow-fs: a link, FIFO or folder planted at these names is refused, never followed.
 export const DESKTOP_LOG_PATH = path.join(HERMES_HOME, 'logs', 'desktop.log')
+
+pinRoot(HERMES_HOME)
 
 const DESKTOP_LOG_FLUSH_MS = 120
 
@@ -42,6 +61,9 @@ const DESKTOP_LOG_MAX_BYTES = 10 * 1024 * 1024
 const DESKTOP_LOG_BACKUP_COUNT = 3
 
 const DESKTOP_LOG_DISCARD_BYTES = DESKTOP_LOG_MAX_BYTES * 4
+
+// Under userData, outside every hole the runtime profile opens.
+const DESKTOP_LOG_REFUSAL_RECORD = 'desktop-log-refused.json'
 
 const desktopLogBackupPath = (n: number) => `${DESKTOP_LOG_PATH}.${n}`
 
@@ -93,21 +115,20 @@ function planDesktopLogRotation(size: number) {
   return ops
 }
 
+// The size comes from the entry itself: a link is not the log, so it plans nothing and the append refuses it.
+function liveDesktopLogSize() {
+  const stat = lstatInRoot(HERMES_HOME, DESKTOP_LOG_PATH)
+
+  return stat?.isFile() ? stat.size : 0
+}
+
 function rotateDesktopLogIfNeededSync() {
-  let size
-
-  try {
-    size = fs.statSync(DESKTOP_LOG_PATH).size
-  } catch {
-    return // No live file yet — the append (re)creates it.
-  }
-
-  for (const [op, src, dst] of planDesktopLogRotation(size)) {
+  for (const [op, src, dst] of planDesktopLogRotation(liveDesktopLogSize())) {
     try {
       if (op === 'rm') {
-        fs.rmSync(src, { force: true })
+        unlinkInRoot(HERMES_HOME, src)
       } else {
-        fs.renameSync(src, dst)
+        renameInRoot(HERMES_HOME, src, dst)
       }
     } catch {
       // Best-effort — logging must never block startup/shutdown.
@@ -116,25 +137,44 @@ function rotateDesktopLogIfNeededSync() {
 }
 
 async function rotateDesktopLogIfNeededAsync() {
-  let size
-
-  try {
-    size = (await fs.promises.stat(DESKTOP_LOG_PATH)).size
-  } catch {
-    return // No live file yet — the append (re)creates it.
-  }
-
-  for (const [op, src, dst] of planDesktopLogRotation(size)) {
+  for (const [op, src, dst] of planDesktopLogRotation(liveDesktopLogSize())) {
     try {
       if (op === 'rm') {
-        await fs.promises.rm(src, { force: true })
+        await unlinkAsync(resolveInRoot(HERMES_HOME, src))
       } else {
-        await fs.promises.rename(src, dst)
+        await rename(resolveInRoot(HERMES_HOME, src), resolveInRoot(HERMES_HOME, dst))
       }
     } catch {
       // Best-effort — logging must never crash the shell.
     }
   }
+}
+
+let desktopLogRefusalRecorded = false
+
+// Refused: the lines stay in the in-memory `hermesLog`, and one record goes under userData, which the runtime's
+// profile denies. Once per launch: a runtime that keeps a link planted must not grow any file by doing so.
+function noteDesktopLogFailure(error: unknown) {
+  if (!isRefusedPath(error) || desktopLogRefusalRecorded) {
+    return
+  }
+
+  desktopLogRefusalRecorded = true
+
+  try {
+    writeFileAtomicSync(
+      path.join(app.getPath('userData'), DESKTOP_LOG_REFUSAL_RECORD),
+      `${JSON.stringify({ at: new Date().toISOString(), refused: error.message })}\n`
+    )
+  } catch {
+    // Logging must never block app startup/shutdown.
+  }
+}
+
+/** Creates the empty log for a surface that shows it; a refusal reaches the caller, which reports it to the user. */
+export function ensureDesktopLogFile() {
+  mkdirsInRoot(HERMES_HOME, path.dirname(DESKTOP_LOG_PATH))
+  appendFileInRoot(HERMES_HOME, DESKTOP_LOG_PATH, '')
 }
 
 export function flushDesktopLogBufferSync() {
@@ -146,11 +186,12 @@ export function flushDesktopLogBufferSync() {
   desktopLogBuffer = ''
 
   try {
-    fs.mkdirSync(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
+    mkdirsInRoot(HERMES_HOME, path.dirname(DESKTOP_LOG_PATH))
     rotateDesktopLogIfNeededSync()
-    fs.appendFileSync(DESKTOP_LOG_PATH, chunk)
-  } catch {
+    appendFileInRoot(HERMES_HOME, DESKTOP_LOG_PATH, chunk)
+  } catch (error) {
     // Logging must never block app startup/shutdown.
+    noteDesktopLogFailure(error)
   }
 }
 
@@ -164,13 +205,11 @@ function flushDesktopLogBufferAsync() {
 
   desktopLogFlushPromise = desktopLogFlushPromise
     .then(async () => {
-      await fs.promises.mkdir(path.dirname(DESKTOP_LOG_PATH), { recursive: true })
+      mkdirsInRoot(HERMES_HOME, path.dirname(DESKTOP_LOG_PATH))
       await rotateDesktopLogIfNeededAsync()
-      await fs.promises.appendFile(DESKTOP_LOG_PATH, chunk)
+      await appendFileInRootAsync(HERMES_HOME, DESKTOP_LOG_PATH, chunk)
     })
-    .catch(() => {
-      // Logging must never crash the desktop shell.
-    })
+    .catch(noteDesktopLogFailure)
 
   return desktopLogFlushPromise
 }

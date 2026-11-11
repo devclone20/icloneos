@@ -16,6 +16,7 @@ from typing import Any, List, Optional
 
 from agent.lazy_forward import forward_static as _forward_static
 from agent.tool_dispatch_helpers import _is_multimodal_tool_result, _multimodal_text_summary
+from hermes_constants import get_hermes_home
 from utils import base_url_host_matches, base_url_hostname
 
 # Same logger name as the origin module so log records / caplog filters are unchanged.
@@ -75,7 +76,11 @@ class VisionMessagePrepMixin:
             return "", None
         mime = header[len("data:"):].split(";", 1)[0].strip() if header.startswith("data:") else ""
         suffix = _DATA_URL_SUFFIXES.get(mime if mime.startswith("image/") else "image/jpeg", ".jpg")
-        tmp = tempfile.NamedTemporaryFile(prefix="anthropic_image_", suffix=suffix, delete=False)
+        # A media cache root, the one host place vision may read under a non-local backend, the Seatbelt included
+        # (tools/image_source.py): the system temp folder comes back "not reachable inside the sandbox".
+        cache = get_hermes_home() / "temp_vision_images"
+        cache.mkdir(parents=True, exist_ok=True)
+        tmp = tempfile.NamedTemporaryFile(prefix="anthropic_image_", suffix=suffix, delete=False, dir=cache)
         try:
             with tmp:
                 tmp.write(base64.b64decode(data))

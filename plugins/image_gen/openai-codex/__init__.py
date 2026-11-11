@@ -25,6 +25,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from hermes_cli.auth_constants import AuthError
 from agent.image_gen_provider import DEFAULT_ASPECT_RATIO, resolve_aspect_ratio, save_b64_image, success_response
 from plugins.image_gen._common import (
     GPT_IMAGE_2_API_MODEL as API_MODEL, GPT_IMAGE_2_DEFAULT as DEFAULT_MODEL, GPT_IMAGE_2_TIERS,
@@ -68,7 +69,7 @@ def _read_codex_credential() -> Tuple[Optional[str], Optional[str]]:
     """``(token, base_url)`` from one resolution (``agent.auxiliary_client`` owns expiry/pool/JWT):
     the image request goes to the host the token's credential routes to (pool row /
     ``model.base_url`` / profile override), never a default it does not belong to (#121486).
-    ``(None, None)`` without a usable token."""
+    ``(None, None)`` without a usable token; the host refusal alone is raised, for its fix to be shown."""
     try:
         from agent.auxiliary_client import _resolve_codex_credential_and_base
 
@@ -77,6 +78,8 @@ def _read_codex_credential() -> Tuple[Optional[str], Optional[str]]:
             return token.strip(), base_url
         return None, None
     except Exception as exc:
+        if getattr(exc, "code", "") == "codex_credential_host_unknown":
+            raise
         logger.debug("Could not resolve Codex credential: %s", exc)
         return None, None
 
@@ -242,7 +245,10 @@ class OpenAICodexImageGenProvider(StaticImageGenProvider):
     price = "varies"
 
     def is_available(self) -> bool:
-        return bool(_read_codex_credential()[0]) and _httpx_available()
+        try:
+            return bool(_read_codex_credential()[0]) and _httpx_available()
+        except AuthError:
+            return False
 
     def get_setup_schema(self) -> Dict[str, Any]:
         return {
@@ -270,7 +276,10 @@ class OpenAICodexImageGenProvider(StaticImageGenProvider):
         aspect = resolve_aspect_ratio(aspect_ratio)
         if not prompt:
             return prompt_required_error("openai-codex", aspect)
-        token, base_url = _read_codex_credential()
+        try:
+            token, base_url = _read_codex_credential()
+        except AuthError as refusal:  # no credential was sent; the message names the fix
+            return error_factory("openai-codex", aspect)(str(refusal), "auth_required")
         if not token:
             return error_factory("openai-codex", aspect)(_NO_AUTH, "auth_required")
         if not _httpx_available():

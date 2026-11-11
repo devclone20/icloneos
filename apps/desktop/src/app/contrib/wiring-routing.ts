@@ -6,6 +6,22 @@
  */
 
 import type { SessionOwnerRoute } from '@/store/session-request-router'
+import { $sessionTilesRender } from '@/store/tile-render'
+
+/** The sidebar "+": stacks a tile only where tiles render; else the fresh draft takes the chosen folder. */
+export function plusStacksTile(openTab: boolean | undefined, mainOccupied: boolean): boolean {
+  return Boolean(openTab) && mainOccupied && $sessionTilesRender.get()
+}
+
+/** Cmd+T: a new session tab, or a new chat in main while no pane renders tiles
+ *  (a tile would show nothing). */
+export function openNewChatDoor(startFreshChat: () => void, openTile: () => void): void {
+  if ($sessionTilesRender.get()) {
+    openTile()
+  } else {
+    startFreshChat()
+  }
+}
 
 /**
  * Resolve a runtime session id back to its stored id by reverse-scanning the

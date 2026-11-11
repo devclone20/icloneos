@@ -14,7 +14,7 @@ def _codex_jwt(subject: str) -> str:
     (a custom base's gateway key must stay off chatgpt.com, #121486)."""
     enc = lambda raw: base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
     header = enc(b'{"alg":"RS256"}')
-    payload = enc(json.dumps({"sub": subject}).encode())
+    payload = enc(json.dumps({"iss": "https://auth.openai.com", "sub": subject}).encode())
     return f"{header}.{payload}.test-signature"
 
 

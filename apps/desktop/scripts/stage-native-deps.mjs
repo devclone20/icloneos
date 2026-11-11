@@ -12,18 +12,10 @@
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { dirname, resolve, join } from 'node:path'
-import {
-  chmodSync,
-  cpSync,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync
-} from 'node:fs'
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { isMain } from './utils.mjs'
+import { ADDON_OUTPUT, assertPinnedAddon, readAddonPin } from './build-iclone-fsevents.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const projectRoot = resolve(here, '..')
@@ -77,7 +69,7 @@ function copyGlobByExt(srcDir, destDir, extensions) {
       continue
     }
     if (PACKAGE_TEST_FILE.test(entry.name)) continue
-    if (extensions.some((ext) => entry.name.endsWith(ext))) {
+    if (extensions.some(ext => entry.name.endsWith(ext))) {
       mkdirSync(destDir, { recursive: true })
       cpSync(join(srcDir, entry.name), join(destDir, entry.name))
     }
@@ -216,9 +208,7 @@ function validateStagedBinaries(destRoot, targetPlatform) {
   if (mismatches.length > 0) {
     throw new Error(
       `[stage-native-deps] native binary platform mismatch (target=${targetPlatform}):\n` +
-        mismatches
-          .map((m) => `  ${m.file}: expected ${m.expected}, got ${m.classified ?? 'unknown'}`)
-          .join('\n') +
+        mismatches.map(m => `  ${m.file}: expected ${m.expected}, got ${m.classified ?? 'unknown'}`).join('\n') +
         `\nRefusing to stage a binary compiled for the wrong platform.`
     )
   }
@@ -294,13 +284,10 @@ export function stageNodePtyInto(srcRoot, destRoot, { platform = process.platfor
   }
 
   // Check whether a native binary for this target was staged.
-  const stagedDirs = [
-    join(destRoot, 'prebuilds', `${platform}-${arch}`),
-    join(destRoot, 'build/Release')
-  ]
-  const hasNativeBinary = stagedDirs.some((dir) => {
+  const stagedDirs = [join(destRoot, 'prebuilds', `${platform}-${arch}`), join(destRoot, 'build/Release')]
+  const hasNativeBinary = stagedDirs.some(dir => {
     if (!existsSync(dir)) return false
-    return readdirSync(dir, { recursive: true }).some((name) => String(name).endsWith('.node'))
+    return readdirSync(dir, { recursive: true }).some(name => String(name).endsWith('.node'))
   })
 
   if (!hasNativeBinary) {
@@ -318,14 +305,7 @@ export function stageNodePtyInto(srcRoot, destRoot, { platform = process.platfor
       `[stage-native-deps] no native binary for ${platform}-${arch}; ` +
         `running electron-rebuild (target arch: ${arch})...`
     )
-    const rebuildArgs = [
-      '../../node_modules/.bin/electron-rebuild',
-      '-f',
-      '-w',
-      'node-pty',
-      '--arch',
-      arch
-    ]
+    const rebuildArgs = ['../../node_modules/.bin/electron-rebuild', '-f', '-w', 'node-pty', '--arch', arch]
     const result = spawnSync(process.execPath, rebuildArgs, {
       cwd: projectRoot,
       stdio: 'inherit'
@@ -493,7 +473,7 @@ export function stageGetWindowsInto(
     const scanBindingDirs = () =>
       existsSync(bindingRoot)
         ? readdirSync(bindingRoot).filter(
-            (dir) =>
+            dir =>
               dir.includes(`-${platform}-`) &&
               dir.endsWith(`-${arch}`) &&
               existsSync(join(bindingRoot, dir, 'node-get-windows.node'))
@@ -516,9 +496,7 @@ export function stageGetWindowsInto(
       // the allowlist is fixed. Invoke node-pre-gyp directly: npm treats this
       // optional dependency's failed lifecycle as non-fatal and can report a
       // successful rebuild without producing the Windows binding.
-      console.log(
-        '[stage-native-deps] get-windows has no win32 binding; running its native installer...'
-      )
+      console.log('[stage-native-deps] get-windows has no win32 binding; running its native installer...')
       installAttempted = true
       install()
       bindingDirs = scanBindingDirs()
@@ -549,10 +527,7 @@ export function stageGetWindowsInto(
   return destRoot
 }
 
-export function installGetWindowsNativeBinding(
-  srcRoot,
-  { resolveInstaller, spawn = spawnSync } = {}
-) {
+export function installGetWindowsNativeBinding(srcRoot, { resolveInstaller, spawn = spawnSync } = {}) {
   let installerPath
   try {
     const resolveNodePreGyp =
@@ -572,22 +547,18 @@ export function installGetWindowsNativeBinding(
     stdio: 'inherit'
   })
   if (result.error) {
-    throw new Error(
-      `[stage-native-deps] get-windows native installer could not start: ${result.error.message}`
-    )
+    throw new Error(`[stage-native-deps] get-windows native installer could not start: ${result.error.message}`)
   }
   if (result.status !== 0) {
     throw new Error(`[stage-native-deps] get-windows native installer exited with ${result.status}`)
   }
 }
 
-export function stageGetWindows(
-  {
-    platform = process.platform,
-    arch = process.arch,
-    resolveRoot = resolveGetWindowsRoot
-  } = {}
-) {
+export function stageGetWindows({
+  platform = process.platform,
+  arch = process.arch,
+  resolveRoot = resolveGetWindowsRoot
+} = {}) {
   const srcRoot = resolveRoot()
   const destRoot = resolve(projectRoot, 'dist/node_modules/get-windows')
 
@@ -614,10 +585,44 @@ export function stageGetWindows(
   // Only a win32 host can produce the win32 binding, so a cross-platform pack
   // has nothing to gain from the native installer.
   const install =
-    platform === 'win32' && process.platform === 'win32'
-      ? () => installGetWindowsNativeBinding(srcRoot)
-      : undefined
+    platform === 'win32' && process.platform === 'win32' ? () => installGetWindowsNativeBinding(srcRoot) : undefined
   return stageGetWindowsInto(srcRoot, destRoot, { platform, arch, install })
+}
+
+// ─── iclone_fsevents (v0.0.7 FSEV: the F7 hard-link guard's own FSEvents addon) ───
+//
+// Built from native/iclone-fsevents by scripts/build-iclone-fsevents.mjs (no download). The guard loads it from
+// dist/native/iclone_fsevents.node beside dist/electron-main.mjs (electron/iclone-confinement/iclone-fsevents.ts);
+// asarUnpack **/*.node unpacks it and the release signs it with the Team ID like every other .node. Only the pinned
+// bytes are staged (PIN.json sha256, L1-4): a copy that differs in one byte is refused, whatever put it there.
+
+/** Stage the pinned addon from `srcFile` into `destFile` (darwin targets only). */
+export function stageIcloneFseventsInto(srcFile, destFile, { platform = process.platform, pin = readAddonPin() } = {}) {
+  if (platform !== 'darwin') {
+    return undefined
+  }
+
+  if (!existsSync(srcFile)) {
+    throw new Error(`[stage-native-deps] ${srcFile} is not built (node scripts/build-iclone-fsevents.mjs)`)
+  }
+
+  if (classifyNativeBinary(srcFile) !== 'darwin') {
+    throw new Error(`[stage-native-deps] iclone_fsevents.node is not a macOS binary: ${srcFile}`)
+  }
+
+  assertPinnedAddon(srcFile, pin)
+  rmSync(destFile, { force: true })
+  mkdirSync(dirname(destFile), { recursive: true })
+  cpSync(srcFile, destFile)
+  assertPinnedAddon(destFile, pin)
+  console.log(`[stage-native-deps] staged iclone_fsevents.node (sha256 ${pin.sha256}) -> ${destFile}`)
+
+  return destFile
+}
+
+/** Stage the addon for a darwin target; a darwin build without the pinned addon fails (the guard would walk every root). */
+export function stageIcloneFsevents({ platform = process.platform } = {}) {
+  return stageIcloneFseventsInto(ADDON_OUTPUT, resolve(projectRoot, 'dist/native/iclone_fsevents.node'), { platform })
 }
 
 // Allow direct CLI invocation: node scripts/stage-native-deps.mjs [platform] [arch]
@@ -625,4 +630,5 @@ if (isMain(import.meta.url)) {
   const [platform, arch] = process.argv.slice(2)
   stageNodePty({ platform, arch })
   stageGetWindows({ platform, arch })
+  stageIcloneFsevents({ platform: platform || process.platform })
 }

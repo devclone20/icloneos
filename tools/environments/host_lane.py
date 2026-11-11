@@ -47,6 +47,17 @@ def env_is_host(env: Any) -> bool:
     return isinstance(env, LocalEnvironment) and getattr(type(env), "host_side_helpers", None) is True
 
 
+def env_reads_this_host(env: Any) -> bool:
+    """The environment's shell reads this host's own files, confined or not: a ``LocalEnvironment`` and its subclasses,
+    never a container or a remote. Only for the fresh-read record of a file the shell has just shown (f55): that record
+    is stats and a hash here, and nothing the model sees depends on it. It opens no helper; helpers ask the predicate below."""
+    try:
+        from tools.environments.local import LocalEnvironment
+    except Exception:  # noqa: BLE001
+        return False
+    return isinstance(env, LocalEnvironment)
+
+
 def _configured_backend_is_local() -> bool:
     return (os.environ.get("TERMINAL_ENV") or "local").strip().lower() == "local"
 
@@ -70,7 +81,8 @@ def host_side_helpers_allowed(env: Any = _UNSET) -> bool:
 #   (a) the environment's own shell — a spawn made inside a method of a NON-host environment (the seatbelt, a
 #       container, a remote backend), from the environment backends' own code;
 #   (c) an app-fixed program — a site listed ``fixed`` in plugins/iclone-confinement/spawn_sites.json — and only as the
-#       exact ``sandbox-exec`` argv ``confine_program`` sealed for it: the program runs INSIDE the agent's Seatbelt
+#       exact ``sandbox-exec`` argv ``confine_program`` sealed for it (or, when the runtime itself is confined, that
+#       argv carried by the plugin's stub to the launcher): the program runs INSIDE the agent's Seatbelt
 #       profile, widened only by what that program provably needs (ruling 56: the allowlist decides WHICH program,
 #       never WHETHER it runs outside the sandbox);
 #   (h) the confined runtime itself — a site listed ``hermes`` starting this runtime's own interpreter (or the hermes
@@ -91,6 +103,12 @@ from pathlib import Path as _Path
 RUNTIME_ROOT = _Path(__file__).resolve().parents[2]
 SITES_FILE = RUNTIME_ROOT / "plugins" / "iclone-confinement" / "spawn_sites.json"
 SANDBOX_EXEC = "/usr/bin/sandbox-exec"
+# A runtime that runs under its own profile cannot apply another one: its confined commands start as this stub (the
+# runtime's interpreter, isolated) carrying the sealed sandbox-exec argv to the launcher main started.
+STUB_FILE = RUNTIME_ROOT / "plugins" / "iclone-confinement" / "stub.py"
+# Ruling R1 narrows ruling 56 for one site: with the Seatbelt on, agent-browser runs outside it through the launcher's
+# door (plugins/iclone-confinement/browser_door.py). The door takes exact verbs and picks the program itself.
+BROWSER_DOOR_COMMAND = "iclone-agent-browser"
 SPAWN_EVENTS = frozenset({"subprocess.Popen", "os.system", "os.exec", "os.spawn", "os.posix_spawn", "os.fork",
                           "os.forkpty", "os.startfile", "pty.spawn"})
 DLSYM_EVENTS = frozenset({"ctypes.dlsym", "ctypes.dlsym/handle"})
@@ -99,7 +117,12 @@ SPAWN_SYMBOLS = frozenset({"system", "popen", "fork", "vfork", "forkpty", "execv
                            "execl", "execle", "execlp", "posix_spawn", "posix_spawnp", "_posix_spawn", "spawnv",
                            "fork_exec"})
 _ENV_DIRS = (RUNTIME_ROOT / "tools" / "environments", RUNTIME_ROOT / "plugins" / "iclone-confinement")
-_state = {"installed": False, "refusals": [], "confiner": None}
+# The env seal (hermes_cli/iclone_sinks.py ``install_spawn_seal``) wraps ``subprocess.Popen.__init__`` and the os spawn
+# functions in every process icloneOS starts; its wrappers are runtime frames that only pass the call on. They are
+# never a site: the site is the first runtime frame below them, judged exactly as without the seal (no lane added).
+SEAL_WRAPPERS = frozenset({"hermes_cli/iclone_sinks.py::install_spawn_seal.popen_init",
+                           "hermes_cli/iclone_sinks.py::install_spawn_seal.wrap.sealed"})
+_state = {"installed": False, "refusals": [], "confiner": None, "logged": set()}
 # Digests of the argv ``confine_program`` built; the installed hook holds THIS object (rebinding the name is moot).
 _SEALS: set = set()
 _state_lock = _threading.Lock()
@@ -107,6 +130,17 @@ _state_lock = _threading.Lock()
 
 def _within(path: str, root: str) -> bool:
     return path == root or path.startswith(root + os.sep)
+
+
+def _load_door_sites() -> frozenset:
+    """The sites (ruling R1) that may start only the sealed door argv. Unreadable => none (fail closed)."""
+    try:
+        import json
+
+        data = json.loads(SITES_FILE.read_text(encoding="utf-8"))
+        return frozenset(str(s) for s in data.get("door", []) if isinstance(s, str))
+    except Exception:  # noqa: BLE001
+        return frozenset()
 
 
 def _load_sites() -> tuple:
@@ -146,7 +180,8 @@ def argv_digest(argv) -> str:
     return _hashlib.sha256("\0".join(os.fsdecode(a) for a in argv).encode("utf-8", "surrogateescape")).hexdigest()
 
 
-def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals: set, interpreters: frozenset):
+def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals: set, interpreters: frozenset,
+                   doors: frozenset = frozenset()):
     """The decision as one closure over local helpers (nothing it calls is looked up in a module afterwards)."""
     import shutil
 
@@ -157,6 +192,10 @@ def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals
     root = str(RUNTIME_ROOT)
     env_dirs = tuple(str(d) for d in _ENV_DIRS)
     symbols, dlsym_events, sandbox_exec = SPAWN_SYMBOLS, DLSYM_EVENTS, SANDBOX_EXEC
+    browser_command = BROWSER_DOOR_COMMAND
+    stub = realpath(str(STUB_FILE))
+    interpreter = realpath(_sys.executable) if _sys.executable else ""
+    transparent = SEAL_WRAPPERS
 
     def within(path: str, base: str) -> bool:
         return path == base or path.startswith(base + sep)
@@ -171,7 +210,10 @@ def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals
                     rel = relpath(filename, root).replace(sep, "/")
                     qual = getattr(f.f_code, "co_qualname", f.f_code.co_name)
                     qual = ".".join(p for p in qual.split(".") if not p.startswith("<")) or "<module>"
-                    site = f"{rel}::{qual}"
+                    candidate = f"{rel}::{qual}"
+                    # The env seal's wrappers only pass the call on: the site is whoever called them.
+                    if candidate not in transparent:
+                        site = candidate
             f = f.f_back
         return site, frames
 
@@ -219,6 +261,40 @@ def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals
     def digest(argv) -> str:
         return sha256("\0".join(fsdecode(a) for a in argv).encode("utf-8", "surrogateescape")).hexdigest()
 
+    def stub_form(prog: str, argv) -> bool:
+        """``<this interpreter> -I -S <the plugin's stub.py> <socket> -- /usr/bin/sandbox-exec …``, nothing else."""
+        items = [fsdecode(a) if isinstance(a, (bytes, os.PathLike)) else a for a in argv]
+        return bool(interpreter) and prog == interpreter and len(items) >= 7 and items[1:3] == ["-I", "-S"] \
+            and items[3] == stub and items[5] == "--" and items[6] == sandbox_exec
+
+    def door_form(prog: str, argv) -> bool:
+        """S10: ``<this interpreter> -I -S <the plugin's stub.py> <socket> -- iclone-cua-driver …``, nothing else. It runs
+        the launcher's stub; what the driver may do is the launcher's to say (driver_door.py)."""
+        items = [fsdecode(a) if isinstance(a, (bytes, os.PathLike)) else a for a in argv]
+        return bool(interpreter) and prog == interpreter and len(items) >= 7 and items[1:3] == ["-I", "-S"] \
+            and items[3] == stub and items[5] == "--" and items[6] == "iclone-cua-driver"
+
+    def screen_form(prog: str, argv) -> bool:
+        """G9: the stub carrying one of the three screen recording verbs, nothing else (screen_door.py judges them too)."""
+        items = [fsdecode(a) if isinstance(a, (bytes, os.PathLike)) else a for a in argv]
+        if not (interpreter and prog == interpreter and len(items) >= 8 and items[1:3] == ["-I", "-S"]
+                and items[3] == stub and items[5] == "--" and items[6] == "iclone-screen-record"):
+            return False
+        return items[7:] in (["stop"], ["status"]) or (len(items) == 9 and items[7] == "start" and items[8].isdigit())
+
+    def browser_door_form(prog: str, argv) -> bool:
+        """Ruling R1: ``<this interpreter> -I -S <the plugin's stub.py> <socket> -- iclone-agent-browser …``, nothing else.
+        What the program may do is the launcher's to say (browser_door.py)."""
+        items = [fsdecode(a) if isinstance(a, (bytes, os.PathLike)) else a for a in argv]
+        return bool(interpreter) and prog == interpreter and len(items) >= 8 and items[1:3] == ["-I", "-S"] \
+            and items[3] == stub and items[5] == "--" and items[6] == browser_command
+
+    def onefile_form(prog: str, argv) -> bool:
+        """G2 A5, G26: the stub carrying one approved file to or from the launcher, nothing else. Main's row decides, not this."""
+        items = [fsdecode(a) if isinstance(a, (bytes, os.PathLike)) else a for a in argv]
+        return bool(interpreter) and prog == interpreter and len(items) == 8 and items[1:3] == ["-I", "-S"] \
+            and items[3] == stub and items[5] == "--" and items[6] == sandbox_exec and items[7] in ("--iclone-onefile", "--iclone-onefile-read")
+
     def child_confined(args: tuple) -> bool:
         env = (tuple(args) + (None,) * 4)[3]
         env = environ if env is None else env
@@ -241,10 +317,27 @@ def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals
             if env_is_host(env):
                 return False, f"(b) a host environment's shell ({type(env).__name__}) in a confined process [{site}]"
             return True, f"(a) the environment's own shell ({type(env).__name__})"
-        if site in fixed:
+        if event == "subprocess.Popen" and isinstance((tuple(args) + (None,) * 2)[1], (list, tuple)) \
+                and (tuple(args) + (None,) * 2)[1] and door_form(program(event, args), (tuple(args) + (None,) * 2)[1]):
+            return True, f"(d) the launcher's door to the signed driver [{site}]"
+        if event == "subprocess.Popen" and isinstance((tuple(args) + (None,) * 2)[1], (list, tuple)) \
+                and (tuple(args) + (None,) * 2)[1] and screen_form(program(event, args), (tuple(args) + (None,) * 2)[1]):
+            return True, f"(d) the launcher's door to the screen recording [{site}]"
+        if event == "subprocess.Popen" and isinstance((tuple(args) + (None,) * 2)[1], (list, tuple)) \
+                and (tuple(args) + (None,) * 2)[1] and onefile_form(program(event, args), (tuple(args) + (None,) * 2)[1]):
+            return True, f"(d) the launcher, for one file the owner allowed [{site}]"
+        if site in doors:
             argv = (tuple(args) + (None,) * 2)[1]
             if event == "subprocess.Popen" and isinstance(argv, (list, tuple)) and argv \
-                    and program(event, args) == sandbox_exec and digest(argv) in seals:
+                    and browser_door_form(program(event, args), argv) and digest(argv) in seals:
+                seals.discard(digest(argv))
+                return True, f"(e) the launcher's door to the browser, ruling R1 [{site}]"
+            return False, f"(e) {site} starts only the launcher's door to the browser (ruling R1 narrows ruling 56 for this site)"
+        if site in fixed:
+            argv = (tuple(args) + (None,) * 2)[1]
+            prog = program(event, args) if event == "subprocess.Popen" else ""
+            if event == "subprocess.Popen" and isinstance(argv, (list, tuple)) and argv \
+                    and (prog == sandbox_exec or stub_form(prog, argv)) and digest(argv) in seals:
                 seals.discard(digest(argv))
                 return True, f"(c) app-fixed program inside the agent's Seatbelt [{site}]"
             return False, f"(c) {site} runs its program only inside the agent's Seatbelt (ruling 56)"
@@ -259,14 +352,15 @@ def _build_decider(*, fixed: frozenset, hermes: frozenset, foreign: tuple, seals
 
 
 def decide_spawn(event: str, args: tuple, frame=None, *, fixed=None, hermes=None, foreign=None, seals=None,
-                 confined=None) -> tuple:
+                 confined=None, doors=None) -> tuple:
     """(allowed, why) for one process-creation audit event in this process (a fresh decider; tests and tools)."""
     if not (confined_process() if confined is None else confined):
         return True, "not a confined process"
     loaded = _load_sites() if fixed is None or hermes is None else (fixed, hermes)
     decide = _build_decider(fixed=loaded[0] if fixed is None else fixed, hermes=loaded[1] if hermes is None else hermes,
                             foreign=_foreign_roots() if foreign is None else foreign,
-                            seals=_SEALS if seals is None else seals, interpreters=_interpreter_programs())
+                            seals=_SEALS if seals is None else seals, interpreters=_interpreter_programs(),
+                            doors=_load_door_sites() if doors is None else doors)
     return decide(event, args, frame if frame is not None else _sys._getframe(1))
 
 
@@ -299,7 +393,38 @@ def confine_program(argv, *, kind: str, env=None, reads=(), writes=()) -> tuple:
     return wrapped, new_env
 
 
-def _guard_fork_exec(getframe, refusals, stderr) -> None:
+def browser_door_argv(argv, env) -> tuple:
+    """``(argv, env)`` to knock on the launcher's door to the browser (ruling R1): the stub carrying the verb, never the
+    program, and of the environment only what the door reads. Sealed for the spawn guard, for this argv, once."""
+    from hermes_cli.iclone_policy_env import exec_env
+
+    socket_path = exec_env("ICLONE_CONFINEMENT_LAUNCHER") or ""
+    if not socket_path:
+        raise PermissionError("icloneOS confinement cannot start the browser here: the launcher is not named")
+    door_argv = [_sys.executable, "-I", "-S", os.path.realpath(str(STUB_FILE)), socket_path, "--", BROWSER_DOOR_COMMAND,
+                 *[os.fsdecode(a) for a in list(argv)[1:]]]
+    source = env if env is not None else os.environ
+    door_env = {"ICLONE_RUN_CWD": "/"}
+    for name in ("AGENT_BROWSER_SOCKET_DIR", "AGENT_BROWSER_IDLE_TIMEOUT_MS"):
+        if name in source:
+            door_env[name] = source[name]
+    _SEALS.add(argv_digest(door_argv))
+    return door_argv, door_env
+
+
+def _log_once(stderr, logged: set, line: str) -> None:
+    """One stderr line (the app keeps Hermes' stderr) the first time a refusal is seen in this process, never the
+    argv. A caller that retries is refused every time, but logs one line, not one per attempt (bounded set)."""
+    if line in logged or len(logged) >= 200:
+        return
+    logged.add(line)
+    try:
+        stderr.write(f"[icloneOS spawn guard] {line} (logged once; repeats are refused too)\n")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _guard_fork_exec(getframe, refusals, stderr, logged) -> None:
     """``_posixsubprocess.fork_exec`` has no audit event: only ``subprocess.Popen._execute_child`` (whose
     ``subprocess.Popen`` event the hook already decided) may reach it. multiprocessing's spawn, a direct call: refused."""
     import subprocess
@@ -318,10 +443,7 @@ def _guard_fork_exec(getframe, refusals, stderr) -> None:
         why = "(b) _posixsubprocess.fork_exec outside subprocess.Popen (multiprocessing spawn, a direct call)"
         if len(refusals) < 200:
             refusals.append(("_posixsubprocess.fork_exec", why))
-            try:
-                stderr.write(f"[icloneOS spawn guard] refused _posixsubprocess.fork_exec: {why}\n")
-            except Exception:  # noqa: BLE001
-                pass
+        _log_once(stderr, logged, f"refused _posixsubprocess.fork_exec: {why}")
         raise PermissionError(f"icloneOS confinement refused to start a program: {why}")
 
     _posixsubprocess.fork_exec = fork_exec
@@ -339,8 +461,8 @@ def install_spawn_guard() -> bool:
             return True
         fixed, hermes = _load_sites()
         decide = _build_decider(fixed=fixed, hermes=hermes, foreign=_foreign_roots(), seals=_SEALS,
-                                interpreters=_interpreter_programs())
-        refusals, watched = _state["refusals"], SPAWN_EVENTS | DLSYM_EVENTS
+                                interpreters=_interpreter_programs(), doors=_load_door_sites())
+        refusals, watched, logged = _state["refusals"], SPAWN_EVENTS | DLSYM_EVENTS, _state["logged"]
         getframe, stderr = _sys._getframe, _sys.stderr
 
         def _audit(event: str, args: tuple) -> None:
@@ -351,14 +473,11 @@ def install_spawn_guard() -> bool:
                 return
             if len(refusals) < 200:
                 refusals.append((event, why))
-                try:  # one line per refusal on stderr (the app keeps Hermes' stderr); never the argv
-                    stderr.write(f"[icloneOS spawn guard] refused {event}: {why}\n")
-                except Exception:  # noqa: BLE001
-                    pass
+            _log_once(stderr, logged, f"refused {event}: {why}")
             raise PermissionError(f"icloneOS confinement refused to start a program: {why}")
 
         _sys.addaudithook(_audit)
-        _guard_fork_exec(getframe, refusals, stderr)
+        _guard_fork_exec(getframe, refusals, stderr, logged)
         _state.update(installed=True)
     return True
 

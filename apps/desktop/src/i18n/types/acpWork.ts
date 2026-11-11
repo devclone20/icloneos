@@ -60,6 +60,7 @@ export type AcpWorkTranslations = {
   repair: { action: string; hint: string }
   chainGaps: (count: number) => string
   chainBroken: string
+  chainVerifying: string
   errors: Record<WorkActionError, string>
   refusedBy: (rule: string) => string
 }

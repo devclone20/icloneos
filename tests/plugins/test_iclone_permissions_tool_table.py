@@ -268,7 +268,7 @@ class TestEveryPathArgumentIsDecided:
                 k = classify.classify(tool, args, str(tmp_path), policy, session_id="s1")
                 assert k.floor and k.floor.startswith("secrets"), (tool, spec, value, k)
                 for mode in MODES:
-                    assert _decide(k, mode, ON).outcome == "refuse", (tool, spec, mode)
+                    assert _decide(k, mode, ON).outcome in {"ignore": ("allow",), "plan": ("ask", "refuse")}.get(mode, ("ask",)), (tool, spec, mode)
 
     def test_the_same_arguments_off_the_secret_carry_no_floor(self, classify, tmp_path):
         (tmp_path / "ok.png").write_text("x")
@@ -282,7 +282,7 @@ class TestEveryPathArgumentIsDecided:
 
     def test_a_terminal_command_resolves_its_relative_paths_in_its_workdir(self, classify, tmp_path):
         """``rm -rf build`` in the project is a delete in the project (Ignore allows it); the same text with
-        ``workdir`` elsewhere deletes OUTSIDE it, so Ignore asks — the classifier used to resolve it in the cwd."""
+        ``workdir`` elsewhere deletes OUTSIDE it, so Manual asks; in Ignore all it runs (F40, L2) — the classifier used to resolve it in the cwd."""
         project = tmp_path / "proj"
         (project / ".git").mkdir(parents=True)
         elsewhere = tmp_path / "elsewhere"
@@ -296,7 +296,7 @@ class TestEveryPathArgumentIsDecided:
         assert _decide(here, "ignore", ON).outcome == "allow"
         for k in (there, relative):
             assert (k.cls, k.facts.get("inProject")) == ("D", False)
-            assert _decide(k, "ignore", ON).outcome == "ask"
+            assert _decide(k, "ignore", ON).outcome == "allow"
 
     def test_every_write_argument_is_classified_as_the_write_and_its_guard_is_the_floor(self, classify, tmp_path):
         project = tmp_path / "proj"
@@ -315,7 +315,7 @@ class TestEveryPathArgumentIsDecided:
             base = classify.classify(tool, {}, str(project), policy, session_id="s1")
             assert outside.cls == "Wo" and _decide(outside, "automatic", ON).outcome == "ask", tool
             assert _decide(inside, "automatic", ON).outcome == _decide(base, "automatic", ON).outcome, tool
-            assert floor.floor and all(_decide(floor, m, ON).outcome == "refuse" for m in MODES), tool
+            assert floor.floor and all(_decide(floor, m, ON).outcome == {"ignore": "allow", "plan": "refuse"}.get(m, "ask") for m in MODES), tool
 
 
 # ---------------------------------------------------------------------------------------------------------------------
@@ -354,7 +354,7 @@ class TestTheLookupsAreReads:
     def test_an_unreadable_or_deeply_nested_tool_call_is_the_strictest_class(self, classify, args):
         k = classify.classify("tool_call", args, "/tmp", {}, session_id="s1")
         assert (k.cls, k.ceiling_key) == classify.UNKNOWN_TOOL_CLASS
-        assert _decide(k, "plan", ON).outcome == "refuse" and _decide(k, "ignore", ON).outcome == "ask"
+        assert _decide(k, "plan", ON).outcome == "refuse" and _decide(k, "ignore", ON).outcome == "allow"
 
 
     def test_wrappers_nested_past_the_cap_are_the_strictest_class_even_if_the_bridge_ever_accepts_them(
@@ -430,7 +430,9 @@ class TestTheBridgeEndToEndUnderTheLock:
             if mode == "plan":
                 assert block and main.verbs("ask") == [], mode
             else:
-                assert len(main.verbs("ask")) == 1, mode
+                assert len(main.verbs("ask")) == (0 if mode == "ignore" else 1), mode
+                if mode == "ignore":
+                    continue
                 assert (main.verbs("ask")[0]["tool"], main.verbs("ask")[0]["cls"]) == ("mcp__x__y", "$")
 
 
@@ -444,16 +446,18 @@ class TestTheCriticsRowsAtThePin:
     """r1 critic M1, reproduced with the names the pin's dispatcher hands the hook (P-C1)."""
 
     @pytest.mark.parametrize("name", ["process_manage", "process"])
-    def test_a_spend_typed_into_a_running_shell_still_asks_in_ignore(self, classify, name):
+    def test_a_spend_typed_into_a_running_shell_asks_except_in_ignore(self, classify, name):
         k = classify.classify(name, SPEND, "/tmp", {}, session_id="s1")
         assert k.cls == "$"
-        assert _decide(k, "ignore", {"terminal": "on", "spendTrade": "on"}).outcome == "ask"
+        assert _decide(k, "ignore", {"terminal": "on", "spendTrade": "on"}).outcome == "allow"
+        assert _decide(k, "manual", {"terminal": "on", "spendTrade": "on"}).outcome == "ask"  # F40: Ignore lifted it, every other mode keeps it
 
     @pytest.mark.parametrize("name", ["cronjob_manage", "cronjob"])
     def test_a_cron_job_is_refused_with_the_scheduled_tasks_switch_off(self, classify, name):
         k = classify.classify(name, {"action": "create", "prompt": "x", "schedule": "every 5m"}, "/tmp", {}, session_id="s1")
         assert (k.cls, k.ceiling_key) == ("X", "scheduledTasks")
-        assert _decide(k, "ignore", {"scheduledTasks": "off", "terminal": "on"}).outcome == "refuse"
+        assert _decide(k, "ignore", {"scheduledTasks": "off", "terminal": "on"}).outcome == "allow"
+        assert _decide(k, "manual", {"scheduledTasks": "off", "terminal": "on"}).outcome == "refuse"  # F40: Ignore lifted it, every other mode keeps it
 
     @pytest.mark.parametrize("name", ["process_manage", "process"])
     def test_looking_at_a_background_process_is_a_read_in_plan(self, classify, name):
@@ -484,9 +488,10 @@ class TestTheCriticsRowsAtThePin:
         k = classify.classify(name, args, "/tmp", {}, session_id="s1")
         assert (k.cls, k.ceiling_key) == ("$", "spendTrade")
         for mode in ("ignore", "manual", "automatic", "acceptEdits"):
-            assert _decide(k, mode, ON).outcome == "ask", mode
+            assert _decide(k, mode, ON).outcome == ("allow" if mode == "ignore" else "ask"), mode
         assert _decide(k, "plan", ON).outcome == "refuse"
-        assert _decide(k, "ignore", dict(ON, spendTrade="off")).outcome == "refuse"
+        assert _decide(k, "ignore", dict(ON, spendTrade="off")).outcome == "allow"
+        assert _decide(k, "manual", dict(ON, spendTrade="off")).outcome == "refuse"  # F40, L2: a switch off binds every mode but Ignore
 
     @pytest.mark.parametrize("name", ["browser_vault_fill", "browser_vault_enter_code"])
     def test_the_owners_per_function_levels_can_lower_a_vault_credential_action(self, classify, name):
@@ -522,7 +527,7 @@ class TestTheBrowserUrlIsAPathArgument:
             k = classify.classify("browser_navigate", {"url": url}, str(tmp_path), policy, session_id="s1")
             assert k.floor and k.floor.startswith("secrets"), (url, k)
             for mode in MODES:
-                assert _decide(k, mode, ON).outcome == "refuse", (url, mode)
+                assert _decide(k, mode, ON).outcome == {"ignore": "allow"}.get(mode, "ask"), (url, mode)
 
     def test_a_browsers_own_page_is_floored_and_the_web_is_not(self, classify, tmp_path):
         for url in ("chrome://version", "chrome://settings/passwords", "about:config", "view-source:chrome://version",
@@ -548,7 +553,8 @@ class TestBrowserExecIsCodeExecution:
     def test_a_spend_inside_the_code_is_spend(self, classify):
         k = classify.classify("browser_exec", {"code": "import os; os.system('acp wallet send-transaction --to 0xabc "
                                                          "--amount 5')"}, "/tmp", {}, session_id="s1")
-        assert k.cls == "$" and _decide(k, "ignore", ON).outcome == "ask"
+        assert k.cls == "$" and _decide(k, "ignore", ON).outcome == "allow"
+        assert _decide(k, "manual", ON).outcome == "ask"  # F40: Ignore lifted it, every other mode keeps it
 
 
 # The agent's persistent state outside any project — Hermes' memory, its skills, the kanban board, the bundled memory
@@ -568,7 +574,8 @@ class TestTheAgentsOwnStateIsWrittenOutsideTheProject:
         assert _decide(k, "automatic", ON).outcome == "ask"
         assert _decide(k, "acceptEdits", ON).outcome == "ask"
         assert _decide(k, "plan", ON).outcome == "refuse"
-        assert _decide(k, "ignore", dict(ON, fileWriting="off")).outcome == "refuse"
+        assert _decide(k, "ignore", dict(ON, fileWriting="off")).outcome == "allow"
+        assert _decide(k, "manual", dict(ON, fileWriting="off")).outcome == "refuse"  # F40: Ignore lifted it, every other mode keeps it
 
     def test_every_state_writer_is_named_here(self, classify):
         """A new Wo row must be added above (and so pinned); a removed one fails the parametrization."""
@@ -591,7 +598,8 @@ class TestAMemoryProvidersQueryIsNetwork:
         assert (k.cls, k.ceiling_key, k.facts.get("getOnly")) == ("N", "webBrowsing", False), name
         assert _decide(k, "plan", ON).outcome == "refuse"
         assert _decide(k, "manual", ON).outcome == "ask"
-        assert _decide(k, "ignore", dict(ON, webBrowsing="off")).outcome == "refuse"
+        assert _decide(k, "ignore", dict(ON, webBrowsing="off")).outcome == "allow"
+        assert _decide(k, "manual", dict(ON, webBrowsing="off")).outcome == "refuse"  # F40: Ignore lifted it, every other mode keeps it
 
     def test_every_memory_provider_query_is_named_here(self, universe, classify):
         memory = set(universe["memory"])
@@ -608,9 +616,10 @@ class TestAnUnknownToolIsTheStrictestClass:
         assert "unclassified tool" in k.target
         on = {"spendTrade": "on", "terminal": "on"}
         for mode in ("ignore", "manual", "automatic", "acceptEdits"):
-            assert _decide(k, mode, on).outcome == "ask", mode
+            assert _decide(k, mode, on).outcome == ("allow" if mode == "ignore" else "ask"), mode
         assert _decide(k, "plan", on).outcome == "refuse"
-        assert _decide(k, "ignore", {"spendTrade": "off", "terminal": "on"}).outcome == "refuse"
+        assert _decide(k, "ignore", {"spendTrade": "off", "terminal": "on"}).outcome == "allow"
+        assert _decide(k, "manual", {"spendTrade": "off", "terminal": "on"}).outcome == "refuse"  # F40, L2: a switch off binds every mode but Ignore
 
     def test_no_grant_lifts_it(self, classify):
         k = classify.classify("a_tool_nobody_registered", {}, "/tmp", {}, session_id="s1")

@@ -260,3 +260,34 @@ describe('AttachmentList', () => {
     expect($previewTabs.get().map(tab => tab.target.path)).toEqual(['/tmp/notes.md'])
   })
 })
+
+describe('AttachmentList: the frames of a screen recording', () => {
+  afterEach(cleanup)
+
+  const frames: ComposerAttachment[] = Array.from({ length: 10 }, (_, i) => ({
+    id: `f${i}`,
+    kind: 'image',
+    label: `frame-${i}.png`,
+    path: `/u/composer-images/screen/s1/f${i}.png`
+  }))
+
+  it('form one compact strip after the other chips, each frame still removable on its own', async () => {
+    const onRemove = vi.fn()
+    await renderWithI18n(<AttachmentList attachments={[...frames, makeAttachment('doc', 'doc.pdf')]} onRemove={onRemove} />)
+    const list = document.querySelector('[data-slot=composer-attachments]')!
+
+    expect(list.children).toHaveLength(11)
+    expect(list.getAttribute('data-frames-label')).toBe('10 frames')
+    expect(screen.getByText('doc.pdf')).toBeDefined()
+    expect(screen.queryByText('frame-0.png')).toBeNull()
+    expect(list.children[0].textContent).toContain('doc.pdf')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove frame-3.png' }))
+    expect(onRemove).toHaveBeenCalledWith('f3')
+  })
+
+  it('leaves a list without frames as it was', async () => {
+    await renderWithI18n(<AttachmentList attachments={[makeAttachment('doc', 'doc.pdf')]} />)
+    expect(document.querySelector('[data-slot=composer-attachments]')!.hasAttribute('data-frames-label')).toBe(false)
+  })
+})

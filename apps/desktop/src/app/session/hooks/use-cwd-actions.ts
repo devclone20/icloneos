@@ -8,6 +8,7 @@ import {
   $newChatWorkspaceTargetGeneration,
   setCurrentBranch,
   setCurrentCwd,
+  setCurrentCwdTransient,
   setNewChatWorkspaceTarget
 } from '@/store/session'
 import type { SessionRuntimeInfo } from '@/types/hermes'
@@ -60,6 +61,8 @@ export function useCwdActions({ activeSessionIdRef, onSessionRuntimeInfo, reques
       // that agent's terminal/file tools at another conversation's project.
       const sessionId = activeSessionIdRef.current
 
+      // fx27: this hook has no caller in the product (no control renders it), so it lists nothing; the palette's typed
+      // path is the 'typed' source (projects.ts openFolderAsProject). Wiring a control here is a feature, not a fix.
       if (!sessionId) {
         setCurrentCwd(trimmed)
         const workspaceGeneration = setNewChatWorkspaceTarget(trimmed)
@@ -74,10 +77,9 @@ export function useCwdActions({ activeSessionIdRef, onSessionRuntimeInfo, reques
             return
           }
 
-          // Adopt the backend's normalized cwd so the persisted workspace and
-          // branch stay consistent with what the agent will use.
+          // Adopt the backend's normalized cwd for the view and the branch. The view only: no answer lists a folder.
           if (info.cwd) {
-            setCurrentCwd(info.cwd)
+            setCurrentCwdTransient(info.cwd)
             setNewChatWorkspaceTarget(info.cwd)
           }
 
@@ -97,7 +99,9 @@ export function useCwdActions({ activeSessionIdRef, onSessionRuntimeInfo, reques
           cwd: trimmed
         })
 
-        setCurrentCwd(info.cwd || trimmed)
+        // The backend's answer moves the view; nothing here lists a folder.
+        setCurrentCwd(trimmed)
+        setCurrentCwdTransient(info.cwd || trimmed)
         setCurrentBranch(info.branch || '')
         onSessionRuntimeInfo?.({ branch: info.branch || '', cwd: info.cwd || trimmed })
       } catch (err) {

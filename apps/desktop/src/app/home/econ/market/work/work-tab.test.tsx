@@ -7,6 +7,7 @@ import type { Locale, Translations } from '@/i18n/types'
 import { $acpWork, $acpWorkNotice } from '@/store/acp-work'
 
 import { workViewFixture } from './fixture'
+import { ACP_WORK_COPY } from './work-copy'
 import { WorkTab } from './work-tab'
 
 const SLUG = 'robinhood-1'
@@ -151,6 +152,19 @@ describe('ACP Market › Work in the web build', () => {
       fireEvent.click(repair)
     })
     expect(bridge.repair).toHaveBeenCalledWith(SLUG)
+  })
+
+  it('a ledger being re-verified shows a neutral note, never the broken note or the Repair action', () => {
+    mount(workViewFixture({ chain: { ok: false, records: 0, gaps: 0, verifying: true } }))
+    expect(screen.getByText(ACP_WORK_COPY.en.chainVerifying)).toBeTruthy()
+    expect(screen.queryByText(ACP_WORK_COPY.en.chainBroken)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Repair ledger' })).toBeNull()
+  })
+
+  it('a broken ledger that is not being verified shows the broken note and no verifying note', () => {
+    mount(workViewFixture({ chain: { ok: false, records: 3, gaps: 0, verifying: false } }))
+    expect(screen.getByText(ACP_WORK_COPY.en.chainBroken)).toBeTruthy()
+    expect(screen.queryByText(ACP_WORK_COPY.en.chainVerifying)).toBeNull()
   })
 
   it('a ledger with recorded gaps says so, and offers no repair', () => {

@@ -79,13 +79,14 @@ def _heal_exec_bit(binary: Path) -> bool:
     """agent-browser entries staged before stage() set the exec bit sit at 0644 and fail every
     launch with PermissionError. Modes are not part of the pinned digest, so restore it in place;
     an entry we cannot chmod (sealed store) is treated as not installed."""
-    if os.name == "nt" or os.access(binary, os.X_OK):
+    # The mode, not access(X_OK): a Seatbelt that lets this process exec only its interpreter answers no to access.
+    if os.name == "nt" or binary.stat().st_mode & 0o100:
         return True
     try:
         binary.chmod(binary.stat().st_mode | 0o111)
     except OSError:
         return False
-    return os.access(binary, os.X_OK)
+    return bool(binary.stat().st_mode & 0o100)
 
 
 def _installed_location(package: Package, lockfile: Lockfile, target: str, *,

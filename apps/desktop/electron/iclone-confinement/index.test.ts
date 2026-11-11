@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import {
   existsSync,
@@ -17,15 +17,55 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { BackendStatusView } from '../../src/iclone-shared/confinement'
+import {
+  type BackendStatusView,
+  CONFINEMENT_STATE_SCHEMA,
+  type ConfinementStateView
+} from '../../src/iclone-shared/confinement'
 
 import { containerRefusal } from './backend-container'
-import { hardlinkFiles, type SealedKeyStore } from './hardlinks'
-import { CONFINEMENT_CHANNELS, confinementSpawnEnv, registerConfinement, stopConfinement } from './ipc'
+import { activeFirstScan, createHardlinkGuard, hardlinkFiles, type SealedKeyStore } from './hardlinks'
+import type { TreeRecords } from './hardlinks-walk'
+import { residentInProcess } from './hardlinks-walker'
+import {
+  CONFINEMENT_CHANNELS,
+  confinementSpawnEnv,
+  FIRST_SCAN_NOTICE_MS,
+  registerConfinement,
+  stopConfinement
+} from './ipc'
+import { realOrSelf } from './profiles'
+import { refusalRecordDir, reportedRefusalsDir } from './refusals'
+import { runtimeWritableFolders } from './runtime-profile'
+import { parsePs, verdictOf } from './state'
 
-import { createConfinement, DEFAULT_SETTINGS, HERMES_BACKEND_NAME, readAckPids, readSettings } from './index'
+import {
+  createConfinement,
+  DEFAULT_SETTINGS,
+  HERMES_BACKEND_NAME,
+  readAckCommands,
+  readAckPids,
+  readSettings,
+  sweepAcks
+} from './index'
 
 const dirs: string[] = []
+
+/**
+ * These worlds start no Hermes, so on macOS the runtime reads "not running" and the verdict is red for that one
+ * reason. The verdict the rest of the state gives, which is what these cases are about: the real rule (state.ts
+ * `verdictOf`, the one foldState applies) over the reasons minus that one.
+ */
+const verdictApartFromTheRuntime = (state: ConfinementStateView) => {
+  expect(state.reasons.filter(reason => reason.code === 'runtime-not-running')).toHaveLength(
+    state.enabled && process.platform === 'darwin' ? 1 : 0
+  )
+
+  return verdictOf(
+    state.enabled,
+    state.reasons.filter(reason => reason.code !== 'runtime-not-running')
+  )
+}
 
 function world() {
   const root = mkdtempSync(path.join(os.tmpdir(), 'v3g-index-'))
@@ -78,8 +118,9 @@ const keyStore: SealedKeyStore = {
 const settingsFile = (deps: { userDataDir: string }) => path.join(deps.userDataDir, 'confinement', 'settings.json')
 
 const refusalRows = (deps: { userDataDir: string }) =>
-  readdirSync(path.join(deps.userDataDir, 'confinement', 'refusals'))
-    .flatMap(name => readFileSync(path.join(deps.userDataDir, 'confinement', 'refusals', name), 'utf8').split('\n'))
+  readdirSync(refusalRecordDir(deps.userDataDir))
+    .filter(name => name.endsWith('.jsonl'))
+    .flatMap(name => readFileSync(path.join(refusalRecordDir(deps.userDataDir), name), 'utf8').split('\n'))
     .filter(Boolean)
     .map(line => JSON.parse(line) as { operation: string; target: string })
 
@@ -89,6 +130,153 @@ afterEach(() => {
   for (const dir of dirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+describe('a run’s refusal count has one source, before and after its end', () => {
+  const SHA = 'a'.repeat(64)
+  const token = (n: number) => `project+${SHA.slice(0, 12)}+sess-1+${n.toString(16).padStart(32, '0')}`
+  const T0 = Date.parse('2026-11-01T10:00:00.000Z')
+  const iso = (ms: number) => new Date(T0 + ms).toISOString()
+
+  const startRow = (n: number, command: string) =>
+    JSON.stringify({
+      v: 1,
+      ev: 'start',
+      ts: iso(n),
+      run: token(n),
+      pid: 40_000 + n,
+      kind: 'shell',
+      cls: 'project',
+      sha: SHA,
+      session: 'sess-1',
+      command,
+      cwd: '/Users/me/p',
+      project: '/Users/me/p',
+      net: false,
+      write: true
+    })
+
+  it('fx24: a look lists and counts wherever it pointed, whatever the start row’s folders', async () => {
+    const deps = { ...world(), now: () => new Date(T0 + 1_500) }
+    const layer = createConfinement(deps)
+    const ledger = path.join(deps.userDataDir, 'confinement', 'ledger')
+
+    mkdirSync(ledger, { recursive: true })
+    writeFileSync(path.join(ledger, 'runs.jsonl'), `${startRow(1, 'cd ~/.ssh; ls')}\n`)
+
+    const look = (target: string, pid: number) => ({
+      ts: iso(100 + pid),
+      pid,
+      process: 'bash',
+      operation: 'file-read-metadata',
+      target,
+      sessionId: 'sess-1',
+      run: token(1),
+      shellLook: true
+    })
+
+    layer.refusals.append(look('/Users/me', 1))
+    layer.refusals.append(look('/Users/me/p', 2))
+    layer.refusals.append(look('/Users/me/.ssh', 3))
+
+    const state = await layer.state()
+
+    expect(state.refusals.map(row => row.target).sort()).toEqual(['/Users/me', '/Users/me/.ssh', '/Users/me/p'])
+    expect(state.runs.find(run => run.id === token(1))).toMatchObject({ refusals: 3 })
+  })
+
+  it('three refusals stay three while the run runs, after it ends, and after another run refuses 1 200 times', async () => {
+    const deps = { ...world(), now: () => new Date(T0 + 1_500) }
+    const layer = createConfinement(deps)
+    const ledger = path.join(deps.userDataDir, 'confinement', 'ledger')
+
+    mkdirSync(ledger, { recursive: true })
+    writeFileSync(path.join(ledger, 'runs.jsonl'), `${startRow(1, 'cat ~/.ssh/config')}\n${startRow(2, 'sleep 900')}\n`)
+
+    const row = (run: string, index: number) => ({
+      ts: iso(100 + index),
+      pid: 50_000 + index,
+      process: 'cat',
+      operation: 'file-read-data',
+      target: `/Users/me/.ssh/config-${index}`,
+      sessionId: 'sess-1',
+      run
+    })
+
+    for (let index = 0; index < 3; index += 1) {
+      layer.refusals.append(row(token(1), index))
+    }
+
+    const countOf = async (n: number) => (await layer.state()).runs.find(run => run.id === token(n))?.refusals
+
+    // Running (its start is within the grace, no end yet).
+    expect(await countOf(1)).toBe(3)
+
+    // Ended.
+    writeFileSync(
+      path.join(ledger, 'runs.jsonl'),
+      `${startRow(1, 'cat ~/.ssh/config')}\n${startRow(2, 'sleep 900')}\n${JSON.stringify({ v: 1, ev: 'end', ts: iso(900), run: token(1), pid: 40_001, code: 1, signal: null })}\n`
+    )
+    expect(await countOf(1)).toBe(3)
+
+    // The other run refuses more than the shared list keeps: the first run's number does not move.
+    for (let index = 0; index < 1_200; index += 1) {
+      layer.refusals.append(row(token(2), 10 + index))
+    }
+
+    const state = await layer.state()
+
+    expect(state.runs.find(run => run.id === token(1))?.refusals).toBe(3)
+    expect(state.runs.find(run => run.id === token(2))?.refusals).toBe(1_200)
+    expect(state.refusals).toHaveLength(100)
+  }, 30_000)
+
+  it('the record a run’s count is read from lies in no folder the runtime may write, and what it writes there counts nothing', async () => {
+    const deps = { ...world(), now: () => new Date(T0 + 1_500) }
+    const layer = createConfinement(deps)
+    const ledger = path.join(deps.userDataDir, 'confinement', 'ledger')
+    const inside = (child: string, parent: string) => child === parent || child.startsWith(`${parent}${path.sep}`)
+    const record = realpathSync(layer.refusals.dir)
+
+    for (const folder of runtimeWritableFolders(layer.paths)) {
+      expect(inside(record, folder), `${record} inside ${folder}`).toBe(false)
+      expect(inside(folder, record), `${folder} inside ${record}`).toBe(false)
+    }
+
+    mkdirSync(ledger, { recursive: true })
+    writeFileSync(path.join(ledger, 'runs.jsonl'), `${startRow(1, 'cat ~/.ssh/config')}\n`)
+    layer.refusals.append({
+      ts: iso(100),
+      pid: 50_000,
+      process: 'cat',
+      operation: 'file-read-data',
+      target: '/Users/me/.ssh/config',
+      sessionId: 'sess-1',
+      run: token(1)
+    })
+
+    // The runtime writes what it may: its report folder, a forged per-run file and kernel-looking rows in it.
+    const reported = reportedRefusalsDir(deps.userDataDir)
+
+    const forged = JSON.stringify({
+      ts: iso(200),
+      pid: 7,
+      process: 'cat',
+      operation: 'file-read-data',
+      target: '/forged',
+      sessionId: 'sess-1',
+      run: token(1)
+    })
+
+    mkdirSync(path.join(reported, 'runs'), { recursive: true })
+    writeFileSync(path.join(reported, 'runs', `${token(1)}.jsonl`), `${forged}\n`.repeat(500))
+    writeFileSync(path.join(reported, `${iso(200).slice(0, 10)}.jsonl`), `${forged}\n`.repeat(50))
+
+    const state = await layer.state()
+
+    expect(state.runs.find(run => run.id === token(1))?.refusals).toBe(1)
+    expect(state.refusals.map(row => row.target)).toEqual(['/Users/me/.ssh/config'])
+  })
 })
 
 describe('settings (T7: trusted only under main’s own signature)', () => {
@@ -117,7 +305,7 @@ describe('settings (T7: trusted only under main’s own signature)', () => {
 
     const state = await layer.state()
 
-    expect(state.verdict).toBe('green')
+    expect(verdictApartFromTheRuntime(state)).toBe('green')
     expect(state.enabled).toBe(true)
     expect(state.reasons).toContainEqual({ code: 'settings-ignored' })
     await layer.state()
@@ -139,7 +327,7 @@ describe('settings (T7: trusted only under main’s own signature)', () => {
     const second = createConfinement(deps)
 
     expect((await second.state()).verdict).toBe('off')
-    expect(second.spawnEnv()).toEqual({})
+    expect(second.spawnEnv()).toEqual({ ICLONE_CONFINEMENT: 'off' })
 
     const signed = JSON.parse(readFileSync(settingsFile(deps), 'utf8')) as { body: string; sig: string }
 
@@ -151,7 +339,7 @@ describe('settings (T7: trusted only under main’s own signature)', () => {
     const third = createConfinement(deps)
     const state = await third.state()
 
-    expect(state.verdict).toBe('green')
+    expect(verdictApartFromTheRuntime(state)).toBe('green')
     expect(state.reasons).toContainEqual({ code: 'settings-ignored' })
     expect(refusalRows(deps).map(row => row.target)).toContain(`${settingsFile(deps)} (signature)`)
   })
@@ -167,7 +355,7 @@ describe('settings (T7: trusted only under main’s own signature)', () => {
     const second = createConfinement(deps)
     const state = await second.state()
 
-    expect(state.verdict).toBe('green')
+    expect(verdictApartFromTheRuntime(state)).toBe('green')
     expect(state.reasons).not.toContainEqual({ code: 'settings-ignored' })
     expect(refusalRows(deps)).toEqual([])
   })
@@ -196,7 +384,7 @@ describe('G6 — one seam: flipping the backend is one setting', () => {
     const snapshot = () => Object.fromEntries(files().map(file => [file, readFileSync(file, 'utf8')]))
     const before = snapshot()
 
-    expect((await layer.state()).verdict).toBe('green')
+    expect(verdictApartFromTheRuntime(await layer.state())).toBe('green')
     expect(layer.spawnEnv().TERMINAL_ENV).toBe(HERMES_BACKEND_NAME.seatbelt)
 
     layer.setBackend('container')
@@ -221,12 +409,32 @@ describe('G6 — one seam: flipping the backend is one setting', () => {
     const layer = createConfinement(deps)
 
     layer.setEnabled(false)
-    expect(layer.spawnEnv()).toEqual({})
+    expect(layer.spawnEnv()).toEqual({ ICLONE_CONFINEMENT: 'off' })
     expect((await layer.state()).verdict).toBe('off')
   })
 
   it('off macOS the shell is left as it was (Linux and Windows are not in this release)', () => {
     expect(createConfinement({ ...world(), platform: 'linux' }).spawnEnv()).toEqual({})
+  })
+
+  it('fx18 (F3): the spawn env carries the user name and e-mail of the global git config, and nothing else of it', () => {
+    const layer = createConfinement({
+      ...world(),
+      platform: 'darwin',
+      gitIdentity: () => ({ name: 'Proof Person', email: 'proof@example.invalid' })
+    })
+
+    const env = layer.spawnEnv()
+    expect(env.ICLONE_GIT_USER_NAME).toBe('Proof Person')
+    expect(env.ICLONE_GIT_USER_EMAIL).toBe('proof@example.invalid')
+
+    const none = createConfinement({
+      ...world(),
+      platform: 'darwin',
+      gitIdentity: () => ({ name: '', email: '' })
+    }).spawnEnv()
+
+    expect(Object.keys(none).filter(k => k.startsWith('ICLONE_GIT'))).toEqual([])
   })
 
   it('the spawn env routes Hermes through the layer, with the default class', () => {
@@ -241,7 +449,9 @@ describe('G6 — one seam: flipping the backend is one setting', () => {
       ICLONE_CONFINEMENT_SPEC: expect.any(String),
       ICLONE_CONFINEMENT_ACK: path.join(path.dirname(layer.paths.profilesDir), 'run', 'hermes-ack.json'),
       ICLONE_CONFINEMENT_LINK_KEY: expect.stringMatching(/^[0-9a-f]{64}$/),
-      TERMINAL_ENV: 'iclone_seatbelt'
+      TERMINAL_ENV: 'iclone_seatbelt',
+      ICLONE_CONFINEMENT_LAUNCHER: path.join(path.dirname(layer.paths.profilesDir), 'run', 'launcher.sock'),
+      ICLONE_RUNTIME_CONFINED: '1'
     })
   })
 
@@ -311,16 +521,94 @@ describe('G6 — one seam: flipping the backend is one setting', () => {
 
   it('F5 — the plugin acknowledgement is read by pid; anything malformed acknowledges nothing', () => {
     const dir = mkdtempSync(path.join(os.tmpdir(), 'v3g-ack-'))
+    const named = path.join(dir, 'hermes-ack.json')
+    const file = path.join(dir, 'hermes-ack.4242.json')
+
+    dirs.push(dir)
+    expect(readAckPids(named)).toEqual([])
+    writeFileSync(file, JSON.stringify({ pid: 4242, backend: 'iclone_seatbelt' }))
+    expect(readAckPids(named)).toEqual([4242])
+
+    for (const bad of ['{', '{"pid": "x"}', '{"pid": 1}', '[]', '{"pid": 4243}']) {
+      writeFileSync(file, bad)
+      expect(readAckPids(named)).toEqual([])
+    }
+  })
+
+  it('G22 B1: every runtime has its own acknowledgement, a second never hides the first, and a dead one is swept', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'g22-ack-'))
+    const named = path.join(dir, 'hermes-ack.json')
+
+    dirs.push(dir)
+    writeFileSync(
+      path.join(dir, 'hermes-ack.100.json'),
+      JSON.stringify({ v: 2, pid: 100, commands: { available: true, reason: '' } })
+    )
+    writeFileSync(
+      path.join(dir, 'hermes-ack.200.json'),
+      JSON.stringify({ v: 2, pid: 200, commands: { available: false, reason: 'no' } })
+    )
+    writeFileSync(named, JSON.stringify({ v: 2, pid: 300 })) // an older runtime's single file says nothing
+    writeFileSync(path.join(dir, 'launcher.sock.json'), '{"pid": 400}')
+    expect(readAckPids(named).sort()).toEqual([100, 200])
+    expect(readAckCommands(named).sort((a, b) => a.pid - b.pid)).toEqual([
+      { pid: 100, available: true, reason: '' },
+      { pid: 200, available: false, reason: 'no' }
+    ])
+
+    sweepAcks(named, pid => pid === 100)
+    expect(readAckPids(named)).toEqual([100])
+    expect(existsSync(named)).toBe(false)
+    expect(existsSync(path.join(dir, 'launcher.sock.json'))).toBe(true)
+  })
+
+  it('R20: the acknowledgement carries the config note beside available', () => {
+    const file = path.join(mkdtempSync(path.join(os.tmpdir(), 'ack-note-')), 'ack.json')
+
+    writeFileSync(
+      file.replace('ack.json', 'ack.4242.json'),
+      JSON.stringify({
+        v: 2,
+        pid: 4242,
+        backend: 'iclone_seatbelt',
+        commands: { available: true, reason: '', note: 'unread' }
+      })
+    )
+    expect(readAckCommands(file)).toEqual([{ pid: 4242, available: true, reason: '', note: 'unread' }])
+  })
+
+  it('the acknowledgement’s word on the agent’s commands is read as the plugin wrote it; anything else says nothing', () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), 'confinement-ack-'))
     const file = path.join(dir, 'hermes-ack.json')
 
     dirs.push(dir)
-    expect(readAckPids(file)).toEqual([])
-    writeFileSync(file, JSON.stringify({ pid: 4242, backend: 'iclone_seatbelt' }))
-    expect(readAckPids(file)).toEqual([4242])
+    expect(readAckCommands(file)).toEqual([])
 
-    for (const bad of ['{', '{"pid": "x"}', '{"pid": 1}', '[]']) {
-      writeFileSync(file, bad)
-      expect(readAckPids(file)).toEqual([])
+    const ack = (commands: unknown) =>
+      writeFileSync(
+        path.join(dir, 'hermes-ack.4242.json'),
+        JSON.stringify({ v: 2, pid: 4242, backend: 'iclone_seatbelt', commands })
+      )
+
+    ack({ available: false, reason: 'the launcher is not answering' })
+    expect(readAckCommands(file)).toEqual([{ pid: 4242, available: false, reason: 'the launcher is not answering' }])
+    ack({ available: true, reason: '' })
+    expect(readAckCommands(file)).toEqual([{ pid: 4242, available: true, reason: '' }])
+    ack({ available: false, reason: 'y'.repeat(5000) })
+    expect(readAckCommands(file)[0]?.reason).toHaveLength(400)
+    ack({ available: false, reason: 7 })
+    expect(readAckCommands(file)).toEqual([{ pid: 4242, available: false, reason: '' }])
+
+    // An older plugin (no commands), a malformed answer, or a bad pid: nothing is reported.
+    for (const bad of [
+      JSON.stringify({ pid: 4242, backend: 'iclone_seatbelt' }),
+      JSON.stringify({ pid: 4242, commands: { available: 'no' } }),
+      JSON.stringify({ pid: 4242, commands: null }),
+      JSON.stringify({ pid: 1, commands: { available: false, reason: 'r' } }),
+      '{'
+    ]) {
+      writeFileSync(path.join(dir, 'hermes-ack.4242.json'), bad)
+      expect(readAckCommands(file)).toEqual([])
     }
   })
 })
@@ -362,7 +650,7 @@ describe('G3-3 — the pane and the refusal read the same probe, at the same tim
     for (step = 0; step < steps.length; step += 1) {
       const row = (await layer.state()).backends.find(backend => backend.id === 'container')
 
-      const spawned = layer.active().spawn({
+      const spawned = await layer.active().spawn({
         cls: 'project',
         argv: ['ls'],
         cwd: '/',
@@ -417,7 +705,7 @@ describe('G3 r2 m-3 — one probe per backend in flight, kept for the TTL', () =
 
     // The spawn refusal reads the same answer.
     expect(
-      layer.active().spawn({
+      await layer.active().spawn({
         cls: 'project',
         argv: ['ls'],
         cwd: '/',
@@ -467,6 +755,89 @@ describe('G3 r2 m-3 — one probe per backend in flight, kept for the TTL', () =
 describe('ipc', () => {
   type Handler = (event: unknown, ...args: unknown[]) => unknown
 
+  it('B2-M1: a first hard-link scan that starts after the window mounted is announced at start, as it counts, and at its end, at most one notice per 500 ms', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+
+    try {
+      const deps = world()
+      const notices: number[] = []
+      const payloads: unknown[] = []
+      const project = mkdtempSync(path.join(os.tmpdir(), 'v3g-first-scan-'))
+
+      dirs.push(project)
+      registerConfinement({
+        ...deps,
+        ipcMain: { handle: () => undefined },
+        isTrustedSender: () => true,
+        broadcast: (channel, notice) => {
+          if (channel === CONFINEMENT_CHANNELS.changed) {
+            notices.push(Date.now())
+            payloads.push(notice)
+          }
+        }
+      })
+
+      let progress: ((dirs: number) => void) | undefined
+      let finish: (records: TreeRecords) => void = () => undefined
+
+      const guard = createHardlinkGuard({
+        ackFile: path.join(deps.userDataDir, 'cf4-acks.json'),
+        fsEvents: null,
+        walkFull: (root, options) => {
+          progress = options.onProgress
+
+          return new Promise(resolve => (finish = records => resolve(residentInProcess(root, records))))
+        }
+      })
+
+      const settle = async () => {
+        for (let i = 0; i < 20; i += 1) {
+          await new Promise(resolve => setImmediate(resolve))
+        }
+      }
+
+      const prewarmed = guard.prewarm(project)
+
+      await settle()
+      expect(progress).toBeTypeOf('function')
+      // The start: told at once, and what the window reads then is the running scan.
+      expect(notices).toHaveLength(1)
+      expect(activeFirstScan()).toMatchObject({ dirs: 0 })
+
+      progress?.(1_000)
+      progress?.(2_000)
+      expect(notices).toHaveLength(1)
+      await vi.advanceTimersByTimeAsync(FIRST_SCAN_NOTICE_MS)
+      // The count moved: one trailing notice, reading the newest count.
+      expect(notices).toHaveLength(2)
+      expect(activeFirstScan()).toMatchObject({ dirs: 2_000 })
+
+      await vi.advanceTimersByTimeAsync(100)
+      progress?.(3_000)
+      finish(new Map())
+      await prewarmed
+      expect(activeFirstScan()).toBeNull()
+      await vi.advanceTimersByTimeAsync(FIRST_SCAN_NOTICE_MS)
+      // The end: announced too (the window's read then finds no scan, and the line goes away).
+      expect(notices).toHaveLength(3)
+      // CF5 (B3-n5): while it runs, each notice carries the count (no window re-reads the state for it); the end
+      // carries nothing, so each window reads the state once.
+      expect(payloads[0]).toMatchObject({ firstScan: { dirs: 0 } })
+      expect(payloads[1]).toMatchObject({ firstScan: { dirs: 2_000 } })
+      expect(payloads[2]).toBeUndefined()
+      expect(
+        notices
+          .slice(1)
+          .map((at, i) => at - notices[i])
+          .every(gap => gap >= FIRST_SCAN_NOTICE_MS)
+      ).toBe(true)
+      guard.close()
+      stopConfinement()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   function register(trusted = true, lastInputAt?: () => number) {
     const handlers = new Map<string, Handler>()
     const deps = world()
@@ -493,7 +864,7 @@ describe('ipc', () => {
     linkSync(path.join(outside, 'secret'), path.join(project, 'vendor', 'linked'))
     linkSync(path.join(outside, 'other'), path.join(project, 'vendor', 'linked2'))
 
-    const refused = layer.backend('seatbelt').spawn({
+    const refused = await layer.backend('seatbelt').spawn({
       cls: 'project',
       argv: ['/usr/bin/true'],
       cwd: project,
@@ -576,7 +947,7 @@ describe('ipc', () => {
         ipcMain: { handle: (channel, listener) => void handlers.set(channel, listener as Handler) },
         isTrustedSender: (() => answer) as never
       })
-      expect(handlers.size).toBe(4)
+      expect(handlers.size).toBe(7)
 
       for (const [channel, handler] of handlers) {
         expect(await handler(synthetic, { pid: 2 }), `${channel} with ${JSON.stringify(answer)}`).toBeNull()
@@ -599,7 +970,7 @@ describe('ipc', () => {
       }
     })
     expect(await handlers.get(CONFINEMENT_CHANNELS.state)?.(synthetic)).toMatchObject({
-      schema: 'iclone.confinement.state/6'
+      schema: CONFINEMENT_STATE_SCHEMA
     })
     expect(seen).toEqual([CONFINEMENT_CHANNELS.state])
   })
@@ -611,17 +982,39 @@ describe('ipc', () => {
       [
         CONFINEMENT_CHANNELS.ackHardlink,
         CONFINEMENT_CHANNELS.explain,
+        CONFINEMENT_CHANNELS.hardlinkPaths,
         CONFINEMENT_CHANNELS.kill,
-        CONFINEMENT_CHANNELS.state
+        CONFINEMENT_CHANNELS.state,
+        CONFINEMENT_CHANNELS.stopRun,
+        CONFINEMENT_CHANNELS.setIsolation
       ].sort()
     )
     expect(Object.values(CONFINEMENT_CHANNELS).every(channel => channel.startsWith('iclone:confinement:'))).toBe(true)
   })
 
+  it('CF5 B3-n2: hardlink-paths answers only a well-formed request (no unknown field), and a group it does not hold is `changed`', async () => {
+    const { handlers } = register()
+    const page = handlers.get(CONFINEMENT_CHANNELS.hardlinkPaths)
+    const good = { root: '/p', dir: '/p/d', digest: 'x', offset: 0 }
+
+    expect(await page?.({}, good)).toEqual({ ok: false, reason: 'changed' })
+
+    for (const bad of [
+      null,
+      {},
+      { ...good, offset: -1 },
+      { ...good, offset: 1.5 },
+      { ...good, root: 1 },
+      { ...good, extra: 1 }
+    ]) {
+      expect(await page?.({}, bad), JSON.stringify(bad)).toEqual({ ok: false, reason: 'invalid' })
+    }
+  })
+
   it('state answers the schema; kill refuses a pid that is not confined and any malformed input', async () => {
     const { handlers } = register()
 
-    expect(await handlers.get(CONFINEMENT_CHANNELS.state)?.({})).toMatchObject({ schema: 'iclone.confinement.state/6' })
+    expect(await handlers.get(CONFINEMENT_CHANNELS.state)?.({})).toMatchObject({ schema: CONFINEMENT_STATE_SCHEMA })
     expect(await handlers.get(CONFINEMENT_CHANNELS.kill)?.({}, { pid: process.pid })).toMatchObject({
       ok: false,
       reason: 'not-confined'
@@ -648,5 +1041,627 @@ describe('ipc', () => {
     expect(confinementSpawnEnv().TERMINAL_ENV).toBe('iclone_seatbelt')
     stopConfinement()
     expect(confinementSpawnEnv()).toEqual({})
+  })
+})
+
+describe('stop-run — the owner stops one run of the ledger', () => {
+  type Handler = (event: unknown, ...args: unknown[]) => unknown
+
+  const RUN = `project+${'a'.repeat(12)}+sess-1+${'c'.repeat(32)}`
+  const children: ChildProcess[] = []
+
+  afterEach(() => {
+    for (const child of children.splice(0)) {
+      child.kill('SIGKILL')
+    }
+  })
+
+  /** A stand-in for the runtime's Python: answers the membership probe with a fixed kernel answer. */
+  function fakeMemberPython(root: string, answer: Record<string, string | null>): string {
+    const file = path.join(root, 'member-python.sh')
+
+    writeFileSync(file, `#!/bin/sh\n/bin/cat > /dev/null\necho '${JSON.stringify(answer)}'\n`, { mode: 0o700 })
+
+    return file
+  }
+
+  function register(over: Record<string, unknown> = {}, trusted = true) {
+    const handlers = new Map<string, Handler>()
+    const deps = { ...world(), ...over }
+
+    const layer = registerConfinement({
+      ...deps,
+      ipcMain: { handle: (channel, listener) => void handlers.set(channel, listener as Handler) },
+      isTrustedSender: () => trusted
+    })
+
+    return { handlers, layer, deps, stop: handlers.get(CONFINEMENT_CHANNELS.stopRun) as Handler }
+  }
+
+  const stopsOf = (userDataDir: string) => {
+    const file = path.join(userDataDir, 'confinement', 'stops.jsonl')
+
+    return existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter(Boolean) : []
+  }
+
+  it('an untrusted sender gets null, and nothing is recorded or signalled', async () => {
+    const { deps, stop } = register({}, false)
+
+    expect(await stop({}, { run: RUN })).toBeNull()
+    expect(stopsOf(deps.userDataDir)).toEqual([])
+  })
+
+  it('a malformed run id is invalid before any scan', async () => {
+    const ps = vi.fn(async () => [])
+    const { stop } = register({ ps })
+
+    for (const bad of [
+      null,
+      {},
+      { run: 5 },
+      { run: '../../etc' },
+      { run: `${RUN} ; kill -9 1` },
+      { run: 'a'.repeat(300) }
+    ]) {
+      expect(await stop({}, bad)).toMatchObject({ ok: false, reason: 'invalid' })
+    }
+
+    expect(ps).not.toHaveBeenCalled()
+  })
+
+  it('unverified membership (no kernel answer) never stops by guesswork', async () => {
+    const { stop } = register()
+
+    expect(await stop({}, { run: RUN })).toMatchObject({ ok: false, run: RUN, reason: 'unverified' })
+  })
+
+  it('a run with no live member is not-running, and no stop is recorded', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+    dirs.push(root)
+
+    const { deps, stop } = register({
+      memberPython: fakeMemberPython(root, {}),
+      ps: async () => [{ pid: 4242, ppid: 1, pgid: 4242, elapsedSec: 3, command: '/bin/sleep 30' }]
+    })
+
+    expect(await stop({}, { run: RUN })).toMatchObject({ ok: false, run: RUN, reason: 'not-running' })
+    expect(stopsOf(deps.userDataDir)).toEqual([])
+  })
+
+  it('g17: Stop on an approved background command ends its process group, with the launcher up or killed', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+    dirs.push(root)
+
+    // Its leader gone at once, as the launcher's wrapper: the command lives on in that group, and it ignores the TERM.
+    const leader = spawn('/bin/sh', ['-c', "(trap '' TERM; exec /bin/sleep 42) & echo $!"], {
+      detached: true,
+      stdio: 'ignore'
+    })
+
+    const leftGroup = leader.pid as number
+
+    await new Promise(resolve => leader.on('exit', resolve))
+
+    const realPs = async () =>
+      parsePs(execFileSync('/bin/ps', ['-axo', 'pid=,ppid=,pgid=,etime=,command='], { encoding: 'utf8' }))
+
+    const inGroup = async () => (await realPs()).filter(row => row.pgid === leftGroup).length
+
+    expect(await inGroup()).toBe(1)
+
+    const OUTSIDE = `oneshot+${'a'.repeat(12)}+outside+${'e'.repeat(32)}`
+    const ledger = path.join(root, 'userData', 'confinement', 'ledger')
+    const at = new Date().toISOString()
+
+    mkdirSync(ledger, { recursive: true })
+    writeFileSync(
+      path.join(ledger, 'runs.jsonl'),
+      [
+        {
+          v: 1,
+          ev: 'start',
+          ts: at,
+          run: OUTSIDE,
+          pid: leftGroup,
+          kind: 'shell',
+          cls: null,
+          sha: 'a'.repeat(64),
+          session: 'sess-1',
+          command: '[ran once outside the Seatbelt, approved by the owner] sleep 42',
+          cwd: root,
+          project: null,
+          net: true,
+          write: true,
+          origin: 'agent',
+          unconfined: true,
+          one_shot: 'e'.repeat(32)
+        },
+        { v: 1, ev: 'end', ts: at, run: OUTSIDE, pid: leftGroup, code: 0, signal: null },
+        { v: 1, ev: 'left-running', ts: at, run: OUTSIDE, pid: leftGroup }
+      ]
+        .map(row => JSON.stringify(row))
+        .join('\n') + '\n'
+    )
+
+    const { deps, stop } = register({
+      memberPython: fakeMemberPython(root, {}),
+      ps: realPs,
+      userDataDir: path.join(root, 'userData')
+    })
+
+    expect(await stop({}, { run: OUTSIDE })).toMatchObject({ ok: true, run: OUTSIDE })
+    expect(await inGroup()).toBe(0)
+    expect(stopsOf(deps.userDataDir)).toHaveLength(1)
+    expect(await stop({}, { run: OUTSIDE })).toMatchObject({ ok: false, reason: 'not-running' })
+  })
+
+  it('fx26a: a process the kernel holds as confined with no token is stopped by the Stop of the ended run that may own it', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+    dirs.push(root)
+
+    const child = spawn('/bin/sleep', ['30'], { stdio: 'ignore' })
+
+    children.push(child)
+
+    const pid = child.pid as number
+    const alive = () => child.exitCode === null && child.signalCode === null
+    const journal = path.join(root, 'userData', 'confinement', 'ledger')
+    const OTHER = `project+${'a'.repeat(12)}+sess-1+${'d'.repeat(32)}`
+
+    const row = (over: Record<string, unknown>) =>
+      JSON.stringify({
+        v: 1,
+        kind: 'shell',
+        cls: 'project',
+        sha: 'a'.repeat(64),
+        session: 'sess-1',
+        command: 'sleep 30',
+        cwd: '/tmp',
+        project: null,
+        net: false,
+        write: false,
+        ...over
+      })
+
+    mkdirSync(journal, { recursive: true })
+    // RUN ended a minute ago and left something behind; OTHER was stopped by its owner, so it owns nothing.
+    writeFileSync(
+      path.join(journal, 'runs.jsonl'),
+      [
+        row({ ev: 'start', ts: new Date(Date.now() - 60_000).toISOString(), run: RUN, pid: 999_999 }),
+        JSON.stringify({
+          v: 1,
+          ev: 'end',
+          ts: new Date(Date.now() - 59_000).toISOString(),
+          run: RUN,
+          pid: 999_999,
+          code: 0,
+          signal: null
+        }),
+        JSON.stringify({ v: 1, ev: 'left-running', ts: new Date(Date.now() - 58_000).toISOString(), run: RUN }),
+        row({ ev: 'start', ts: new Date(Date.now() - 30_000).toISOString(), run: OTHER, pid: 999_998 }),
+        JSON.stringify({
+          v: 1,
+          ev: 'end',
+          ts: new Date(Date.now() - 29_000).toISOString(),
+          run: OTHER,
+          pid: 999_998,
+          code: 0,
+          signal: null
+        }),
+        ''
+      ].join('\n')
+    )
+    // Main's own stops file: the owner pressed Stop on OTHER before its end landed.
+    writeFileSync(
+      path.join(root, 'userData', 'confinement', 'stops.jsonl'),
+      `${JSON.stringify({ v: 1, ev: 'stop', ts: new Date(Date.now() - 29_500).toISOString(), run: OTHER })}\n`
+    )
+
+    // The kernel's answer: confined, and no token names it.
+    const { deps, layer, stop } = register({
+      userDataDir: path.join(root, 'userData'),
+      memberPython: fakeMemberPython(root, { [pid]: null }),
+      ps: async () => (alive() ? [{ pid, ppid: 1, pgid: pid, elapsedSec: 3, command: '/bin/sleep 30' }] : [])
+    })
+
+    expect((await layer.state()).runs).toMatchObject([
+      { id: RUN, phase: 'background', live: 1 },
+      { id: OTHER, phase: 'stopped', live: 0 }
+    ])
+    expect(await stop({}, { run: OTHER })).toMatchObject({ ok: false, run: OTHER, reason: 'not-running' })
+    expect(alive()).toBe(true)
+
+    expect(await stop({}, { run: RUN })).toEqual({ ok: true, run: RUN, killed: [pid] })
+
+    for (let left = 100; alive() && left > 0; left -= 1) {
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+
+    expect(alive()).toBe(false)
+    expect(stopsOf(deps.userDataDir).map(line => (JSON.parse(line) as { run: string }).run)).toEqual([OTHER, RUN])
+  })
+
+  describe('fx28: a Stop that does what the row says', () => {
+    const OLDER = `project+${'a'.repeat(12)}+sess-1+${'d'.repeat(32)}`
+    const ago = (ms: number) => new Date(Date.now() - ms).toISOString()
+
+    const startLine = (run: string, pid: number, ts: string) =>
+      JSON.stringify({
+        v: 1,
+        ev: 'start',
+        ts,
+        run,
+        pid,
+        kind: 'shell',
+        cls: 'project',
+        sha: 'a'.repeat(64),
+        session: 'sess-1',
+        command: 'sleep 30',
+        cwd: '/tmp',
+        project: null,
+        net: false,
+        write: false
+      })
+
+    const endedLeaving = (run: string, pid: number) => [
+      startLine(run, pid, ago(60_000)),
+      JSON.stringify({ v: 1, ev: 'end', ts: ago(59_000), run, pid, code: 0, signal: null }),
+      JSON.stringify({ v: 1, ev: 'left-running', ts: ago(58_000), run })
+    ]
+
+    const world = (lines: string[]) => {
+      const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+      dirs.push(root)
+      mkdirSync(path.join(root, 'userData', 'confinement', 'ledger'), { recursive: true })
+      writeFileSync(path.join(root, 'userData', 'confinement', 'ledger', 'runs.jsonl'), `${lines.join('\n')}\n`)
+
+      return root
+    }
+
+    const sleeper = () => {
+      const child = spawn('/bin/sleep', ['30'], { stdio: 'ignore' })
+
+      children.push(child)
+
+      return { child, pid: child.pid as number, alive: () => child.exitCode === null && child.signalCode === null }
+    }
+
+    const gone = async (alive: () => boolean) => {
+      for (let left = 100; alive() && left > 0; left -= 1) {
+        await new Promise(resolve => setTimeout(resolve, 50))
+      }
+
+      return !alive()
+    }
+
+    const row = (pid: number, elapsedSec: number) => ({ pid, ppid: 1, pgid: pid, elapsedSec, command: '/bin/sleep 30' })
+
+    it('its token gone, its first process alive: running with a Stop that works, and the older run has no claim on it', async () => {
+      const first = sleeper()
+      const root = world([...endedLeaving(OLDER, 999_999), startLine(RUN, first.pid, ago(1_000))])
+
+      const { layer, stop } = register({
+        userDataDir: path.join(root, 'userData'),
+        memberPython: fakeMemberPython(root, { [first.pid]: null }),
+        ps: async () => (first.alive() ? [row(first.pid, 1)] : [])
+      })
+
+      expect((await layer.state()).runs).toMatchObject([
+        { id: RUN, phase: 'running', live: 1 },
+        { id: OLDER, phase: 'exited', live: 0, backgroundEnded: true }
+      ])
+      expect(await stop({}, { run: OLDER })).toMatchObject({ ok: false, run: OLDER, reason: 'not-running' })
+      expect(first.alive()).toBe(true)
+      expect(await stop({}, { run: RUN })).toEqual({ ok: true, run: RUN, killed: [first.pid] })
+      expect(await gone(first.alive)).toBe(true)
+    })
+
+    it('fx29: the clock the tie is judged by is the moment ps was read, not a later one after the probes', async () => {
+      const first = sleeper()
+      let clock = Date.now()
+      const started = clock - 1_000
+      const root = world([startLine(RUN, first.pid, new Date(started).toISOString())])
+
+      const { layer, stop } = register({
+        userDataDir: path.join(root, 'userData'),
+        memberPython: fakeMemberPython(root, { [first.pid]: null }),
+        now: () => new Date(clock),
+        ps: async () => {
+          // The probes after the read take time: the clock moves on before the fold.
+          setTimeout(() => {
+            clock += 3_000
+          }, 0)
+
+          return first.alive() ? [row(first.pid, Math.round((clock - started) / 1_000))] : []
+        }
+      })
+
+      expect((await layer.state()).runs).toMatchObject([{ id: RUN, phase: 'running', live: 1 }])
+      expect(await stop({}, { run: RUN })).toMatchObject({ ok: true, run: RUN })
+    })
+
+    it('a Stop that reported survivors does not end the run: it stays live and its Stop is still there', async () => {
+      const held = sleeper()
+      const root = world(endedLeaving(RUN, 999_999))
+
+      // The kernel keeps naming the process after the signals: a survivor, as far as the Stop can tell.
+      const { deps, layer, stop } = register({
+        userDataDir: path.join(root, 'userData'),
+        memberPython: fakeMemberPython(root, { [held.pid]: null }),
+        ps: async () => [row(held.pid, 3)]
+      })
+
+      expect(await stop({}, { run: RUN })).toMatchObject({
+        ok: false,
+        run: RUN,
+        reason: 'survivors',
+        survivors: [held.pid]
+      })
+      expect(stopsOf(deps.userDataDir).map(line => (JSON.parse(line) as { outcome?: string }).outcome)).toEqual([
+        undefined,
+        'failed'
+      ])
+      expect((await layer.state()).runs).toMatchObject([{ id: RUN, phase: 'background', live: 1 }])
+      expect((await layer.state()).runs[0]).not.toHaveProperty('backgroundEnded')
+      // Pressed again, it asks the kernel again; it does not answer not-running.
+      expect(await stop({}, { run: RUN })).toMatchObject({ ok: false, reason: 'survivors' })
+    })
+
+    it('the first of two orphans dies, the second survives: the whole Stop failed and names the survivor', async () => {
+      const first = sleeper()
+      const second = sleeper()
+      const root = world(endedLeaving(RUN, 999_999))
+
+      const { deps, layer, stop } = register({
+        userDataDir: path.join(root, 'userData'),
+        memberPython: fakeMemberPython(root, { [first.pid]: null, [second.pid]: null }),
+        ps: async () => [...(first.alive() ? [row(first.pid, 5)] : []), row(second.pid, 3)]
+      })
+
+      expect(await stop({}, { run: RUN })).toMatchObject({
+        ok: false,
+        run: RUN,
+        reason: 'survivors',
+        survivors: [second.pid]
+      })
+      expect(first.alive()).toBe(false)
+      expect(stopsOf(deps.userDataDir).map(line => (JSON.parse(line) as { outcome?: string }).outcome)).toEqual([
+        undefined,
+        'failed'
+      ])
+      expect((await layer.state()).runs).toMatchObject([{ id: RUN, phase: 'background', live: 1 }])
+    })
+  })
+
+  it('a stop record that cannot be written does not hold back the kill', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+    dirs.push(root)
+
+    const child = spawn('/bin/sleep', ['30'], { stdio: 'ignore' })
+
+    children.push(child)
+
+    const pid = child.pid as number
+    const alive = () => child.exitCode === null && child.signalCode === null
+    const said: string[] = []
+
+    // A directory where the stops file goes: the append fails as it would on a full disk.
+    mkdirSync(path.join(root, 'userData', 'confinement', 'stops.jsonl'), { recursive: true })
+
+    const { stop } = register({
+      log: (line: string) => said.push(line),
+      userDataDir: path.join(root, 'userData'),
+      memberPython: fakeMemberPython(root, { [pid]: RUN }),
+      ps: async () => (alive() ? [{ pid, ppid: process.pid, pgid: pid, elapsedSec: 1, command: '/bin/sleep 30' }] : [])
+    })
+
+    expect(await stop({}, { run: RUN })).toEqual({ ok: true, run: RUN, killed: [pid] })
+    expect(said.join('\n')).toMatch(/could not record the stop/)
+  })
+
+  it('a live run: the stop is recorded first, every member is killed, and the ledger reads stopped', async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), 'v006-stop-'))
+
+    dirs.push(root)
+
+    const child = spawn('/bin/sleep', ['30'], { stdio: 'ignore' })
+
+    children.push(child)
+
+    const pid = child.pid as number
+    const alive = () => child.exitCode === null && child.signalCode === null
+    let stopsAtFirstSignal: string[] | null = null
+    const realKill = process.kill.bind(process)
+
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation((target: number, signal?: string | number) => {
+      stopsAtFirstSignal ??= stopsOf(path.join(root, 'userData'))
+
+      return realKill(target, signal)
+    })
+
+    const journal = path.join(root, 'userData', 'confinement', 'ledger')
+
+    mkdirSync(journal, { recursive: true })
+    writeFileSync(
+      path.join(journal, 'runs.jsonl'),
+      `${JSON.stringify({
+        v: 1,
+        ev: 'start',
+        ts: new Date().toISOString(),
+        run: RUN,
+        pid,
+        kind: 'shell',
+        cls: 'project',
+        sha: 'a'.repeat(64),
+        session: 'sess-1',
+        command: 'sleep 30',
+        cwd: '/tmp',
+        project: null,
+        net: false,
+        write: false
+      })}\n`
+    )
+
+    const { deps, layer, stop } = register({
+      userDataDir: path.join(root, 'userData'),
+      memberPython: fakeMemberPython(root, { [pid]: RUN }),
+      ps: async () => (alive() ? [{ pid, ppid: process.pid, pgid: pid, elapsedSec: 1, command: '/bin/sleep 30' }] : [])
+    })
+
+    expect((await layer.state()).runs).toMatchObject([{ id: RUN, phase: 'running', live: 1, rootPid: pid }])
+
+    const result = await stop({}, { run: RUN })
+
+    killSpy.mockRestore()
+    expect(result).toEqual({ ok: true, run: RUN, killed: [pid] })
+    expect(stopsAtFirstSignal).toHaveLength(1)
+    expect(JSON.parse((stopsAtFirstSignal as unknown as string[])[0])).toMatchObject({ v: 1, ev: 'stop', run: RUN })
+    expect(statSync(path.join(deps.userDataDir, 'confinement', 'stops.jsonl')).mode & 0o777).toBe(0o600)
+    expect((await layer.state()).runs).toMatchObject([{ id: RUN, phase: 'stopped', live: 0 }])
+  })
+})
+
+describe('schema 9 — runs and the runtime ride on every state', () => {
+  it('the runtime is off when not configured, not running when configured with no Hermes, and follows the optional deps', async () => {
+    const linux = createConfinement({ ...world(), platform: 'linux' })
+
+    expect((await linux.state()).runtime).toMatchObject({ state: 'off', launcher: 'off', profileSha: null })
+
+    // On macOS with confinement on and no Hermes process: not running and the launcher down, never off.
+    const idle = await createConfinement({ ...world(), platform: 'darwin' }).state()
+
+    expect(idle.runtime).toMatchObject({ state: 'stopped', launcher: 'down', profileSha: null })
+    expect(idle.reasons).toContainEqual({ code: 'runtime-not-running' })
+    expect(idle.reasons).not.toContainEqual({ code: 'launcher-down' })
+    expect(idle.verdict).toBe('red')
+
+    const wired = createConfinement({
+      ...world(),
+      platform: 'darwin',
+      // A Hermes runs (not kernel-checked here: no probe in this world), so the launcher's state is its own reason.
+      hermesPids: () => [4242],
+      ps: async () => [{ pid: 4242, ppid: 1, pgid: 4242, elapsedSec: 5, command: 'python -m hermes_cli.main serve' }],
+      runtime: () => ({ profileSha: 'f'.repeat(64), reads: ['/usr'], writes: ['/w'], denied: ['/d'] }),
+      launcher: () => 'down'
+    })
+
+    const state = await wired.state()
+
+    expect(state.runtime).toMatchObject({ profileSha: 'f'.repeat(64), launcher: 'down', reads: ['/usr'] })
+    expect(state.reasons).toContainEqual({ code: 'launcher-down' })
+    expect(state.verdict).toBe('red')
+    expect(state.runs).toEqual([])
+  })
+
+  it('the plugin’s acknowledgement that commands are unavailable turns the state red with its reason; available adds nothing', async () => {
+    const layer = createConfinement({
+      ...world(),
+      platform: 'darwin',
+      hermesPids: () => [4242],
+      ps: async () => [{ pid: 4242, ppid: 1, pgid: 4242, elapsedSec: 5, command: 'python -m hermes_cli.main serve' }],
+      runtime: () => ({ profileSha: 'f'.repeat(64), reads: [], writes: [], denied: [] }),
+      launcher: () => 'up'
+    })
+
+    const ackFile = layer.spawnEnv().ICLONE_CONFINEMENT_ACK
+
+    const ack = (commands: { available: boolean; reason: string }) => {
+      mkdirSync(path.dirname(ackFile), { recursive: true })
+      writeFileSync(
+        ackFile.replace('hermes-ack.json', 'hermes-ack.4242.json'),
+        JSON.stringify({ v: 2, pid: 4242, backend: 'iclone_seatbelt', commands })
+      )
+    }
+
+    const codes = async () => (await layer.state()).reasons.map(reason => reason.code)
+
+    ack({ available: true, reason: '' })
+    expect(await codes()).not.toContain('agent-commands-unavailable')
+
+    ack({ available: false, reason: 'the launcher is not answering' })
+
+    const red = await layer.state()
+
+    expect(red.reasons).toContainEqual({
+      code: 'agent-commands-unavailable',
+      reason: 'the launcher is not answering',
+      reportedBy: 'runtime'
+    })
+    expect(red.verdict).toBe('red')
+  })
+})
+
+describe('G23, the owner: what main records for one file', () => {
+  const judge = () => {
+    const deps = world()
+
+    mkdirSync(deps.home, { recursive: true })
+
+    const layer = createConfinement(deps)
+    const home = realpathSync(deps.home)
+
+    return {
+      issued: (rel: string) => layer.issueOneFile(path.join(home, rel), home),
+      runs: (rel: string) => layer.oneFileRuns(path.join(home, rel), home),
+      deps
+    }
+  }
+
+  it.each([
+    '.zshrc',
+    '.gitconfig',
+    '.ssh/config',
+    '.ssh/authorized_keys',
+    '.aws/credentials',
+    '.npmrc',
+    '.pgpass',
+    'Library/LaunchAgents/x.plist',
+    'Library/Keychains/x',
+    'Library/Application Support/Google/Chrome/Default/Login Data',
+    'Library/Safari/Bookmarks.plist',
+    'Library/app/.git/config',
+    'Library/app/.GIT/config',
+    'Library/Caches/pip/d/x',
+    'notes.txt'
+  ])('records: %s', rel => {
+    expect(judge().issued(rel)).toBe(true)
+  })
+
+  it.each(['.hermes/config.yaml', '.hermes/plugins/x.py', '.HERMES/.env', '.hermes/auth.json', 'plain-folder/x.txt'])(
+    'never: %s',
+    rel => {
+      expect(judge().issued(rel)).toBe(false)
+    }
+  )
+
+  it("this app's data, in any case, takes no row", () => {
+    const { deps } = judge()
+    const layer = createConfinement(deps)
+    const data = realOrSelf(deps.userDataDir)
+
+    expect(layer.issueOneFile(path.join(data, 'consent.json'), data)).toBe(false)
+    expect(layer.issueOneFile(path.join(data, 'CONFINEMENT/ledger/oneshots.jsonl'), data)).toBe(false)
+  })
+
+  it.each([
+    '.zshrc',
+    '.ssh/config',
+    '.aws/credentials',
+    'Library/LaunchAgents/x',
+    'Library/Application Support/Firefox/x',
+    'a/.git/config',
+    '.pgpass'
+  ])('the sheet adds its line for: %s', rel => {
+    expect(judge().runs(rel)).toBe(true)
+  })
+
+  it.each(['notes.txt', 'Library/Application Support/Some App/x.json'])('and not for: %s', rel => {
+    expect(judge().runs(rel)).toBe(false)
   })
 })

@@ -78,6 +78,7 @@ export const install: TranslationOverrides['install'] = {
   recovery: {
     diagnosis: {
       cancelled: 'A instalação foi cancelada.',
+      homeSettings: 'A instalação parou num dos teus ficheiros de definições.',
       disk: 'Não há espaço livre em disco suficiente para terminar a instalação.',
       integrity: 'Um ficheiro descarregado não corresponde à impressão digital esperada, por isso não foi usado.',
       interpreter: 'Falta o interpretador de Python de que o agente precisa.',

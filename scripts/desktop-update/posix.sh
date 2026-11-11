@@ -94,10 +94,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HERMES_HOME="${HERMES_HOME:-${INSTALL_ROOT:+$(dirname "$INSTALL_ROOT")}}"
 HERMES_HOME="${HERMES_HOME:-${TMPDIR:-/tmp}}"
 export HERMES_HOME
-MARKER="$HERMES_HOME/.hermes-update-in-progress"
-LOG_DIR="$HERMES_HOME/logs"; mkdir -p "$LOG_DIR" 2>/dev/null || true
+# Unconfined Python below (hermes update) refuses what the runtime planted: hermes_cli/no_follow.py.
+export HERMES_HOME_NO_LINKS=1
+# Pinned now: no_follow.pl refuses a link anywhere in a path, and the folders above the home may legitimately hold one.
+NF_HOME="$(cd "$HERMES_HOME" 2>/dev/null && pwd -P)" || NF_HOME="$HERMES_HOME"
+MARKER="$NF_HOME/.hermes-update-in-progress"
+LOG_DIR="$NF_HOME/logs"
+[ -L "$LOG_DIR" ] || mkdir -p "$LOG_DIR" 2>/dev/null || true
 LOG="$LOG_DIR/desktop-update-handoff.log"
-RESULT="$HERMES_HOME/.hermes-update-result.json"
+RESULT="$NF_HOME/.hermes-update-result.json"
 STATUS="${TMPDIR:-/tmp}/hermes-update-status.$$"
 STARTED_AT="$(date +%s)"  # the shim's elapsed clock; see serve-ui.py
 # Separate identity from both heartbeat time and adopt-only HANDOFF_RUN.
@@ -116,8 +121,9 @@ MARKER_CLAIMED=0
 APP_REBUILD_FAILED=0
 
 log() {
-  if [ -n "$MARKER_OP" ]; then echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" >> "$LOG" 2>/dev/null
-  else echo "$(date +%Y-%m-%dT%H:%M:%S%z) $1" | tee -a "$LOG" 2>/dev/null; fi
+  local line; line="$(date +%Y-%m-%dT%H:%M:%S%z) $1"
+  [ -n "$MARKER_OP" ] || printf '%s\n' "$line"
+  printf '%s\n' "$line" | nf append "$LOG" 2>/dev/null
 }
 
 owed_followup_steps() { # $OUT -> the distinct owed steps, space-separated, in print order
@@ -413,7 +419,7 @@ start_status_panel() { # the macOS no-browser shim: osascript (JXA) panel.
   local py="$1" panel="$SCRIPT_DIR/update-panel.js"
   [ -n "$py" ] || py="/usr/bin/python3"  # unused by osascript; keeps the wrapper shape
   "$py" -c 'import os, signal, sys; os.setsid(); signal.signal(signal.SIGTERM, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' \
-    /usr/bin/osascript -l JavaScript "$panel" "$STATUS" >>"$LOG" 2>&1 &
+    nf exec-log "$LOG" /usr/bin/osascript -l JavaScript "$panel" "$STATUS" &
   UI_PANEL_PID=$!
   sleep 1
   kill -0 "$UI_PANEL_PID" 2>/dev/null || { UI_PANEL_PID=""; return; }
@@ -457,7 +463,7 @@ start_ui() {
   # window showed ERR_CONNECTION_REFUSED for the whole run; upstream #66753).
   # stop_ui ends the server with SIGKILL instead — it is stateless HTTP.
   "$py" -c 'import os, signal, sys; os.setsid(); signal.signal(signal.SIGTERM, signal.SIG_IGN); signal.signal(signal.SIGHUP, signal.SIG_IGN); os.execv(sys.argv[1], sys.argv[1:])' \
-    "$py" "$SCRIPT_DIR/serve-ui.py" "$html" "$STATUS" "$STARTED_AT" "$$" > "$STATUS.port" 2>>"$LOG" &
+    nf exec-err-log "$LOG" "$py" "$SCRIPT_DIR/serve-ui.py" "$html" "$STATUS" "$STARTED_AT" "$$" > "$STATUS.port" &
   UI_SERVER_PID=$!
   for i in $(seq 1 10); do
     port="$(tr -cd '0-9' < "$STATUS.port" 2>/dev/null)"
@@ -701,8 +707,7 @@ write_result() { # atomic (tmp + rename); run_id survives marker line-2 heartbea
     "$([ "$MANUAL" -eq 1 ] && echo true || echo false)" \
     "$(json_escape "$FINAL_MSG")" "$(json_escape "$BRANCH")" "$(json_escape "$CHANNEL")" \
     "$RESULT_RUN_ID" "${STARTED_AT:-0}" "$(date +%s)" "$w" \
-    > "$RESULT.$$.tmp" 2>/dev/null && mv -f "$RESULT.$$.tmp" "$RESULT" 2>/dev/null
-  rm -f "$RESULT.$$.tmp" 2>/dev/null || true
+    | nf replace "$RESULT" 2>/dev/null || true
 }
 
 add_warning() { # step reason -- post-commit follow-up failed; the update still counts
@@ -1167,13 +1172,13 @@ run_update() { # streams straight into the log (a killed run keeps its output);
   # HUP/INT/QUIT that lands meanwhile is handled once it exits, exactly like a
   # foreground child.
   local offset pid sig go="${TMPDIR:-/tmp}/hermes-update-go.$$"
-  offset="$(wc -c < "$LOG" 2>/dev/null | tr -d '[:space:]')"
+  offset="$(nf read "$LOG" 2>/dev/null | wc -c | tr -d '[:space:]')"
   PENDING_SIGNAL=""
   for sig in HUP INT QUIT; do trap "PENDING_SIGNAL=\${PENDING_SIGNAL:-$sig}" "$sig"; done
   rm -f "$go" 2>/dev/null
   ( trap - TERM
     while [ ! -e "$go" ]; do kill -0 $$ 2>/dev/null || exit 70; sleep 0.05; done
-    exec "${UPDATE_INVOKE[@]}" update --yes $GATEWAY_FLAG $KEEP_STASH "${TARGET_ARGS[@]}" ) >> "$LOG" 2>&1 <&0 &
+    exec "$NF_PERL" "$NF_SCRIPT" exec-log "$LOG" "${UPDATE_INVOKE[@]}" update --yes $GATEWAY_FLAG $KEEP_STASH "${TARGET_ARGS[@]}" ) <&0 &
   pid=$!
   if marker_add_delegate "$pid"; then
     : > "$go"
@@ -1192,7 +1197,7 @@ run_update() { # streams straight into the log (a killed run keeps its output);
   fi
   rm -f "$go" 2>/dev/null
   for sig in HUP INT QUIT; do trap "on_signal $sig" "$sig"; done
-  OUT="$(tail -c +"$(( ${offset:-0} + 1 ))" "$LOG" 2>/dev/null)"
+  OUT="$(nf read "$LOG" 2>/dev/null | tail -c +"$(( ${offset:-0} + 1 ))")"
   [ -z "$PENDING_SIGNAL" ] || on_signal "$PENDING_SIGNAL"
 }
 
@@ -1274,7 +1279,7 @@ fi
 if [ "$LEGACY_INSTALL" -eq 1 ] && [ "$CODE" -eq 0 ] && printf '%s' "$OUT" | grep -q "Desktop build failed"; then
   log "desktop build failed inside hermes update; retrying build"
   publish_stage "Rebuilding Desktop"
-  if ! ( trap - TERM; exec "${UPDATE_INVOKE[@]}" desktop --force-build --build-only ) >> "$LOG" 2>&1; then
+  if ! ( trap - TERM; exec "$NF_PERL" "$NF_SCRIPT" exec-log "$LOG" "${UPDATE_INVOKE[@]}" desktop --force-build --build-only ); then
     APP_REBUILD_FAILED=1
     DONE_NOTE="Hermes was updated, but the Desktop app rebuild failed - you are running the previous app build. Run hermes desktop --force-build from a terminal to retry."
     add_warning "desktop-rebuild" "hermes desktop --force-build --build-only failed"

@@ -487,3 +487,44 @@ describe('the consent verb on the agent socket', () => {
     expect(door.status('inft-6', 'clipboard')).toEqual({ clipboard: 'off' })
   })
 })
+
+describe('S1: the text the sheet says it showed reaches the ask, through the real handler', () => {
+  const permission = {
+    cls: 'X' as const,
+    tool: 'terminal',
+    target: 'npm test',
+    mode: 'manual' as const,
+    project: null,
+    session: null,
+    subagent: null,
+    scopes: ['once' as const],
+    outsideOnce: '/lab/proj'
+  }
+
+  async function answered(input: Record<string, unknown>) {
+    const handlers = new Map<string, (event: unknown, input: unknown) => unknown>()
+    const shown: ({ id: string } | null)[] = []
+
+    const door = registerConsentDoor({
+      ipcMain: { handle: (channel: string, handler: (event: unknown, input: unknown) => unknown) => handlers.set(channel, handler) },
+      isTrustedSender: () => true,
+      store: { read: () => ({ permissions: {} }), allowAlways: () => ({ ok: true }) },
+      broadcast: (request: { id: string } | null) => shown.push(request),
+      userDataDir: '/nonexistent-f51'
+    } as never)
+
+    const asked = door.askPermissionShown('i01', permission, 'terminal', 'run it')
+
+    expect(await handlers.get('iclone:consent:door-answer')!({}, { id: shown[0]!.id, choice: 'once', ...input })).toBe(true)
+
+    return asked
+  }
+
+  it('a text is carried whole', async () => {
+    expect(await answered({ shown: 'npm test' })).toMatchObject({ outcome: 'once', read: 'npm test' })
+  })
+
+  it.each([[{}], [{ shown: 7 }], [{ shown: ['npm test'] }], [{ shown: null }]])('anything else is no text: %j', async input => {
+    expect(await answered(input)).toMatchObject({ outcome: 'once', read: null })
+  })
+})

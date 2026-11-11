@@ -644,7 +644,7 @@ export function desktopSlashTerminalOnlyMessage(command: string): string {
   return UNAVAILABLE_MESSAGE.terminal(normalizeCommand(command))
 }
 
-/** One row per spec, as the V3-B inventory gate reads the table (RESUME/run/gates/V3B/slash_inventory.ts). */
+/** One row per spec, as the V3-B inventory gate reads the table (the V3-B inventory gate script). */
 interface DesktopSlashInventoryRow {
   name: string
   aliases: string[]

@@ -1,3 +1,4 @@
+import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
@@ -5,6 +6,7 @@ import { getTerminalBackends, selectTerminalBackend } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { AlertTriangle, Check, Loader2, RefreshCw } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { $confinement } from '@/store/confinement'
 import { notify, notifyError } from '@/store/notifications'
 import type { TerminalBackendInfo, TerminalBackendsResponse } from '@/types/hermes'
 
@@ -51,6 +53,8 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
   const [data, setData] = useState<TerminalBackendsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [selecting, setSelecting] = useState<string | null>(null)
+  // While isolation is on the runtime refuses any other place, so none is offered: the list would promise what cannot run.
+  const sandboxed = useStore($confinement).state?.isolation.on === true
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -69,7 +73,7 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
   }, [refresh])
 
   async function handleSelect(backend: TerminalBackendInfo) {
-    if (backend.active || selecting) {
+    if (backend.active || selecting || sandboxed) {
       return
     }
 
@@ -118,6 +122,11 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
           <RefreshCw className={cn('size-3.5', loading && 'animate-spin')} />
         </Button>
       </div>
+      {sandboxed ? (
+        <p className="px-0.5 text-[0.68rem] text-muted-foreground" data-backend-sandboxed="">
+          Isolation is on, so commands run in the Seatbelt sandbox and these are not used. Turn it off in Containers › Backends to pick one.
+        </p>
+      ) : null}
       <div className="grid gap-1">
         {data.backends.map(backend => (
           <button
@@ -128,7 +137,7 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
                 ? 'border-(--ui-stroke-secondary) bg-(--ui-bg-tertiary)'
                 : 'border-transparent bg-background/55 hover:bg-accent/40'
             )}
-            disabled={selecting !== null}
+            disabled={selecting !== null || sandboxed}
             key={backend.name}
             onClick={() => void handleSelect(backend)}
             type="button"

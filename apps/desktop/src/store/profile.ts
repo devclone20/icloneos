@@ -357,6 +357,15 @@ $activeGatewayProfile.subscribe(value => {
 // so a lazy spawn doesn't read as a hang. Single-profile users never swap.
 export const $gatewaySwapTarget = atom<string | null>(null)
 
+/**
+ * A plain new chat (Cmd+N, the sidebar's New session) goes to the live profile and drops any older per-profile pick.
+ * While a swap is in flight the live profile is the one being woken: the pointer still names the one being left until the
+ * swap publishes, so a chat started during "Waking up x…" would otherwise open behind the person's back on the old backend.
+ */
+export function pointNewChatAtLiveProfile(): void {
+  $newChatProfile.set($gatewaySwapTarget.get())
+}
+
 // Profile whose wake resolved PAINT-FIRST while the active-profile gate was
 // still unsatisfied (#89843): on a shared-remote connection every profile is
 // legitimately served through the primary socket, so $activeGatewayProfile

@@ -1006,7 +1006,7 @@ POSIX_ONLY('a tarball install updates from the new source tree, keeps the venv, 
     fs.writeFileSync(path.join(agent, 'venv', 'pyvenv.cfg'), 'old')
     const newTar = makeSourceTarball(home, newSha, { 'NEW.txt': 'new' })
 
-    const update = (failAt: null | string) => {
+    const update = (failAt: null | string, refusal?: string) => {
       const stages: string[] = []
 
       const result = runPinnedRuntimeUpdate({
@@ -1023,6 +1023,10 @@ POSIX_ONLY('a tarball install updates from the new source tree, keeps the venv, 
           assert.ok(!args.includes('--commit'))
           const ok = name !== failAt
 
+          if (!ok && refusal) {
+            return { code: 78, stderr: refusal, stdout: '' }
+          }
+
           return { code: ok ? 0 : 1, stdout: JSON.stringify({ ok, stage: name }) }
         }
       })
@@ -1038,6 +1042,14 @@ POSIX_ONLY('a tarball install updates from the new source tree, keeps the venv, 
     assert.equal(readSourceMarker(agent)?.sha, oldSha)
     assert.equal(fs.readFileSync(path.join(agent, 'venv', 'pyvenv.cfg'), 'utf8'), 'old')
     assert.ok(!fs.existsSync(path.join(agent, 'NEW.txt')))
+    assert.doesNotMatch(failedResult.message, /undefined/)
+
+    // Critic B-m1: main's refusal of the stage reaches the user, reason and way out, not only the log.
+    const refused = await update('config', 'Your .env is a link. Replace it: cp -L a b').result
+    assert.equal(
+      refused.message,
+      'Runtime update failed (config). Your .env is a link. Replace it: cp -L a b iclone os keeps running on the current runtime.'
+    )
 
     const ok = update(null)
     const okResult = await ok.result

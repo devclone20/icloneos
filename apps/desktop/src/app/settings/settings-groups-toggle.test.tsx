@@ -383,7 +383,8 @@ describe('Settings groups open and close on every click, in any order (owner 202
 
       cleanup()
     }
-  })
+    // 2,000 simulated clicks per seed: 10 s and more on a loaded machine, against 15 s by default.
+  }, 60_000)
 })
 
 describe('the palette marks its Settings rows as arrivals (lead ruling 2026-10-28)', () => {

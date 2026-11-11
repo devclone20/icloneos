@@ -102,7 +102,7 @@ describe('MessageWindow session sidebar', () => {
     expect(bodyTop()).toContain('+ var(--ic-win-head-h)')
   })
 
-  // OWNER DECISION 2026-10-19 (RESUME/contracts/M1_message_head_band.md): the band is in BOTH views —
+  // OWNER DECISION 2026-10-19 (contract M1, message head band): the band is in BOTH views —
   // "the iT does not have that top, but it needs to have it there". This test asserted the opposite until
   // then (`.imsg-head` null on iT), because a fixed band over a terminal that starts at the window's top
   // edge covers the shell's first lines. That reason still holds: what makes the band safe on iT is that

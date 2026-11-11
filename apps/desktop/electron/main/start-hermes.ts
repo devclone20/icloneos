@@ -3,20 +3,25 @@ import { spawn } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 
+import { app } from 'electron'
+
 import { createBackendOutputTail } from '../backend-claim'
 import { isReauthRequiredError } from '../backend-health'
 import { waitForDashboardPortAnnouncement } from '../backend-ready'
 import {
+  describeConfinedExecFailure,
   isRetryableRemoteBootFailure,
   isUserActionRemoteBootFailure,
   shouldLatchBackendStartFailure,
   shouldLatchHostKeyChangedFailure,
   shouldLatchRemoteReauthFailure
 } from '../backend-start-failure'
+import { removeOrphanedBootstrapCache } from '../bootstrap-runner'
 import { adoptServedDashboardToken } from '../dashboard-token'
 import { probeGatewayWebSocket } from '../gateway-ws-probe'
 import { icloneCompatGuard } from '../iclone-compat'
 import { consentEnv } from '../iclone-consent'
+import { listDefaultFolder } from '../iclone-permissions/ipc'
 import { paySpawn } from '../iclone-x402/ipc'
 import { spawnProfile } from '../iclone-x402/spawn-profile'
 import { endInstallBudget, INSTALL_WATCHDOG_TAG } from '../install-liveness'
@@ -241,10 +246,20 @@ export async function startHermes() {
     setWslBridgeProfileState(primaryProfile, true)
 
     const backend = setup.backend
+    removeOrphanedBootstrapCache(HERMES_HOME, rememberLog)
     await ensureRuntimeUpdateCheckOff(runsAs.slug ?? activeProfile) // iclone-seam: r1-config — updates.check off → spawn
     // Route old runtimes (no `serve`) through the legacy `dashboard --no-open`.
     backend.args = getBackendArgsForRuntime(backend)
     const hermesCwd = resolveHermesCwd()
+
+    // fx13 (D13, lens3-normal B2): the folder this spawn starts in (TERMINAL_CWD) is one main lists for the
+    // confinement launcher. fx17 (lens4-pass H2): its sources are main's own — the default project dir the user set
+    // (userData, which the runtime profile denies), HERMES_DESKTOP_CWD in main's own environment, home — never a
+    // runtime answer. fx27: it is the source 'default-folder' of main's own folder record: judged by the never list
+    // (home is never listed), visible and removable under Permissions, re-judged at each start.
+    listDefaultFolder(hermesCwd, { home: app.getPath('home'), userDataDir: app.getPath('userData') })
+
+    const webDist = resolveWebDist()
 
     // V3-S: the iclone Hermes plugins from the signed bundle, verified in this runtime and proven armed by its own
     // plugin manager, then this spawn's key, lock and confinement env — or this throws (`[iclone-gate]`, latched like
@@ -253,10 +268,10 @@ export async function startHermes() {
       backend,
       cwd: hermesCwd,
       profile: activeProfile || null,
-      role: 'primary'
+      role: 'primary',
+      webDist
     })
 
-    const webDist = resolveWebDist()
     const readyFile = backend.readyFile ? makeDashboardReadyFile() : null
 
     await advanceBootProgress('backend.spawn', `Starting Hermes backend via ${backend.label}`, 84)
@@ -276,9 +291,10 @@ export async function startHermes() {
     refuseBootWhileQuitting()
 
     const hermesProcess = spawn(
-      backend.command,
+      // Confinement on (macOS): sandbox-exec with the runtime profile, the interpreter after it; else the command.
+      gated.command(backend.command),
       // V3-S r3 (m-b): `-s -P` before the backend's args (no user site, no cwd on sys.path).
-      gated.argv(backend.args),
+      gated.argv(backend.args, backend.command),
       hiddenWindowsChildOptions({
         cwd: hermesCwd,
         // V3-S r3 (m-b, m-f): sealed — inherited Python settings and foreign ICLONE_* dropped, then the gate's env
@@ -417,7 +433,13 @@ export async function startHermes() {
       sendBackendExit({ code, signal })
 
       if (!backendReady) {
-        const message = `Hermes backend exited before it became ready (${signal || code}).${primaryOutputTail.describe()}`
+        // A confined interpreter the kernel would not exec (sandbox-exec's 71 with its execvp line) says which path
+        // the profile could not reach, instead of a bare exit code.
+        const confinedExec = describeConfinedExecFailure(code, primaryOutputTail.text())
+
+        const message =
+          confinedExec ?? `Hermes backend exited before it became ready (${signal || code}).${primaryOutputTail.describe()}`
+
         updateBootProgress(
           {
             error: message,
@@ -429,7 +451,7 @@ export async function startHermes() {
         )
         rejectBackendStart?.(
           new Error(
-            `Hermes backend exited before it became ready (${signal || code}). Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+            `${confinedExec ?? `Hermes backend exited before it became ready (${signal || code}).`} Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
           )
         )
       }

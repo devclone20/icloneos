@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from tests.chatgpt_token_fixture import chatgpt_jwt  # rotation lands only on a row its route accepts
+
 
 def _write_auth_store(tmp_path, payload: dict) -> None:
     hermes_home = tmp_path / "hermes"
@@ -285,7 +287,7 @@ def test_token_invalidated_marks_credential_dead(tmp_path, monkeypatch):
                         "auth_type": "oauth",
                         "priority": 0,
                         "source": "manual:device_code",
-                        "access_token": "revoked-at",
+                        "access_token": chatgpt_jwt("revoked"),
                         "refresh_token": "revoked-rt",
                     },
                     {
@@ -294,7 +296,7 @@ def test_token_invalidated_marks_credential_dead(tmp_path, monkeypatch):
                         "auth_type": "oauth",
                         "priority": 1,
                         "source": "manual:device_code",
-                        "access_token": "healthy-at",
+                        "access_token": chatgpt_jwt("healthy"),
                         "refresh_token": "healthy-rt",
                     },
                 ]
@@ -410,7 +412,7 @@ def test_429_rate_limit_still_uses_exhausted_not_dead(tmp_path, monkeypatch):
                         "auth_type": "oauth",
                         "priority": 0,
                         "source": "manual:device_code",
-                        "access_token": "at-1",
+                        "access_token": chatgpt_jwt("one"),
                         "refresh_token": "rt-1",
                     },
                     {
@@ -419,7 +421,7 @@ def test_429_rate_limit_still_uses_exhausted_not_dead(tmp_path, monkeypatch):
                         "auth_type": "oauth",
                         "priority": 1,
                         "source": "manual:device_code",
-                        "access_token": "at-2",
+                        "access_token": chatgpt_jwt("two"),
                         "refresh_token": "rt-2",
                     },
                 ]

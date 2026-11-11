@@ -1,5 +1,5 @@
 /**
- * V3-FX FX-2 r1b: with the Keychain setting off (the default since FX-2), the permission modes run Manual only, the
+ * V3-FX FX-2 r1b: with the Keychain setting off (the default since FX-2), the permission modes last until the app quits (fx47, was Manual only), the
  * ACP tools are unavailable and payments are off. Each of these states names the fix in plain words: turn on Keychain,
  * and exactly where (Settings › Machine › Gateways › the toggle's own title), in all six locales. The path is checked
  * against the live Settings labels, so renaming the toggle or a nav entry without updating the fix turns this red.
@@ -57,10 +57,10 @@ afterEach(() => {
 })
 
 describe('FX-2 r1b: the Keychain-off states name the fix', () => {
-  it('Permissions: Manual only with the Keychain off says how to turn it on', async () => {
+  it('Permissions: a mode lasts until quit with the Keychain off, and it says how to keep it', async () => {
     mountPane(false)
     await waitFor(() => expect(line()).toBe(enPermissions.enforcement['keychain-off']))
-    expect(line()).toMatch(/Turn on Keychain in Settings › Machine › Gateways/)
+    expect(line()).toMatch(/turn on Keychain in Settings › Machine › Gateways/)
   })
 
   it('Permissions: degraded with the Keychain ON keeps the system-keychain line (a different cause)', async () => {

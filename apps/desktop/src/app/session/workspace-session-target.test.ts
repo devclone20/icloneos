@@ -108,3 +108,30 @@ describe('startWorkspaceSession', () => {
     expect($currentCwd.get()).toBe('')
   })
 })
+
+describe('fx26b — a workspace target moves the view only', () => {
+  it('neither the target nor the resolved cwd asks main to list it', async () => {
+    const noteFolder = vi.fn(async (_folder: string) => ({ ok: true }))
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = { noteFolder }
+
+    try {
+      const lookup = deferred<{ branch?: string; cwd?: string }>()
+
+      startWorkspaceSession({
+        activeSessionIdRef: { current: null },
+        followActiveSessionCwd: vi.fn(),
+        path: '/workspace-a',
+        requestGateway: vi.fn(() => lookup.promise) as never,
+        startFreshSessionDraft: vi.fn()
+      })
+
+      lookup.resolve({ branch: 'main', cwd: '/runtime/says' })
+      await vi.waitFor(() => expect($currentCwd.get()).toBe('/runtime/says'))
+      expect($newChatWorkspaceTarget.get()).toBe('/runtime/says')
+      expect(noteFolder).not.toHaveBeenCalled()
+    } finally {
+      delete (window as { hermesDesktop?: unknown }).hermesDesktop
+    }
+  })
+})

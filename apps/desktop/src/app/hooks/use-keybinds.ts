@@ -29,8 +29,8 @@ import { $capture, $comboIndex, endCapture, setBinding } from '@/store/keybinds'
 import { requestSessionSearchFocus, setFileBrowserOpen, togglePanesFlipped } from '@/store/layout'
 import { openBrowserTab } from '@/store/preview'
 import {
-  $newChatProfile,
   cycleProfile,
+  pointNewChatAtLiveProfile,
   requestProfileCreate,
   switchProfileToSlot,
   switchToDefaultProfile,
@@ -229,7 +229,7 @@ export function useKeybinds(deps: KeybindRuntimeDeps): void {
       // target the current live profile, not a stale per-profile quick-create
       // selection from a prior action.
       setWorkspaceScope('sessions')
-      $newChatProfile.set(null)
+      pointNewChatAtLiveProfile()
       deps.startFreshSession()
       window.dispatchEvent(new CustomEvent('hermes:new-session-shortcut'))
     },

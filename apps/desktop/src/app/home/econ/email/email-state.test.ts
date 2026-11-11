@@ -657,7 +657,7 @@ describe('deleted forever, counted and recovered', () => {
   })
 })
 
-/** UF2B1-c2-01: the R3d harness probes (RESUME/run/gates/R3d/extra) read this symbol off the module. */
+/** UF2B1-c2-01: the R3d harness probes (kept outside this repository) read this symbol off the module. */
 describe('parseStampedMailState stays public', () => {
   it('is exported and reads the stamp beside the marks', async () => {
     const mod: Record<string, unknown> = await import('./email-state')

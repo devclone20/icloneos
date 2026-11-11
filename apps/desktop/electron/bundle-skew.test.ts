@@ -24,6 +24,22 @@ describe('detectBundleSkew', () => {
     expect(result).toEqual({ desktopCommitsBehind: 3, outOfSync: true })
   })
 
+  it('fx23 (proof6 F4): gives git a time limit, so a FIFO at ~/.gitconfig cannot hold it until quit', async () => {
+    const seen: unknown[] = []
+
+    await detectBundleSkew(
+      STAMP,
+      async (_args, options) => {
+        seen.push(options)
+
+        return { code: 0, stderr: '', stdout: '0\n' }
+      },
+      REPO
+    )
+
+    expect(seen).toEqual([expect.objectContaining({ cwd: REPO, timeoutMs: 10_000 })])
+  })
+
   it('passes the stamp range scoped to apps/desktop', async () => {
     let seen: string[] = []
 

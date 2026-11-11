@@ -34,9 +34,13 @@ import {
   setSessionTileDelegate,
   setSessionTileWorkspaceScope
 } from '@/store/session-states'
+import { $sessionTilesRender } from '@/store/tile-render'
 
 const tile = (storedSessionId: string): SessionTile => ({ storedSessionId })
 const tilePane = (id: string) => `session-tile:${id}`
+
+// These cover the tile paths for a pane that renders them; open-session-unrendered-tile.test.ts has today's.
+beforeEach(() => $sessionTilesRender.set(true))
 
 describe('foregroundSessionScopes', () => {
   beforeEach(() => {
@@ -651,6 +655,9 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     const { registry } = await import('@/contrib/registry')
     const session = await import('@/store/session')
     const states = await import('@/store/session-states')
+    const tileRender = await import('@/store/tile-render')
+
+    tileRender.$sessionTilesRender.set(true)
 
     registry.register({
       area: 'panes',

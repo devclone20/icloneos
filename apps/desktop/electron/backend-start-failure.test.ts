@@ -4,8 +4,10 @@ import { test } from 'vitest'
 
 import { isReauthRequiredError, makeUnsignedOauthError } from './backend-health'
 import {
+  describeConfinedExecFailure,
   isHostKeyChangedBootFailure,
   isRetryableRemoteBootFailure,
+  SANDBOX_EXEC_FAILED_STATUS,
   shouldLatchBackendStartFailure,
   shouldLatchHostKeyChangedFailure,
   shouldLatchRemoteReauthFailure
@@ -175,4 +177,28 @@ test("'ownership-unverifiable' needs the user: never retried automatically, latc
   })
 
   assert.equal(isUserActionRemoteBootFailure(transient), false)
+})
+
+test('a confined interpreter the kernel would not exec is named: sandbox-exec exit 71 with its execvp line', () => {
+  const tail =
+    "sandbox-exec: execvp() of '/Users/owner/.hermes/hermes-agent/venv/bin/python' failed: Operation not permitted\n"
+
+  assert.equal(
+    describeConfinedExecFailure(SANDBOX_EXEC_FAILED_STATUS, tail),
+    'The agent runtime could not start inside its sandbox profile: /Users/owner/.hermes/hermes-agent/venv/bin/python is not reachable from the profile (a link on the way to the interpreter the profile does not name, or a binary outside its roots).'
+  )
+})
+
+test('any other early exit keeps the generic before-ready message: another code, no execvp line, or no output', () => {
+  const tail = "sandbox-exec: execvp() of '/x/python' failed: Operation not permitted\n"
+
+  assert.equal(describeConfinedExecFailure(1, tail), null)
+  assert.equal(describeConfinedExecFailure(null, tail), null)
+  assert.equal(describeConfinedExecFailure(SANDBOX_EXEC_FAILED_STATUS, 'Traceback (most recent call last):\n'), null)
+  assert.equal(describeConfinedExecFailure(SANDBOX_EXEC_FAILED_STATUS, ''), null)
+  // sandbox-exec's own refusal to nest a profile is a 71 too, but not an exec of a path the profile cannot see.
+  assert.equal(
+    describeConfinedExecFailure(SANDBOX_EXEC_FAILED_STATUS, 'sandbox-exec: sandbox_apply: Operation not permitted\n'),
+    null
+  )
 })

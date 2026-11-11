@@ -9,14 +9,17 @@ export {
 
 export type SetupSystemItem = 'microphone' | 'notifications' | 'screen'
 export type SetupSystemStatus =
-  'declined' | 'denied' | 'granted' | 'notDetermined' | 'notSetUp' | 'restricted' | 'unknown'
-export type SetupSystemAction = 'none' | 'openSettings' | 'request'
+  'declined' | 'denied' | 'granted' | 'notDetermined' | 'notSetUp' | 'restartNeeded' | 'restricted' | 'unknown'
+export type SetupSystemAction = 'none' | 'openSettings' | 'request' | 'restart'
+/** CuaDriver's two Privacy panes: the renderer names one, main picks the URL. */
+export type CuaDriverPane = 'cua:accessibility' | 'cua:screen'
 
 export interface SetupSystemRow {
   id: SetupSystemItem
   status: SetupSystemStatus
   action: SetupSystemAction
   restartToApply?: true
+  identity?: { bundleId: string | null; expected: boolean }
 }
 
 export type SetupPackageState = 'failed' | 'installed' | 'installing' | 'skipped'
@@ -31,5 +34,9 @@ export interface SetupPackage {
 
 export interface IcloneSetupBridge {
   system: () => Promise<SetupSystemRow[] | null>
-  act: (input: { item: SetupSystemItem; title?: string; body?: string }) => Promise<SetupSystemRow[] | null>
+  act: (input: {
+    item: CuaDriverPane | SetupSystemItem
+    title?: string
+    body?: string
+  }) => Promise<SetupSystemRow[] | null>
 }

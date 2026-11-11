@@ -10,15 +10,22 @@ so ``hermes_cli.auth.<name>`` patches still intercept (and no import cycle).
 
 from __future__ import annotations
 
+import functools
+import importlib
+import importlib.machinery
 import logging
 import hashlib
 import json
 import os
+import re
+import sys
 import threading
 import time
+import unicodedata
 from contextlib import suppress
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from urllib.parse import urlsplit
 from hermes_cli.auth_constants import (
     _decode_jwt_claims, AUTH_LOCK_TIMEOUT_SECONDS, AuthError,
     CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS, CODEX_OAUTH_CLIENT_ID, CODEX_OAUTH_TOKEN_URL,
@@ -33,6 +40,92 @@ logger = logging.getLogger("hermes_cli.auth")
 
 # ``{relogin}`` is filled at raise time with the profile-aware sign-in command: a bare
 # ``hermes auth`` from a named profile re-signs the ROOT store (93889b770da, #114012).
+_codex_wire_lock = threading.Lock()
+# Where the Codex API lives on chatgpt.com. Searched, not anchored: a server may collapse ``//`` and ``/x/../``.
+_CODEX_API_PATH = re.compile(r"/(?:backend-api/(?:codex|wham)|api/codex)(?:/|$)")
+
+
+def _codex_wire_judge(request: Any) -> None:
+    """The choke point: every ``httpx`` send, the OpenAI SDK's included, passes here before any transport."""
+    _codex_judge_send(request.headers.get("authorization", ""), request.url.host, request.url.path)
+
+
+def _codex_judge_send(authorization: Any, host: str, path: str) -> None:
+    """Raises the ``AuthError`` naming the fix when the two checks refuse this send; takes the host and path as the
+    sending stack holds them, with no second parse. No state and no row: only the bearer and where it is going."""
+    auth = str(authorization or "")
+    if auth[:7].lower() != "bearer ":
+        return
+    token, host = auth[7:].strip(), str(host or "").lower().rstrip(".")
+    if token and not _codex_checks_pass(token, host, codex_api=bool(_CODEX_API_PATH.search(str(path).lower()))):
+        raise _codex_refusal(token, host)
+
+
+def _httpx_own_classes() -> Any:
+    """The module where httpx defines its classes, or None when no httpx can load. ``httpx.Client`` is only a name:
+    it can be rebound, and the ``httpx`` entry of ``sys.modules`` can be swapped, while this class still does the
+    sending. ``test_httpx_defines_what_the_judge_wraps`` goes red if an httpx upgrade moves it."""
+    try:
+        return importlib.import_module("httpx._client")
+    except ImportError:
+        return None
+
+
+def _wrap_send_with_the_judge(module: Any) -> None:
+    """On the class, so a client built earlier is judged too: an instance finds ``send`` on its class at each call."""
+    if module is None or all(getattr(c.send, "_codex_wire_judge", False) for c in (module.Client, module.AsyncClient)):
+        return
+    with _codex_wire_lock:
+        for client in (module.Client, module.AsyncClient):
+            original = client.send
+            if getattr(original, "_codex_wire_judge", False):
+                continue
+            if client is module.Client:
+                @functools.wraps(original)
+                def send(self, request, *args, _original=original, **kwargs):
+                    _codex_wire_judge(request)
+                    return _original(self, request, *args, **kwargs)
+            else:
+                @functools.wraps(original)
+                async def send(self, request, *args, _original=original, **kwargs):
+                    _codex_wire_judge(request)
+                    return await _original(self, request, *args, **kwargs)
+            send._codex_wire_judge = True
+            client.send = send
+
+
+def _install_codex_wire_judge() -> None:
+    """Asks the real classes each time instead of remembering: a flag stays true after ``send`` is replaced."""
+    _wrap_send_with_the_judge(_httpx_own_classes())
+
+
+class _JudgeHttpxAsItLoads:
+    """Import hook: wraps ``send`` the moment httpx defines it, in every process that imports this module, so no
+    client exists unjudged and no sender depends on a rule having run first. httpx stays lazy on the CLI startup
+    path (~30 ms, see ``auth_constants``), which rules out importing it here. Falls back to the rule's own check
+    when another finder loads httpx (a frozen build)."""
+
+    def find_spec(self, name, path=None, target=None):
+        if name != "httpx._client":
+            return None
+        sys.meta_path.remove(self)
+        spec = importlib.machinery.PathFinder.find_spec(name, path, target)
+        if spec is not None and spec.loader is not None:
+            define_classes = spec.loader.exec_module
+
+            def exec_module(module):
+                define_classes(module)
+                _wrap_send_with_the_judge(module)
+            spec.loader.exec_module = exec_module
+        return spec
+
+
+if "httpx._client" in sys.modules:
+    _install_codex_wire_judge()
+else:
+    sys.meta_path.insert(0, _JudgeHttpxAsItLoads())
+
+
 _MISSING_ACCESS_TOKEN_MSG = "Codex auth is missing access_token. Run `{relogin}` to re-authenticate."
 _MISSING_REFRESH_TOKEN_MSG = "Codex auth is missing refresh_token. Run `{relogin}` to re-authenticate."
 _NO_CREDENTIALS_MSG = "No Codex credentials stored. Run `{relogin}` to authenticate."
@@ -71,11 +164,228 @@ def _codex_base_url() -> str:
     return os.getenv("HERMES_CODEX_BASE_URL", "").strip().rstrip("/") or DEFAULT_CODEX_BASE_URL
 
 
-def _codex_pool_route_base_url(entry_base_url: Optional[str] = "") -> str:
-    """Base URL the chat route sends a pooled Codex credential to — the same rule
-    ``runtime_provider._pool_entry_mode_and_url`` applies (``HERMES_CODEX_BASE_URL`` > ``model.base_url``
-    while the row still carries the canonical URL > the row's own URL). A pooled gateway key belongs to
-    that host only; composing it with the ambient default sends it to chatgpt.com (#121486)."""
+CODEX_HOST_UNKNOWN_CODE = "codex_credential_host_unknown"
+_OPENAI_AUTH_CLAIM = "https://api.openai.com/auth"
+_CHATGPT_ISSUER_HOSTS = frozenset({"auth.openai.com", "auth0.openai.com"})
+_codex_refusals_logged: set = set()
+
+
+def _codex_token_is_chatgpt_own(token: Any) -> bool:
+    """True only for a JWT that names OpenAI as its issuer, or carries OpenAI's auth claim and names no
+    other issuer. A routing guard against a mistake, not a signature check. An opaque key is never
+    ChatGPT's; a JWT from a gateway fails, also when it copies the OpenAI claim under its own issuer."""
+    try:
+        claims = _decode_jwt_claims(token)
+    except ValueError:
+        return False
+    if not claims:
+        return False
+    if "iss" in claims:
+        return _issuer_is_chatgpt(claims["iss"])
+    nested = claims.get(_OPENAI_AUTH_CLAIM)
+    return isinstance(nested, dict) and bool(nested)
+
+
+def _issuer_is_chatgpt(issuer: Any) -> bool:
+    """Exact host, over https or with no scheme; a userinfo or a port is a look-alike."""
+    if not isinstance(issuer, str):
+        return False
+    from utils import _hostname_of, _parse_base_url
+    try:
+        parsed = _parse_base_url(issuer)
+        return (bool(parsed) and parsed.scheme in ("", "https") and parsed.username is None and parsed.port is None
+                and _hostname_of(parsed) in _CHATGPT_ISSUER_HOSTS)
+    except ValueError:
+        return False
+
+
+def _codex_token_is_refreshable(token: Any) -> bool:
+    """An empty access token can be a real login mid-flow. Anything else that is not ChatGPT's own holds a
+    refresh token auth.openai.com never issued: it is not posted there, and a rejection cannot kill the row."""
+    return not _stripped(token) or _codex_token_is_chatgpt_own(token)
+
+
+def _codex_url_as_dialed(base_url: str) -> str:
+    """The URL the HTTP client would dial: it folds the IDNA dots and full-width letters that ``urlparse`` keeps."""
+    return unicodedata.normalize("NFKC", base_url).replace("\u3002", ".")
+
+
+def _codex_dialed_host(base_url: Any) -> str:
+    """The host the HTTP client dials for ``base_url`` (lower-case, no trailing dot); empty when it dials none:
+    ``https://``, a scheme word, a URL it cannot parse, or a scheme-less ``my-host/v1`` (httpx reads that as a path)."""
+    try:
+        url = _codex_url_as_dialed(_stripped(base_url))
+        urlsplit(url)  # httpx reads a host out of ``https://[oops``; no client could dial it
+        return _httpx_own_classes().URL(url).host.lower().rstrip(".")
+    except Exception:
+        return ""
+
+
+def _codex_url_has_no_host(base_url: str) -> bool:
+    return not _codex_dialed_host(base_url)
+
+
+def _is_chatgpt_route(base_url: str) -> bool:
+    """Compares the host the HTTP client would dial. A URL with no known host counts as chatgpt.com, so a choice
+    made on the route never treats it as somewhere else."""
+    from utils import base_url_host_matches
+    try:
+        return _codex_url_has_no_host(base_url) or base_url_host_matches(_codex_url_as_dialed(base_url), "chatgpt.com")
+    except ValueError:
+        return True
+
+
+def _codex_env_host() -> str:
+    """The host HERMES_CODEX_BASE_URL names at this moment, or empty. Read at each send and never kept, through the
+    profile's scope like the route's own read: a multiplexed sibling's value is not this profile's act."""
+    from agent.secret_scope import get_secret_str
+    try:
+        return _codex_dialed_host(get_secret_str("HERMES_CODEX_BASE_URL", ""))
+    except Exception:
+        return ""
+
+
+def _codex_checks_pass(token: Any, host: str, *, codex_api: bool) -> bool:
+    """The two checks (FX34 R43), on the bearer and the dialed host only:
+    (a) chatgpt.com, on the Codex API paths, takes only a bearer that is ChatGPT's own;
+    (b) a bearer that is ChatGPT's own goes only to chatgpt.com, unless HERMES_CODEX_BASE_URL names that host now.
+    A key that is not ChatGPT's own passes to every other host: the wire cannot tell whose key it is."""
+    own = _codex_token_is_chatgpt_own(token)
+    if host == "chatgpt.com" or host.endswith(".chatgpt.com"):
+        return own or not codex_api
+    return not own or (bool(host) and host == _codex_env_host())
+
+
+def _codex_host_accepts_credential(token: Any, base_url: Optional[str]) -> bool:
+    """The two checks for a base URL, which every path of a request may hang from, so all of chatgpt.com counts as
+    the Codex API here. An empty URL counts as chatgpt.com, what every sender falls back to; a URL with no host
+    accepts nothing."""
+    _install_codex_wire_judge()
+    host = _codex_dialed_host(_stripped(base_url) or DEFAULT_CODEX_BASE_URL)
+    return bool(host) and _codex_checks_pass(token, host, codex_api=True)
+
+
+def _codex_refusal_message(label: Any = None) -> str:
+    row = f" (pool row {label})" if label else ""
+    return (
+        f"This Codex credential{row} is not a ChatGPT login and no gateway is known for it, so it was not sent "
+        "to chatgpt.com. If it is a gateway key: check that config.yaml is readable and complete, with "
+        "model.provider set to openai-codex and model.base_url set to your gateway (or set "
+        "HERMES_CODEX_BASE_URL), then try again. If you meant to use ChatGPT: run "
+        f"`{_codex_relogin_command()}`. If the entry is left over: run `hermes auth list`, then "
+        "`hermes auth remove openai-codex <n>`.")
+
+
+def _codex_login_route_message(host: str, label: Any = None) -> str:
+    row = f" (pool row {label})" if label else ""
+    return (
+        f"This ChatGPT login{row} was not sent to {host}: a ChatGPT login goes only to chatgpt.com. For a passthrough "
+        "proxy, set HERMES_CODEX_BASE_URL to the proxy. For a gateway with its own key, run "
+        "`hermes auth add openai-codex --type api-key --api-key <key>`. To use ChatGPT directly, remove that URL where "
+        "it is set: model.base_url in config.yaml, a --base-url flag, or a pool row (`hermes auth list`, then "
+        "`hermes auth remove openai-codex <n>`). The check reads only the token's shape, so a request that is not for "
+        "Codex is refused the same way.")
+
+
+def _codex_no_host_message(label: Any = None) -> str:
+    row = f" (pool row {label})" if label else ""
+    return (
+        f"This Codex credential{row} was not sent: the Codex URL in use has no host, so nothing can receive it. "
+        "Check model.base_url in config.yaml (or HERMES_CODEX_BASE_URL): set it to the full URL of your gateway, or "
+        "remove it to use ChatGPT.")
+
+
+def _warn_codex_refusal_once(token: Any, message: str) -> None:
+    fingerprint = hashlib.sha256(str(token).encode("utf-8", "replace")).hexdigest()
+    if fingerprint not in _codex_refusals_logged:  # /usage polls: once per credential per process
+        _codex_refusals_logged.add(fingerprint)
+        logger.warning("%s", message)
+
+
+def _codex_pool_quota_error() -> Optional[AuthError]:
+    """The quota error of a pool row chat could send that is cooling down, or None."""
+    limited = _codex_pool_rate_limit_status()
+    if not limited:
+        return None
+    reset_at = limited.get("reset_at")
+    in_future = isinstance(reset_at, (int, float)) and reset_at > time.time()
+    return _codex_quota_exhausted_error(int(reset_at - time.time()) if in_future else None)
+
+
+def _ensure_codex_pool_entry_host(token: Any, base_url: Optional[str], *, label: Any = None) -> str:
+    """``_ensure_codex_credential_host`` for a row the pool chose: when the row it chose is refused but another
+    is only cooling down, the user meets the quota. The refusal stands when no row qualifies."""
+    if not _codex_host_accepts_credential(token, base_url):
+        quota = _codex_pool_quota_error()
+        if quota is not None:
+            raise quota
+    return _ensure_codex_credential_host(token, base_url, label=label)
+
+
+def _codex_refusal(token: Any, host: str, label: Any = None) -> AuthError:
+    if not host:
+        message = _codex_no_host_message(label)
+    elif _codex_token_is_chatgpt_own(token):
+        message = _codex_login_route_message(host, label)
+    else:
+        message = _codex_refusal_message(label)
+    return _codex_err(message, CODEX_HOST_UNKNOWN_CODE, relogin=False)
+
+
+def _ensure_codex_credential_host(token: Any, base_url: Optional[str], *, label: Any = None) -> str:
+    """``base_url`` unchanged, or an ``AuthError`` naming the fix. Never sends, never logs the token."""
+    if _codex_host_accepts_credential(token, base_url):
+        return _stripped(base_url)
+    refusal = _codex_refusal(token, _codex_dialed_host(_stripped(base_url) or DEFAULT_CODEX_BASE_URL), label)
+    _warn_codex_refusal_once(token, str(refusal))
+    raise refusal
+
+
+def _codex_entry_route(entry: Any) -> str:
+    """Where the chat route would point this pool entry; see ``_codex_pool_route_unchecked``."""
+    return _codex_pool_route_unchecked(getattr(entry, "runtime_base_url", None) or getattr(entry, "base_url", None))
+
+
+def _codex_entry_accepted(entry: Any) -> bool:
+    return _codex_host_accepts_credential(entry.runtime_api_key, _codex_entry_route(entry))
+
+
+def _codex_row_probe_route(token: Any, row_url: Any) -> str:
+    """Where a row's quota is asked: a login's at chatgpt.com unless HERMES_CODEX_BASE_URL names its route, a
+    key's at its route. Never the wrong pair; a key whose route refuses it is refused at the wire, so no probe."""
+    route = _codex_pool_route_unchecked(row_url)
+    if _codex_token_is_chatgpt_own(token) and not _codex_host_accepts_credential(token, route):
+        return DEFAULT_CODEX_BASE_URL
+    return route
+
+
+def _codex_choosable_entries(entries: list, *, pool_rows: Iterable[Any] = (), rotating: bool = False) -> list:
+    """The rows choosing may take: those whose token their route accepts. A refused row is skipped, never
+    sent, and the same user's next row takes over. If none qualifies the list stands, so the sender refuses
+    naming the fix, unless a row of the pool (cooling, say) does qualify, when the sender reports that row's
+    state instead; rotation never lands on a refused row. One warning per skipped credential per process."""
+    accepted = [e for e in entries if _codex_entry_accepted(e)]
+    if not accepted:
+        stands = not rotating and not any(_codex_entry_accepted(row) for row in pool_rows if row.runtime_api_key)
+        return entries if stands else []
+    for entry in entries:
+        if entry not in accepted:
+            with suppress(AuthError):
+                _ensure_codex_credential_host(entry.runtime_api_key, _codex_entry_route(entry), label=entry.label or entry.id)
+    return accepted
+
+
+def _codex_pool_route_base_url(entry_base_url: Optional[str] = "", *, token: Any) -> str:
+    """The route of a pooled Codex credential, for sending it: an ``AuthError`` when that would put a
+    credential on chatgpt.com that is not ChatGPT's own. ``token`` is required so no sender can skip it."""
+    return _ensure_codex_credential_host(token, _codex_pool_route_unchecked(entry_base_url))
+
+
+def _codex_pool_route_unchecked(entry_base_url: Optional[str] = "") -> str:
+    """Where the chat route would point a pooled Codex credential — the same rule
+    ``runtime_provider._pool_entry_mode_and_url`` applies (``HERMES_CODEX_BASE_URL`` > a row's own URL >
+    ``model.base_url`` > the default; a row's URL says where a key goes and licenses nothing). For reports and dedupe keys only; anything that
+    sends the credential goes through ``_codex_pool_route_base_url`` (#121486)."""
     base = _stripped(entry_base_url).rstrip("/")
     try:
         from hermes_cli.config import load_config_readonly
@@ -94,8 +404,10 @@ def _codex_pool_route_base_url(entry_base_url: Optional[str] = "") -> str:
 
 def _codex_runtime_result(
     api_key: str, *, source: str, last_refresh: Optional[str], base_url: Optional[str] = None) -> Dict[str, Any]:
+    route = base_url or _codex_base_url()
+    _ensure_codex_credential_host(api_key, route)  # the store's own token too: it can be hand-edited
     return {
-        "provider": "openai-codex", "base_url": base_url or _codex_base_url(), "api_key": api_key,
+        "provider": "openai-codex", "base_url": route, "api_key": api_key,
         "source": source, "last_refresh": last_refresh, "auth_mode": "chatgpt"}
 
 
@@ -483,7 +795,9 @@ def refresh_codex_oauth_pure(
     access_token: str, refresh_token: str, *, timeout_seconds: float = 20.0) -> Dict[str, Any]:
     """Refresh Codex OAuth tokens without mutating Hermes auth state."""
     from hermes_cli.auth import _nonempty_str, _utc_now_z
-    del access_token  # Access token is only used by callers to decide whether to refresh.
+    if not _codex_token_is_refreshable(access_token):  # the one place this POST is built: no route can miss it
+        raise _codex_err("This Codex credential is not a ChatGPT login, so its refresh token was not sent to "
+                         "auth.openai.com.", CODEX_HOST_UNKNOWN_CODE, relogin=False)
     if not _nonempty_str(refresh_token):
         raise _codex_err(_MISSING_REFRESH_TOKEN_MSG.format(relogin=_codex_relogin_command()),
                          "codex_auth_missing_refresh_token", relogin=True)
@@ -528,6 +842,8 @@ def _refresh_codex_auth_tokens(tokens: Dict[str, str], timeout_seconds: float) -
     finds root already rotated by its peer adopts the stored pair instead of replaying the
     consumed token. Both locks wait out a full endpoint timeout so the waiter adopts, not times out.
     """
+    if not _codex_token_is_refreshable(tokens.get("access_token")):
+        return tokens
     from hermes_cli.auth import _provider_state_transaction, _save_codex_tokens, refresh_codex_oauth_pure
     lock_timeout = max(float(AUTH_LOCK_TIMEOUT_SECONDS), float(timeout_seconds) + 5.0)
     with _provider_state_transaction("openai-codex", lock_timeout) as (_store, state, _source):
@@ -589,8 +905,11 @@ def _import_codex_cli_tokens() -> Optional[Dict[str, str]]:
 def resolve_codex_runtime_credentials(
     *, force_refresh: bool = False, refresh_if_expiring: bool = True,
     refresh_skew_seconds: int = CODEX_ACCESS_TOKEN_REFRESH_SKEW_SECONDS,
-    read_only: bool = False) -> Dict[str, Any]:
+    read_only: bool = False, route_url: Optional[str] = None) -> Dict[str, Any]:
     """Resolve runtime credentials from Hermes's own Codex token store.
+
+    ``route_url`` is an explicit endpoint the caller will send to: the host rule then looks only at that
+    final pair, never at the stored route the credential is leaving behind.
 
     ``read_only=True`` (status / doctor / pickers) reports the stored state as-is: no Codex CLI
     adoption, no token refresh, no auth-store write — and it wins over ``force_refresh``. A
@@ -636,7 +955,9 @@ def resolve_codex_runtime_credentials(
             if imported:
                 data = {"tokens": imported, "last_refresh": imported.get("last_refresh")}
     if data is None:
-        pool_token, pool_base = _pool_codex_credential()
+        pool_token, pool_base = _pool_codex_credential(route_url)
+        if pool_token and not route_url:  # before any refresh: a refused row stays unmarked
+            pool_base = _codex_pool_route_base_url(pool_base, token=pool_token)
         if pool_token and force_refresh and not read_only:
             # Pool-only setup: a forced refresh must rotate the pool entry, not resend its token.
             from agent.credential_pool import load_pool
@@ -646,7 +967,7 @@ def resolve_codex_runtime_credentials(
             # Report the host this row routes to, not the ambient default: a pooled gateway key
             # paired with chatgpt.com leaks to every consumer of this result (#121486).
             return _codex_runtime_result(pool_token, source="credential_pool", last_refresh=None,
-                                         base_url=_codex_pool_route_base_url(pool_base))
+                                         base_url=route_url or pool_base)
         pool_rate_limit = _codex_pool_rate_limit_status()
         if pool_rate_limit:
             # Before surfacing the persisted cooldown, ask the usage endpoint whether the quota
@@ -656,14 +977,14 @@ def resolve_codex_runtime_credentials(
             if not read_only and _probe_codex_pool_entry_quota_restored(pool_rate_limit):
                 logger.info("Codex quota restored upstream — clearing stale pool cooldown(s).")
                 clear_codex_pool_quota_cooldowns()
-                pool_token, pool_base = _pool_codex_credential()
+                pool_token, pool_base = _pool_codex_credential(route_url)
                 if pool_token:
                     return _codex_runtime_result(
                         pool_token, source="credential_pool", last_refresh=None,
-                        base_url=_codex_pool_route_base_url(pool_base))
-            reset_at = pool_rate_limit.get("reset_at")
-            in_future = isinstance(reset_at, (int, float)) and reset_at > time.time()
-            raise _codex_quota_exhausted_error(int(reset_at - time.time()) if in_future else None)
+                        base_url=route_url or _codex_pool_route_base_url(pool_base, token=pool_token))
+            quota = _codex_pool_quota_error()
+            if quota is not None:
+                raise quota
         if read_error is not None:
             raise read_error
         raise _codex_err(_NO_CREDENTIALS_MSG.format(relogin=_codex_relogin_command()),
@@ -688,7 +1009,7 @@ def resolve_codex_runtime_credentials(
                 tokens = _refresh_codex_auth_tokens(tokens, refresh_timeout_seconds)
             access_token = _stripped(tokens.get("access_token"))
     return _codex_runtime_result(
-        access_token, source="hermes-auth-store", last_refresh=data.get("last_refresh"))
+        access_token, source="hermes-auth-store", last_refresh=data.get("last_refresh"), base_url=route_url)
 
 
 def _is_codex_rate_limit_shaped(code: Any, reason: Any, message: Any) -> bool:
@@ -746,6 +1067,8 @@ def _probe_codex_quota_restored(
     # network calls for corrupt/placeholder entries (and keeps hermetic test fixtures offline).
     if not token or not _decode_jwt_claims(token):
         return None
+    if not _codex_host_accepts_credential(token, _codex_usage_probe_url(base_url)):
+        return None  # the wire refuses this too; here it costs no warning and no probe slot
     cache_key = _codex_quota_probe_cache_key(token)
     now = time.monotonic()
     with _codex_quota_probe_lock:
@@ -846,7 +1169,7 @@ def _probe_codex_pool_entry_quota_restored(entry: Dict[str, Any]) -> Optional[bo
     if not token:
         return None
     # The row keeps the canonical URL; a gateway key belongs to its route host (#121486).
-    return _probe_codex_quota_restored(token, base_url=_codex_pool_route_base_url(entry.get("base_url")))
+    return _probe_codex_quota_restored(token, base_url=_codex_row_probe_route(token, entry.get("base_url")))
 
 
 def clear_codex_pool_quota_cooldowns(access_token: Optional[str] = None) -> int:
@@ -887,7 +1210,7 @@ def _codex_pool_dicts(entries: Optional[List[Any]]) -> Iterator[Dict[str, Any]]:
 
 
 def _codex_pool_rate_limit_status() -> Optional[Dict[str, Any]]:
-    """Return metadata for a pool-only Codex credential in quota cooldown.
+    """Return metadata for a pool-only Codex credential in quota cooldown, among rows chat could send.
 
     Reads through ``read_credential_pool`` so a named profile with no Codex rows of its own sees
     the global-root pool (the per-provider fallback every other pool read uses)."""
@@ -899,6 +1222,8 @@ def _codex_pool_rate_limit_status() -> Optional[Dict[str, Any]]:
             token = entry.get("access_token")
             if not _nonempty_str(token) or not _entry_is_rate_limit_exhausted(entry):
                 continue
+            if not _codex_host_accepts_credential(token.strip(), _codex_pool_route_unchecked(entry.get("base_url"))):
+                continue  # cooling or not, a row chat would refuse holds no quota to report
             reset_at = _parse_absolute_timestamp(entry.get("last_error_reset_at"))
             if reset_at is None or reset_at > now:
                 return {
@@ -919,24 +1244,33 @@ def _pool_entries(auth_store: Dict[str, Any], provider_id: str) -> Optional[List
     return entries if isinstance(entries, list) else None
 
 
-def _pool_codex_credential() -> Tuple[str, str]:
-    """``(access_token, row base_url)`` of the first pool entry with a non-empty access_token that is
-    not in an exhaustion cooldown window, so the caller routes the token to the host that row belongs
-    to; ``("", "")`` when none is usable.
+def _pool_codex_credential(route_url: Optional[str] = None) -> Tuple[str, str]:
+    """``(access_token, route)`` of the first pool entry with a non-empty access_token that is not in an
+    exhaustion cooldown window, so the caller sends the token to the host that row belongs to; ``("", "")``
+    when none is usable. A row whose route (``route_url`` when given) refuses its token is skipped; it comes
+    back only when no row qualifies, in cooldown or not, so the caller refuses.
 
     Fallback for ``resolve_codex_runtime_credentials`` when the singleton has no creds; reads
     through ``read_credential_pool`` so a profile inherits the global-root pool (#34143)."""
     from agent.credential_pool import _parse_absolute_timestamp
     from hermes_cli.auth import _nonempty_str, read_credential_pool
     try:
+        refused: Tuple[str, str] = ("", "")
         for entry in _codex_pool_dicts(read_credential_pool("openai-codex")):
             token = entry.get("access_token")
             # Same normaliser as ``_codex_pool_rate_limit_status``: a millisecond epoch compared
             # raw reads as far-future here and as elapsed there, hiding a usable entry (#103349).
             reset_at = _parse_absolute_timestamp(entry.get("last_error_reset_at"))
             in_cooldown = reset_at is not None and reset_at > time.time()
-            if _nonempty_str(token) and not in_cooldown:
-                return token.strip(), _stripped(entry.get("base_url"))
+            if _nonempty_str(token):
+                token = token.strip()
+                route = _codex_pool_route_unchecked(entry.get("base_url"))
+                if not _codex_host_accepts_credential(token, route_url or route):
+                    refused = refused if refused[0] else (token, route)
+                elif not in_cooldown:
+                    return token, route
+        # A real login cooling down outranks a leftover row: the caller reports its quota, not the refusal.
+        return ("", "") if _codex_pool_rate_limit_status() else refused
     except Exception:
         logger.debug("Codex pool fallback lookup failed", exc_info=True)
     return "", ""

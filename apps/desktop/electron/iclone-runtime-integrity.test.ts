@@ -105,7 +105,7 @@ SUITE('RT-3: the installed runtime against the bundled manifest', { timeout: 180
     const m = parseRuntimeManifest(fs.readFileSync(path.join(root, RUNTIME_MANIFEST_FILE), 'utf8'))
     const shipped = m.entries.find(row => row[0].endsWith('.pyc'))?.[0] as string
 
-    expect(unlistedRuntimeFiles(root, new Set(m.entries.map(row => row[0])))).toEqual([...planted].sort())
+    expect(await unlistedRuntimeFiles(root, new Set(m.entries.map(row => row[0])))).toEqual([...planted].sort())
     expect((await run(root)).action).toBe('verified')
 
     for (const rel of planted) {
@@ -167,7 +167,7 @@ SUITE('RT-3: the installed runtime against the bundled manifest', { timeout: 180
     fs.rmSync(list)
     // The list is a manifest file, so integrity restores it from the bundle before the environment is judged; the
     // environment check itself refuses without it.
-    expect(String(checkRuntimeDependencies(root).problem)).toMatch(
+    expect(String((await checkRuntimeDependencies(root)).problem)).toMatch(
       /telemetry exclusion list \(pm\/runtime-venv-exclusions\.txt\) is missing/
     )
 
@@ -289,9 +289,9 @@ SUITE('RT-3: the installed runtime against the bundled manifest', { timeout: 180
     fs.writeFileSync(path.join(copy, '__init__.py'), '# a copy\n')
     fs.writeFileSync(path.join(copy, '..', 'pyproject.toml'), '[project]\n')
 
-    expect(runtimeCopiesOutsideTree(root)).toEqual([copy])
+    expect(await runtimeCopiesOutsideTree(root)).toEqual([copy])
     expect((await run(root)).action).toBe('verified')
-    expect(runtimeCopiesOutsideTree(root)).toEqual([])
+    expect(await runtimeCopiesOutsideTree(root)).toEqual([])
     expect(fs.existsSync(path.join(copy, '..', 'pyproject.toml'))).toBe(true)
     expect(fs.existsSync(path.join(root, 'hermes_cli', '__init__.py'))).toBe(true)
     expect(log.some(line => line.includes('removed an unverified copy of the runtime package'))).toBe(true)
@@ -335,7 +335,7 @@ SUITE('RT-3: the installed runtime against the bundled manifest', { timeout: 180
     fs.rmSync(path.join(root, 'hermes_bootstrap.py'))
     fs.mkdirSync(path.join(root, 'hermes_bootstrap.py'))
 
-    const before = verifyRuntimeTree(root, manifest())
+    const before = await verifyRuntimeTree(root, manifest())
     expect(before.ok).toBe(false)
     expect(before.missing).toEqual(['tools/approval.py'])
     expect([...before.changed].sort()).toEqual([
@@ -355,7 +355,7 @@ SUITE('RT-3: the installed runtime against the bundled manifest', { timeout: 180
       'scripts/install.sh',
       'tools/approval.py'
     ])
-    expect(verifyRuntimeTree(root, manifest()).ok).toBe(true)
+    expect((await verifyRuntimeTree(root, manifest())).ok).toBe(true)
     expect(fs.readFileSync(policy, 'utf8')).not.toContain('trojan')
     expect(fs.statSync(path.join(root, 'scripts', 'install.sh')).mode & 0o111).not.toBe(0)
     // The dependency environment is not the runtime's to repair: left as the installer recorded it.

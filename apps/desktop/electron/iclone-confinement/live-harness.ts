@@ -18,6 +18,7 @@ import {
   type HardlinkAppearedEvent
 } from './backend-seatbelt'
 import { createHardlinkGuard, hardlinkFiles, type HardlinkGuard } from './hardlinks'
+import { writeInstallerConfig } from './live-guards'
 import { createMemberProbe, ensureMembersDir } from './members'
 import { type ConfinementPaths, realOrSelf } from './profiles'
 import { readPs, type Snapshot, withMembership } from './state'
@@ -89,7 +90,7 @@ export function createLiveWorld(): LiveWorld {
   writeFileSync(path.join(userDataDir, 'permissions', 'planted.json'), '{"planted":true}\n')
   writeFileSync(path.join(hermesHome, '.env'), 'OPENAI_API_KEY=sk-test-not-real\n')
   writeFileSync(path.join(hermesHome, 'auth.json'), '{"token":"not-real"}\n')
-  writeFileSync(path.join(hermesHome, 'config.yaml'), 'terminal: {}\n')
+  writeInstallerConfig(hermesHome)
 
   const paths: ConfinementPaths = {
     home: os.homedir(),
@@ -133,7 +134,7 @@ export function createLiveWorld(): LiveWorld {
     appeared,
     scan,
     async runConfined(command, options = {}) {
-      const result = backend.spawn({
+      const result = await backend.spawn({
         cls: options.cls ?? ('project' satisfies ActivityClass),
         argv: ['/bin/sh', '-c', command],
         cwd: options.cwd ?? project,

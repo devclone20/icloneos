@@ -12,6 +12,7 @@ import base64
 import importlib.util
 import json
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlparse
@@ -34,8 +35,23 @@ def _jwt(account: str = "acct") -> str:
     return f"{header}.{_b64(json.dumps(claims).encode())}.sig"
 
 
-JWT = _jwt()
+JWT = _jwt()  # ChatGPT's own by its OpenAI claim: under R36 only chatgpt.com or a host the user named for it takes it.
+# A gateway's own JWT names the gateway as issuer: what a gateway really hands out, and what these rows mean by a
+# JWT-shaped gateway key since R36 (the rows that used JWT for it were asking for the login to leave).
+GATEWAY_JWT = (f"{_b64(json.dumps({'alg': 'RS256'}).encode())}."
+               f"{_b64(json.dumps({'iss': 'https://codex-gw.example', 'sub': 'gw'}).encode())}.sig")
 _REPO = Path(__file__).resolve().parents[2]
+_BACKGROUND_WORKERS = (
+    "hermes-account-usage-refresh", "hermes-picker-pricing-prewarm", "model-cache-swr-", "models-dev-refresh")
+
+
+@pytest.fixture(autouse=True)
+def _no_worker_outlives_its_test():
+    """The host assertions read a process-wide httpx patch, so a worker left by one test is recorded
+    as another test's traffic (gate run h12: this file's picker test, seen by the image test)."""
+    yield
+    leaked = [t.name for t in threading.enumerate() if t.name.startswith(_BACKGROUND_WORKERS)]
+    assert not leaked, f"a background worker outlived the test: {leaked}"
 
 
 def _home(monkeypatch) -> Path:
@@ -96,7 +112,7 @@ def picker_http(monkeypatch):
 # ── /model picker ──────────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("key", [OPAQUE, JWT], ids=["opaque", "jwt"])
+@pytest.mark.parametrize("key", [OPAQUE, GATEWAY_JWT], ids=["opaque", "gateway-jwt"])
 def test_picker_model_base_url_only_gateway_keeps_pool_key_on_gateway(monkeypatch, picker_http, key):
     """``model.base_url`` gateway, env unset, pool-only key: the picker asks the gateway (the host
     the chat route uses for that key), never chatgpt.com."""
@@ -110,11 +126,23 @@ def test_picker_model_base_url_only_gateway_keeps_pool_key_on_gateway(monkeypatc
     assert _authorized_hosts(picker_http) == {"codex-gw.example"}
 
 
+def test_picker_login_beside_a_model_base_url_gateway_is_not_sent_to_it(monkeypatch, picker_http):
+    """R36: ``model.base_url`` alone never carries a ChatGPT login to a gateway; R37: its catalog read is skipped."""
+    home = _home(monkeypatch)
+    _write_config(home, base_url=GW)
+    _write_pool(home, JWT)
+    from hermes_cli.models import _codex_catalog
+
+    _codex_catalog("openai-codex", force_refresh=True)
+
+    assert _authorized_hosts(picker_http) == set()
+
+
 def test_picker_pool_row_with_its_own_gateway_url(monkeypatch, picker_http):
     """A pool row that carries its gateway URL is authoritative for its own key."""
     home = _home(monkeypatch)
     _write_config(home)
-    _write_pool(home, JWT, row_base=OTHER_GW)
+    _write_pool(home, GATEWAY_JWT, row_base=OTHER_GW)
     from hermes_cli.models import _codex_catalog
 
     _codex_catalog("openai-codex", force_refresh=True)
@@ -128,9 +156,19 @@ def test_picker_uses_the_route_base_not_a_mismatched_env(monkeypatch, picker_htt
     monkeypatch.setenv("HERMES_CODEX_BASE_URL", OTHER_GW)
     from hermes_cli.codex_models import get_codex_model_ids
 
-    get_codex_model_ids(access_token=JWT, base_url=GW)
+    get_codex_model_ids(access_token=GATEWAY_JWT, base_url=GW)
 
     assert _authorized_hosts(picker_http) == {"codex-gw.example"}
+
+
+def test_picker_login_on_a_route_the_env_does_not_name_is_not_sent(monkeypatch, picker_http):
+    """R36: the env names another gateway, so the explicit act does not cover this route's host."""
+    monkeypatch.setenv("HERMES_CODEX_BASE_URL", OTHER_GW)
+    from hermes_cli.codex_models import get_codex_model_ids
+
+    get_codex_model_ids(access_token=JWT, base_url=GW)
+
+    assert picker_http == []
 
 
 def test_setup_flow_status_carries_the_pool_entry_route(monkeypatch):
@@ -182,7 +220,7 @@ def test_cli_default_model_swap_asks_the_session_route(monkeypatch, picker_http)
     from hermes_cli.cli_model_switch_mixin import CLIModelSwitchMixin
 
     monkeypatch.setenv("HERMES_CODEX_BASE_URL", OTHER_GW)
-    cli = SimpleNamespace(model="", api_key=JWT, base_url=GW, _model_is_default=True,
+    cli = SimpleNamespace(model="", api_key=GATEWAY_JWT, base_url=GW, _model_is_default=True,
                           _console_print=lambda *a, **kw: None)
     cli._normalize_model_for_provider = MethodType(CLIModelSwitchMixin._normalize_model_for_provider, cli)
 
@@ -230,6 +268,9 @@ def test_full_picker_discovers_codex_models_with_pinned_canonical_url(monkeypatc
     monkeypatch.setattr("hermes_cli.models.get_curated_nous_model_ids", lambda: [])
     monkeypatch.setattr("hermes_cli.models.fetch_ollama_cloud_models", lambda **kw: [])
     monkeypatch.setattr("hermes_cli.models_pricing.get_pricing_for_provider", lambda *a, **kw: {})
+    monkeypatch.setattr("agent.account_usage_cache.refresh_account_usage_async", lambda *a, **kw: [])
+    monkeypatch.setattr("agent.account_usage_cache.refresh_account_usage_entries_async", lambda *a, **kw: [])
+    monkeypatch.setattr("hermes_cli.inventory._prewarm_pricing_async", lambda *a, **kw: None)
 
     payload = build_model_options_payload(load_picker_context(), refresh=True)
     row = next(p for p in payload["providers"] if p["slug"] == "openai-codex")
@@ -262,7 +303,7 @@ def probe_http(monkeypatch):
     return seen
 
 
-@pytest.mark.parametrize("key", [OPAQUE, JWT], ids=["opaque", "jwt"])
+@pytest.mark.parametrize("key", [OPAQUE, GATEWAY_JWT], ids=["opaque", "gateway-jwt"])
 def test_context_probe_asks_the_gateway_with_its_own_key(probe_http, key):
     """The route's base is bound to its key: a gateway key (opaque or JWT) probes that gateway's
     catalog, never chatgpt.com."""
@@ -272,6 +313,14 @@ def test_context_probe_asks_the_gateway_with_its_own_key(probe_http, key):
 
     assert _authorized_hosts(probe_http) == {"codex-gw.example"}
     assert fresh and live.get("gpt-5.5") == 272000
+
+
+def test_context_probe_of_a_login_on_a_gateway_route_is_not_sent(probe_http):
+    """R36: the probe runs every chat turn, so a login it may not send stays home instead of being refused loudly."""
+    from agent import model_metadata as mm
+
+    assert mm._fetch_codex_oauth_context_lengths_with_source(JWT, base_url=GW) == ({}, False)
+    assert probe_http == []
 
 
 def test_context_probe_refuses_opaque_key_on_the_chatgpt_default(probe_http):
@@ -320,7 +369,7 @@ def _load_image_plugin():
     return module
 
 
-@pytest.mark.parametrize("key", [OPAQUE, JWT], ids=["opaque", "jwt"])
+@pytest.mark.parametrize("key", [OPAQUE, GATEWAY_JWT], ids=["opaque", "gateway-jwt"])
 def test_image_request_goes_to_the_pool_entry_gateway(monkeypatch, key):
     """Image generation with a pool-selected gateway key and a ``model.base_url``-only gateway:
     zero Authorization-bearing traffic to chatgpt.com."""
@@ -348,6 +397,31 @@ def test_image_request_goes_to_the_pool_entry_gateway(monkeypatch, key):
     assert seen[0][1] == f"Bearer {key}"
 
 
+def test_image_request_with_a_login_beside_a_config_gateway_is_refused_naming_the_opt_in(monkeypatch):
+    """R36: the same setup with a ChatGPT login: nothing leaves, and the error says how to opt in."""
+    import httpx
+
+    home = _home(monkeypatch)
+    _write_config(home, base_url=GW)
+    _write_pool(home, JWT)
+    img = _load_image_plugin()
+    seen = []
+
+    def handler(request):
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"data": [{"b64_json": "aGk="}]}, request=request)
+
+    real_client = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda *a, **kw: real_client(
+        transport=httpx.MockTransport(handler), headers=kw.get("headers"), timeout=kw.get("timeout")))
+
+    result = img.OpenAICodexImageGenProvider().generate("a cat")
+
+    assert result["success"] is False
+    assert "HERMES_CODEX_BASE_URL" in result["error"]
+    assert seen == []
+
+
 # ── quota-restored probe + /usage (pool rows keep the canonical ChatGPT URL) ──────────────
 
 
@@ -369,15 +443,15 @@ class _UsageRecorder:
             "rate_limit": {"primary_window": {"used_percent": 10}}}, headers={})
 
 
-def _exhausted_jwt_pool(home: Path) -> None:
-    """A JWT-shaped gateway key in a rate-limited pool row that still carries the canonical URL."""
+def _exhausted_jwt_pool(home: Path, token: str = JWT) -> None:
+    """A JWT in a rate-limited pool row that still carries the canonical URL."""
     import time
     now = time.time()
     (home / "auth.json").write_text(json.dumps({
         "version": 1, "providers": {},
         "credential_pool": {"openai-codex": [{
             "id": "gw", "label": "gateway", "auth_type": "oauth", "priority": 0,
-            "source": "device_code", "access_token": JWT, "base_url": CHATGPT,
+            "source": "device_code", "access_token": token, "base_url": CHATGPT,
             "last_status": "exhausted", "last_status_at": now, "last_error_code": 429,
             "last_error_reason": "usage_limit_reached", "last_error_message": "The usage limit has been reached",
             "last_error_reset_at": now + 3 * 24 * 3600,
@@ -396,29 +470,35 @@ def usage_probe_http(monkeypatch):
     auth_mod._codex_quota_probe_cache.clear()
 
 
-def test_quota_restored_probe_of_a_persisted_entry_asks_the_gateway(monkeypatch, usage_probe_http):
+# R37: a gateway's own key is asked at its gateway, a ChatGPT login at chatgpt.com whatever the route.
+_PROBE_HOSTS = [(GATEWAY_JWT, "codex-gw.example"), (JWT, "chatgpt.com")]
+
+
+@pytest.mark.parametrize(("token", "host"), _PROBE_HOSTS, ids=["gateway-jwt", "login"])
+def test_quota_restored_probe_of_a_persisted_entry_asks_its_own_host(monkeypatch, usage_probe_http, token, host):
     home = _home(monkeypatch)
     _write_config(home, base_url=GW)
-    _exhausted_jwt_pool(home)
+    _exhausted_jwt_pool(home, token)
     from hermes_cli.auth_codex import _probe_codex_pool_entry_quota_restored
 
     entry = json.loads((home / "auth.json").read_text())["credential_pool"]["openai-codex"][0]
     assert _probe_codex_pool_entry_quota_restored(entry) is True
 
-    assert _authorized_hosts(usage_probe_http) == {"codex-gw.example"}
+    assert _authorized_hosts(usage_probe_http) == {host}
 
 
-def test_pool_selection_quota_probe_asks_the_gateway(monkeypatch, usage_probe_http):
+@pytest.mark.parametrize(("token", "host"), _PROBE_HOSTS, ids=["gateway-jwt", "login"])
+def test_pool_selection_quota_probe_asks_its_own_host(monkeypatch, usage_probe_http, token, host):
     home = _home(monkeypatch)
     _write_config(home, base_url=GW)
-    _exhausted_jwt_pool(home)
+    _exhausted_jwt_pool(home, token)
     from agent.credential_pool import load_pool
 
     pool = load_pool("openai-codex")
     (entry,) = pool.entries()
     assert pool._codex_quota_restored_upstream(entry) is True
 
-    assert _authorized_hosts(usage_probe_http) == {"codex-gw.example"}
+    assert _authorized_hosts(usage_probe_http) == {host}
 
 
 def test_quota_restored_probe_direct_chatgpt_positive_control(monkeypatch, usage_probe_http):
@@ -492,6 +572,6 @@ def test_route_fallback_reads_the_profile_scoped_override_not_a_sibling_process_
     for scope, expected in [({}, GW), ({"HERMES_CODEX_BASE_URL": OTHER_GW + "/"}, OTHER_GW)]:
         token = set_secret_scope(scope)
         try:
-            assert _codex_pool_route_base_url(GW) == expected
+            assert _codex_pool_route_base_url(GW, token=OPAQUE) == expected
         finally:
             reset_secret_scope(token)

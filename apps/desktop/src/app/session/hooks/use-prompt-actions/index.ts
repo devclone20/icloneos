@@ -25,7 +25,7 @@ import {
 } from '@/store/composer'
 import { resetSessionBackground } from '@/store/composer-status'
 import { requestGatewayForAgent } from '@/store/gateway'
-import { clearNotifications, notify, notifyError } from '@/store/notifications'
+import { clearNotifications, dismissNotification, notify, notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
 import {
@@ -56,6 +56,7 @@ import type {
   SessionRedirectResponse
 } from '../../../types'
 
+import { isGatewayReconnecting, waitForGatewayOpen } from './reconnect-hold'
 import {
   appendMidTurnUserMessage,
   applyBranchVisibility,
@@ -105,7 +106,14 @@ const CONTAINER_TERMINAL_BACKENDS = new Set(['docker', 'ssh', 'singularity', 'mo
 // boundary as bytes just like a remote attachment. Container terminal backends
 // (docker, ssh, ...) always need bytes: the sandbox has its own filesystem and
 // the host path would dangle inside it (#76577).
+const APP_DATA_IMAGE = /[\\/]composer-images[\\/]/
+
 function attachmentPathNeedsUpload(path: string, backendCwd?: null | string, terminalBackend?: string): boolean {
+  // The app's own data folder is denied whole to a confined runtime: to it, these images do not exist.
+  if (APP_DATA_IMAGE.test(path)) {
+    return true
+  }
+
   if (CONTAINER_TERMINAL_BACKENDS.has((terminalBackend || '').trim().toLowerCase())) {
     return true
   }
@@ -639,6 +647,27 @@ export function usePromptActions({
 
       if (!attachments.length && SLASH_COMMAND_RE.test(visibleText)) {
         triggerHaptic('selection')
+
+        // The same hold a plain message gets: a command runs against the backend that comes back, never into the restart.
+        // /profile would otherwise start its swap while the reconnect is still re-adopting the window's primary profile,
+        // and the next chat would open on the profile the person just left.
+        if (isGatewayReconnecting()) {
+          const held = options?.fromQueue ? null : notify({ kind: 'info', message: t.desktop.sendHeldReconnecting })
+          const up = await waitForGatewayOpen()
+
+          if (held) {
+            dismissNotification(held)
+          }
+
+          if (!up) {
+            if (!options?.fromQueue) {
+              notify({ kind: 'warning', message: t.desktop.sendKeptNoBackend, survivesClear: true })
+            }
+
+            return false
+          }
+        }
+
         // Forward the explicit target (background queue drain, tile) — dropping
         // it ran the command against whatever chat happened to be in front.
         await executeSlashCommand(visibleText, options?.sessionId ? { sessionId: options.sessionId } : undefined)
@@ -648,7 +677,7 @@ export function usePromptActions({
 
       return await submitPromptText(rawText, options)
     },
-    [executeSlashCommand, submitPromptText]
+    [executeSlashCommand, submitPromptText, t.desktop]
   )
 
   const transcribeVoiceAudio = useCallback(

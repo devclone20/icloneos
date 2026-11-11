@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Consumer-contract extractor (RESUME/contracts/P4_upstream.md §3.1). Reads the app's code, never the runtime, and
+// Consumer-contract extractor (the P4 upstream contract §3.1). Reads the app's code, never the runtime, and
 // writes the reviewed lock (runtime.lock.json), the unreviewed call-site file, lock.generated.ts and extract-report.json.
 //
 //   node iclone/contract/extract.mjs [--app <apps/desktop-like dir>] [--out <dir>] [--cache <dir>] [--allow <json>]

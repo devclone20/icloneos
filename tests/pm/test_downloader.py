@@ -67,7 +67,12 @@ def test_parallel_requests_overlap_without_exceeding_limit(tmp_path, connections
                     active -= 1
 
     dest = tmp_path / "big.bin"
-    with ThreadingHTTPServer(("127.0.0.1", 0), ConcurrentHandler) as server:
+    class ConcurrentServer(ThreadingHTTPServer):
+        # All the ranges connect at once. The default backlog of 5 drops some on macOS, and a
+        # dropped SYN comes back after the barrier has timed out, which reads as serialized.
+        request_queue_size = 128
+
+    with ConcurrentServer(("127.0.0.1", 0), ConcurrentHandler) as server:
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         try:

@@ -402,7 +402,7 @@ describe('System permissions: every TCC state', () => {
     fakeSetup(accepted(CURRENT))
     await openSetup()
     await waitFor(() => expect(row('computerUse').getAttribute('data-setup-status')).toBe('needs'))
-    await act(async () => fireEvent.click(within(row('computerUse')).getByRole('button')))
+    await act(async () => fireEvent.click(within(row('computerUse')).getByRole('button', { name: 'Allow…' })))
     expect(computerUse.grant).toHaveBeenCalledTimes(1)
   })
 })

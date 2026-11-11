@@ -27,6 +27,12 @@ export interface AtomicWriteOptions {
    * the temp file stays behind for the caller's leftover sweep (`isAtomicTempName`).
    */
   beforeRename?: ((temp: string, file: string) => void) | undefined
+  /**
+   * False: still atomic for every reader (exclusive temp file, rename), but not fsynced. Only for a file whose loss in
+   * a power cut is harmless because it is rebuilt before anyone trusts it again (a per-launch file main rewrites at
+   * the next start). Default true. `writeFileAtomicSync` only.
+   */
+  durable?: boolean | undefined
 }
 
 const TEMP_NAME = /^\..+\.\d+\.[0-9a-f]{12}\.tmp$/
@@ -109,6 +115,23 @@ async function fsyncDir(dir: string): Promise<void> {
   }
 }
 
+/**
+ * The durable half of a `durable: false` write, off the main thread: fsyncs `file` and then its directory in the
+ * thread pool. Resolves once both are on stable storage; a failure to sync the file rejects (the directory as in
+ * fsyncDir). For a caller that must not hold the event loop for a flush (macOS fsync is F_FULLFSYNC: 10-100 ms).
+ */
+export async function syncFileAndDir(file: string): Promise<void> {
+  const handle = await fs.promises.open(file, 'r')
+
+  try {
+    await handle.sync()
+  } finally {
+    await handle.close()
+  }
+
+  await fsyncDir(path.dirname(file))
+}
+
 /** Replaces `file` with `data` atomically (sync). Creates missing parent directories. */
 export function writeFileAtomicSync(file: string, data: string | Uint8Array, options: AtomicWriteOptions = {}): void {
   const dir = path.dirname(file)
@@ -124,14 +147,20 @@ export function writeFileAtomicSync(file: string, data: string | Uint8Array, opt
     try {
       fs.writeFileSync(fd, data)
       fs.fchmodSync(fd, mode)
-      fs.fsyncSync(fd)
+
+      if (options.durable !== false) {
+        fs.fsyncSync(fd)
+      }
     } finally {
       fs.closeSync(fd)
     }
   })
   options.beforeRename?.(tmp, file)
   removingTempOnError(tmp, () => fs.renameSync(tmp, file))
-  fsyncDirSync(dir)
+
+  if (options.durable !== false) {
+    fsyncDirSync(dir)
+  }
 }
 
 /** The asynchronous write path of `writeFileAtomic` and `writeStreamAtomic`: `fill` writes the temp file's content. */

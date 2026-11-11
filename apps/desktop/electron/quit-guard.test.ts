@@ -60,3 +60,31 @@ test('quitPromptFor speaks singular for one chat', () => {
   assert.equal(prompt.message, 'Hermes is still working on 1 chat.')
   assert.ok(prompt.detail.includes('mid-turn'))
 })
+
+test('quitPromptFor asks about a background command when no chat is running (fx21)', () => {
+  const prompt = quitPromptFor({ count: 0, titles: [] }, false, 1)
+  assert.ok(prompt)
+  assert.equal(prompt.message, '1 background command is still running.')
+  assert.match(prompt.detail, /Quitting stops it/)
+  assert.equal(quitPromptFor({ count: 0, titles: [] }, false, 2)?.message, '2 background commands are still running.')
+})
+
+test('quitPromptFor adds background commands to a running chat, and an update handoff skips both (fx21)', () => {
+  const prompt = quitPromptFor({ count: 1, titles: ['Fix login'] }, false, 2)
+  assert.equal(prompt?.message, 'Hermes is still working on 1 chat.')
+  assert.match(prompt?.detail ?? '', /Quitting also stops 2 background commands\./)
+  assert.equal(quitPromptFor({ count: 0, titles: [] }, true, 3), null)
+  assert.doesNotMatch(quitPromptFor({ count: 1, titles: [] }, false)?.detail ?? '', /background/)
+})
+
+test('fx22: a signal or a handoff skips the prompt whatever the background count says', () => {
+  assert.equal(quitPromptFor({ count: 0, titles: [] }, true, 3), null)
+  assert.equal(quitPromptFor({ count: 2, titles: ['Fix login'] }, true, 3), null)
+})
+
+test('fx23 (proof6 F5): the prompt agrees in number with its count', () => {
+  assert.match(quitPromptFor({ count: 0, titles: [] }, false, 1)?.detail ?? '', /Quitting stops it\./)
+  const many = quitPromptFor({ count: 0, titles: [] }, false, 3)?.detail ?? ''
+  assert.match(many, /Quitting stops them\./)
+  assert.doesNotMatch(many, /\bit\b/)
+})

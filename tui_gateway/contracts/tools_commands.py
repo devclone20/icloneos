@@ -515,6 +515,9 @@ class BrowserAction(WireEnum):
     connect = "connect"
     disconnect = "disconnect"
     use = "use"
+    record_status = "record_status"
+    record_sync = "record_sync"
+    record_stop = "record_stop"
 
 
 class BrowserManageParams(Params):
@@ -526,12 +529,27 @@ class BrowserManageParams(Params):
     profile: str | None = None
 
 
+class BrowserRecordNotice(Result):
+    seq: int
+    ok: bool
+    message: str
+    file: str | None = None
+    path: str | None = None
+
+
 class BrowserManageResult(Result):
-    connected: bool
+    # Every action but the three ``record_*``.
+    connected: bool | None = None
     url: str | None = None
     messages: list[str] | None = None
     # ``status`` / ``use``: whether new agents for this profile get browser_exec.
     browser_use: bool | None = None
+    # ``record_*``: the setting as the runtime reads it, this runtime's id (its notices count from 1 again), the videos being
+    # captured now, and what the user should read.
+    armed: bool | None = None
+    boot: str | None = None
+    capturing: list[str] | None = None
+    notices: list[BrowserRecordNotice] | None = None
 
 
 method("browser.manage", params=BrowserManageParams, result=BrowserManageResult,

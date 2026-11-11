@@ -40,6 +40,7 @@ import { installEmbedReferer } from './embed-referer'
 import { registerFsIpc } from './fs-ipc'
 import { registerGitIpc } from './git-ipc'
 import { enableBasicPasswordStoreEncryption, resolveRequestedPathForIpc } from './hardening'
+import { homeSettingsCopyGuard } from './home-settings-guard'
 import { registerHudIpc } from './hud-ipc'
 import { acpWorkCli, initIcloneAcp, refreshAcpToolsSealing, startIcloneSelftest } from './iclone-acp'
 import { streamingSlugs } from './iclone-acp-ipc'
@@ -55,7 +56,11 @@ import {
 } from './iclone-app-update'
 import { initIcloneBalances } from './iclone-balances'
 import { initIcloneClaudeCode } from './iclone-claude-code'
-import { registerConfinement, stopConfinement } from './iclone-confinement/ipc'
+import { confinementPaths, currentConfinement } from './iclone-confinement/index'
+import { confinementSpawnEnv, registerConfinement, stopConfinement } from './iclone-confinement/ipc'
+import { confirmIsolationOffNatively, restartAgentInPlace } from './iclone-confinement/isolation-switch'
+import { leftRunningCount, runFiles } from './iclone-confinement/runs'
+import { runtimePids } from './iclone-confinement/state'
 import { bundledLegalDir, consentAllows, onConsentPermissionsChanged, registerIcloneConsent } from './iclone-consent'
 import { registerConsentDoor } from './iclone-consent-door'
 import { initIcloneDoctor } from './iclone-doctor-main'
@@ -66,6 +71,7 @@ import { createKeychainSwitch } from './iclone-live-sealing'
 import { initIcloneModel } from './iclone-model'
 import { initIcloneOwnership } from './iclone-ownership'
 import { initPaneBus, paneBusTerminalHooks } from './iclone-pane-bus/ipc'
+import { callingSession } from './iclone-permissions/calling-session'
 import { gestureOf, permissionGestureOk } from './iclone-permissions/gesture'
 import {
   confirmFunctionRaiseNatively,
@@ -96,7 +102,7 @@ import {
   activeSshTerminalTarget,
   primaryBackendIsRemote,
   primaryProfileKey,
-  sendConnectionApplied,
+  sendBackendRestarted,
   teardownPrimaryBackendAndWait
 } from './main/backend'
 import {
@@ -148,8 +154,10 @@ import {
   SKIP_QUIT_CONFIRM
 } from './main/env'
 import { findOnPath, resolveGhBinary, resolveGitBinary } from './main/executables'
-import { registerFilesIpc } from './main/files-ipc'
+import { pickProjectFolderDialog, registerFilesIpc } from './main/files-ipc'
+import { registerHomeSettingsIpc } from './main/home-settings-ipc'
 import { closeHudWindow, hudSnapShortcut, openHudWindow, resetHudWindowLayout } from './main/hud'
+import { prewarmRuntimeIntegrity } from './main/iclone-gate'
 import { flushDesktopLogBufferSync, hermesLog, rememberLog, updatePolicy } from './main/log'
 import { createWindow } from './main/main-window'
 import { sshBootstrapCoordinator, teardownSshConnection } from './main/managed-ssh'
@@ -157,6 +165,7 @@ import { registerMediaProtocol } from './main/media-protocol'
 import { closePreviewWatchers, expandUserPath } from './main/preview'
 import { applyQuickEntrySettings, closeQuickEntryWindow, readQuickEntrySettings } from './main/quick-entry'
 import { resolveRendererIndex } from './main/runtime'
+import { registerScreenRecordIpc } from './main/screen-record-ipc'
 import { migrateLegacyEncryptedSecretsOnce } from './main/secret-storage'
 import { onSecretStoragePolicyWrite, secretStoragePolicy } from './main/secrets'
 import { registerSetupIpc } from './main/setup-ipc'
@@ -231,6 +240,24 @@ registerConnectionRoutingIpc({
 })
 registerWindowIpc({ connectionRuntimeState, windowsState })
 registerBootstrapIpc({ backendConnectionState, bootState, progressState })
+registerHomeSettingsIpc({
+  copyGuard: () =>
+    homeSettingsCopyGuard(
+      confinementPaths({ hermesHome: HERMES_HOME, hermesRoot: ACTIVE_HERMES_ROOT, home: os.homedir(), userDataDir: app.getPath('userData') })
+    ),
+  gestureOk: (event, input) =>
+    permissionGestureOk({ payload: gestureOf(input), lastInputAt: lastTrustedInputAt(event.sender), now: Date.now() }),
+  hermesHome: HERMES_HOME,
+  isConfined: () => confinementSpawnEnv().ICLONE_RUNTIME_CONFINED === '1',
+  // iclone-seam: p7-ipc-sender — the copy makes a file outside the home readable by the agent; only the app's own renderer.
+  isTrustedSender: createAppSenderGuard({
+    devServer: DEV_SERVER,
+    rendererIndexPath: resolveRendererIndex,
+    log: rememberLog
+  }),
+  log: rememberLog,
+  primaryProfile: primaryProfileKey
+})
 registerConnectionsIpc({ saveRegistryConnection, stopRegistryConnectionBackends })
 registerAgentRosterIpc({ backendDialClaims, backendPool })
 registerConnectionConfigIpc({ bootState, stopPoolBackend, windowsState })
@@ -376,6 +403,9 @@ app.whenReady().then(() => {
   // Warm the login-shell PATH resolution immediately so it usually completes
   // before the backend start path awaits the same single-flight promise.
   void ensureLoginShellPath()
+
+  // L4-01: hash the managed runtime into the digest cache now (read-only), so the first spawn's check mostly lstat()s.
+  void prewarmRuntimeIntegrity()
 
   // Read before clearCachesOnVersionChange rewrites it: the Privy "signed out since the update" hint needs it.
   const versionChange = { current: app.getVersion(), previous: lastSeenVersion(app.getPath('userData')) }
@@ -547,7 +577,8 @@ app.whenReady().then(() => {
   })
 
   // V3-ON: the first-launch Set up step's system permissions and package states (same sender guard).
-  registerSetupIpc(consentSenderGuard, consentStore)
+  registerSetupIpc(consentSenderGuard, consentStore, () => relaunchOnQuit.request())
+  registerScreenRecordIpc(consentSenderGuard)
 
   // The consent door: `acp consent request <key> --reason …` from an agent → one sheet at a time in the app windows.
   let consentDoorBounce: number | null = null
@@ -561,6 +592,7 @@ app.whenReady().then(() => {
   const consentDoor = registerConsentDoor({
     ipcMain,
     isTrustedSender: consentSenderGuard,
+    ignoreInForce: () => activePermissions().authority?.modeOfCaller(callingSession()) === 'ignore',
     gestureOk: (event, input) =>
       permissionGestureOk({ payload: gestureOf(input), lastInputAt: senderInputAt(event), now: Date.now() }),
     store: consentStore,
@@ -595,6 +627,7 @@ app.whenReady().then(() => {
   // V3-F — the five permission modes: main is the only authority (electron/iclone-permissions/).
   registerPermissions({
     ipcMain,
+    pickFolderDialog: pickProjectFolderDialog,
     isTrustedSender: consentSenderGuard,
     userDataDir: app.getPath('userData'),
     paths: { hermesHome: HERMES_HOME, home: os.homedir(), hermesRoot: ACTIVE_HERMES_ROOT },
@@ -604,8 +637,8 @@ app.whenReady().then(() => {
     // FX-2: the master key is sealed (and its seal probed) only under the owner's Keychain setting: no keychain dialog
     // at launch. Off = an unsealed per-run key (the authority's 'unavailable' key status), as with no OS encryption.
     sealer: secretStoragePolicy().on ? permissionKeySealer(safeStorage) : null,
-    confirmIgnore: request =>
-      confirmIgnoreNatively(dialog, BrowserWindow.getFocusedWindow(), MAIN_DIALOG_LOCALE, request),
+    // F40: a free-standing alert, never attached to a window: on macOS a parent would make it a sheet.
+    confirmIgnore: request => confirmIgnoreNatively(dialog, null, MAIN_DIALOG_LOCALE, request),
     confirmFunctionRaise: request =>
       confirmFunctionRaiseNatively(dialog, BrowserWindow.getFocusedWindow(), MAIN_DIALOG_LOCALE, request),
     broadcast: seq => broadcastToWindows(() => BrowserWindow.getAllWindows(), 'iclone:permissions:changed', seq)
@@ -621,7 +654,7 @@ app.whenReady().then(() => {
     socketDir: path.join(app.getPath('userData'), 'run'),
     sealer: paymentsSealing.current(),
     door: consentDoor,
-    mode: () => activePermissions().authority?.state().mode.standing ?? 'manual',
+    mode: () => activePermissions().authority?.modeOfCaller(callingSession()) ?? 'manual',
     audit: entry => recordPayment(entry),
     gestureOk: (event, input) =>
       permissionGestureOk({ payload: gestureOf(input), lastInputAt: senderInputAt(event), now: Date.now() }),
@@ -686,8 +719,23 @@ app.whenReady().then(() => {
         }
       : null,
     lastInputAt: senderInputAt,
-    hermesPids: () => [backendConnectionState.getProcess()?.pid].filter((pid): pid is number => Boolean(pid)),
-    broadcast: channel => broadcastToWindows(() => BrowserWindow.getAllWindows(), channel, null)
+    // F41: the native dialog before isolation goes off, on the window that asked.
+    confirmIsolationOff: (event, persists) =>
+      confirmIsolationOffNatively(
+        dialog,
+        BrowserWindow.fromWebContents((event as Electron.IpcMainInvokeEvent).sender),
+        persists
+      ),
+    restartAgent: () =>
+      restartAgentInPlace({
+        running: () => Boolean(backendConnectionState.getProcess()?.pid),
+        stop: () => Promise.all([teardownPrimaryBackendAndWait({ soft: true }), poolStopper.stopAll()]),
+        start: () => startHermes(),
+        restarted: sendBackendRestarted
+      }),
+    hermesPids: () => runtimePids(backendConnectionState.getProcess()?.pid, backendPool.values()),
+    primaryPid: () => backendConnectionState.getProcess()?.pid ?? null,
+    broadcast: (channel, notice) => broadcastToWindows(() => BrowserWindow.getAllWindows(), channel, notice ?? null)
   })
   // iCLONE OS — local self-diagnostics + fixes (Settings › Diagnostics, `acp doctor`; see electron/iclone-doctor-main.ts).
   initIcloneDoctor({
@@ -705,7 +753,7 @@ app.whenReady().then(() => {
     stopGateway: () => teardownPrimaryBackendAndWait({ soft: true }),
     startGateway: async () => {
       await startHermes()
-      sendConnectionApplied()
+      sendBackendRestarted()
     },
     encryptionOn: () => secretStoragePolicy().on,
     isTrustedSender: createAppSenderGuard({
@@ -916,7 +964,12 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
     return false
   }
 
-  const prompt = quitPromptFor(mergeActiveWork(activeWorkByWebContents.values()), quitState.isQuittingForHandoff)
+  const prompt = quitPromptFor(
+    mergeActiveWork(activeWorkByWebContents.values()),
+    quitState.isQuittingForHandoff,
+    leftRunningCount(runFiles(app.getPath('userData')), undefined, currentConfinement()?.launcherSince() ?? null)
+  )
+
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
 
   if (!prompt || !parent || parent.isDestroyed()) {

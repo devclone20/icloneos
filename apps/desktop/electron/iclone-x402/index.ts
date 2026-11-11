@@ -838,8 +838,14 @@ export function registerPayments(deps: RegisterPaymentsDeps): RegisteredPayments
 
   const failed = { ok: false as const, reason: 'unknown' as const }
 
+  // The pane polls this every 3 s: a ledger whose stamp moved is verified off the event loop first, so the sync
+  // folds below read the verified cache (L4-03).
   ipcMain.handle('iclone:payments:status', () =>
-    safely(() => ({ ...payments.status(server !== null), unprotectedProfiles: [...unprotectedProfiles] }), null)
+    safely(async () => {
+      await payments.ledger.readAsync()
+
+      return { ...payments.status(server !== null), unprotectedProfiles: [...unprotectedProfiles] }
+    }, null)
   )
   ipcMain.handle('iclone:payments:limits', () => safely(() => payments.limits(), null))
   ipcMain.handle('iclone:payments:mandates', () => safely(() => payments.mandates(), []))

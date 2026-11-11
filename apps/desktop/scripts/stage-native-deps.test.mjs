@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import fs, { existsSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,11 +8,13 @@ import { test } from 'vitest'
 
 import {
   installGetWindowsNativeBinding,
+  stageIcloneFseventsInto,
   stageGetWindows,
   stageGetWindowsInto,
   stageNodePtyInto,
   classifyNativeBinary
 } from '../scripts/stage-native-deps.mjs'
+import { readAddonPin } from '../scripts/build-iclone-fsevents.mjs'
 
 const { join } = path
 
@@ -634,3 +637,53 @@ test('win32-x64 staging fails when get-windows is absent', () => {
     /get-windows is not installed/
   )
 })
+
+// ─── iclone_fsevents (FSEV) ───────────────────────────────────────
+
+test('iclone_fsevents: only the pinned bytes are staged, for darwin', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'stage-fsev-'))
+
+  try {
+    const built = join(tmp, 'iclone_fsevents.node')
+    const dest = join(tmp, 'dist', 'native', 'iclone_fsevents.node')
+
+    makeFakeNode(built, 'darwin')
+
+    const sha256 = createHash('sha256').update(fs.readFileSync(built)).digest('hex')
+    const pin = { sha256, sha256Unsigned: sha256, source: sha256 }
+
+    assert.equal(stageIcloneFseventsInto(built, dest, { platform: 'darwin', pin }), dest)
+    assert.deepEqual(fs.readFileSync(dest), fs.readFileSync(built))
+    assert.equal(stageIcloneFseventsInto(built, join(tmp, 'w'), { platform: 'win32', pin }), undefined)
+
+    // One byte changed (L1-4): refused, and nothing is staged.
+    const tampered = join(tmp, 'tampered.node')
+    const bytes = fs.readFileSync(built)
+
+    bytes[bytes.length - 1] ^= 1
+    fs.writeFileSync(tampered, bytes)
+    assert.throws(
+      () => stageIcloneFseventsInto(tampered, join(tmp, 'd1', 'a.node'), { platform: 'darwin', pin }),
+      /not the pinned iclone_fsevents\.node/
+    )
+    assert.equal(fs.existsSync(join(tmp, 'd1', 'a.node')), false)
+
+    const linux = join(tmp, 'linux.node')
+
+    makeFakeNode(linux, 'linux')
+    assert.throws(() => stageIcloneFseventsInto(linux, join(tmp, 'd2', 'a.node'), { platform: 'darwin', pin }), /not a macOS binary/)
+    assert.throws(() => stageIcloneFseventsInto(join(tmp, 'missing.node'), join(tmp, 'd3', 'a.node'), { platform: 'darwin', pin }), /is not built/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('iclone_fsevents: the committed pin is well formed and the build script is the one wired into npm run build', () => {
+  const pin = readAddonPin()
+  const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+
+  assert.equal(pin.minimumSystemVersion, pkg.build.mac.minimumSystemVersion)
+  assert.match(pkg.scripts.build, /node scripts\/build-iclone-fsevents\.mjs && node scripts\/stage-native-deps\.mjs/)
+  assert.equal(pkg.optionalDependencies?.fsevents, undefined)
+})
+

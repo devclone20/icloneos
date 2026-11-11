@@ -5,8 +5,7 @@ columns + Free/Pro badges and gate paid models on free Nous accounts, the
 same way the `hermes model` CLI picker does.
 """
 
-from threading import Event
-from time import monotonic
+from threading import Event, get_ident
 
 import pytest
 
@@ -111,12 +110,16 @@ def test_model_options_cold_pricing_fetch_runs_off_the_request_path(monkeypatch)
     """A cold pricing endpoint must not delay the first picker payload."""
     fetch_started = Event()
     release_fetch = Event()
+    fetch_finished = Event()
+    fetch_threads = []
 
     def fake_pricing(_slug, *, force_refresh=False, cached_only=False):
         if cached_only:
             return {}
+        fetch_threads.append(get_ident())
         fetch_started.set()
-        release_fetch.wait(timeout=5)
+        release_fetch.wait(timeout=30)  # held until the payload is back; only a blocking path pays this
+        fetch_finished.set()
         return {}
 
     row = {
@@ -139,7 +142,6 @@ def test_model_options_cold_pricing_fetch_runs_off_the_request_path(monkeypatch)
     monkeypatch.setattr(inv, "_pricing_prewarm_threads", {})
 
     try:
-        started_at = monotonic()
         payload = inv.build_model_options_payload(
             inv.ConfigContext(
                 current_provider="openrouter",
@@ -149,16 +151,19 @@ def test_model_options_cold_pricing_fetch_runs_off_the_request_path(monkeypatch)
                 custom_providers=[],
             )
         )
-        elapsed = monotonic() - started_at
+        # Ordering, not wall clock: the payload is back while the fetch it must not wait for is
+        # still held open. A 2 s budget measured machine load (gate run h9: 2.84 s, nothing blocked).
+        assert not fetch_finished.is_set(), "the picker waited for the cold pricing fetch"
         assert payload["providers"][0]["slug"] == "openrouter"
         assert "pricing" not in payload["providers"][0]
-        assert elapsed < 2.0, f"cold picker blocked for {elapsed:.2f}s"
-        assert fetch_started.wait(timeout=1), "pricing should prewarm in the background"
+        assert fetch_started.wait(timeout=30), "pricing should prewarm in the background"
+        assert fetch_threads and get_ident() not in fetch_threads
     finally:
         threads = list(inv._pricing_prewarm_threads.values())
         release_fetch.set()
         for thread in threads:
-            thread.join(timeout=2)
+            thread.join(timeout=30)
+        assert not any(thread.is_alive() for thread in threads)
 
 
 def test_cold_nous_entitlement_keeps_models_unselectable(monkeypatch):

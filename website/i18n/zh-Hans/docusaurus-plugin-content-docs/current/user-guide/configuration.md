@@ -1532,7 +1532,7 @@ web:
 browser:
   inactivity_timeout: 120        # 自动关闭空闲会话前的秒数
   command_timeout: 30             # 浏览器命令超时（截图、导航等）（秒）
-  record_sessions: false         # 自动将浏览器会话录制为 WebM 视频到 ~/.hermes/browser_recordings/
+  record_sessions: false         # 自动将浏览器会话录制为 WebM 视频到 ~/Movies/icloneOS Recordings/
   # 可选 CDP 覆盖 —— 设置后，Hermes 直接附加到您自己的
   # Chromium 系浏览器（通过 /browser connect），而不是启动无头浏览器。
   cdp_url: ""

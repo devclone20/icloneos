@@ -12,6 +12,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,20 @@ from hermes_cli import update_cmd
 def _git(root: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True,
                           text=True, encoding="utf-8").stdout.strip()
+
+
+def _clone(cwd: Path, origin: Path, root: Path) -> None:
+    # git on macOS can fail with "failed to copy file" on objects written a moment earlier; measured with plain git
+    # outside pytest, 2 of 12 immediate clones against 0 of 12 after 3 s. A retry waits it out; only the fixture is retried.
+    for attempt in range(5):
+        try:
+            _git(cwd, "clone", "-q", str(origin), str(root))
+            return
+        except subprocess.CalledProcessError:
+            if attempt == 4:
+                raise
+            shutil.rmtree(root, ignore_errors=True)
+            time.sleep(1)
 
 
 _MULTI = "top = 1\nx = 0\ny = 0\nz = 0\nend = 1\n"
@@ -77,7 +92,7 @@ def checkout(tmp_path, monkeypatch):
     _git(origin, "update-index", "--chmod=+x", "tool.sh")
     _git(origin, "commit", "-qm", "B")
     root = tmp_path / "install"
-    _git(tmp_path, "clone", "-q", str(origin), str(root))
+    _clone(tmp_path, origin, root)
     _git(root, "reset", "-q", "--hard", "HEAD~1")
     monkeypatch.setattr("hermes_cli.main.PROJECT_ROOT", root)
     return root, _git(root, "rev-parse", "HEAD"), _git(root, "rev-parse", "origin/main")
@@ -288,7 +303,7 @@ def test_concurrent_launches_take_turns_and_all_rerun_from_the_restored_tree(tmp
         (origin / name).write_text(f"V = 'new {i}'\n" * 50, encoding="utf-8", newline="")
     _git(origin, "commit", "-qam", "B")
     root = tmp_path / "install"
-    _git(tmp_path, "clone", "-q", str(origin), str(root))
+    _clone(tmp_path, origin, root)
     _git(root, "reset", "-q", "--hard", "HEAD~1")
     pre, target = _git(root, "rev-parse", "HEAD"), _git(root, "rev-parse", "origin/main")
     for i, name in enumerate(names[:150]):  # git got halfway
