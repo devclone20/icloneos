@@ -2,7 +2,7 @@
   "name": "iclone-os",
   "productName": "iclone os",
   "private": true,
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "iclone os — the iNFT desktop by CLONE FRAME, built on the Hermes desktop app by Nous Research (MIT).",
   "author": {
     "name": "CLONE FRAME",
@@ -332,8 +332,8 @@
       "**/get-windows/main"
     ],
     "mac": {
-      "bundleShortVersion": "0.0.7",
-      "bundleVersion": "0.0.7",
+      "bundleShortVersion": "0.0.8",
+      "bundleVersion": "0.0.8",
       "category": "public.app-category.developer-tools",
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",

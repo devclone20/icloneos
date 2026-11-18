@@ -808,13 +808,13 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     // CF1: the F7 guard's full-scan worker thread: the bundled walk script read from beside the main bundle, or the
     // TypeScript source beside it; it runs only hardlinks-walk.ts (node:fs), with an empty env, and posts records.
     // I7 (F-8): both carry resourceLimits, the heap cap (WALK_WORKER_HEAP_MB); it only bounds the worker's own heap.
-    'iclone-confinement/hardlinks-walker.ts startWalkWorker 93b2bbc4061c',
+    'iclone-confinement/hardlinks-walker.ts startWalkWorker 3f2cb064508d',
     'iclone-confinement/hardlinks-walker.ts startWalkWorker d9900039f3c3',
     // FSEV: the F7 guard's own FSEvents addon, by one of two fixed paths (iclone-fsevents.ts addonCandidates).
     'iclone-confinement/iclone-fsevents.ts loadIcloneFsevents 4ad2963c3c82',
-    'iclone-confinement/index.ts ensureLauncher ec934a6a8628',
+    'iclone-confinement/index.ts ensureLauncher f7ddcbee85a4',
     'iclone-confinement/index.ts xcrunCacheFile cbfdec72e4bb',
-    'iclone-confinement/launcher.ts launch 5d6fa468688f',
+    'iclone-confinement/launcher.ts launch 173752b931b3',
     'iclone-confinement/probe.ts probeContainer 46034aa8f4fe',
     'iclone-confinement/probe.ts probeSeatbelt b06b79a783da',
     'iclone-confinement/probe.ts probeSeatbelt b135d4665680',
@@ -962,7 +962,7 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'git-review-ops.ts reviewShipInfo 70a9c1cd49c8',
     'git-review-ops.ts runGh 0b9ddc0ea7ea',
     'iclone-claude-code.ts defaultExec 54a2db43ddf8',
-    'iclone-confinement/index.ts currentProbe 33f9ebbd19c1',
+    'iclone-confinement/index.ts currentProbe 5a53cbb16fa0',
     'iclone-confinement/launcher.ts spawn 1c878270cf35',
     'iclone-confinement/members.ts createMemberProbe 7c2d9d18a0d6',
     'iclone-confinement/probe.ts runFile 755ad63d84db',

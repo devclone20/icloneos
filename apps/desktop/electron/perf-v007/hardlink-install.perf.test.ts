@@ -1,6 +1,6 @@
 /**
  * v0.0.7 CF6 (critic B4-M1) — PERF.scan.install: a full scan's records reach main without stopping it, on a tree the
- * owner's size (520 000 folders, 600 000 files: scripts/perf-v007/make-fixture.mjs, under the run's /private/tmp).
+ * owner's size (520 000 folders, 3 875 853 files, the owner's ratio: scripts/perf-v007/make-fixture.mjs, under the run's /private/tmp).
  *
  * Before CF6 the walk worker posted every record in one message; main decoded all of it, then folded the scan and the
  * one-volume test over the whole Map, in one turn: ~0.42 s on this tree, at the end of every first scan, background
@@ -40,7 +40,8 @@ import {
 } from './gate-helpers'
 
 const DIRS = 520_000
-const FILES = 600_000
+// CF8: the owner's 7.45 files per folder (3 895 210 / 522 597, CF8_DESIGN.md "Measured"); v0.0.7 had 600 000.
+const FILES = Math.round((DIRS * 3_895_210) / 522_597)
 const BLOCK_LIMIT_MS = 50
 const SLEEP_MS = 61 * 60_000
 
@@ -86,6 +87,8 @@ describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: a full scan installs without s
     const guard = createHardlinkGuard({
       ackFile: path.join(path.dirname(tree.root), 'userdata-install', 'confinement', 'acks.json'),
       now: () => new Date(Date.now() + offset),
+      // FX-SLEEP: the offset is awake time past the bound (a real sleep alone no longer ages a stream-backed root).
+      awake: () => performance.now() + offset,
       walkFull,
       onRefresh: (_root, phase) => {
         phases.push(phase)

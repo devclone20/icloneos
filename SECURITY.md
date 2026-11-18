@@ -113,9 +113,9 @@ log and payment keys with, so it stays in Manual, and payments and the ACP tools
 
 ### Accepted high-severity advisories with no compatible fix
 
-These ship in v0.0.7. Our release checks accept each one explicitly, by name, version and advisory (for `acp-node`, whose
+These ship in v0.0.8. Our release checks accept each one explicitly, by name, version and advisory (for `acp-node`, whose
 npm advisory id can change between runs, by name, version and the accepted GHSA advisories it depends on), and stop accepting
-it at v0.0.8: it must then be decided again or, as soon as a compatible fix exists, removed. `npm audit` shows more
+it at v0.0.9: it must then be decided again or, as soon as a compatible fix exists, removed. `npm audit` shows more
 packages as high than the ones named here, because it also counts every package that depends on them.
 
 **The bundled sign-in page** (the sign-in window only):
@@ -125,6 +125,9 @@ packages as high than the ones named here, because it also counts every package 
 - `decode-uri-component` 0.2.2 (GHSA-qr28-fpjm-wq7f, high: denial of service on percent-encoded input; also the
   moderate GHSA-vcc3-ghjq-m6fr). It is fixed only in 0.5.1, and it comes in through `query-string` 7 in the WalletConnect
   packages of the same page.
+- `picomatch` 2.3.2 (GHSA-fc5q-39xc-vjpf, high: slow pattern matching on crafted glob patterns). No picomatch release
+  has the fix yet. It is in the page's dependency lock, through WalletConnect's storage package, but not in the bundled
+  page: no code we ship passes it a pattern.
 
 The worst case is that the sign-in window runs out of memory or hangs. No data or code is exposed. These parsers see
 responses from Privy's servers and the wallet RPC endpoints, and URLs such as WalletConnect pairing links.
@@ -134,6 +137,8 @@ responses from Privy's servers and the wallet RPC endpoints, and URLs such as Wa
 - `zod` 3.25.76 (the same advisory), required by its account-kit packages.
 - `@virtuals-protocol/acp-node` 0.3.0-beta-subscription.2 (high; an npm advisory with no GHSA number: it depends on
   vulnerable versions of the same zod chain, and has no fixed release).
+- `picomatch` 4.0.7 (GHSA-fc5q-39xc-vjpf, the advisory above, no fixed release). It arrives only through a build tool
+  that `acp-node` lists as a dependency; it is installed with the CLI, but nothing the CLI runs loads it.
 
 The plausible worst case is that the ACP CLI process runs out of memory or stalls. The app restarts it, waiting longer
 each time up to about once a minute, with no cap on restarts yet, so a slow restart loop is possible until you stop the

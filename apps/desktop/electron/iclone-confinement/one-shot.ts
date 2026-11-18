@@ -6,7 +6,7 @@
  * spends a row by id, once. A runtime that asks without a row, with an edited text or in another folder gets nothing.
  */
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, lstatSync, readFileSync, realpathSync, statSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
 import { ONE_SHOT_MAX_TEXT, oneShotReadable } from '../../src/iclone-shared/one-shot-text'
@@ -14,6 +14,10 @@ import { writeFileAtomicSync } from '../lib/atomic-write'
 
 import { diskFold } from './disk-name'
 import { projectRootRefusal } from './profiles'
+import { projectFs } from './project-fs'
+
+/** FX-ASAR: folders and links are judged as the kernel sees them (a `*.asar` file is a file); the ledger is main's own. */
+const { lstatSync, realpathSync, statSync } = projectFs.sync
 
 export { ONE_SHOT_MAX_TEXT }
 

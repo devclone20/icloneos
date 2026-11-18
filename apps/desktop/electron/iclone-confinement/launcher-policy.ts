@@ -17,11 +17,13 @@
  * not land.
  */
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, realpathSync, rmSync, statSync, truncateSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, statSync, truncateSync } from 'node:fs'
 import path from 'node:path'
 
 import type { PolicySigner } from '../iclone-permissions/policy-file'
 import { writeFileAtomicSync } from '../lib/atomic-write'
+
+import { projectFs } from './project-fs'
 
 export const LAUNCHER_POLICY_FILE = 'policy.json'
 export const LAUNCHER_PASS_FILE = 'passes.jsonl'
@@ -86,7 +88,7 @@ const realOrNull = (root: unknown): string | null => {
   }
 
   try {
-    return realpathSync(root)
+    return projectFs.sync.realpathSync(root)
   } catch {
     return null
   }
@@ -105,7 +107,7 @@ export function gitRootOf(real: string, home: string | null): string | null {
       return null
     }
 
-    if (existsSync(path.join(dir, '.git'))) {
+    if (projectFs.sync.existsSync(path.join(dir, '.git'))) {
       return dir
     }
 

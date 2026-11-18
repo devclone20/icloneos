@@ -34,9 +34,9 @@ const BLOCK_LIMIT_MS = 50
 const LOOP_P99_LIMIT_MS = 16
 const HEAP_LIMIT_MB = 8 // real ~0.25 MB; 48 let the TreeOutgrown mutant pass on heap (45.96 MB, critic B7-n3)
 
-/** A subtree of `dirs` folders (and as many files) at `dir`, made by the fixture script (fanout 16). */
+/** A subtree of `dirs` folders (and the owner's 7.45 files per folder, CF8) at `dir`, made by the fixture script (fanout 16). */
 function growAt(dir: string, dirs: number): void {
-  const run = spawnSync(process.execPath, [MAKE_FIXTURE, dir, '--dirs', String(dirs), '--files', String(dirs)], {
+  const run = spawnSync(process.execPath, [MAKE_FIXTURE, dir, '--dirs', String(dirs), '--files', String(Math.round((dirs * 3_895_210) / 522_597))], {
     encoding: 'utf8',
     maxBuffer: 1 << 24
   })

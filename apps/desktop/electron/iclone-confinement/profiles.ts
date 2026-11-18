@@ -4,7 +4,6 @@
  * only the spawner knows (the project root, the scratch dir, whether the permission mode grants the network or
  * project writes) are SBPL parameters, so one generated file serves every session and is never hand-edited.
  */
-import { lstatSync, realpathSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 import { ACTIVITY_CLASSES, type ActivityClass } from '../../src/iclone-shared/confinement'
@@ -12,6 +11,10 @@ import { protectedPaths, secretPaths } from '../iclone-permissions/classify-poli
 
 import { diskFold } from './disk-name'
 import { memberMarkFile } from './members'
+import { projectFs } from './project-fs'
+
+/** FX-ASAR: every path here is judged as the kernel (and Seatbelt) sees it: a `*.asar` file is a file. */
+const { lstatSync, realpathSync, statSync } = projectFs.sync
 
 export interface ConfinementPaths {
   home: string

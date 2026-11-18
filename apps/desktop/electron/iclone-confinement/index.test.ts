@@ -35,11 +35,13 @@ import {
   stopConfinement
 } from './ipc'
 import { realOrSelf } from './profiles'
+import { projectFs } from './project-fs'
 import { refusalRecordDir, reportedRefusalsDir } from './refusals'
 import { runtimeWritableFolders } from './runtime-profile'
 import { parsePs, verdictOf } from './state'
 
 import {
+  admissibleRoot,
   createConfinement,
   DEFAULT_SETTINGS,
   HERMES_BACKEND_NAME,
@@ -1663,5 +1665,108 @@ describe('G23, the owner: what main records for one file', () => {
 
   it.each(['notes.txt', 'Library/Application Support/Some App/x.json'])('and not for: %s', rel => {
     expect(judge().runs(rel)).toBe(false)
+  })
+})
+
+describe('CF8 D4 (L1.1, L1.3): roots the guard channel may make main walk', () => {
+  const home = realOrSelf(os.homedir())
+
+  it.each(['/', '/System/Volumes/Data', '/Volumes', '/Applications', '/System/Volumes/Data/private/tmp', '/Users', '/private', home])(
+    '%s is refused (a mount point, the Data volume spelling, or holding the home)',
+    root => {
+      expect(admissibleRoot(root, home)).toBe(false)
+    }
+  )
+
+  const volumeMount = execFileSync('/sbin/mount', { encoding: 'utf8' })
+    .split('\n')
+    .map(line => / on (\/Volumes\/[^ ]+) \(/.exec(line)?.[1])
+    .find(mount => mount !== undefined)
+
+  it.skipIf(volumeMount === undefined)('a volume mounted under /Volumes is refused (its device is not its parent\'s)', () => {
+    expect(admissibleRoot(volumeMount as string, home)).toBe(false)
+  })
+
+  it('a root holding the home is refused; a folder beside it is admitted', () => {
+    const fake = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'd4-')))
+
+    dirs.push(fake)
+    mkdirSync(path.join(fake, 'u'))
+    expect(admissibleRoot(fake, path.join(fake, 'u'))).toBe(false)
+    expect(admissibleRoot(path.join(fake, 'u'), '/nonexistent-home')).toBe(true)
+    expect(admissibleRoot(path.join(fake, 'u'), `/System/Volumes/Data${fake}`)).toBe(true)
+  })
+
+  /** FX-STALE (A r1): main's stat with `dev` given per path (the rest is the real stat), so the device rule is tested
+   *  with nothing mounted. */
+  function statWithDevices(devices: Record<string, number>) {
+    const original = projectFs.sync
+
+    const statSync = ((target: string) => {
+      const stat = original.statSync(target)
+
+      return target in devices
+        ? Object.assign(Object.create(Object.getPrototypeOf(stat) as object) as typeof stat, stat, { dev: devices[target] })
+        : stat
+    }) as typeof original.statSync
+
+    // The ProjectFs selection object is plain (hardlinks-walk.ts selectProjectFs): main's stat is swapped there.
+    const selection = projectFs as { sync: typeof original }
+
+    selection.sync = { ...original, statSync } as typeof original
+
+    return { mockRestore: () => void (selection.sync = original) }
+  }
+
+  it('A r1 (1): a mount point (its device is not its parent\'s) is refused with nothing mounted; the same folder on its parent\'s device is admitted', () => {
+    const base = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'd4m-')))
+    const root = path.join(base, 'mnt')
+
+    dirs.push(base)
+    mkdirSync(root)
+
+    const spy = statWithDevices({ [base]: 7, [root]: 8 })
+
+    try {
+      expect(admissibleRoot(root, '/nonexistent-home')).toBe(false)
+      spy.mockRestore()
+
+      const same = statWithDevices({ [base]: 7, [root]: 7 })
+
+      try {
+        expect(admissibleRoot(root, '/nonexistent-home')).toBe(true)
+      } finally {
+        same.mockRestore()
+      }
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('A r1 (2): a root holding the home under its Data-volume spelling (/System/Volumes holds /System/Volumes/Data<home>) is refused, on one device', () => {
+    const base = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'd4d-')))
+
+    dirs.push(base)
+    // One device for /System and /System/Volumes, so only the Data-spelling clause can refuse it.
+    const spy = statWithDevices({ '/System': 9, '/System/Volumes': 9 })
+
+    try {
+      expect(admissibleRoot('/System/Volumes', home)).toBe(false)
+      expect(admissibleRoot(base, home)).toBe(true)
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('only the kernel spelling: another case or Unicode form of the same folder is refused, the real one admitted', () => {
+    const base = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'd4s-')))
+    const nfc = path.join(base, 'Caf\u00e9')
+
+    dirs.push(base)
+    mkdirSync(nfc)
+    expect(admissibleRoot(nfc, '/nonexistent-home')).toBe(true)
+    expect(admissibleRoot(path.join(base, 'cAF\u00c9'), '/nonexistent-home')).toBe(false)
+    expect(admissibleRoot(path.join(base, 'Cafe\u0301'), '/nonexistent-home')).toBe(false)
+    expect(admissibleRoot(path.join(base, 'missing'), '/nonexistent-home')).toBe(false)
   })
 })

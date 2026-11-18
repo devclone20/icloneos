@@ -36,7 +36,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "e23d22ca2ed8a05949b71046ccbe25ff80dc8e191809e1796d3303d0295498f9",
         "reviewer": "owner",
         "sha256": "44cad6b33055c70b1f1e251aa0d2a26ac85a414a54977069aa33cee64d4341a5",
@@ -81,7 +81,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "7b86c888fd3911e824698b95c64275583bf3f8ef32187fbaef1bf14d22c0aee0",
         "reviewer": "owner",
         "sha256": "401b04c9c0becda2e1bbf7d9e4df673c94e817425e999f6151c29a00ffef1ea0",
@@ -126,7 +126,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "da5847a8eec9aad25cd966aae6be9b4f55ed1d5fa7d0a9cd2396d84065e3ee6c",
         "reviewer": "owner",
         "sha256": "976ae0c12f695f3b10e37251c9620ac274b4efff33f013fd2cdbb1037e5cb77d",
@@ -171,7 +171,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "4acf1dc893268e4e87f07065a847fd464a4666235a62104c2f71f4e33f726fc7",
         "reviewer": "owner",
         "sha256": "267066c3afe67c9b22899108b30ddb9d2ebfff984d8fffc3dce617a453297fc9",
@@ -216,7 +216,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "7f6e75c5b9d8400db52170a26348140610b58498ce898520c2e84bf559bbb4e0",
         "reviewer": "owner",
         "sha256": "76a0b516cb4a1a547f6db7eca12aa1d7dfe78ad0120889058d35e4bbf91f6efc",
@@ -261,7 +261,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "68b668e217aa0dbda07dd96738cfb523e86c78dd9df9bae52f0cccc954fd8b7e",
         "reviewer": "owner",
         "sha256": "3a5d326e632239adf01e95d15ebc39448a91878a1b2bb9624f721b1de357601e",
@@ -306,7 +306,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "fec99fedb114dc06daa521ce27d54f4b5582005f1b0bcd619150774c848702f6",
         "reviewer": "owner",
         "sha256": "b0e043bd4234ca92c515903a5b84c2478b59e65ea276592638811d56911bd387",
@@ -351,7 +351,7 @@
       "how_captured": "CDP Page.captureScreenshot (fromSurface) of the app window's own page, 1440x900 @2x (2880x1800), dark, app zoom unchanged; metadata stripped by re-encoding from raw pixels",
       "humanReview": {
         "contactSheetSha256": "f28d85323cde376e3245b0a50d0ca3081096d473b149db9f87b6355f42201696",
-        "date": "2026-11-12",
+        "date": "2026-11-18",
         "ocrVerdictSha256": "709df84a3d699203afa1e1424c108378e134d17fbc0d1b733ff5432ca0ed0736",
         "reviewer": "owner",
         "sha256": "b2aee4f10045d26aa613b28e9cd3d5964c962d59f1bc801771d87e891cfabf36",

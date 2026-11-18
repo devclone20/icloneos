@@ -1,6 +1,7 @@
 """fx29 (lead's rulings 1 and 2), unconfined half: through SeatbeltEnvironment.request_project and the real validator,
 the kernel's spelling is the one the run is judged and started in; a project inside a listed folder is judged as that
 folder; a link is refused as a link, before any place field."""
+import dataclasses
 import json
 import os
 import unicodedata
@@ -120,3 +121,34 @@ def test_the_never_list_in_another_case_stays_refused(tree):
     os.makedirs(denied, exist_ok=True)
     other = os.path.join(os.path.dirname(denied), os.path.basename(denied).swapcase())
     assert refused(w, other).code == "bad-request"
+
+
+def test_library_in_any_spelling_is_no_working_folder_named_or_not(tree):
+    """FX-CWD (CF8): the live row 7 (home/LIBRARY) went green in v0.0.7 only because the runtime's own walk of the
+    window project failed; D1 removed that walk. The launcher keeps ~/Library out itself, by identity, and answers the
+    same for a name that is there and one that is not (Popen's chdir must not tell them apart)."""
+    w, _p, _repo, _plain, _nfc = tree
+    library = os.path.join(str(w.home), "Library")
+    os.makedirs(os.path.join(library, "Caches"), exist_ok=True)
+    nfd_name = unicodedata.normalize("NFD", "Ação")
+    os.makedirs(os.path.join(library, nfd_name), exist_ok=True)
+    for asked in (library, os.path.join(str(w.home), "LIBRARY"), os.path.join(str(w.home), "library", "CACHES"),
+                  os.path.join(library, unicodedata.normalize("NFC", "Ação")), os.path.join(library, "not-there")):
+        caught = refused(w, asked)
+        assert (caught.code, str(caught)) == ("bad-request", "the command's folder is one no confined command may enter"), asked
+
+
+def test_the_scratch_inside_library_still_runs(tree):
+    """FX-CWD: the one place in ~/Library a confined command starts is the scratch (the live runtime's lives there)."""
+    w, _p, _repo, _plain, _nfc = tree
+    validator = w.validator()
+    home = os.path.realpath(str(w.root / "home2"))
+    scratch_root = os.path.join(home, "Library", "Caches", "scratch")
+    os.makedirs(os.path.join(scratch_root, "s1"))
+    validator.index = dataclasses.replace(validator.index, home=home)
+    validator.scratch_root = scratch_root
+    assert not validator.outside_scratch_in_library(scratch_root)
+    assert not validator.outside_scratch_in_library(os.path.join(scratch_root, "s1"))
+    assert not validator.outside_scratch_in_library(os.path.join(home, "work"))
+    for inside in (os.path.join(home, "Library"), os.path.join(home, "LIBRARY", "Caches"), os.path.join(home, "Library", "Caches", "other")):
+        assert validator.outside_scratch_in_library(inside), inside

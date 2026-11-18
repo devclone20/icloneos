@@ -41,6 +41,7 @@ import {
   profileView
 } from './backend-seatbelt'
 import { type GitIdentity, gitIdentityEnv, readGlobalGitIdentity } from './git-identity'
+import { type GuardChannelEvent, type GuardChannelTimings, serveGuardChannel } from './guard-channel'
 import {
   bootSealedKey,
   createHardlinkGuard,
@@ -59,7 +60,8 @@ import { createLauncherPolicyMirror, type LauncherPass } from './launcher-policy
 import { createMemberProbe, ensureMembersDir, isRunToken, type MemberProbe, sweepTokens } from './members'
 import { createOneShotLedger, oneFileLinkTarget, type OneFileRules, oneShotFolder, oneShotRoute } from './one-shot'
 import { probeContainer, probeFailedView, probeSeatbelt } from './probe'
-import { appOwnFiles, type ConfinementPaths, fileRunsOrHoldsKeys, realOrSelf } from './profiles'
+import { acceptableProjectRoot, appOwnFiles, type ConfinementPaths, fileRunsOrHoldsKeys, realOrSelf } from './profiles'
+import { projectFs } from './project-fs'
 import { createRefusalLog, refusalRecordDir, reportedRefusalsDir } from './refusals'
 import {
   appendStop,
@@ -103,6 +105,57 @@ import {
 const SETTINGS_FILE = 'settings.json'
 /** A probe result is a status, not a count: re-measured when older than this. */
 const PROBE_TTL_MS = 15_000
+
+/** CF8 D4: the longest root the guard channel admits (PATH_MAX, what F_GETPATH can give the launcher). */
+const GUARDED_ROOT_MAX_BYTES = 1024
+/** CF8 L1.6: how long one admission verdict is reused, and how many are kept. */
+const GUARDED_ROOT_MEMO_MS = 5_000
+const GUARDED_ROOT_MEMO_MAX = 256
+/** The Data volume's own mount: every folder under it also has a firmlinked spelling outside it. */
+const DATA_VOLUME = '/System/Volumes/Data'
+
+const statOrNull = (target: string): fs.Stats | null => {
+  try {
+    return projectFs.sync.statSync(target)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * CF8 D4 (L1.1, L1.3): whether `root` may be walked by main for the guard channel at all, before the profile's own
+ * rule. Refused: anything but the kernel's spelling (realpath(3), case and Unicode form as on disk; that spelling is
+ * the identity trees are keyed by), `/` and every top-level folder (/Volumes, /Applications, /Users: system folders
+ * or firmlinks into the Data volume), a volume mount point (its device differs from its parent's: an external disk),
+ * anything at or under the Data volume's own mount, and a root that holds the home by any spelling.
+ */
+export function admissibleRoot(root: string, home: string): boolean {
+  let real: string
+
+  try {
+    real = projectFs.sync.realpathSync.native(root)
+  } catch {
+    return false
+  }
+
+  // A top-level folder is a system folder, the home's parent, or a firmlink into the Data volume (/Applications,
+  // /Volumes: same device as `/` through the firmlink, so the device rule below cannot see them).
+  if (real !== root || path.dirname(root) === '/' || root === DATA_VOLUME || root.startsWith(`${DATA_VOLUME}/`)) {
+    return false
+  }
+
+  const own = statOrNull(root)
+  const parent = statOrNull(path.dirname(root))
+
+  if (!own?.isDirectory() || parent === null || own.dev !== parent.dev) {
+    return false
+  }
+
+  const realHome = realOrSelf(home)
+  const holds = (spelling: string) => spelling === root || spelling.startsWith(`${root}/`)
+
+  return !holds(realHome) && !holds(`${DATA_VOLUME}${realHome}`)
+}
 
 interface ConfinementSettings {
   v: 1
@@ -201,6 +254,18 @@ export interface ConfinementDeps {
   launcher?: () => 'down' | 'off' | 'up'
   /** Test seam: how the launcher is made (launcher.ts). */
   createLauncher?: (options: LauncherOptions) => Launcher
+  /** CF8 test seam: every frame of the launcher's guard channel (launcher-live-harness.ts measures with it). */
+  onGuardEvent?: (event: GuardChannelEvent) => void
+  /** CF8 test seam: the guard channel's waits. Absent: guard-channel.ts's own. */
+  guardTimings?: GuardChannelTimings
+  /** CF8 test seam (PERF.launcher): the interpreter the launcher is started with, in place of the helper interpreter
+   *  (same `-I -S launcher.py` argv, env and fd 3). Only once the helper interpreter is trusted; absent: that one. */
+  launcherInterpreter?: string
+  /** CF8 test seam (PERF.launcher sleep): the hard-link guard's wall clock (its age bound, idle release). Absent: `now`. */
+  hardlinkNow?: () => Date
+  /** FX-STALE: test seam for the hard-link guard's awake clock (default performance.now), as `hardlinkNow` is its
+   *  wall clock: a PERF world moves both to model time passing awake. */
+  hardlinkAwake?: () => number
   /** Where the launcher's lifecycle lines go. Absent: nowhere. */
   log?: (line: string) => void
 }
@@ -483,7 +548,8 @@ export function createConfinement(deps: ConfinementDeps) {
   const hardlinks = createHardlinkGuard({
     ackFile: linkFiles.acks,
     sealedKey,
-    now,
+    now: deps.hardlinkNow ?? now,
+    awake: deps.hardlinkAwake,
     onAudit: audit,
     storeRoots,
     onTreeDropped: event => {
@@ -752,6 +818,45 @@ export function createConfinement(deps: ConfinementDeps) {
   const oneShots = createOneShotLedger(launcherLedgerDir(deps.userDataDir))
   const launcherPolicy = createLauncherPolicyMirror(launcherLedgerDir(deps.userDataDir), log, Date.now, deps.home)
 
+  // CF8: the roots the launcher may ask main to check are the ones main would check for a confined start of that
+  // class (backend-seatbelt.ts spawn): an acceptable project root, spelled as its real path. Never the home, `/`, a
+  // denied folder or the app's own data, so a request cannot make main walk them; the scratch is never asked (the
+  // launcher's scan_root skips it).
+  // CF8 D4 (L1.1, L1.3): never a volume's mount point (/System/Volumes/Data, /Volumes, an external disk; through
+  // firmlinks /Applications too), never a spelling under the Data volume's own mount (each such folder has its
+  // firmlinked spelling, so a second spelling would be a second tree of the same folder), never a root holding the home
+  // by its Data-volume spelling, and only the kernel's own spelling (realpath(3): case and Unicode form as on disk).
+  // L1.6: the verdict is memoised for GUARDED_ROOT_MEMO_MS per (profile, root), so a looping runtime costs one
+  // admission per few seconds, not ~3.6 ms of main-thread fs work per command.
+  const guardedMemo = new Map<string, { spec: unknown; ok: boolean; at: number }>()
+
+  const guardedRoot = (root: string, cls: ActivityClass | null): boolean => {
+    const profile = cls === null ? profiles[0] : profiles.find(item => item.spec.cls === cls)
+
+    if (profile === undefined || Buffer.byteLength(root) > GUARDED_ROOT_MAX_BYTES || root !== path.posix.normalize(root)) {
+      return false
+    }
+
+    const key = `${profile.spec.cls}\0${root}`
+    const memo = guardedMemo.get(key)
+    const at = performance.now()
+
+    if (memo && memo.spec === profile.spec && at - memo.at < GUARDED_ROOT_MEMO_MS) {
+      return memo.ok
+    }
+
+    const ok = admissibleRoot(root, deps.home) && acceptableProjectRoot(root, profile.spec, deps.home, storeRoots)
+
+    guardedMemo.delete(key)
+    guardedMemo.set(key, { spec: profile.spec, ok, at })
+
+    if (guardedMemo.size > GUARDED_ROOT_MEMO_MAX) {
+      guardedMemo.delete(guardedMemo.keys().next().value as string)
+    }
+
+    return ok
+  }
+
   const stopLauncher = async (): Promise<void> => {
     const running = launcher
 
@@ -794,7 +899,7 @@ export function createConfinement(deps: ConfinementDeps) {
     if (!launcher) {
       launcherStartedAt = now().getTime()
       launcher = (deps.createLauncher ?? createLauncher)({
-        python,
+        python: deps.launcherInterpreter ?? python,
         script,
         socketPath: launcherSocket,
         journalDir: launcherLedgerDir(deps.userDataDir),
@@ -803,7 +908,17 @@ export function createConfinement(deps: ConfinementDeps) {
         // Read at every (re)start: the hashes of the profiles main holds now, and the runtime's roots.
         spec: () => pluginSpec(paths, profiles, storeRoots),
         roots: () => runtimeRoots(paths, launcherFacts ?? facts),
-        log
+        log,
+        // CF8: the launcher asks main's guard on fd 3 instead of walking the project itself.
+        guardChannel: (channel, onClosed) =>
+          serveGuardChannel(channel, {
+            guard: hardlinks,
+            guarded: guardedRoot,
+            log,
+            onEvent: deps.onGuardEvent,
+            onClosed,
+            timings: deps.guardTimings
+          })
       })
       launcherFor = script
     }

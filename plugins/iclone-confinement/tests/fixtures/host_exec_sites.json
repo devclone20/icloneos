@@ -1784,7 +1784,7 @@
   "plugins/iclone-confinement/core.py::_run_one_file::subprocess.run#1": {
    "verdict": "a",
    "why": "the stub carrying one approved file, written or read, to the launcher, which checks main's row; G2 A5, G23-W2, confined at the launcher's door",
-   "line": 1181
+   "line": 1532
   },
   "plugins/iclone-confinement/driver_door.py::signature_problem::subprocess.run#1": {
    "verdict": "a",
@@ -1804,7 +1804,7 @@
   "plugins/iclone-confinement/launcher.py::Launcher._spawn::subprocess.Popen#1": {
    "verdict": "b",
    "why": "never in a confined process: the launcher runs as its own process that main starts outside any sandbox, and starts only the sandbox-exec argv it validated; were this code reached inside a confined process, the spawn guard would refuse it (no environment on the stack, not a listed site)",
-   "line": 1904
+   "line": 2158
   },
   "plugins/iclone-confinement/providers.py::_run_version::subprocess.Popen#1": {
    "verdict": "c",
@@ -1829,7 +1829,7 @@
   "plugins/iclone-confinement/seatbelt.py::_ConfinedPopen::subprocess.Popen#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 45
+   "line": 47
   },
   "plugins/memory/byterover/__init__.py::_run_brv::subprocess.run#1": {
    "verdict": "b",

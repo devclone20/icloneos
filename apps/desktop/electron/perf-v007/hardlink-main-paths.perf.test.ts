@@ -1,6 +1,6 @@
 /**
  * v0.0.7 CF7 — PERF.main.paths: every path of the F7 guard that main's thread runs, on a tree the owner's size
- * (520 000 folders / 600 000 files, scripts/perf-v007/make-fixture.mjs under the run's /private/tmp), through the
+ * (520 000 folders / 3 875 853 files, the owner's ratio, scripts/perf-v007/make-fixture.mjs under the run's /private/tmp), through the
  * guard's public API alone (createHardlinkGuard: prewarm, check, acknowledgeGroup, groupPaths), so the same file
  * measures the base commit and this one.
  *
@@ -48,7 +48,8 @@ import {
 } from './gate-helpers'
 
 const DIRS = 520_000
-const FILES = 600_000
+// CF8: the owner's 7.45 files per folder (3 895 210 / 522 597, CF8_DESIGN.md "Measured"); v0.0.7 had 600 000.
+const FILES = Math.round((DIRS * 3_895_210) / 522_597)
 const COMMANDS = 20
 const GROUP_LINKS = 1_500
 const BLOCK_LIMIT_MS = 50
@@ -115,7 +116,9 @@ describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: every main-thread path of the 
 
     const guard = createHardlinkGuard({
       ackFile: path.join(path.dirname(tree.root), 'userdata-paths', 'confinement', 'acks.json'),
-      now: () => new Date(Date.now() + offset)
+      now: () => new Date(Date.now() + offset),
+      // FX-SLEEP: the offset is awake time past the bound (a real sleep alone no longer ages a stream-backed root).
+      awake: () => performance.now() + offset
     })
 
     const items: GateItem[] = []

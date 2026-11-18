@@ -26,6 +26,8 @@ except ImportError:  # pragma: no cover — a pre-split runtime
     from tools.environments.base import _split_cwd_marker
 
 RUNTIME_SHELL = "/bin/bash"
+# CF8 D1: the bound on the runtime's own check of its scratch, the one root it still walks when confined.
+SCRATCH_SCAN_S = 30.0
 
 
 def _shell() -> str:
@@ -143,23 +145,17 @@ class SeatbeltEnvironment(LocalEnvironment):
         why = core.project_root_refusal(core.git_root(folder), self._index) or "it is not a folder"
         return self._project, why
 
-    def runtime_can_list(self, folder: str) -> bool:
-        """Whether this (confined) runtime may list ``folder``: a folder main did not open is outside the runtime's
-        own profile, though the command's sandbox, made for that folder, reads it."""
-        try:
-            with os.scandir(folder):
-                return True
-        except PermissionError:
-            return False
-        except OSError:
-            return True
-
     def scanned_by_launcher(self, root: str, project: str) -> bool:
-        """fx18 (F1): the hard-link scan (F7) of a project the runtime cannot look into is the launcher's, which is
-        not confined and scans any folder outside the runtime's own roots, listed or not, before and after the run
-        (fx20, lens5 M2); this runtime skips it only then, and only when the run goes through the launcher (without
-        one, the scan here refuses as before)."""
-        return root == project and project != self._project and core.runtime_confined() and not self.runtime_can_list(project)
+        """fx18 (F1), CF8 D1: through the launcher, the hard-link scan (F7) of the run's project is the launcher's,
+        before and after the run, the window project included: the launcher (not confined) asks main's guard, which
+        keeps the tree current from FSEvents, so no walk of the project runs inside this runtime per command. Without
+        a launcher nothing else scans: the scan here refuses as before. The scratch is always this runtime's."""
+        return root == project and project != self._scratch and core.runtime_confined()
+
+    def check_scratch_bound(self) -> Dict[str, Any]:
+        """CF8 D1: the scratch is small and the runtime's own, checked here within ``SCRATCH_SCAN_S`` (a scratch past
+        it is refused, never walked without end)."""
+        return {"deadline": time.monotonic() + SCRATCH_SCAN_S} if core.runtime_confined() else {}
 
     def _extract_cwd_from_output(self, result: dict) -> None:
         """Hermes drops a reported cwd that ``isdir`` denies; here ``isdir`` is also false for a folder the runtime
@@ -245,7 +241,7 @@ class SeatbeltEnvironment(LocalEnvironment):
         for root in self.scanned_roots(project):
             if self.scanned_by_launcher(root, project):
                 continue
-            core.check_hardlinks(self._index, root, self._cls)
+            core.check_hardlinks(self._index, root, self._cls, **(self.check_scratch_bound() if root == self._scratch else {}))
         grants = core.grant_params(session_id, project if writable else None, self._project)
         params: Dict[str, str] = {
             "PROJECT_ROOT": project,
@@ -465,9 +461,11 @@ class SeatbeltEnvironment(LocalEnvironment):
         index, cls = self._index, self._cls
         roots = [] if one_shot else [r for r in self.scanned_roots(project) if not self.scanned_by_launcher(r, project)]
         after_run: Dict[str, Any] = {}
+        bounded = roots == [self._scratch]
 
         def on_exit() -> None:
-            core.check_hardlinks_after_run(index, roots, after_run.get("pid", 0), session_id, cls)
+            core.check_hardlinks_after_run(index, roots, after_run.get("pid", 0), session_id, cls,
+                                           **(self.check_scratch_bound() if bounded else {}))
 
         proc = _ConfinedPopen(
             args,

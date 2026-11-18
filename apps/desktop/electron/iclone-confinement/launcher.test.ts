@@ -6,14 +6,17 @@ import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { PassThrough } from 'node:stream'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createLauncher,
   ensurePrivateDir,
+  GUARD_FD,
   LAUNCHER_PATH,
   type LauncherChild,
+  type LauncherOptions,
   MAX_RESTARTS,
   READY_TIMEOUT_MS,
   RESTART_BACKOFF_MS,
@@ -25,6 +28,9 @@ class FakeChild extends EventEmitter {
   signalCode: NodeJS.Signals | null = null
   stdout = new EventEmitter()
   stderr = new EventEmitter()
+  /** CF8: main's end of fd 3 when the spawn asked for one (a duplex, as node's socketpair end is). */
+  guardEnd = new PassThrough()
+  stdio: unknown[] = [null, this.stdout, this.stderr, this.guardEnd]
   signals: string[] = []
   /** Whether SIGTERM ends it (a launcher that ignores SIGTERM needs the SIGKILL). */
   constructor(
@@ -66,7 +72,7 @@ let logs: string[]
 let nextPid: number
 let obeysTerm: boolean
 
-function launcher(spawn?: (child: FakeChild) => void) {
+function launcher(spawn?: (child: FakeChild) => void, extra: Partial<LauncherOptions> = {}) {
   return createLauncher({
     home: '/Users/owner',
     hermesHome: '/Users/owner/.hermes',
@@ -86,7 +92,8 @@ function launcher(spawn?: (child: FakeChild) => void) {
       spawn?.(child)
 
       return child as unknown as LauncherChild
-    }
+    },
+    ...extra
   })
 }
 
@@ -343,5 +350,96 @@ describe('restart', () => {
     expect(calls).toHaveLength(MAX_RESTARTS + 1)
     expect(children.every(child => child.signals.includes('SIGTERM'))).toBe(true)
     expect(layer.state()).toBe('down')
+  })
+})
+
+describe('CF8: the guard channel on fd 3', () => {
+  const served = () => {
+    const ends: { end: unknown; closed: string[]; onClosed: (why: string) => void }[] = []
+
+    return {
+      ends,
+      guardChannel: (end: unknown, onClosed: (why: string) => void) => {
+        const record = { end, closed: [] as string[], onClosed }
+
+        ends.push(record)
+
+        return { close: (why?: string) => record.closed.push(why ?? '') }
+      }
+    }
+  }
+
+  it('without a guard channel: three stdio entries and no ICLONE_GUARD_FD', async () => {
+    const layer = launcher(child => queueMicrotask(() => child.ready()))
+
+    await layer.start()
+    expect(calls[0].options.stdio).toEqual(['ignore', 'pipe', 'pipe'])
+    expect(Object.keys(calls[0].options.env as object)).not.toContain('ICLONE_GUARD_FD')
+  })
+
+  it('with one: exactly one more stdio entry, fd 3, a pipe; the env names it; main serves the child end', async () => {
+    const guard = served()
+    const layer = launcher(child => queueMicrotask(() => child.ready()), { guardChannel: guard.guardChannel })
+
+    await expect(layer.start()).resolves.toBe('up')
+    expect(GUARD_FD).toBe(3)
+    expect(calls[0].options.stdio).toEqual(['ignore', 'pipe', 'pipe', 'pipe'])
+    expect((calls[0].options.env as Record<string, string>).ICLONE_GUARD_FD).toBe('3')
+    expect(guard.ends).toHaveLength(1)
+    expect(guard.ends[0].end).toBe(children[0].guardEnd)
+  })
+
+  it('the channel closes when the run ends: an explicit stop, and a crash (the restart serves a new one)', async () => {
+    const guard = served()
+    const layer = launcher(child => queueMicrotask(() => child.ready()), { guardChannel: guard.guardChannel })
+
+    await layer.start()
+    children[0].die(1)
+    expect(guard.ends[0].closed).toEqual(['the launcher exited'])
+    await vi.advanceTimersByTimeAsync(RESTART_BACKOFF_MS)
+    expect(guard.ends).toHaveLength(2)
+    expect(guard.ends[1].end).toBe(children[1].guardEnd)
+    expect(guard.ends[1].closed).toEqual([])
+    await layer.stop()
+    expect(guard.ends[1].closed).toEqual(['the launcher exited'])
+  })
+
+  it('L1.4: a channel that closes by itself ends that launcher, and the restart serves a fresh fd 3', async () => {
+    const guard = served()
+    const layer = launcher(child => queueMicrotask(() => child.ready()), { guardChannel: guard.guardChannel })
+
+    await layer.start()
+    guard.ends[0].onClosed('a request line off the contract')
+    expect(children[0].signals).toEqual(['SIGTERM'])
+    await vi.advanceTimersByTimeAsync(RESTART_BACKOFF_MS)
+    expect(children).toHaveLength(2)
+    expect(guard.ends).toHaveLength(2)
+    expect(guard.ends[1].end).toBe(children[1].guardEnd)
+    expect(layer.state()).toBe('up')
+
+    // Closed by the launcher's own exit or by stop: no second kill, no restart from the close itself.
+    await layer.stop()
+    guard.ends[1].onClosed('the launcher exited')
+    await vi.advanceTimersByTimeAsync(RESTART_BACKOFF_MS * 4)
+    expect(children[1].signals).toEqual(['SIGTERM'])
+    expect(children).toHaveLength(2)
+  })
+
+  it('a child with no fd 3 is stopped and the launcher is down (it would read a verdict from nothing)', async () => {
+    const guard = served()
+
+    const layer = launcher(
+      child => {
+        child.stdio = [null, child.stdout, child.stderr]
+        queueMicrotask(() => child.ready())
+      },
+      { guardChannel: guard.guardChannel }
+    )
+
+    await expect(layer.start()).resolves.toBe('down')
+    expect(guard.ends).toEqual([])
+    expect(children[0].signals).toContain('SIGTERM')
+    expect(logs.some(line => line.includes('no guard channel on fd 3'))).toBe(true)
+    await layer.stop()
   })
 })

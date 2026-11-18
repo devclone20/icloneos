@@ -46,12 +46,14 @@ def test_m2_folder_listed_after_the_runtime_started_is_scanned(w):
     assert r.returncode != 0 and "outside-secret" not in r.stdout
 
 
-def test_m2_the_runtimes_own_folder_stays_its_scan(w):
+def test_m2_the_runtimes_own_folder_is_scanned_by_the_launcher_too(w):
+    # CF8 D1: the confined runtime no longer walks its own project (it was left to that walk, with no bound and no
+    # age); the launcher checks it like any other command's project, so a planted link there refuses the command.
     other = _other(w)
     w.policy("acceptEdits", listed=[str(w.proj), str(other)])
     w.start(roots=([str(w.rt), str(other)], [str(w.root / "scratch")]))
     r = _run(w, _flags(w, project=other), ["/bin/cat", str(other / "planted")])
-    assert r.returncode == 0 and "outside-secret" in r.stdout
+    assert r.returncode != 0 and "outside-secret" not in r.stdout
 
 
 def test_m2_a_link_planted_during_the_run_is_recorded_after_it(w):
@@ -78,8 +80,9 @@ def test_m1_the_scan_holds_no_lock_and_another_session_runs_during_it(w, monkeyp
     scanning, release = threading.Event(), threading.Event()
 
     def held(*a, **k):
-        scanning.set()
-        assert release.wait(30)
+        if a[1] == str(other):  # CF8 D1: the other session's own project is scanned too; only this one is held
+            scanning.set()
+            assert release.wait(30)
         return real(*a, **k)
 
     monkeypatch.setattr(L.core, "check_hardlinks", held)
@@ -114,18 +117,77 @@ def test_m1_a_scan_longer_than_ten_seconds_is_waited_for_and_never_called_not_an
     assert r.returncode == 0 and "after-scan" in r.stdout
 
 
-def test_m1_a_folder_too_large_for_the_budget_is_refused_for_that_reason(w, monkeypatch):
+def test_m1_a_folder_slower_than_the_old_budget_is_waited_for_with_progress_then_runs(w, monkeypatch):
+    # CF8: a first scan that progresses has no fixed budget (it was refused at SCAN_BUDGET_S): it is waited for, the
+    # stub hears its progress, and the command runs. The security half stays: a scan that stalls is refused, with no
+    # start row, and its slot is back for the next one.
     other = _other(w, "big", planted=False)
+    for i in range(12):
+        (other / f"d{i}").mkdir()
     w.policy("acceptEdits", listed=[str(w.proj)])
     lau = w.start()
     monkeypatch.setattr(L, "SCAN_BUDGET_S", 1e-9)
+    monkeypatch.setattr(L, "PROGRESS_FORWARD_S", 0.0)
+    monkeypatch.setattr(L.core, "_PROGRESS_EVERY_S", 0.0)
+    monkeypatch.setattr(L.core, "FIRST_SCAN_STALL_S", 0.5)
+    real_scandir = L.core.os.scandir
+
+    def slow_scandir(path):
+        time.sleep(0.15)  # 14 folders: ~2 s, far past the stall each step stays under
+        return real_scandir(path)
+
+    monkeypatch.setattr(L.core.os, "scandir", slow_scandir)
+    r = _run(w, _flags(w, project=other), ["/bin/echo", "after-scan"])
+    assert r.returncode == 0 and "after-scan" in r.stdout
+    assert "not answering" not in r.stderr and "too large" not in r.stderr
+
+    L.core._scan_cache.clear()
+    starts = len([row for row in w.journal() if row.get("ev") == "start"])
+
+    def stalled_scandir(path):
+        time.sleep(0.8)  # one folder longer than the stall: no progress, refused
+        return real_scandir(path)
+
+    monkeypatch.setattr(L.core.os, "scandir", stalled_scandir)
     r = _run(w, _flags(w, project=other), ["/bin/echo", "never"])
     assert r.returncode != 0 and "never" not in r.stdout
-    assert "too large to scan" in r.stderr and "not answering" not in r.stderr
-    assert not [row for row in w.journal() if row.get("ev") == "start"]
+    assert "stopped progressing" in r.stderr and "not answering" not in r.stderr
+    assert "smaller folder" not in r.stderr
+    assert len([row for row in w.journal() if row.get("ev") == "start"]) == starts
     assert not lau.runs
-    # The budget's slot is back: a later scan of a folder that fits goes through.
-    monkeypatch.setattr(L, "SCAN_BUDGET_S", 30.0)
+    # The slot is back: a later scan that progresses goes through.
+    monkeypatch.setattr(L.core.os, "scandir", real_scandir)
+    assert _run(w, _flags(w, project=other), ["/bin/echo", "fits"]).returncode == 0
+
+
+def test_m1_a_fallback_scan_that_keeps_progressing_is_still_refused_past_the_cap(w, monkeypatch):
+    # L6.1: the launcher's own fallback (no fd 3) bounds a first scan by FIRST_SCAN_CAP_S however it progresses: each
+    # folder stays under the stall, the walk as a whole runs past the cap. Refused for that reason (not as a stall),
+    # with no start row and no run, and the slot is back for the next scan.
+    other = _other(w, "big", planted=False)
+    for i in range(12):
+        (other / f"d{i}").mkdir()
+    w.policy("acceptEdits", listed=[str(w.proj)])
+    lau = w.start()
+    assert lau.guard is None
+    L.core._scan_cache.clear()
+    monkeypatch.setattr(L, "FIRST_SCAN_CAP_S", 0.5)
+    monkeypatch.setattr(L.core, "FIRST_SCAN_STALL_S", 5.0)
+    real_scandir = L.core.os.scandir
+
+    def slow_scandir(path):
+        time.sleep(0.15)  # 14 folders: ~2 s, each one far under the stall
+        return real_scandir(path)
+
+    monkeypatch.setattr(L.core.os, "scandir", slow_scandir)
+    starts = len([row for row in w.journal() if row.get("ev") == "start"])
+    r = _run(w, _flags(w, project=other), ["/bin/echo", "never"])
+    assert r.returncode != 0 and "never" not in r.stdout
+    assert re.search(r"took longer than|ran past", r.stderr) and "stopped progressing" not in r.stderr
+    assert len([row for row in w.journal() if row.get("ev") == "start"]) == starts
+    assert not lau.runs
+    monkeypatch.setattr(L.core.os, "scandir", real_scandir)
+    monkeypatch.setattr(L, "FIRST_SCAN_CAP_S", 180.0)
     assert _run(w, _flags(w, project=other), ["/bin/echo", "fits"]).returncode == 0
 
 

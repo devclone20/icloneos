@@ -114,6 +114,17 @@
  * is the last completed scan's result with every folder named since its start left dirty. `prewarm` starts a root's
  * first scan (full speed) and stream when its Hermes is spawned.
  *
+ * AGE IN AWAKE TIME (FX-SLEEP, v0.0.8). The bound limits how long a name made outside the root can go unseen, and only
+ * a running process makes one. A stream-backed root (local APFS/HFS+ only, hardlinks-fsevents.ts) therefore ages in
+ * awake time (`awake`, mach_absolute_time: stopped while the Mac sleeps, running in every wake, dark wakes included),
+ * not in wall time: a night's sleep no longer turns the first command after the wake into a full walk (~20 s on the
+ * owner's 520k folders). Unchanged: a volume unmounted or remounted while asleep, a lost journal (MustScanSubDirs,
+ * HistoryDone, dropped) or a dead stream voids the stream and the root is walked; a wall clock stepped back is still
+ * stale; a walked root (no stream: network volumes, small roots) still ages in wall time. If the platform clock ever
+ * counted sleep, the bound falls back to today's wall rule (the stricter direction). Idle release (I7) counts awake
+ * time too (stream-backed roots). PERF.launcher.sleep moves the wall clock 61 min with no awake time: no walk; past the bound in awake time a
+ * command still runs its own full-speed scan (hardlinks.fsevents.test.ts, FX-SLEEP).
+ *
  * Fail closed (r3 T1): a directory inside the root that cannot be listed hides whatever it holds, while a process
  * needs only `x` to traverse it. Unlistable is not unreadable: such a root is refused ("cannot scan") until the owner
  * fixes the permissions. The same for a directory that lists but whose children cannot be stat-ed (r4 T1': `r` and
@@ -140,7 +151,6 @@
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { type Dirent, readFileSync } from 'node:fs'
-import { lstat, readdir, realpath } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
@@ -172,6 +182,10 @@ import {
 } from './hardlinks-walk'
 import { type TreeResident, walkInWorker } from './hardlinks-walker'
 import { insideFolder } from './profiles'
+import { projectFs } from './project-fs'
+
+/** FX-ASAR: project paths through the non-asar fs (project-fs.ts); key and record files stay on node:fs. */
+const { lstat, readdir, realpath } = projectFs.promises
 
 /** Where main keeps the owner's acknowledgements (and the sealed key that signs them), and where the Hermes plugin
  *  says which projects it refused. */
@@ -381,11 +395,21 @@ export async function resolveInStore(
   return { passed, files, ms: performance.now() - started, timedOut }
 }
 
+/** A walk of a root's whole tree a check waits on, while it runs (header D3): clock() when it last reached a folder,
+ *  how many it reached, and when it began (epoch ms, for the state view). */
+interface ScanProgress {
+  at: number
+  dirs: number
+  startedAt: number
+}
+
 interface CacheEntry {
   /** The root's tree, as its worker holds it (or in process, a small one): its summary is the answer. */
   tree: TreeResident
   /** When every file of the tree was last stat-ed (the full scan): the age bound for names made outside. */
   fullAt: number
+  /** FX-SLEEP: awake() when that walk began. A stream-backed entry ages in awake time (header, AGE IN AWAKE TIME). */
+  awakeAt: number
   /** T2'': the store-resolved inodes of this scan, once a `build` check asked; null until then. */
   store: Set<string> | null
   /** V-1b: the stream that has seen every change since the walk behind `tree` began; null: none has. */
@@ -729,6 +753,9 @@ interface HardlinkGuardDeps extends Omit<SealedKeyDeps, 'keyFile'> {
   onRefreshWalk?: (root: string, pace: WalkPace) => Promise<void>
   /** Monotonic ms for a first scan's progress (`firstScanProgress`); defaults to performance.now. */
   clock?: () => number
+  /** FX-SLEEP: ms of time the Mac was awake (header, AGE IN AWAKE TIME); defaults to performance.now, which on macOS
+   *  is mach_absolute_time (libuv): it stops while the Mac sleeps and runs in every wake, dark wakes included. */
+  awake?: () => number
   /** A2-m2 test seam: how long a refresh a check waits on may reach no new folder before the check is refused. */
   refreshStallMs?: number
   /** CF1 test seam: how a full scan walks (default: `walkInWorker`, off main's thread, which keeps the tree). */
@@ -941,13 +968,18 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
   /** I7: when each root was last checked (epoch ms of the guard's clock). */
   const lastCheckedAt = new Map<string, number>()
+  /** FX-SLEEP: awake() at each root's last check (idle is counted in awake time; the wall clock above orders victims). */
+  const lastCheckedAwake = new Map<string, number>()
   /** I7 (F-5): roots released and not checked since: the pane's re-measure leaves them released. */
   const releasedRoots = new Set<string>()
 
   const clock = deps.clock ?? (() => performance.now())
-  /** A root's FIRST full scan while it runs (no completed scan yet): when it last reached a directory, how many it
-   *  reached, and when it began (epoch ms, for the state view). */
-  const firstScans = new Map<string, { at: number; dirs: number; startedAt: number }>()
+  const awake = deps.awake ?? (() => performance.now())
+  /** A root's full scan while it runs: when it last reached a directory, how many it reached, and when it began (epoch
+   *  ms, for the state view). CF8 D3 (L4.1): every full scan counts, not only the root's very first one: a full scan
+   *  runs only when no usable tree is cached (never walked, released for idle or budget, dropped, a clock step), and
+   *  each is as long as the first. */
+  const firstScans = new Map<string, ScanProgress>()
   /** Stops every walk worker of this guard at `close`. */
   const walks = new AbortController()
   const walkFull = deps.walkFull ?? ((root, options) => walkInWorker(root, options))
@@ -956,35 +988,47 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
   const idleReleaseMs = deps.idleReleaseMs ?? IDLE_RELEASE_MS
   const treeDrops = new Map<string, number>()
 
-  const fullScan = async (root: string, at: number): Promise<CacheEntry> => {
-    const progress = lastScanMs.has(root) || cache.has(root) ? null : { at: clock(), dirs: 0, startedAt: at }
+  /**
+   * FX-STALE (B1-M1, D3): `run` is a walk of the whole tree a check waits on, so it counts as a first scan: progress
+   * (the folders it reached, when it last reached one) is `firstScanProgress` / `firstScanDirs` while it runs, which
+   * is what gives the check main's progress frames and the first-scan cap (checkBeforeStart) instead of the plain
+   * 30 s deadline. The walk itself still decides; nothing is answered from the progress.
+   */
+  const asFirstScan = async <T>(
+    root: string,
+    startedAt: number,
+    run: (moved: (dirs: number) => void, progress: ScanProgress) => Promise<T>,
+    dirs = 0
+  ): Promise<T> => {
+    const progress: ScanProgress = { at: clock(), dirs, startedAt }
 
-    if (progress) {
-      firstScans.set(root, progress)
-      firstScanChanged()
-    }
+    firstScans.set(root, progress)
+    firstScanChanged()
 
     try {
-      deps.onFullScan?.(root)
-
-      const tree = await walkFull(root, {
-        signal: walks.signal,
-        onProgress: progress
-          ? dirs => {
-              progress.at = clock()
-              progress.dirs = dirs
-              firstScanChanged()
-            }
-          : undefined
-      })
-
-      return { tree, fullAt: at, store: null, watch: null }
+      return await run(reached => {
+        progress.at = clock()
+        progress.dirs = reached
+        firstScanChanged()
+      }, progress)
     } finally {
-      if (progress && firstScans.get(root) === progress) {
+      if (firstScans.get(root) === progress) {
         firstScans.delete(root)
         firstScanChanged()
       }
     }
+  }
+
+  const fullScan = async (root: string, at: number): Promise<CacheEntry> => {
+    const awakeAt = awake()
+
+    return asFirstScan(root, at, async moved => {
+      deps.onFullScan?.(root)
+
+      const tree = await walkFull(root, { signal: walks.signal, onProgress: moved })
+
+      return { tree, fullAt: at, awakeAt, store: null, watch: null }
+    })
   }
 
   const source = deps.fsEvents === undefined ? defaultFsEventsSource() : deps.fsEvents
@@ -1225,6 +1269,8 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
   interface Refresh {
     /** now() when the walk began: the `fullAt` of what it answers. */
     started: number
+    /** awake() when the walk began: the `awakeAt` of what it answers. */
+    startedAwake: number
     watch: RootWatch
     /** Every folder the stream named since the walk began: dirty for the answer it makes. */
     tap: Set<string>
@@ -1236,6 +1282,10 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
     stop: AbortController
     /** clock() when its walk last reached a folder (or began): a check waiting on it refuses past the stall bound. */
     progressAt: number
+    /** The folders its walk reached so far. */
+    dirs: number
+    /** FX-STALE (B1-M1): the first-scan progress of the check waiting on it (`refreshed`), moved with each folder. */
+    scan: ScanProgress | null
   }
 
   /** INFO L1-7: `realParentJoin` kept while the root's stream is healthy (its WatchRoot flag voids the stream when
@@ -1328,10 +1378,21 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
   /** The root's age bound (header, refreshCadence). */
   const boundFor = (root: string) => refreshCadence(cadenceScanMs(root)).boundMs
 
+  /** How old `entry` is at `at` for the age bound: wall time since its walk began, except for a stream-backed entry,
+   *  which ages in awake time (header, AGE IN AWAKE TIME). A2-m5: a wall clock stepped back is a negative age. */
+  const ageOf = (root: string, entry: CacheEntry, at: number) => {
+    const wall = at - entry.fullAt
+
+    return wall < 0 || !streamBacked(root, entry) ? wall : awake() - entry.awakeAt
+  }
+
   /** Within the bound at `at`, counted from the start of the walk (`fullAt`). A2-m5: a wall clock stepped back (a
    *  negative age) is stale too, never fresh for longer. */
-  const young = (root: string, entry: CacheEntry, at: number) =>
-    at - entry.fullAt >= 0 && at - entry.fullAt < boundFor(root)
+  const young = (root: string, entry: CacheEntry, at: number) => {
+    const age = ageOf(root, entry, at)
+
+    return age >= 0 && age < boundFor(root)
+  }
 
   /** How long after a background scan began the next one begins. */
   const intervalFor = (root: string) => refreshCadence(cadenceScanMs(root)).intervalMs
@@ -1376,7 +1437,7 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
     refresh.tap.forEach(dir => watch.dirty.add(dir))
 
-    const entry: CacheEntry = { tree, fullAt: refresh.started, store: null, watch }
+    const entry: CacheEntry = { tree, fullAt: refresh.started, awakeAt: refresh.startedAwake, store: null, watch }
 
     setEntry(root, entry)
     deps.onRefresh?.(root, 'installed')
@@ -1418,6 +1479,7 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
     const refresh: Refresh = {
       started: now().getTime(),
+      startedAwake: awake(),
       watch,
       tap,
       walk: (deps.onRefreshWalk?.(root, pace) ?? Promise.resolve()).then(() => {
@@ -1426,15 +1488,24 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
         return walkFull(root, {
           signal: AbortSignal.any([walks.signal, stop.signal]),
           pace,
-          onProgress: () => {
+          onProgress: dirs => {
             refresh.progressAt = clock()
+            refresh.dirs = dirs
+
+            if (refresh.scan) {
+              refresh.scan.at = refresh.progressAt
+              refresh.scan.dirs = dirs
+              firstScanChanged()
+            }
           }
         })
       }),
       done: false,
       pace,
       stop,
-      progressAt: clock()
+      progressAt: clock(),
+      dirs: 0,
+      scan: null
     }
 
     refreshes.set(root, refresh)
@@ -1504,16 +1575,31 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
     dropEntry(root)
     lastCheckedAt.delete(root)
+    lastCheckedAwake.delete(root)
     releasedRoots.add(root)
     deps.onRefresh?.(root, 'released')
     deps.onRootReleased?.(root, why)
   }
 
-  /** I7: unchecked for IDLE_RELEASE_MS, never checked, or the clock stepped back (released: the cheap direction). */
+  /** I7: unchecked for IDLE_RELEASE_MS, never checked, or the wall clock stepped back (released: the cheap direction).
+   *  FX-SLEEP: a root with a healthy stream idles in awake time, the clock it ages in (a night's sleep is not idle use;
+   *  releasing there made the first command after every wake a full walk); a walked root, in wall time as before. */
   const idleAt = (root: string, at: number) => {
     const last = lastCheckedAt.get(root)
+    const lastAwake = lastCheckedAwake.get(root)
 
-    return last === undefined || at < last || at - last >= idleReleaseMs
+    if (last === undefined || lastAwake === undefined || at < last) {
+      return true
+    }
+
+    return (watches.get(root)?.healthy ? awake() - lastAwake : at - last) >= idleReleaseMs
+  }
+
+  /** I7: `root` was used (checked or prewarmed) now. */
+  const checkedNow = (root: string, at: number) => {
+    lastCheckedAt.set(root, at)
+    lastCheckedAwake.set(root, awake())
+    releasedRoots.delete(root)
   }
 
   const streamBacked = (root: string, entry: CacheEntry | null | undefined): entry is CacheEntry =>
@@ -1534,7 +1620,24 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
     let tree: TreeResident
 
     try {
-      tree = await stallBounded(refresh)
+      // FX-STALE (B1-M1, D3): the full-speed walk this check waits on is a walk of the whole tree with no usable cached
+      // answer, so it is a first scan (progress frames, the first-scan cap), as long as the check waits on it.
+      tree = await asFirstScan(
+        root,
+        refresh.started,
+        async (_moved, progress) => {
+          refresh.scan = progress
+
+          try {
+            return await stallBounded(refresh)
+          } finally {
+            if (refresh.scan === progress) {
+              refresh.scan = null
+            }
+          }
+        },
+        refresh.dirs
+      )
     } catch (error) {
       // A2-m2: a hung worker refuses this check (and frees the root's queue); any other failure: the walk decides.
       if (error instanceof RefreshStalled) {
@@ -1586,8 +1689,7 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
     const at = now().getTime()
 
     if (use) {
-      lastCheckedAt.set(root, at)
-      releasedRoots.delete(root)
+      checkedNow(root, at)
     }
 
     // I7 (F-7): every other idle root goes now (walked ones too: they have no refresh tick); O(roots).
@@ -1602,7 +1704,7 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
     if (hit && !fresh && streamBacked(root, hit)) {
       fresh = await refreshed(root)
-    } else if (fresh && streamBacked(root, fresh) && at - fresh.fullAt >= intervalFor(root)) {
+    } else if (fresh && streamBacked(root, fresh) && ageOf(root, fresh, at) >= intervalFor(root)) {
       startRefresh(root)
     }
 
@@ -1623,6 +1725,9 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
       fresh = null
     }
 
+    // FX-STALE: the cached tree once had a stream that is no longer this root's healthy one (it was voided).
+    const voided = fresh !== null && fresh.watch !== null && !streamBacked(root, fresh)
+
     // V-1b: the stream (when this root is worth one) starts before the walk it is to cover; what it saw until now is
     // in that walk.
     const watch = preferEvents(root, fresh) ? await ensureWatch(root) : null
@@ -1633,7 +1738,12 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
 
     if (fresh) {
       // I1: every folder is stat-ed where the tree lives; main learns the verdict.
-      const verdict = standing(await updated(root, fresh, () => fresh.tree.walk()))
+      // FX-STALE (B1-M1, D3): every folder of the tree is stat-ed here. After its stream was voided (MustScanSubDirs,
+      // HistoryDone, an unmount, its death) that walk of the whole tree replaces the stream's answer, so it is a first
+      // scan (progress, the cap). A walked root (never a stream: a network volume) keeps its plain per-check walk, as
+      // CF1 pins (hardlinks.first-scan.test.ts).
+      const walk = (moved?: (dirs: number) => void) => updated(root, fresh, () => fresh.tree.walk(moved))
+      const verdict = standing(voided ? await asFirstScan(root, now().getTime(), walk) : await walk())
 
       walkMs.set(root, performance.now() - walkStarted)
 
@@ -1992,10 +2102,9 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
         const hit = cache.get(root)
 
         // I7 (F-4): a prewarm is a use (the first command may come later than the first refresh tick).
-        lastCheckedAt.set(root, at)
-        releasedRoots.delete(root)
+        checkedNow(root, at)
 
-        if (hit && at - hit.fullAt < boundFor(root)) {
+        if (hit && young(root, hit, at)) {
           return
         }
 
@@ -2018,6 +2127,11 @@ export function createHardlinkGuard(deps: HardlinkGuardDeps) {
      */
     firstScanProgress(projectRoot: string): number | null {
       return firstScans.get(resolvedRoots.get(projectRoot) ?? projectRoot)?.at ?? null
+    },
+    /** CF8: how many folders the root's FIRST full scan has reached so far; null when none of that root is running.
+     *  The launcher's guard channel (guard-channel.ts) sends it as its progress frames. No file system call. */
+    firstScanDirs(projectRoot: string): number | null {
+      return firstScans.get(resolvedRoots.get(projectRoot) ?? projectRoot)?.dirs ?? null
     },
     /** CF1: this guard's first scan running now, or null (`activeFirstScan` reads every live guard's). */
     firstScan,
@@ -2048,7 +2162,8 @@ export interface HardlinkUnanswered {
 
 /** The guard as a start waits on it. `firstScanProgress` is optional so a bare `check` (tests, other callers) keeps
  *  the plain deadline; the app's guard has it. */
-export type HardlinkStartGuard = Pick<HardlinkGuard, 'check'> & Partial<Pick<HardlinkGuard, 'firstScanProgress'>>
+export type HardlinkStartGuard = Pick<HardlinkGuard, 'check'> &
+  Partial<Pick<HardlinkGuard, 'firstScanDirs' | 'firstScanProgress'>>
 
 export interface CheckBeforeStartTimings {
   firstScanDeadlineMs?: number
@@ -2056,6 +2171,9 @@ export interface CheckBeforeStartTimings {
   pollMs?: number
   /** The same monotonic clock as the guard's `clock` dep. */
   now?: () => number
+  /** CF8: T3, the check after a run's exit (epoch ms, as `check`'s `exitedAtMs`): the answer carries `appeared`.
+   *  Absent: the check before a start. */
+  exitedAtMs?: number
 }
 
 /**
@@ -2081,14 +2199,21 @@ export function checkBeforeStart(
     let timer: ReturnType<typeof setTimeout> | undefined
 
     const refuse = (detail: string) => resolve({ ok: false, unanswered: 'timeout', detail })
+    /** The last progress any poll saw: a scan that ends between two polls leaves its check still settling. */
+    let lastSeen: number | null = null
 
     const waitOrRefuse = () => {
       const at = now()
       const progress = guard.firstScanProgress?.(root) ?? null
       const advancing = progress !== null && at - progress <= stallMs
       const left = firstScanDeadlineMs - (at - began)
+      // CF8 L4.4: the scan this wait was behind just finished (it advanced within the stall window, now nothing runs):
+      // its check is in its last steps (install, store passes), so it gets the rest of that window, not a refusal.
+      const finishing = progress === null && lastSeen !== null && at - lastSeen <= stallMs
 
-      if (advancing && left > 0) {
+      lastSeen = progress ?? lastSeen
+
+      if ((advancing || finishing) && left > 0) {
         timer = setTimeout(waitOrRefuse, Math.min(pollMs, left))
 
         return
@@ -2105,7 +2230,9 @@ export function checkBeforeStart(
 
     timer = setTimeout(waitOrRefuse, deadlineMs)
 
-    guard.check(root, cls).then(
+    const asked = timings.exitedAtMs === undefined ? guard.check(root, cls) : guard.check(root, cls, timings.exitedAtMs)
+
+    asked.then(
       result => {
         clearTimeout(timer)
         resolve(result)

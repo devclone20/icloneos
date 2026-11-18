@@ -1,6 +1,6 @@
 {
-  "sha": "fc5c4e2d9101d0c120f2cfe8e9ba9086f13a554a",
-  "date": "2026-11-11",
+  "sha": "38728b1966330f7b0e8f3970100cabc2e04b72bf",
+  "date": "2026-11-17",
   "python": "3.14.7",
   "pycs": 2308,
   "python_build": {
@@ -15,12 +15,12 @@
   "node": "v26.8.1",
   "source": "repo",
   "upstream": "1ac3f97fbe0958aa2743c0c26202b20b3b4e760e",
-  "tarball_sha256": "ded5b46e312b440900c634a5618bfdeedfa84dc65ede8cab797ba680532528cb",
-  "tarball_bytes": 46614717,
+  "tarball_sha256": "b1769dd64d971b588e7c0c266b3c0da1abd4c912f4aa9524da9feaa3c9859b79",
+  "tarball_bytes": 46629510,
   "install_sh_sha256": "a19c2c01737669167f3d28e7264b46e7e6fb6ac5f736f0fcb7dbbb32dc099d80",
-  "manifest_sha256": "7f061de7da1ede8c54ef79c1c20e5e086104c58008a9249e58cccb71605fda58",
+  "manifest_sha256": "be3989a656c082e2b405b28dff55542cd18acf980b74a2ba160b220d7dafdcae",
   "files": 6452,
-  "bytes": 129446328,
+  "bytes": 129481086,
   "min_app": "1.1.0",
   "verified": "amber:3-roots"
 }

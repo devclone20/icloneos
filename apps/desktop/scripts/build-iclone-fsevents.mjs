@@ -100,7 +100,86 @@ function run(command, args) {
   return result.stdout.trim()
 }
 
-/** sha256 of `file` with its code signature removed (a copy is stripped; the file itself is untouched). */
+const MH_MAGIC_64 = 0xfeedfacf
+const LC_SEGMENT_64 = 0x19
+const LINKEDIT_PAGE = 0x4000
+/** The most a Developer ID signature has been measured to grow __LINKEDIT.vmsize past its canonical value (2 pages). */
+const LINKEDIT_SIGNATURE_GROWTH = 0x8000n
+
+/**
+ * `codesign --remove-signature` drops the signature and shrinks __LINKEDIT's filesize, but leaves its vmsize as the
+ * signing left it: a Developer ID signature is larger than the linker's ad-hoc one, so after a Team signature and a strip
+ * the one header field __LINKEDIT.vmsize reads 0x8000 where the linker-signed build read 0x4000 (measured on the
+ * v0.0.7 release, 2026-11-12: one byte differs, every code byte equal). This puts that one field back to its canonical
+ * value, filesize rounded up to the 16 KiB arm64 page, so a stripped Team-signed copy and the stripped pinned build hash
+ * alike. Nothing else is touched: any other byte that differs still differs. Refuses anything that is not one thin
+ * little-endian Mach-O 64 with exactly one __LINKEDIT, and a vmsize that is not a page multiple between the canonical
+ * value and two pages more (L6.2).
+ */
+export function canonicalLinkedit(buffer) {
+  const bytes = Buffer.from(buffer)
+
+  if (bytes.length < 32 || bytes.readUInt32LE(0) !== MH_MAGIC_64) {
+    throw new Error('[build-iclone-fsevents] not a thin little-endian Mach-O 64')
+  }
+
+  const ncmds = bytes.readUInt32LE(16)
+  const sizeofcmds = bytes.readUInt32LE(20)
+  let offset = 32
+  let found = 0
+
+  if (32 + sizeofcmds > bytes.length) {
+    throw new Error('[build-iclone-fsevents] load commands run past the file')
+  }
+
+  for (let index = 0; index < ncmds; index += 1) {
+    if (offset + 8 > 32 + sizeofcmds) {
+      throw new Error('[build-iclone-fsevents] a load command runs past sizeofcmds')
+    }
+
+    const cmd = bytes.readUInt32LE(offset)
+    const cmdsize = bytes.readUInt32LE(offset + 4)
+
+    if (cmdsize < 8 || offset + cmdsize > 32 + sizeofcmds) {
+      throw new Error('[build-iclone-fsevents] a load command has a bad size')
+    }
+
+    if (cmd === LC_SEGMENT_64 && cmdsize >= 72) {
+      const name = bytes.subarray(offset + 8, offset + 24).toString('latin1').replace(/\0+$/, '')
+
+      if (name === '__LINKEDIT') {
+        const filesize = bytes.readBigUInt64LE(offset + 48)
+        const vmsize = bytes.readBigUInt64LE(offset + 32)
+        const page = BigInt(LINKEDIT_PAGE)
+        const canonical = ((filesize + page - 1n) / page) * page
+
+        // L6.2: only what a signature can have grown it to, so the pin still states this header, not "any vmsize".
+        if (vmsize % page !== 0n || vmsize < canonical || vmsize > canonical + LINKEDIT_SIGNATURE_GROWTH) {
+          throw new Error(
+            `[build-iclone-fsevents] __LINKEDIT vmsize 0x${vmsize.toString(16)} is not what a signature grows 0x${canonical.toString(16)} to`
+          )
+        }
+
+        bytes.writeBigUInt64LE(canonical, offset + 32)
+        found += 1
+      }
+    }
+
+    offset += cmdsize
+  }
+
+  if (found !== 1) {
+    throw new Error(`[build-iclone-fsevents] expected one __LINKEDIT segment, found ${found}`)
+  }
+
+  return bytes
+}
+
+/**
+ * sha256 of `file` with its code signature removed (a copy is stripped; the file itself is untouched) and its
+ * __LINKEDIT vmsize made canonical (canonicalLinkedit): the same value for the linker-signed build and for any
+ * Team-signed copy of it.
+ */
 export function unsignedSha256(file) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'iclone-fsev-pin-'))
 
@@ -110,7 +189,7 @@ export function unsignedSha256(file) {
     copyFileSync(file, copy)
     run('/usr/bin/codesign', ['--remove-signature', copy])
 
-    return sha256(readFileSync(copy))
+    return sha256(canonicalLinkedit(readFileSync(copy)))
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

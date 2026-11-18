@@ -9,6 +9,7 @@ to what main said, then handed to ``sandbox-exec -p`` from memory (no window bet
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import hmac
 import json
@@ -392,6 +393,52 @@ def project_git_state(project: str, scratch: str) -> str:
     return "locked"
 
 
+DATA_VOLUME = "/System/Volumes/Data"
+
+
+def _kernel_spelling(path: str) -> Optional[str]:
+    """The folder's own spelling as the kernel gives it (F_GETPATH: realpath, case and Unicode form as on disk), or
+    None when it cannot be opened as a folder. Without F_GETPATH (not macOS) the realpath stands for it."""
+    if not hasattr(fcntl, "F_GETPATH"):
+        return os.path.realpath(path) if os.path.isdir(path) else None
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+    except OSError:
+        return None
+    try:
+        return os.fsdecode(fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0])
+    except OSError:
+        return None
+    finally:
+        os.close(fd)
+
+
+def _root_admission_refusal(root: str, home: str) -> Optional[str]:
+    """CF8 D4, the twin of main's ``admissibleRoot`` (index.ts), judged on the folder's identity: its kernel spelling
+    (F_GETPATH), or its realpath when the folder cannot be opened (inside the confined runtime a window project opened
+    after the spawn is outside its profile, EPERM; or it is not there yet). Never ``/`` or a top-level folder (system
+    folders, the home's parent, firmlinks into the Data volume); nothing at or under the Data volume's own mount; no
+    volume mount point (its device differs from its parent's); no root that holds the home by either spelling.
+    Another spelling of an admissible folder is not refused here: the runtime may name a project in any case or
+    Unicode form, and the launcher spells it by the kernel (fx29) before main's guardedRoot refuses any other."""
+    real = _kernel_spelling(root) or os.path.realpath(root)
+    if real == os.sep or os.path.dirname(real) == os.sep:
+        return "it is a top-level folder of the disk"
+    if any(name == DATA_VOLUME or name.startswith(DATA_VOLUME + os.sep) for name in (root, real)):
+        return "it is on the Data volume's own mount (open it by its usual path)"
+    try:
+        own, parent = os.stat(real), os.stat(os.path.dirname(real))
+    except OSError:
+        own = parent = None  # not there, or not visible from this profile: no mount point to see; main judges again
+    if own is not None and own.st_dev != parent.st_dev:
+        return "it is a volume's mount point"
+    real_home = os.path.realpath(home)
+    for spelling in (real_home, DATA_VOLUME + real_home):
+        if spelling == real or spelling.startswith(real + os.sep):
+            return "it is your home folder or a folder above it"
+    return None
+
+
 def project_root_refusal(root: Optional[str], index: ProfileIndex) -> Optional[str]:
     """Why ``root`` may not be a project (``None`` when it may): the one rule behind ``acceptable_project_root``,
     worded for the agent (fx18: a command whose folder is refused is told which rule refused it, never a bare EPERM).
@@ -416,7 +463,8 @@ def project_root_refusal(root: Optional[str], index: ProfileIndex) -> Optional[s
         return "it is, holds or sits inside a folder your own shell or tools run from"
     if any(_inside_folder(real, denied) or _inside_folder(denied, real) for denied in index.denied):
         return "it is, holds or sits inside a folder icloneOS denies every command"
-    return None
+    # CF8 D4 last, so a path that is not there still hears the profile's own rule first (fx18 wording).
+    return _root_admission_refusal(root, index.home)
 
 
 def acceptable_project_root(root: Optional[str], index: ProfileIndex) -> bool:
@@ -471,9 +519,9 @@ def grant_params(session_id: Optional[str], project: Optional[str], window: Opti
 # Seatbelt judges a path, not an inode: a name inside the project for an inode outside it is read and written under
 # the project's rules. The profile refuses to make one (``deny file-link``); this finds the ones that exist before a
 # command starts. An inode matters only when a name lies outside the root (``st_nlink`` > names found inside). The full
-# scan stats every file, so it is cached per root behind a fingerprint (every directory's inode, mtime and ctime, the
-# file count): planting a name anywhere moves its directory's ctime, which no user call can set back, so a planted link
-# always misses the cache.
+# scan stats every file, so it keeps a record per directory (its inode, mtime and ctime, its subdirectories and its
+# multi-linked names, CF8): planting a name anywhere moves its directory's ctime, which no user call can set back, so
+# that directory is listed again, and a linked set that moved is decided by one full walk.
 #
 # Fail closed (r3 T1): a directory inside the root that cannot be listed hides what it holds, while a process needs
 # only ``x`` to traverse it; such a root is refused ("cannot scan") until its permissions are fixed. The same for a
@@ -489,87 +537,379 @@ def grant_params(session_id: Optional[str], project: Optional[str], window: Opti
 # roots under a budget; past it, or on any error, nothing is passed and the gesture stands.
 
 HARDLINK_PATHS_SHOWN = 3
+# CF8 D2: records answer only while the last FULL walk is younger than this; past it one full walk decides again. A
+# name made OUTSIDE the root for an inside file with one link moves no inside directory, so only a walk sees it: this
+# bounds that blind window to the same limit main's guard declares (hardlinks.ts). The age moves on a full walk only.
 _CACHE_MAX_AGE_S = 300.0
+# CF8 (c'): a first scan has no fixed budget; it may run while it progresses: refused after this long with no
+# directory (or batch of entries) finished. The cap past which it is refused however it progresses is the launcher's
+# FIRST_SCAN_CAP_S (one definition, L6.4).
+FIRST_SCAN_STALL_S = 5.0
+_PROGRESS_EVERY_S = 0.5
 _STORE_BUDGET_S = 1.0
 _STORE_AUTO_PASS_CLASS = "build"
-# Per root: [fingerprint, measured_at, linked, files, unscannable, store_passed] (the last is None until a ``build``
-# command asked, T2''; it lives and dies with the scan it was computed over, as in hardlinks.ts).
-_scan_cache: Dict[str, List[Any]] = {}
+# Entries between two progress marks inside one directory: a huge folder that keeps listing is not a stall, and the
+# cap is judged inside it rather than only once it returns (L3.4).
+_ENTRIES_PER_MARK = 256
+# On a volume with whole-second timestamps (HFS+ 1 s, exFAT 2 s, SMB), a directory whose ctime is this close to the
+# wall clock when it is listed is listed again at the next check: a name added in the same tick leaves the identity
+# equal (L3.5). The age bound caps what is left.
+_FRESH_CTIME_NS = 2_000_000_000
+# A directory that moves while it is listed (written to, or swapped for a symlink and back) is listed again this many
+# times; still moving, it is refused for this check as one it cannot list (L3.3).
+_LIST_ATTEMPTS = 5
+# L3.2: records kept for at most this many roots and this many directories in all, least recently used out first. The
+# root just measured is never evicted (one owner-sized root, about 520 k directories, fits).
+_CACHE_ROOTS_MAX = 4
+_CACHE_DIRS_BUDGET = 1_000_000
+# How often a caller waiting on a walk running on its worker looks at the budget.
+_WAIT_POLL_S = 0.05
+
+
+class _Scan:
+    """CF8 (c'): one root's per-directory records. ``folders``: directory -> (identity (``_ident``) or None when it
+    could not be stat-ed, subdirectories (the same strings as their keys), file count, the names with ``st_nlink`` > 1 as (dev, ino,
+    nlink, ctime_ns, path, name identity), unscannable, list again at the next check). ``measured_at`` is the
+    (monotonic) time of the last FULL walk. ``store_passed`` is None until a ``build`` command asked (T2''); it lives
+    and dies with the linked set it was computed over."""
+
+    __slots__ = ("folders", "measured_at", "linked", "files", "unscannable", "store_passed")
+
+    def __init__(self, folders, measured_at, linked, files, unscannable):
+        self.folders = folders
+        self.measured_at = measured_at
+        self.linked = linked
+        self.files = files
+        self.unscannable = unscannable
+        self.store_passed = None
+
+
+# Insertion order is recency (a hit moves the root to the end). Every access holds _scan_lock; a walk records its
+# result only when the root's generation did not move while it ran (forget_root moved it: a run happened there).
+_scan_cache: Dict[str, _Scan] = {}
+_scan_generation: Dict[str, int] = {}
+_scan_lock = threading.Lock()
+# A walk the caller gave up on (cap, stall) whose worker is still inside a listing: a hung mount holds one thread, and
+# a new check of that root waits its own stall for it, then is refused instead of starting another one.
+_abandoned: Dict[str, threading.Thread] = {}
 
 
 class ScanTooLarge(OSError):
-    """fx20 (lens5 M1): the walk ran past the caller's time budget. An ``OSError``, so the after-run scan records its
-    root as one it could not scan; before a command the caller refuses, naming the size as the reason."""
+    """fx20 (lens5 M1): the walk ran past the caller's time budget (CF8: or stalled). An ``OSError``, so the
+    after-run scan knows its root was not scanned; before a command the caller refuses."""
 
 
-def _walk(root: str, stat_files: bool, deadline: Optional[float] = None) -> Tuple[str, int, List[Dict[str, Any]], List[str]]:
-    fingerprint: List[str] = []
-    by_inode: Dict[Tuple[int, int], Dict[str, Any]] = {}
-    unscannable: List[str] = []
-    stack = [root]
+class _NeedsWalk(Exception):
+    """A known multi-linked file moved (inode, link count or ctime): records cannot say where its names are now (D2)."""
+
+
+class _Budget:
+    def __init__(self, root: str, deadline: Optional[float], stall_s: Optional[float], progress) -> None:
+        self.root = root
+        self.deadline = deadline
+        self.stall_s = stall_s
+        self.progress = progress
+        self.dirs = 0
+        self.cancelled = False
+        self.last = self.told = time.monotonic()
+
+    def overdue(self, now: float) -> bool:
+        if self.deadline is not None and now > self.deadline:
+            return True
+        return self.stall_s is not None and now - self.last > self.stall_s
+
+    def tick(self) -> None:
+        if self.cancelled or self.overdue(time.monotonic()):
+            raise ScanTooLarge(self.root)
+
+    def mark(self) -> None:
+        """Entries listed inside one directory: progress, and the cap judged there too."""
+        self.tick()
+        self.last = time.monotonic()
+
+    def advance(self) -> None:
+        # One directory that took longer than the stall is a stall too, judged when its listing returns.
+        self.tick()
+        self.dirs += 1
+        self.last = now = time.monotonic()
+        if self.progress is not None and now - self.told >= _PROGRESS_EVERY_S:
+            self.told = now
+            self.progress(self.dirs)
+
+
+def _ident(st: os.stat_result) -> bytes:
+    """A directory's identity (ino, mtime_ns, ctime_ns) in 24 bytes: a tuple of three large ints costs about 160 B per
+    directory, the dominant part of a record after its path (L3.2)."""
+    return struct.pack("<Qqq", st.st_ino, st.st_mtime_ns, st.st_ctime_ns)
+
+
+def _list_once(directory: str, before: os.stat_result, budget: _Budget):
+    ident = _ident(before)
+    folder = f"{before.st_dev}:{before.st_ino}"
+    subdirs: List[str] = []
+    links: List[Tuple[int, int, int, int, str, str]] = []
     files = 0
-    while stack:
-        if deadline is not None and time.monotonic() > deadline:
-            raise ScanTooLarge(root)
-        directory = stack.pop()
-        rel = os.path.relpath(directory, root)
-        try:
-            st = os.lstat(directory)
-            fingerprint.append(f"{rel}\0{st.st_ino}\0{st.st_mtime_ns}\0{st.st_ctime_ns}")
-            folder = f"{st.st_dev}:{st.st_ino}"
-            entries = list(os.scandir(directory))
-        except FileNotFoundError:
-            # Gone since its parent was listed: nothing is hidden there.
-            continue
-        except OSError:
-            # Unlistable is not unreadable: whatever it holds is reachable and unseen. Refused (T1).
-            fingerprint.append(f"{rel}\0unscannable")
-            unscannable.append(directory)
-            continue
-        for entry in entries:
+    unscannable = False
+    seen = 0
+    with os.scandir(directory) as listing:
+        for entry in listing:
+            seen += 1
+            if seen % _ENTRIES_PER_MARK == 0:
+                budget.mark()
             try:
                 if entry.is_dir(follow_symlinks=False):
-                    stack.append(entry.path)
+                    subdirs.append(entry.path)  # the same string object becomes its record's key
                     continue
                 files += 1
-                if not stat_files or not entry.is_file(follow_symlinks=False):
+                if unscannable or not entry.is_file(follow_symlinks=False):
                     continue
-                st = entry.stat(follow_symlinks=False)
+                fst = entry.stat(follow_symlinks=False)
             except FileNotFoundError:
-                # Gone between the listing and the stat: nothing is there.
                 continue
             except OSError:
-                # EACCES on a ``chmod 400`` directory, EPERM, ELOOP, EIO…: this child's link count is hidden, and so
-                # is the whole directory (T1'): refused. Its subdirectories stay on the stack and report themselves
-                # (they cannot be listed either), in both walks alike, so the cached answer stays this refusal.
-                unscannable.append(directory)
-                break
-            if st.st_nlink > 1 and stat_mod.S_ISREG(st.st_mode):
-                inode = by_inode.setdefault((st.st_dev, st.st_ino), {"dev": st.st_dev, "ino": st.st_ino, "nlink": st.st_nlink,
-                                                                     "paths": [], "names": []})
-                inode["paths"].append(entry.path)
-                # r6: the name as an identity (the holding folder's dev:ino, the name), shared with the store walk.
-                inode["names"].append(f"{folder}/{entry.name}")
-    fingerprint.sort()
-    fingerprint.append(f"files\0{files}")
+                # EACCES on a ``chmod 400`` directory, EPERM, ELOOP, EIO…: this child's link count is hidden, and so is
+                # the whole directory (T1'): refused. Its subdirectories are still followed and report themselves.
+                unscannable = True
+                continue
+            if fst.st_nlink > 1 and stat_mod.S_ISREG(fst.st_mode):
+                links.append((fst.st_dev, fst.st_ino, fst.st_nlink, fst.st_ctime_ns, entry.path,
+                              f"{folder}/{entry.name}"))
+    # Whole-second timestamps mark a coarse volume (APFS keeps nanoseconds): only there can a same-tick name hide.
+    recheck = before.st_ctime_ns % 1_000_000_000 == 0 and time.time_ns() - before.st_ctime_ns < _FRESH_CTIME_NS
+    return (ident, tuple(sorted(subdirs)), files, tuple(sorted(links)), unscannable, recheck)
+
+
+def _list_folder_record(directory: str, budget: _Budget):
+    """One directory listed and its files stat-ed: its record, or None when it is gone (nothing is hidden there).
+    L3.3: the listing goes by path (``scandir`` follows a symlink), so the directory's ``lstat`` is taken again once it
+    is listed; any swap for a symlink, even one put back, moves its ctime, and a listing that did not hold still is
+    redone. One that never holds is refused for this check."""
+    for _attempt in range(_LIST_ATTEMPTS):
+        try:
+            before = os.lstat(directory)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            # Unlistable is not unreadable: whatever it holds is reachable and unseen. Refused (T1).
+            return (None, (), 0, (), True, False)
+        if not stat_mod.S_ISDIR(before.st_mode):
+            return None
+        ident = _ident(before)
+        try:
+            record = _list_once(directory, before, budget)
+            after = os.lstat(directory)
+        except FileNotFoundError:
+            return None
+        except ScanTooLarge:
+            raise
+        except OSError:
+            return (ident, (), 0, (), True, False)
+        if stat_mod.S_ISDIR(after.st_mode) and _ident(after) == ident:
+            return record
+    return (None, (), 0, (), True, False)
+
+
+def _links_moved(record) -> bool:
+    """A known multi-linked file whose inode, link count or ctime is not what was recorded (a name added, removed or
+    swapped elsewhere, possibly outside the root, moves no mtime of the directory holding this one; it moves the
+    file's ctime)."""
+    for _dev, ino, nlink, ctime_ns, path, _name in record[3]:
+        try:
+            st = os.lstat(path)
+        except OSError:
+            return True
+        if st.st_ino != ino or st.st_nlink != nlink or st.st_ctime_ns != ctime_ns:
+            return True
+    return False
+
+
+def _full_walk(root: str, budget: _Budget) -> Dict[str, Any]:
+    folders: Dict[str, Any] = {}
+    stack = [root]
+    while stack:
+        budget.tick()
+        directory = stack.pop()
+        record = _list_folder_record(directory, budget)
+        budget.advance()
+        if record is None:
+            continue
+        folders[directory] = record
+        stack.extend(record[1])
+    return folders
+
+
+def _refresh(root: str, scan: _Scan, budget: _Budget) -> Tuple[Dict[str, Any], bool]:
+    """CF8 (c'): one ``lstat`` per known directory; only a directory whose identity moved, a new one, one that was
+    unscannable or one marked to be listed again is listed again. Returns the records and whether anything differs
+    from ``scan``. ``_NeedsWalk`` when a known multi-linked file moved (D2)."""
+    old = scan.folders
+    folders: Dict[str, Any] = {}
+    changed = False
+    stack = [root]
+    while stack:
+        budget.tick()
+        directory = stack.pop()
+        record = old.get(directory)
+        if record is not None and record[0] is not None and not record[4]:
+            if _links_moved(record):
+                raise _NeedsWalk(directory)
+            if not record[5]:
+                try:
+                    st = os.lstat(directory)
+                    same = _ident(st) == record[0]
+                except OSError:
+                    same = False
+                if same:
+                    folders[directory] = record
+                    stack.extend(record[1])
+                    budget.advance()
+                    continue
+        fresh = _list_folder_record(directory, budget)
+        budget.advance()
+        if fresh is None or record is None or fresh[:5] != record[:5]:
+            changed = True
+        if fresh is None:
+            continue
+        folders[directory] = fresh
+        stack.extend(fresh[1])
+    if len(folders) != len(old):
+        changed = True
+    return folders, changed
+
+
+def _summary(folders: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], int, List[str]]:
+    by_inode: Dict[Tuple[int, int], Dict[str, Any]] = {}
+    unscannable: List[str] = []
+    files = 0
+    for directory, record in folders.items():
+        files += record[2]
+        if record[4]:
+            unscannable.append(directory)
+        for dev, ino, nlink, _ctime_ns, path, name in record[3]:
+            inode = by_inode.setdefault((dev, ino), {"dev": dev, "ino": ino, "nlink": nlink, "paths": [], "names": []})
+            inode["nlink"] = max(inode["nlink"], nlink)
+            inode["paths"].append(path)
+            # r6: the name as an identity (the holding folder's dev:ino, the name), shared with the store walk.
+            inode["names"].append(name)
     linked = sorted(
-        ({**inode, "paths": sorted(inode["paths"])} for inode in by_inode.values() if len(inode["paths"]) < inode["nlink"]),
+        ({**inode, "paths": sorted(inode["paths"]), "names": sorted(inode["names"])}
+         for inode in by_inode.values() if len(inode["paths"]) < inode["nlink"]),
         key=lambda inode: inode["paths"][0],
     )
-    return "\n".join(fingerprint), files, linked, sorted(unscannable)
+    return linked, files, sorted(unscannable)
 
 
-def linked_inodes(root: str, now: Optional[float] = None,
-                  deadline: Optional[float] = None) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
-    """The inodes under ``root`` with a name outside it, whether the answer came from the cache, and the directories
-    inside it that could not be listed (T1: any of them refuses the root)."""
-    at = time.monotonic() if now is None else now
-    hit = _scan_cache.get(root)
-    if hit and at - hit[1] < _CACHE_MAX_AGE_S and _walk(root, False, deadline)[0] == hit[0]:
-        return hit[2], True, hit[4]
-    fingerprint, files, linked, unscannable = _walk(root, True, deadline)
-    _scan_cache[root] = [fingerprint, at, linked, files, unscannable, None]
+def forget_root(root: str) -> None:
+    """D2 (L2.1): a run happened in ``root``: its records are dropped, and a walk that was already running there
+    records nothing. The next check walks it whole (a name made outside for an inside file with one link moves no
+    directory inside, so no refresh could see it)."""
+    with _scan_lock:
+        _scan_cache.pop(root, None)
+        _scan_generation[root] = _scan_generation.get(root, 0) + 1
+
+
+def _cached(root: str) -> Tuple[Optional[_Scan], int]:
+    with _scan_lock:
+        scan = _scan_cache.pop(root, None)
+        if scan is not None:
+            _scan_cache[root] = scan
+        return scan, _scan_generation.get(root, 0)
+
+
+def _store(root: str, generation: int, scan: _Scan) -> None:
+    with _scan_lock:
+        if _scan_generation.get(root, 0) != generation:
+            return
+        _scan_cache.pop(root, None)
+        _scan_cache[root] = scan
+        total = sum(len(entry.folders) for entry in _scan_cache.values())
+        for other in list(_scan_cache):
+            if len(_scan_cache) <= _CACHE_ROOTS_MAX and total <= _CACHE_DIRS_BUDGET:
+                break
+            if other == root:
+                continue
+            total -= len(_scan_cache.pop(other).folders)
+
+
+def _measure(root: str, at: float, budget: _Budget) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
+    scan, generation = _cached(root)
+    if scan is not None and at - scan.measured_at < _CACHE_MAX_AGE_S:
+        try:
+            folders, changed = _refresh(root, scan, budget)
+        except _NeedsWalk:
+            folders = None
+        if folders is not None and not changed:
+            with _scan_lock:
+                scan.folders = folders  # directories listed again and found the same lose their "list again" mark
+            return scan.linked, True, scan.unscannable
+        if folders is not None:
+            linked, files, unscannable = _summary(folders)
+            if linked == scan.linked and not unscannable and not scan.unscannable:
+                _store(root, generation, _Scan(folders, scan.measured_at, linked, files, []))
+                return linked, False, []
+    folders = _full_walk(root, budget)
+    linked, files, unscannable = _summary(folders)
+    _store(root, generation, _Scan(folders, at, linked, files, unscannable))
     return linked, False, unscannable
+
+
+def _measure_on_worker(root: str, at: float, budget: _Budget) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
+    """L3.4: a listing or ``stat`` that blocks (dead network or FUSE mount, cold disk) cannot be cut off from the
+    thread making it; the walk runs on a worker and the caller judges the cap and the stall while it waits."""
+    with _scan_lock:
+        stuck = _abandoned.get(root)
+    if stuck is not None:
+        # The walk given up on before may only have been slow: it is given this check's own stall (or what is left of
+        # its cap) to let go; still inside a listing then, this check stops too, without a second thread.
+        waits = [w for w in (budget.stall_s, None if budget.deadline is None else budget.deadline - time.monotonic())
+                 if w is not None]
+        stuck.join(max(0.0, min(waits)))
+        if stuck.is_alive():
+            raise ScanTooLarge(root)
+        with _scan_lock:
+            if _abandoned.get(root) is stuck:
+                del _abandoned[root]
+    done = threading.Event()
+    outcome: Dict[str, Any] = {}
+
+    def work() -> None:
+        try:
+            outcome["value"] = _measure(root, at, budget)
+        except BaseException as error:  # handed to the caller, which raises it in its own thread
+            outcome["error"] = error
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=work, name="iclone-hardlink-walk", daemon=True)
+    worker.start()
+    while not done.wait(_WAIT_POLL_S):
+        if budget.overdue(time.monotonic()):
+            budget.cancelled = True
+            # The worker stops at its next directory or entry mark; until it does, it records nothing that counts.
+            forget_root(root)
+            with _scan_lock:
+                _abandoned[root] = worker
+            raise ScanTooLarge(root)
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
+def linked_inodes(root: str, now: Optional[float] = None, deadline: Optional[float] = None,
+                  stall_s: Optional[float] = None, progress=None) -> Tuple[List[Dict[str, Any]], bool, List[str]]:
+    """The inodes under ``root`` with a name outside it, whether the answer came from the records unchanged, and the
+    directories inside it that could not be listed (T1: any of them refuses the root). CF8 (c'): with records younger
+    than ``_CACHE_MAX_AGE_S`` (since the last full walk), only what moved is listed again; that answer stands only when
+    the linked set is identical and nothing is unscannable, otherwise one full walk decides (a new name's other names
+    may sit in a folder that did not move), as it does when a known multi-linked file moved (D2). ``deadline``
+    (``time.monotonic``) caps the walk, ``stall_s`` refuses one that stops progressing (``ScanTooLarge``), both judged
+    while the walk runs on a worker; nothing is recorded from a walk that did not finish. ``progress(dirs)`` hears the
+    count while it runs (from the worker)."""
+    at = time.monotonic() if now is None else now
+    budget = _Budget(root, deadline, stall_s, progress)
+    if deadline is None and stall_s is None:
+        return _measure(root, at, budget)
+    return _measure_on_worker(root, at, budget)
 
 
 def real_store_root(root: str) -> bool:
@@ -703,9 +1043,9 @@ def _store_passed(index: ProfileIndex, root: str, open_inodes: List[Dict[str, An
     entry = _scan_cache.get(root)
     if entry is None:
         return frozenset()
-    if entry[5] is None:
-        entry[5] = resolve_in_store(roots, open_inodes)[0]
-    return entry[5]
+    if entry.store_passed is None:
+        entry.store_passed = resolve_in_store(roots, open_inodes)[0]
+    return entry.store_passed
 
 
 def verified_acks(index: ProfileIndex) -> List[Dict[str, Any]]:
@@ -761,11 +1101,11 @@ def refusal_sentence(root: str, paths: List[str], count: int, kind: str = "hard-
             f"remove {pronoun} or allow {pronoun} in Containers")
 
 
-def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None,
-                deadline: Optional[float] = None) -> Optional[Dict[str, Any]]:
+def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None, deadline: Optional[float] = None,
+                stall_s: Optional[float] = None, progress=None) -> Optional[Dict[str, Any]]:
     """What refuses ``root`` right now: ``{"kind", "paths", "count"}`` or ``None`` when it is clean. ``cls`` is the
     command's class: ``build`` alone may pass a link whose other names all resolve into the pnpm store (T2'')."""
-    linked, _cached, unscannable = linked_inodes(root, deadline=deadline)
+    linked, _cached, unscannable = linked_inodes(root, deadline=deadline, stall_s=stall_s, progress=progress)
     if unscannable:
         return {"kind": "cannot-scan", "paths": unscannable[:HARDLINK_PATHS_SHOWN], "count": len(unscannable)}
     acks = verified_acks(index) if linked else []
@@ -779,10 +1119,12 @@ def _open_block(index: ProfileIndex, root: str, cls: Optional[str] = None,
             "count": len(open_inodes)}
 
 
-def check_hardlinks(index: ProfileIndex, root: str, cls: Optional[str] = None, deadline: Optional[float] = None) -> None:
+def check_hardlinks(index: ProfileIndex, root: str, cls: Optional[str] = None, deadline: Optional[float] = None,
+                    stall_s: Optional[float] = None, progress=None) -> None:
     """Before a command in ``root``: refuses while an inode with a name outside it is not acknowledged by the owner,
-    or while a directory inside it cannot be listed. ``ScanTooLarge`` past ``deadline`` (``time.monotonic``)."""
-    block = _open_block(index, root, cls, deadline)
+    or while a directory inside it cannot be listed. ``ScanTooLarge`` past ``deadline`` (``time.monotonic``) or after
+    ``stall_s`` without progress (``linked_inodes``)."""
+    block = _open_block(index, root, cls, deadline, stall_s, progress)
     try:
         _report(index, root, block)
     except OSError:
@@ -803,14 +1145,23 @@ def _refusal_row(index: ProfileIndex, row: Dict[str, Any]) -> None:
 
 
 def check_hardlinks_after_run(index: ProfileIndex, roots: List[str], pid: int, session_id: Optional[str],
-                              cls: Optional[str] = None, deadline: Optional[float] = None) -> None:
+                              cls: Optional[str] = None, deadline: Optional[float] = None,
+                              stall_s: Optional[float] = None) -> None:
     """T3: when a confined command exits, scan again. A link planted while it ran was reachable (Seatbelt has no
     inode filter): that cannot be undone, only recorded, as a refusal-class row main's pane says in that run's name.
-    The next command in that root is refused by ``check_hardlinks`` like any other."""
+    The next command in that root is refused by ``check_hardlinks`` like any other. D2 (L2.1): the root's records are
+    dropped first, so this scan walks it whole: a run that gave an inside file with one link a name outside moved no
+    directory inside, and only a walk sees that."""
     ts = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + f".{int(time.time() * 1000) % 1000:03d}Z"
     for root in roots:
+        forget_root(root)
         try:
-            block = _open_block(index, root, cls, deadline)
+            block = _open_block(index, root, cls, deadline, stall_s)
+        except ScanTooLarge:
+            # CF8: out of time is not "cannot scan": no row says so. Nothing was recorded from the unfinished walk and
+            # the records were dropped above, so the next command's scan walks the root whole and refuses the link.
+            logger.warning("the after-run scan of %s did not finish in time; the next command's scan decides", root)
+            continue
         except OSError:
             block = {"kind": "cannot-scan", "paths": [root], "count": 1}
         if not block:

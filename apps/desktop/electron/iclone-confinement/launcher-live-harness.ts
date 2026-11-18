@@ -10,6 +10,7 @@ import path from 'node:path'
  * the probe script both runtime tests ask: one probe list, answered by the interpreter AND by an interpreter child it
  * starts (Seatbelt is inherited). Test-only: nothing in the app imports it.
  */
+import type { GuardChannelEvent, GuardChannelTimings } from './guard-channel'
 import type { LauncherPolicyBody } from './launcher-policy'
 import { writeInstallerConfig } from './live-guards'
 import { realOrSelf } from './profiles'
@@ -192,29 +193,54 @@ export interface LauncherWorld {
   /** The Hermes interpreter with `args`: under the runtime profile through main's own `runtimeSpawn`, or plain. */
   launch: (args: readonly string[], confined: boolean) => { command: string; args: string[] }
   run: (args: readonly string[], options: { confined: boolean; timeoutMs?: number }) => Promise<RunResult>
+  /** CF8: every frame of the launcher's guard channel (fd 3 to main's real hard-link guard), in order. */
+  guardEvents: GuardChannelEvent[]
+  /** CF8: moves main's hard-link guard clock `ms` forward, as a Mac sleep does (the guard's age bound and idle release
+   *  read it; the waits' monotonic timers do not move, as they do not across a real sleep's wake either). */
+  advanceGuardClock: (ms: number) => void
+  /** FX-STALE: moves main's hard-link guard wall clock AND awake clock `ms` forward: time passing with the Mac awake,
+   *  so a stream-backed root ages past its bound (a sleep, `advanceGuardClock`, does not age it). */
+  advanceGuardAwake: (ms: number) => void
   dispose: () => Promise<void>
 }
 
-/** Builds the world, starts the launcher and waits for it: rejects (with the launcher's log) when it is not up. */
-export async function createLauncherWorld(): Promise<LauncherWorld> {
+/** CF8: what a PERF world changes. Absent: the small world every live test has always used. */
+export interface LauncherWorldOptions {
+  /** An existing project folder (a PERF fixture): used as it is, never written to, never removed by `dispose`. */
+  project?: string
+  /** The guard channel's waits (guard-channel.ts), e.g. a shorter first-scan cap for a stall gate. */
+  guardTimings?: GuardChannelTimings
+  /** The interpreter main starts the launcher with (a PERF wrapper that execs the launcher); argv, env and fd 3 as ever. */
+  launcherInterpreter?: string
+}
+
+/** Builds the world, starts the launcher and waits for it: rejects (with the launcher's log) when it is not up. The
+ *  launcher is main's real one, so it is served main's real guard on fd 3 (ICLONE_GUARD_FD=3). */
+export async function createLauncherWorld(options: LauncherWorldOptions = {}): Promise<LauncherWorld> {
   // A short root: the launcher socket and the browser's session socket under it (<home>/Library/Caches/…/ab-<session>/…)
   // must fit a unix socket path.
   const root = realOrSelf(mkdtempSync('/private/tmp/ie-'))
   const home = path.join(root, 'home')
   const hermesHome = path.join(home, '.hermes')
   const userDataDir = path.join(root, 'ud')
-  const project = path.join(root, 'project')
+  const project = options.project === undefined ? path.join(root, 'project') : realpathSync(options.project)
   const outside = path.join(root, 'outside')
   const logs: string[] = []
+  const guardEvents: GuardChannelEvent[] = []
+  let guardClockOffset = 0
+  let guardAwakeOffset = 0
 
-  for (const dir of [home, userDataDir, project, outside, hermesHome]) {
+  for (const dir of [home, userDataDir, outside, hermesHome, ...(options.project === undefined ? [project] : [])]) {
     mkdirSync(dir, { recursive: true })
   }
 
-  writeFileSync(path.join(project, 'README.md'), 'inside\n')
   writeFileSync(path.join(outside, 'secret.txt'), 'outside-secret\n')
   writeInstallerConfig(hermesHome)
-  execFileSync('/usr/bin/git', ['init', '-q', project])
+
+  if (options.project === undefined) {
+    writeFileSync(path.join(project, 'README.md'), 'inside\n')
+    execFileSync('/usr/bin/git', ['init', '-q', project])
+  }
 
   const layer = createConfinement({
     userDataDir,
@@ -225,6 +251,11 @@ export async function createLauncherWorld(): Promise<LauncherWorld> {
     audit: () => [],
     memberPython: RUNTIME_PYTHON,
     log: line => logs.push(line),
+    onGuardEvent: event => guardEvents.push(event),
+    guardTimings: options.guardTimings,
+    launcherInterpreter: options.launcherInterpreter,
+    hardlinkNow: () => new Date(Date.now() + guardClockOffset),
+    hardlinkAwake: () => performance.now() + guardAwakeOffset,
     probes: {
       seatbelt: async () => ({
         id: 'seatbelt' as const,
@@ -313,6 +344,14 @@ export async function createLauncherWorld(): Promise<LauncherWorld> {
     logs,
     env,
     launch,
+    guardEvents,
+    advanceGuardClock(ms) {
+      guardClockOffset += ms
+    },
+    advanceGuardAwake(ms) {
+      guardClockOffset += ms
+      guardAwakeOffset += ms
+    },
     run(args, { confined, timeoutMs = 60_000 }) {
       const { command, args: argv } = launch(args, confined)
       const started = performance.now()

@@ -31,12 +31,13 @@
  */
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Worker } from 'node:worker_threads'
 
 import { registerTeardown } from '../teardown-registry'
 
 import {
+  progressCounter,
   type RecordEntry,
   TreeOutgrown,
   type TreeRecords,
@@ -83,6 +84,14 @@ function bundledWorkerCode(moduleUrl: string): Promise<string | null> {
   return bundledCode
 }
 
+/** The TypeScript source beside `moduleUrl`, as Node's own file: URL. Never `new URL(…, import.meta.url)`: that is the
+ *  realm's global URL, and under a jsdom test environment (the ui vitest project, which drives main's real handlers in
+ *  the live rehearsals) it resolves to an http: URL, which Worker refuses ("The URL must be of scheme file"): every
+ *  walk rejected and every confined start was refused (fail closed, but no walk at all). Built from the path through
+ *  node:url, it is the same file in every runtime main runs in. */
+export const walkSourceUrl = (moduleUrl: string): URL =>
+  pathToFileURL(path.join(path.dirname(fileURLToPath(moduleUrl)), 'hardlinks-walk.ts'))
+
 /** The app's way to start a walk worker: the bundled script when present, else the TypeScript source. */
 export const startWalkWorker: StartWalkWorker = async (root, pace = 'fast', heapMb = WALK_WORKER_HEAP_MB) => {
   const workerData = { icloneTask: WALK_TASK, root, pace }
@@ -91,7 +100,7 @@ export const startWalkWorker: StartWalkWorker = async (root, pace = 'fast', heap
 
   // The worker runs only the walk (hardlinks-walk.ts): none of main's environment is handed to it.
   return code === null
-    ? new Worker(new URL('./hardlinks-walk.ts', import.meta.url), { workerData, env: {}, resourceLimits })
+    ? new Worker(walkSourceUrl(import.meta.url), { workerData, env: {}, resourceLimits })
     : new Worker(code, { eval: true, workerData, env: {}, resourceLimits })
 }
 
@@ -108,8 +117,9 @@ export interface TreeResident {
   readonly alive: boolean
   /** V-1b: the folders the stream named since the last answer, applied (hardlinks-walk.ts applyDirty). */
   apply(dirty: readonly string[]): Promise<TreeVerdict>
-  /** V-1: every folder stat-ed, the changed ones listed again (hardlinks-walk.ts walkIncremental). */
-  walk(): Promise<TreeVerdict>
+  /** V-1: every folder stat-ed, the changed ones listed again (hardlinks-walk.ts walkIncremental). FX-STALE:
+   *  `onProgress` gets the folders reached so far, at most every 100 ms while the count moves, and once at the end. */
+  walk(onProgress?: (dirs: number) => void): Promise<TreeVerdict>
   /** The records (tests only: the guard never asks, hardlinks.async.test.ts proves it structurally). */
   dump(): Promise<TreeRecords>
   /** Stops the worker (or drops the in-process tree). Idempotent. */
@@ -257,7 +267,15 @@ export function residentInProcess(root: string, records: TreeRecords, maxDirs = 
       return alive
     },
     apply: dirty => update(() => state.applyDirty(dirty)),
-    walk: () => update(() => state.walkIncremental()),
+    walk: onProgress =>
+      update(async () => {
+        const counter = progressCounter(dirs => onProgress?.(dirs))
+        const verdict = await state.walkIncremental(counter.onDir)
+
+        counter.flush()
+
+        return verdict
+      }),
     dump: async () => state.dump(),
     release: () => {
       alive = false
@@ -273,7 +291,12 @@ function residentInWorker(
   oneVolume: boolean,
   signal: AbortSignal | undefined
 ): TreeResident {
-  type Waiting = { resolve: (message: WalkMessage) => void; reject: (error: Error) => void }
+  type Waiting = {
+    resolve: (message: WalkMessage) => void
+    reject: (error: Error) => void
+    /** FX-STALE: a `walk` request's progress (posted with its id while it runs). */
+    onProgress?: (dirs: number) => void
+  }
 
   const waiting = new Map<number, Waiting>()
   let nextId = 1
@@ -304,6 +327,20 @@ function residentInWorker(
   worker.removeAllListeners('error')
   worker.removeAllListeners('exit')
   worker.on('message', (message: unknown) => {
+    // FX-STALE: a resident's progress names the walk request it belongs to; any other progress or a second `done` is
+    // a protocol break, as before.
+    if (isMessage(message) && message.type === 'progress' && message.id !== undefined) {
+      const owner = waiting.get(message.id)
+
+      if (!owner?.onProgress || !Number.isSafeInteger(message.dirs) || message.dirs < 0) {
+        return die('the resident tree sent progress for no walk')
+      }
+
+      owner.onProgress(message.dirs)
+
+      return
+    }
+
     if (!isMessage(message) || message.type === 'progress' || message.type === 'done') {
       return die('the resident tree sent an unknown message')
     }
@@ -333,7 +370,7 @@ function residentInWorker(
 
   type Request = { type: 'apply'; dirty: string[] } | { type: 'walk' | 'dump' }
 
-  const ask = (request: Request): Promise<WalkMessage> =>
+  const ask = (request: Request, onProgress?: (dirs: number) => void): Promise<WalkMessage> =>
     new Promise((resolve, reject) => {
       if (!alive) {
         reject(new Error('the tree was released'))
@@ -344,12 +381,12 @@ function residentInWorker(
       const id = nextId
 
       nextId += 1
-      waiting.set(id, { resolve, reject })
+      waiting.set(id, { resolve, reject, onProgress })
       worker.postMessage({ ...request, id } satisfies WalkRequest)
     })
 
-  const update = async (request: Request): Promise<TreeVerdict> => {
-    const message = await ask(request)
+  const update = async (request: Request, onProgress?: (dirs: number) => void): Promise<TreeVerdict> => {
+    const message = await ask(request, onProgress)
 
     if (message.type !== 'answer' || !isVerdict(message.verdict, scan.linked.length)) {
       die('the resident tree sent a malformed verdict')
@@ -374,7 +411,7 @@ function residentInWorker(
       return alive
     },
     apply: dirty => update({ type: 'apply', dirty: [...dirty] }),
-    walk: () => update({ type: 'walk' }),
+    walk: onProgress => update({ type: 'walk' }, onProgress ?? (() => undefined)),
     dump: async () => {
       const message = await ask({ type: 'dump' })
 

@@ -210,3 +210,74 @@ describe('item 4: a start behind the FIRST full scan waits while it advances (up
     guard.close()
   })
 })
+
+describe('CF8 D3/L4.1 + L4.4: a re-walk counts as a first scan; a scan ending between polls is answered', () => {
+  it('L4.1: after the root is released (30 min idle, I7), the walk the next check waits for reports progress', async () => {
+    const base = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'fs2-')))
+    const userData = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'fs2u-')))
+    const [root, other] = [path.join(base, 'a'), path.join(base, 'b')]
+    let at = 1_800_000_000_000
+
+    dirs.push(base, userData)
+
+    for (const dir of [root, other]) {
+      for (let index = 0; index < 30; index += 1) {
+        mkdirSync(path.join(dir, `d${index}`), { recursive: true })
+        writeFileSync(path.join(dir, `d${index}`, 'f'), 'x')
+      }
+    }
+
+    const during: [string, number | null][] = []
+    const released: string[] = []
+    let guard: HardlinkGuard | null = null
+
+    guard = createHardlinkGuard({
+      ackFile: path.join(userData, 'acks.json'),
+      fsEvents: null,
+      now: () => new Date(at),
+      idleReleaseMs: 60_000,
+      onRootReleased: dir => released.push(dir),
+      onFullScan: scanned => during.push([scanned, guard?.firstScanProgress(scanned) ?? null])
+    })
+
+    expect(await guard.check(root, 'build')).toMatchObject({ ok: true })
+    at += 61_000
+    expect(await guard.check(other, 'build')).toMatchObject({ ok: true })
+    expect(released).toEqual([root])
+    expect(await guard.check(root, 'build')).toMatchObject({ ok: true })
+    expect(during.map(([dir]) => dir)).toEqual([root, other, root])
+    expect(during[2][1]).not.toBeNull()
+    expect(guard.firstScanProgress(root)).toBeNull()
+    guard.close()
+  })
+
+  it('L4.4: the scan ends at 1.0 s, its check resolves at 1.25 s (deadline 300 ms): answered, not refused', async () => {
+    vi.useFakeTimers()
+
+    const scan = slowScan()
+    let outcome: Outcome = 'waiting'
+    const start = Date.now()
+
+    void checkBeforeStart(scan.guard, '/p', 'project', 300, {
+      pollMs: 100,
+      stallMs: 500,
+      firstScanDeadlineMs: 10_000,
+      now: () => Date.now()
+    }).then(result => (outcome = result))
+
+    for (let t = 0; t < 1_250; t += 50) {
+      scan.state.progress = Date.now() - start < 1_000 ? Date.now() : null
+
+      if (Date.now() - start >= 1_250) {
+        break
+      }
+
+      await vi.advanceTimersByTimeAsync(50)
+    }
+
+    scan.answer(OK)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(outcome).toEqual(OK)
+  })
+})
+

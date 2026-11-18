@@ -296,6 +296,8 @@ describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: hard-link guard', () => {
 
     const guard = newGuard('idle', {
       now: () => new Date(Date.now() + offset),
+      // FX-SLEEP: the offset is awake time (the refresh interval counts awake time on a stream-backed root).
+      awake: () => performance.now() + offset,
       onRefresh: (_root, phase) => {
         if (phase === 'started') {
           refreshStarted = performance.now()
@@ -421,6 +423,8 @@ describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: hard-link guard', () => {
 
     const guard = newGuard('sleep', {
       now: () => new Date(Date.now() + offset),
+      // FX-SLEEP: the offset is awake time past the bound (a real sleep alone no longer ages a stream-backed root).
+      awake: () => performance.now() + offset,
       onRefresh: (_root, phase) => phases.push(phase),
       walkFull: (root, options) => {
         paces.push(options.pace ?? 'fast')

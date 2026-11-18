@@ -66,7 +66,11 @@ def test_the_roots_are_main_s_for_the_runtime_spawned_now_not_those_at_the_launc
     params = lambda root: {"PROJECT_ROOT": str(root), "SCRATCH": "/scratch"}  # noqa: E731
     v.policy = _policy_file(tmp_path, {"reads": [str(second)], "writes": []})
     assert v.scan_root(params(first)) == str(first)  # the old project is nobody's: this process scans it
-    assert v.scan_root(params(second)) is None
+    # CF8 D1 (designed change, was: ``scan_root(second) is None``, the runtime walked its own roots): every project
+    # is this process's scan now; which roots are the runtime's decides only whether main is asked. The old project
+    # is outside the runtime spawned now, so main is asked; the unlisted folder inside its roots is walked here.
+    assert v.scan_root(params(second)) == str(second)
+    assert v.scan_by_main(str(first)) is True and v.scan_by_main(str(second)) is False
 
 
 @pytest.mark.parametrize("roots", [None, {"reads": ["rel"], "writes": []}, {"reads": []}, "x"])
@@ -76,7 +80,10 @@ def test_a_file_that_does_not_say_the_roots_leaves_those_of_the_launcher_s_start
     v = w.validator()
     v.read_roots, v.write_roots = (str(first),), ()
     v.policy = _policy_file(tmp_path, roots)
-    assert v.scan_root({"PROJECT_ROOT": str(first), "SCRATCH": "/scratch"}) is None
+    # CF8 D1 (designed change, was: ``is None``): scanned by this process; the launcher's start roots still say it is
+    # the runtime's (not a folder main guards), so it is walked here rather than asked of main.
+    assert v.scan_root({"PROJECT_ROOT": str(first), "SCRATCH": "/scratch"}) == str(first)
+    assert v.scan_by_main(str(first)) is False
 
 
 def test_a_survivor_that_ends_during_the_scan_still_gets_its_rows(monkeypatch):

@@ -4,7 +4,7 @@
  * 35.7 ms, warm stream-backed check 139 ms on the napi module. CF1 re-tightened it on our own addon: the same-stream
  * canary barrier measures ~9.6 ms p50 / ~10.9 ms p95 per check (A-m2, B-m4; the declared < 5 ms is not met).
  *
- * Fixture: 150 000 directories / 150 000 files. The guard takes the FSEvents stream path deterministically: until it
+ * Fixture: 150 000 directories / 1 118 035 files (the owner's 7.45 per folder; v0.0.7 had 150 000). The guard takes the FSEvents stream path deterministically: until it
  * has timed a walk of a root it estimates the walk at 0.004 ms per directory (600 ms here), far above the barrier
  * (~10 ms), and a stream-backed root answers without walking, so no measured walk ever replaces the estimate.
  *
@@ -43,7 +43,9 @@ vi.mock('node:fs/promises', async importOriginal => {
 })
 
 const COMMANDS = 50
-const STREAM_FIXTURE = ['--files', '150000', '--dirs', '150000']
+const STREAM_DIRS = 150_000
+// CF8: the owner's 7.45 files per folder (3 895 210 / 522 597, CF8_DESIGN.md "Measured"); v0.0.7 had 150 000.
+const STREAM_FIXTURE = ['--files', String(Math.round((STREAM_DIRS * 3_895_210) / 522_597)), '--dirs', String(STREAM_DIRS)]
 const STREAM_OFF = process.env.ICLONE_PERF_V007_MUTANT === 'stream-off'
 
 describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: hard-link guard on its FSEvents stream', () => {

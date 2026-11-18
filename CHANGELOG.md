@@ -3,6 +3,31 @@
 All notable changes to iclone os. Each release lists its assets — the DMG, the zip and `SHA256SUMS.txt` — on the
 [Releases](https://github.com/devclone20/icloneos/releases) page.
 
+## v0.0.8, beta version (2026-11-18)
+
+icloneOS v0.0.8 is a beta version.
+
+This release fixes one problem: on a project with hundreds of thousands of folders, agent commands could be refused while the Seatbelt sandbox was on.
+
+### Fixed
+
+- In a project with hundreds of thousands of folders, agent commands run under the Seatbelt sandbox were refused. Before each command, the sandbox checked the whole project folder for hard links, and on a project that size that check could not finish in time. Now the app's own hard-link guard answers that question for the sandbox, so the sandbox no longer scans the folder itself.
+- The first command in a very large project waits while the guard checks the folder, and the app shows "Checking the project folder… N folders". Later commands start in milliseconds, because the guard keeps watching the folder instead of checking it again. The folder is checked again, with the same progress line, after the app restarts, after about 30 minutes awake with no command, or if macOS reports that it lost the folder's change history.
+
+What we measured on our test Mac (Apple M5 Max), on a test project with hundreds of thousands of folders: the first command waited about 25 seconds, and each later command added about 34 ms. Your own project is not that test project: the numbers depend on its size and on your Mac.
+
+### Security
+
+- The hard-link guard and the sandbox keep every check they had in v0.0.7; only the place that answers the hard-link question for the sandbox changed. One rule is new: a sandboxed command never starts inside ~/Library (in any spelling of the name), except in the sandbox's own scratch folder.
+- The hard-link guard still asks you before a command runs when a file in the project has a real hard link that points outside it.
+- One new dependency advisory has no fixed release yet: picomatch (GHSA-fc5q-39xc-vjpf, slow matching on crafted glob patterns), in the sign-in page's dependencies and in the optional ACP CLI. A static check found that it is not in the sign-in page the app ships, and that the ACP CLI installs it but never loads it. We accept it by name, version and advisory, and decide it again at v0.0.9.
+
+### Known limits
+
+- The known limits listed under v0.0.7 still apply.
+- The first command in a very large project still waits for the first check of the folder.
+- If another program makes a hard link from inside the project to a file outside it while an agent command is running, the guard finds it in the check right after that command, not before it.
+
 ## v0.0.7, beta version (2026-11-12)
 
 icloneOS v0.0.7 is a beta version.

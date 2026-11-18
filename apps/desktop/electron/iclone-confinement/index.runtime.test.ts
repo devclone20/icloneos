@@ -8,11 +8,11 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import type { Launcher, LauncherOptions, LauncherState } from './launcher'
+import { createLauncher, type Launcher, type LauncherOptions, type LauncherState } from './launcher'
 import { realOrSelf } from './profiles'
 import { generateRuntimeProfile, runtimeRoots } from './runtime-profile'
 
-import { createConfinement, currentConfinement, launcherScript, type RuntimeSpawnFacts } from './index'
+import { type ConfinementDeps, createConfinement, currentConfinement, launcherScript, type RuntimeSpawnFacts } from './index'
 
 const dirs: string[] = []
 
@@ -25,7 +25,8 @@ afterEach(() => {
 function world(
   platform: NodeJS.Platform = 'darwin',
   hermesHome?: (root: string) => string,
-  memberPython?: (root: string) => string
+  memberPython?: (root: string) => string,
+  extra: Partial<ConfinementDeps> = {}
 ) {
   const root = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'v006-runtime-')))
   const python = memberPython?.(root) ?? path.join(root, 'venv', 'bin', 'python')
@@ -80,7 +81,8 @@ function world(
       launchers.push(fake)
 
       return fake
-    }
+    },
+    ...extra
   })
 
   return { layer, made, launchers, logs, python, root }
@@ -488,5 +490,53 @@ describe('HERMES_HOME inside userData', () => {
       )
       expect(layer.runtimeView(), where).toBeNull()
     }
+  })
+})
+
+describe('CF8 test seams change nothing without them', () => {
+  /** What main's real createLauncher spawns with these options: command, argv, stdio and env, as bytes. */
+  const spawnedWith = async (options: LauncherOptions): Promise<string> => {
+    let seen = ''
+
+    const real = createLauncher({
+      ...options,
+      log: () => undefined,
+      spawn: (command, args, spawnOptions) => {
+        seen = JSON.stringify({ command, args, stdio: spawnOptions.stdio, env: spawnOptions.env })
+
+        throw new Error('recorded')
+      }
+    })
+
+    await real.start()
+
+    return seen
+  }
+
+  it('without launcherInterpreter the launcher is the helper interpreter, and the spawn is byte-identical', async () => {
+    const plain = world()
+    const seamed = world(undefined, undefined, undefined, { launcherInterpreter: '/perf/wrapper' })
+
+    await plain.layer.ensureLauncher('/rt', FACTS)
+    await seamed.layer.ensureLauncher('/rt', FACTS)
+    expect(plain.made[0].python).toBe(plain.python)
+    expect(seamed.made[0].python).toBe('/perf/wrapper')
+    expect(plain.made[0].guardChannel).toBeTypeOf('function')
+
+    const production = await spawnedWith(plain.made[0])
+
+    expect(JSON.parse(production)).toMatchObject({
+      command: plain.python,
+      args: ['-I', '-S', launcherScript('/rt')],
+      stdio: ['ignore', 'pipe', 'pipe', 'pipe']
+    })
+    expect((JSON.parse(production) as { env: Record<string, string> }).env.ICLONE_GUARD_FD).toBe('3')
+
+    // The seam swaps the interpreter and nothing else: the same world's options with the helper put back spawn the same bytes.
+    const seamedSpawn = JSON.parse(await spawnedWith(seamed.made[0])) as Record<string, unknown>
+    const restored = JSON.parse(await spawnedWith({ ...seamed.made[0], python: seamed.python })) as Record<string, unknown>
+
+    expect(seamedSpawn.command).toBe('/perf/wrapper')
+    expect({ ...seamedSpawn, command: seamed.python }).toEqual(restored)
   })
 })

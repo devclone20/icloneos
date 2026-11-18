@@ -157,16 +157,16 @@ execFile('git', argv, { cwd, env, encoding: 'utf8', timeout: opts.timeoutMs ?? L
 == iclone-confinement/backend-seatbelt.ts spawn fc31122a8ff0 [confinement]
 spawnChild(deps.sandboxExec ?? SANDBOX_EXEC, ['-p', profile.text, ...defines, '/bin/bash', '-c', script, marker], { cwd: request.cwd, detached: true, env: { ...request.env, TMPDIR: path.join(scratch, 'tmp'), GIT_CONFIG_GLOBAL: path.join(scratch, '.gitconfig') }, stdio: ['ignore', 'pipe', 'pipe'] })
 interface SeatbeltDeps { paths: ConfinementPaths; profiles: () => readonly GeneratedProfile[]; scan: () => Promise<Snapshot>; probe?: () => Promise<BackendStatusView>; hardlinks: Pick<HardlinkGuard, 'check'> & Partial<Pick<HardlinkGuard, 'firstScanProgress'>>; storeRoots?: readonly string[]; onHardlinkAppeared?: (event: HardlinkAppearedEvent) => void; sandboxExec?: string; }
-== iclone-confinement/hardlinks-walker.ts startWalkWorker 93b2bbc4061c [confinement]
-new Worker(new URL('./hardlinks-walk.ts', import.meta.url), { workerData, env: {}, resourceLimits })
-
+== iclone-confinement/hardlinks-walker.ts startWalkWorker 3f2cb064508d [confinement]
+new Worker(walkSourceUrl(import.meta.url), { workerData, env: {}, resourceLimits })
+export const walkSourceUrl = (moduleUrl: string): URL => pathToFileURL(path.join(path.dirname(fileURLToPath(moduleUrl)), 'hardlinks-walk.ts'));
 == iclone-confinement/hardlinks-walker.ts startWalkWorker d9900039f3c3 [confinement]
 new Worker(code, { eval: true, workerData, env: {}, resourceLimits })
 const code = await bundledWorkerCode(import.meta.url);
 == iclone-confinement/iclone-fsevents.ts loadIcloneFsevents 4ad2963c3c82 [confinement]
 requireNative(candidate)
 addonCandidates()
-== iclone-confinement/index.ts currentProbe 33f9ebbd19c1 [forward]
+== iclone-confinement/index.ts currentProbe 5a53cbb16fa0 [forward]
 createMemberProbe(paths.membersDir, python)
 const python = helperPython();
 const helperPython = (): string | null => { const { python, refusals } = helperInterpreter(); const said = refusals.join('; '); if (said && said !== helperRefusalSaid) { log(`[confinement] an interpreter is not trusted to run outside the sandbox: ${said}`); } helperRefusalSaid = said; return python; };
@@ -175,7 +175,7 @@ const helperInterpreter = (): { python: string | null; refusals: string[]; } => 
 const refusals: string[] = [];
 [spawnPython, deps.memberPython]
 let spawnPython: string | null = null;
-export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; log?: (line: string) => void; }
+export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; onGuardEvent?: (event: GuardChannelEvent) => void; guardTimings?: GuardChannelTimings; launcherInterpreter?: string; hardlinkNow?: () => Date; hardlinkAwake?: () => number; log?: (line: string) => void; }
 const verdict = judgeHelperInterpreter(paths, candidate, launcherFacts);
 const paths = confinementPaths(deps);
 let launcherFacts: RuntimeFacts | null = null;
@@ -185,16 +185,19 @@ return { python: null, refusals };
 const said = refusals.join('; ');
 let helperRefusalSaid: string | null = null;
 const log = deps.log ?? (() => undefined);
-== iclone-confinement/index.ts ensureLauncher ec934a6a8628 [confinement]
-(deps.createLauncher ?? createLauncher)({ python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log })
-launcher = (deps.createLauncher ?? createLauncher)({ python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log });
+== iclone-confinement/index.ts ensureLauncher f7ddcbee85a4 [confinement]
+(deps.createLauncher ?? createLauncher)({ python: deps.launcherInterpreter ?? python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log, guardChannel: (channel, onClosed) => serveGuardChannel(channel, { guard: hardlinks, guarded: guardedRoot, log, onEvent: deps.onGuardEvent, onClosed, timings: deps.guardTimings }) })
+launcher = (deps.createLauncher ?? createLauncher)({ python: deps.launcherInterpreter ?? python, script, socketPath: launcherSocket, journalDir: launcherLedgerDir(deps.userDataDir), home: deps.home, hermesHome: deps.hermesHome, spec: () => pluginSpec(paths, profiles, storeRoots), roots: () => runtimeRoots(paths, launcherFacts ?? facts), log, guardChannel: (channel, onClosed) => serveGuardChannel(channel, { guard: hardlinks, guarded: guardedRoot, log, onEvent: deps.onGuardEvent, onClosed, timings: deps.guardTimings }) });
 let launcher: Launcher | null = null;
-export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; log?: (line: string) => void; }
+export interface ConfinementDeps { userDataDir: string; home: string; hermesHome: string; hermesRoot: string | null; hermesPids: () => number[]; primaryPid?: () => number | null; audit: () => AuditSlice[]; now?: () => Date; ps?: () => Promise<PsRow[]>; memberPython?: string | null; probes?: Partial<Record<ConfinementBackendId, () => Promise<BackendStatusView>>>; sandboxExec?: string; platform?: NodeJS.Platform; keyStore?: SealedKeyStore | null; pnpmStoreRoots?: readonly string[]; runtime?: () => { profileSha: string | null; reads: string[]; writes: string[]; denied: string[]; } | null; gitIdentity?: () => GitIdentity; launcher?: () => 'down' | 'off' | 'up'; createLauncher?: (options: LauncherOptions) => Launcher; onGuardEvent?: (event: GuardChannelEvent) => void; guardTimings?: GuardChannelTimings; launcherInterpreter?: string; hardlinkNow?: () => Date; hardlinkAwake?: () => number; log?: (line: string) => void; }
+const { python, refusals } = helperInterpreter();
 const launcherSocket = path.join(runDir, 'launcher.sock');
 const paths = confinementPaths(deps);
 let profiles: GeneratedProfile[] = generateProfiles(paths);
 const storeRoots = deps.pnpmStoreRoots ?? pnpmStoreRoots(process.env.PNPM_HOME, deps.home, storeDenied);
 let launcherFacts: RuntimeFacts | null = null;
+const hardlinks = createHardlinkGuard({ ackFile: linkFiles.acks, sealedKey, now: deps.hardlinkNow ?? now, awake: deps.hardlinkAwake, onAudit: audit, storeRoots, onTreeDropped: event => { console.warn(`[confinement] hard-link tree of ${event.root} dropped (${event.why}: ${event.detail}); rescanning in a worker (drop ${event.count} of this root this session)`); }, onRootReleased: (root, why) => { console.info(`[confinement] hard-link tree of ${root} released (${why}); its next check scans it again`); } });
+const guardedRoot = (root: string, cls: ActivityClass | null): boolean => { const profile = cls === null ? profiles[0] : profiles.find(item => item.spec.cls === cls); if (profile === undefined || Buffer.byteLength(root) > GUARDED_ROOT_MAX_BYTES || root !== path.posix.normalize(root)) { return false; } const key = `${profile.spec.cls}\0${root}`; const memo = guardedMemo.get(key); const at = performance.now(); if (memo && memo.spec === profile.spec && at - memo.at < GUARDED_ROOT_MEMO_MS) { return memo.ok; } const ok = admissibleRoot(root, deps.home) && acceptableProjectRoot(root, profile.spec, deps.home, storeRoots); guardedMemo.delete(key); guardedMemo.set(key, { spec: profile.spec, ok, at }); if (guardedMemo.size > GUARDED_ROOT_MEMO_MAX) { guardedMemo.delete(guardedMemo.keys().next().value as string); } return ok; };
 == iclone-confinement/index.ts xcrunCacheFile cbfdec72e4bb [confinement]
 execFileSync('/usr/bin/getconf', ['DARWIN_USER_TEMP_DIR'], { encoding: 'utf8', timeout: 2000 })
 == iclone-confinement/launcher-live-harness.ts createLauncherWorld c29d0a8ee7e6 [harness]
@@ -204,10 +207,11 @@ execFileSync(RUNTIME_PYTHON, ['-I', '-S', '-c', 'import sys; print(sys.base_pref
 == iclone-confinement/launcher-live-harness.ts run b94e08beadd0 [harness]
 spawn(command, argv, { cwd: project, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true })
 const { command, args: argv } = launch(args, confined);
-== iclone-confinement/launcher.ts launch 5d6fa468688f [confinement]
-spawn(options.python, ['-I', '-S', options.script], { env: launcherEnv({ hermesHome: options.hermesHome, home: options.home, journalDir: options.journalDir, roots: roots(), socketPath: options.socketPath, spec: spec() }), stdio: ['ignore', 'pipe', 'pipe'] })
+== iclone-confinement/launcher.ts launch 173752b931b3 [confinement]
+spawn(options.python, ['-I', '-S', options.script], { env: launcherEnv({ hermesHome: options.hermesHome, home: options.home, journalDir: options.journalDir, roots: roots(), socketPath: options.socketPath, spec: spec(), guardFd: options.guardChannel ? GUARD_FD : undefined }), stdio: options.guardChannel ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe'] })
 const roots = () => (typeof options.roots === 'function' ? options.roots() : options.roots);
 const spec = () => (typeof options.spec === 'function' ? options.spec() : options.spec);
+export const GUARD_FD = 3;
 == iclone-confinement/launcher.ts spawn 1c878270cf35 [forward]
 nodeSpawn(command, args, spawnOptions)
 == iclone-confinement/live-harness.ts createLiveWorld 4e8065348828 [harness]

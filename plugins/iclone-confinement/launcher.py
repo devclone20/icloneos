@@ -46,7 +46,10 @@ import hmac
 import importlib.util
 import json
 import os
+import queue
 import re
+import secrets
+import select
 import shlex
 import signal
 import socket
@@ -95,11 +98,13 @@ PARAM_KEYS = ("PROJECT_ROOT", "SCRATCH", "OUTPUT_DIR", "NET", "WRITE_PROJECT", "
 # fx29: the folders among them, judged and passed on in the kernel's spelling.
 PLACE_KEYS = ("PROJECT_ROOT", "SCRATCH", "OUTPUT_DIR")
 READ_ROOTS_ENV = "ICLONE_LAUNCHER_READ_ROOTS"
-# fx20 (lens5 M1): how long one scan of a folder outside the runtime's roots may take (stub.py waits longer: it must
-# never say "not answering" while this runs), and how many run at once: a runtime can repeat a request, and each
-# scan is a walk of the disk.
+# fx20 (lens5 M1), CF8: how long a request may wait for one of the scan slots (stub.py waits longer, and each
+# progress frame of the scan itself restarts its wait), and how many scans run at once: a runtime can repeat a
+# request. The scan itself is bounded by FIRST_SCAN_CAP_S and its stall rule, never by this.
 SCAN_BUDGET_S = 30.0
 SCANS_AT_ONCE = 4
+# L1.5: main answers at most 64 open checks (guard-channel.ts GUARD_MAX_OPEN); after-asks keep half of them free.
+AFTER_ASKS_AT_ONCE = 32
 WRITE_ROOTS_ENV = "ICLONE_LAUNCHER_WRITE_ROOTS"
 GRANT_ROOTS_ENV = "ICLONE_LAUNCHER_GRANT_ROOTS"
 APPLICATIONS = "/Applications"
@@ -933,17 +938,26 @@ class Validator:
         self.passes = Passes(self.journal_dir) if self.journal_dir else None
 
     def scan_root(self, params: dict):
-        """fx20 (lens5 M2): the folder only this process can scan for hard links (F7): the run's project when it is
-        not the scratch and lies outside the runtime profile's own roots, whatever the flags and whether main lists it
-        or not. The runtime scans what it can list itself; a folder listed after it started stays outside its profile,
-        which has one project fixed at spawn. Without the roots, nothing is known to be the runtime's: scanned here."""
+        """fx20 (lens5 M2), CF8 D1: the folder this process scans for hard links (F7) before and after the run: the
+        run's project whenever it is not the scratch, whatever the flags, whether main lists it or not and whether it
+        is the runtime's own (the window project too: the confined runtime no longer walks it, seatbelt.py
+        ``scanned_by_launcher``). Only the scratch, small and the runtime's own, stays the runtime's bounded check."""
         root = params["PROJECT_ROOT"]
-        if root == params["SCRATCH"]:
-            return None
-        # fx24: main's word for the runtime spawned now; a launcher left up across a respawn keeps no old project.
+        return None if root == params["SCRATCH"] else root
+
+    def scan_by_main(self, root: str) -> bool:
+        """CF8 D1: whether main's guard is asked about ``root`` (when main gave its fd): a folder outside the runtime
+        profile's own roots, or one inside a folder main lists (the window project is listed). A folder inside the
+        runtime's other roots (its venv, plugins, web build) is not one main guards for a confined command, so main
+        would refuse it; this process walks it itself (core, bounded). fx24: the roots are main's word for the runtime
+        spawned now; a launcher left up across a respawn keeps no old project. Without the roots, nothing is known
+        to be the runtime's: main is asked."""
         spawned = self.policy.runtime_roots() if self.policy else None
         known = spawned if spawned is not None else (self.read_roots or ()) + (self.write_roots or ())
-        return None if any(core._within(root, r) for r in known) else root
+        if not any(core._within(root, r) for r in known):
+            return True
+        listed = self.policy.listed_paths() if self.policy else ()
+        return any(isinstance(p, str) and os.path.isabs(p) and core._within(root, os.path.realpath(p)) for p in listed)
 
     # policy
 
@@ -1179,6 +1193,12 @@ class Validator:
                 return root
             at = up
 
+    def outside_scratch_in_library(self, folder: str) -> bool:
+        """``folder`` is ~/Library or inside it (by identity: another case or Unicode form is the same folder) and not
+        inside the scratch root, the one place there a confined command runs."""
+        library = os.path.join(os.path.realpath(self.index.home), "Library")
+        return core._inside_folder(folder, library) and not core._inside_folder(folder, self.scratch_root)
+
     def _under_scratch(self, key: str, value: str) -> None:
         if not (value.startswith(self.scratch_root + os.sep)):
             raise Refusal("bad-request", f"{key} must lie under the scratch root")
@@ -1263,6 +1283,11 @@ class Validator:
         real_cwd = os.path.realpath(cwd)
         if any(core._inside_folder(real_cwd, denied) for denied in self.index.denied):
             raise Refusal("bad-request", "the command's folder is one no confined command may enter")
+        # FX-CWD (CF8): ~/Library, in any spelling, is never a project, so no command starts there but in the scratch.
+        # Until CF8 only the runtime's own walk of the window project kept it out, by failing (D1 moved that walk to
+        # main); the rule is the launcher's, by folder identity, with the same answer for a name there or not.
+        if self.outside_scratch_in_library(real_cwd):
+            raise Refusal("bad-request", "the command's folder is one no confined command may enter")
         # fx32p: a folder that was deleted or moved is an ordinary event for a resumed session, not a malformed request.
         try:
             gone = not stat_mod.S_ISDIR(os.lstat(real_cwd).st_mode)
@@ -1310,6 +1335,7 @@ class Validator:
             clean[key] = value
         kind, shown, wrapped, background = described_command(command)
         project = None if params["PROJECT_ROOT"] == params["SCRATCH"] else params["PROJECT_ROOT"]
+        scan_root = self.scan_root(params)
         return {
             "argv": argv, "cwd": cwd, "env": clean,
             "start": {"run": run, "kind": kind, "cls": cls, "sha": sha,
@@ -1326,7 +1352,8 @@ class Validator:
             # again under its lock: an unborn project's identity.
             "facts": {"params": params, "passes": verdict["passes"], "project": verdict["project"],
                       "listed_by": verdict["listed_by"], "unborn": params["PROJECT_GIT"] == "unborn",
-                      "scan_root": self.scan_root(params), "cls": cls, "session": session},
+                      "scan_root": scan_root, "scan_main": scan_root is not None and self.scan_by_main(scan_root),
+                      "cls": cls, "session": session},
             # What the agent reads on the run's stderr when it fails (lens3-normal M4): the reason and what to do.
             "stderr": narrowed_lines(verdict["narrowed"], project),
         }
@@ -1552,6 +1579,197 @@ def recv_msg(sock: socket.socket, buffered: bytearray, limit: int = MAX_REQUEST)
     return json.loads(recv_exact(sock, size, buffered).decode("utf-8"))
 
 
+# --- CF8: main's hard-link guard, asked over the one fd main gave this process ------------------------------------
+
+GUARD_FD_ENV = "ICLONE_GUARD_FD"
+# No frame (progress or verdict) for this long, or no verdict past the cap: refused (CF8_DESIGN.md, the contract).
+STALL_S = 10.0
+FIRST_SCAN_CAP_S = 180.0
+GUARD_LINE_MAX = 64 << 10
+GUARD_RETIRED_MAX = 1024
+# At most two progress frames a second to the stub. Half main's 1 s cadence on purpose: a throttle equal to it dropped
+# every frame that came a few ms early and left 2 s holes at full scale (v0.0.8 S5, PERF.launcher first.stub_gap_s).
+PROGRESS_FORWARD_S = 0.5
+_NONCE = re.compile(r"^[0-9a-f]{32}$")
+STILL_CHECKING = "the project folder is still being checked; try again in a moment"
+GUARD_SILENT = "the app's hard-link check stopped answering, so the command did not start; run it again in a moment"
+GUARD_GONE = "the app's hard-link check is not reachable, so the command did not start"
+GUARD_GARBLED = "the app's hard-link check sent an answer the launcher could not read, so the command did not start"
+
+
+class GuardChannel:
+    """CF8: one duplex fd to main's guard (``checkBeforeStart`` in main): a request per scan, a fresh nonce each,
+    zero or more progress frames, exactly one verdict. Only this fd ever gives a verdict; nothing is cached. It fails
+    closed: EOF or a read error ends the channel for good, a malformed line or a frame for an id nobody asked fails
+    every request waiting now, a silence of ``STALL_S`` or a wait past ``FIRST_SCAN_CAP_S`` refuses."""
+
+    def __init__(self, fd: int) -> None:
+        self.fd = fd
+        self.lock = threading.Lock()
+        self.write_lock = threading.Lock()
+        self.pending: dict = {}
+        self.retired: dict = {}
+        self.dead = None
+        try:
+            os.set_inheritable(fd, False)  # FD_CLOEXEC: no child of this process ever holds main's guard
+            os.fstat(fd)
+            # L2.2: a blocking write waits for room for the WHOLE buffer once select says writable (SO_SNDLOWAT), so
+            # a long request to a main that stopped reading would hang inside write_lock; non-blocking, it cannot.
+            os.set_blocking(fd, False)
+        except (OSError, ValueError):
+            self.dead = GUARD_GONE
+            return
+        threading.Thread(target=self._read, daemon=True, name="iclone-guard").start()
+
+    def _end(self, reason: str) -> None:
+        with self.lock:
+            self.dead = reason
+            waiting = list(self.pending.values())
+        for box in waiting:
+            box.put(("fail", reason))
+
+    def _fail_waiting(self, reason: str) -> None:
+        with self.lock:
+            waiting = list(self.pending.values())
+        for box in waiting:
+            box.put(("fail", reason))
+
+    def _read(self) -> None:
+        buffered = bytearray()
+        while True:
+            try:
+                select.select([self.fd], [], [])
+                chunk = os.read(self.fd, 65536)
+            except (InterruptedError, BlockingIOError):
+                continue
+            except (OSError, ValueError):
+                chunk = b""
+            if not chunk:
+                self._end(GUARD_GONE)
+                return
+            buffered.extend(chunk)
+            while True:
+                end = buffered.find(b"\n")
+                if end < 0:
+                    if len(buffered) > GUARD_LINE_MAX:
+                        self._end(GUARD_GARBLED)  # no line boundary within the limit: the framing is lost for good
+                        return
+                    break
+                line = bytes(buffered[:end])
+                del buffered[:end + 1]
+                self._dispatch(line)
+
+    def _dispatch(self, line: bytes) -> None:
+        try:
+            frame = json.loads(line.decode("utf-8")) if len(line) <= GUARD_LINE_MAX else None
+        except (UnicodeDecodeError, ValueError):
+            frame = None
+        nonce = frame.get("id") if isinstance(frame, dict) else None
+        if not isinstance(nonce, str) or not _NONCE.fullmatch(nonce):
+            self._fail_waiting(GUARD_GARBLED)
+            return
+        with self.lock:
+            box = self.pending.get(nonce)
+            late = nonce in self.retired
+        if box is None:
+            if not late:  # an id nobody asked: whoever speaks on this fd is not answering this process's requests
+                self._fail_waiting(GUARD_GARBLED)
+            return
+        box.put(self._parse(frame))
+
+    @staticmethod
+    def _parse(frame: dict) -> tuple:
+        if "progress" in frame and "ok" not in frame and set(frame) == {"id", "progress"}:
+            body = frame["progress"]
+            dirs = body.get("dirs") if isinstance(body, dict) else None
+            if isinstance(dirs, int) and not isinstance(dirs, bool) and dirs >= 0:
+                return ("progress", dirs)
+        elif frame.get("ok") is True and set(frame) == {"id", "ok"}:
+            return ("verdict", True, None, None, False)
+        elif frame.get("ok") is False and set(frame) - {"busy"} == {"id", "ok", "code", "detail"}:
+            # Addendum (lead): "busy": true marks main's "still being checked" answer; only on cannot-scan.
+            code, detail, busy = frame["code"], frame["detail"], frame.get("busy", False)
+            if (isinstance(code, str) and code in core.REFUSAL_CODES and isinstance(detail, str) and detail.strip()
+                    and isinstance(busy, bool) and (not busy or code == "cannot-scan")):
+                return ("verdict", False, code, detail[:REFUSED_DETAIL_CLIP * 4], busy)
+        return ("fail", GUARD_GARBLED)
+
+    def _send(self, data: bytes) -> None:
+        """One request line, whole or not at all from this caller's view, within one ``STALL_S`` from the moment it
+        asked, lock wait included: a main that stopped reading never holds a scan slot or the stub's exit."""
+        until = time.monotonic() + STALL_S
+        if not self.write_lock.acquire(timeout=STALL_S):
+            raise Refusal("cannot-scan", GUARD_SILENT)
+        try:
+            view = memoryview(data)
+            while view:
+                left = until - time.monotonic()
+                if left <= 0 or not select.select([], [self.fd], [], left)[1]:
+                    # A part of a line may be out: the framing is lost for good, every later ask is refused.
+                    if len(view) != len(data):
+                        self._end(GUARD_SILENT)
+                    raise Refusal("cannot-scan", GUARD_SILENT)
+                try:
+                    view = view[os.write(self.fd, view):]
+                except (BlockingIOError, InterruptedError):
+                    continue
+        except OSError:
+            self._end(GUARD_GONE)
+            raise Refusal("cannot-scan", GUARD_GONE) from None
+        finally:
+            self.write_lock.release()
+
+    def ask(self, root: str, cls, phase: str, progress=None) -> tuple:
+        """``(ok, code, detail, busy)`` from main for ``root`` (``busy``: main's scan is still running, nothing was
+        found); ``Refusal("cannot-scan")`` when no trustworthy verdict came."""
+        nonce = secrets.token_hex(16)
+        box: queue.Queue = queue.Queue()
+        with self.lock:
+            if self.dead is not None:
+                raise Refusal("cannot-scan", self.dead)
+            self.pending[nonce] = box
+        try:
+            data = (json.dumps({"id": nonce, "op": "check", "root": root, "cls": cls, "phase": phase}) + "\n").encode("utf-8")
+            if len(data) > GUARD_LINE_MAX:
+                raise Refusal("cannot-scan", f"the folder path is too long to ask the app's hard-link check about: {root[:200]}")
+            self._send(data)
+            cap = time.monotonic() + FIRST_SCAN_CAP_S
+            while True:
+                left = cap - time.monotonic()
+                if left <= 0:
+                    raise Refusal("cannot-scan", STILL_CHECKING)
+                try:
+                    item = box.get(timeout=min(STALL_S, left))
+                except queue.Empty:
+                    raise Refusal("cannot-scan", STILL_CHECKING if time.monotonic() >= cap else GUARD_SILENT) from None
+                if item[0] == "progress":
+                    if progress is not None:
+                        progress(item[1])
+                    continue
+                if item[0] == "fail":
+                    raise Refusal("cannot-scan", item[1])
+                return item[1], item[2], item[3], item[4]
+        finally:
+            with self.lock:
+                self.pending.pop(nonce, None)
+                self.retired[nonce] = None
+                while len(self.retired) > GUARD_RETIRED_MAX:
+                    del self.retired[next(iter(self.retired))]
+
+
+def guard_from_env(env) -> "GuardChannel | None":
+    """``ICLONE_GUARD_FD`` names main's guard fd; absent, the launcher scans itself (core, CF8 c'). Present but not
+    a usable fd: a channel that refuses every scan (main meant to be asked). Popped, so no child sees the name."""
+    value = env.pop(GUARD_FD_ENV, None)
+    if value is None:
+        return None
+    try:
+        fd = int(value)
+    except ValueError:
+        fd = -1
+    return GuardChannel(fd if fd > 2 else -1)
+
+
 # --- the launcher ----------------------------------------------------------------------------------------------------
 
 
@@ -1651,7 +1869,10 @@ def confined_members(token_path: str, only: int = None) -> list:
 
 
 class Launcher:
-    def __init__(self, index, socket_path: str, journal_dir: str, *, sandbox_exec: str = SANDBOX_EXEC, roots=None):
+    guard: "GuardChannel | None" = None  # CF8: set per instance; a launcher built without __init__ has none
+
+    def __init__(self, index, socket_path: str, journal_dir: str, *, sandbox_exec: str = SANDBOX_EXEC, roots=None,
+                 guard: "GuardChannel | None" = None):
         # The ledger lives apart from the socket's folder: the runtime may write the run dir (its temp files, the
         # plugin's own refusals), so a journal there could be rewritten by what it records.
         socket_dir = os.path.realpath(os.path.dirname(socket_path))
@@ -1673,6 +1894,9 @@ class Launcher:
         self.left: dict = {}  # fx21: token -> a run whose first process ended, while the kernel still holds members
         self.runs_lock = threading.Lock()
         self.scans = threading.BoundedSemaphore(SCANS_AT_ONCE)
+        self.after_asks = threading.BoundedSemaphore(AFTER_ASKS_AT_ONCE)
+        # CF8: main's guard on fd 3 is the one scanner when main gave it; without it, core's incremental walk.
+        self.guard = guard
         # fx13 (lens3-policy M2): folder identities whose repository an unborn run is making now.
         self.unborn_live: set = set()
         # Every token that started a run, oldest first (STARTED_REMEMBERED), seeded from this ledger's own journal so a
@@ -1812,7 +2036,7 @@ class Launcher:
                     plan = self.one_shots.plan_file(req, self.started, self.validator.index, req["argv"][1] == ONEFILE_READ_FLAG)
                 else:
                     plan = self.validator.request(req)
-                self._scan_first(plan)
+                self._scan_first(plan, self._progress_to(conn, lock))
                 run = self._spawn(plan, fds)
             except Refusal as refusal:
                 self._refuse(conn, lock, req, refusal)
@@ -1854,27 +2078,57 @@ class Launcher:
             except OSError:
                 pass
 
-    def _scan_first(self, plan: dict) -> None:
-        """fx18 (F1), fx20 (lens5 M1, M2): F7's hard-link scan of a folder the confined runtime cannot look into. This
-        process is not confined and scans it before the process exists, outside ``runs_lock`` (no other session's
-        command, and no downgrade's kill, waits on a disk walk) and within a time budget: a folder too large to scan
-        in it is refused with that reason."""
+    @staticmethod
+    def _progress_to(conn: socket.socket, lock: threading.Lock):
+        """CF8: a scan's progress, told to the stub (each frame restarts its reply timeout), at most twice a second."""
+        told = [0.0]
+
+        def progress(dirs: int) -> None:
+            now = time.monotonic()
+            if now - told[0] < PROGRESS_FORWARD_S:
+                return
+            told[0] = now
+            try:
+                send_msg(conn, {"progress": {"dirs": int(dirs)}}, lock)
+            except OSError:
+                pass  # the stub is gone: the reply after the scan finds out and the run is reaped there
+
+        return progress
+
+    def _scan_first(self, plan: dict, progress=None) -> None:
+        """fx18 (F1), fx20 (lens5 M1, M2): F7's hard-link scan of a folder the confined runtime cannot look into,
+        before the process exists and outside ``runs_lock`` (no other session's command, and no downgrade's kill,
+        waits on it). CF8: main's guard answers when main gave its fd (a verdict from nowhere else, none cached);
+        otherwise core's incremental walk, which may run while it progresses (stall and cap, never a fixed budget).
+        Progress goes to the stub, so a long first scan is waited for, never called "not answering"."""
         facts = plan.get("facts") or {}
         root = facts.get("scan_root")
         if root is None:
             return
-        too_large = f"the folder {root} is too large to scan for hard links in {int(SCAN_BUDGET_S)} seconds, so the command did not start; run it in a smaller folder"
         # fx23: a request that only waited behind other scans is told that, not that its folder is too large.
         busy = "the launcher is busy scanning other folders, so the command did not start; run it again in a moment"
+        # L6.3: two causes, two sentences. Past the cap, trying again repeats the same walk (no partial walk is kept).
+        stalled = (f"the hard-link check of {root} stopped progressing, so the command did not start; "
+                   "try again in a moment")
+        past_cap = (f"the folder {root} took longer than {int(FIRST_SCAN_CAP_S // 60)} minutes to check for hard links, "
+                    "so the command did not start; open it in icloneOS, which checks it once in the background")
         asked = time.monotonic()
-        deadline = asked + SCAN_BUDGET_S
         if not self.scans.acquire(timeout=SCAN_BUDGET_S):
             raise Refusal("cannot-scan", busy)
         queued = time.monotonic() - asked >= SCAN_QUEUED_S
+        started = time.monotonic()
         try:
-            core.check_hardlinks(self.validator.index, root, facts.get("cls"), deadline=deadline)
+            if self.guard is not None and facts.get("scan_main", True):
+                ok, code, detail, _busy = self.guard.ask(root, facts.get("cls"), "before", progress)
+                if not ok:
+                    raise Refusal(code, detail)
+                return
+            core.check_hardlinks(self.validator.index, root, facts.get("cls"), deadline=started + FIRST_SCAN_CAP_S,
+                                 stall_s=core.FIRST_SCAN_STALL_S, progress=progress)
         except core.ScanTooLarge:
-            raise Refusal("cannot-scan", busy if queued else too_large) from None
+            if queued:
+                raise Refusal("cannot-scan", busy) from None
+            raise Refusal("cannot-scan", past_cap if time.monotonic() - started >= FIRST_SCAN_CAP_S else stalled) from None
         except core.ConfinementRefused as exc:
             raise Refusal(exc.code, str(exc)) from None
         finally:
@@ -2145,13 +2399,39 @@ class Launcher:
     def _scan_after(self, run: Run) -> None:
         """fx20 (lens5 M2): T3 for a folder the runtime cannot look into: a link planted while the run lived is
         recorded in main's refusal row, and the next command there is refused. Before the exit reaches the stub, so
-        the row is on disk when the agent hears the run ended."""
+        the row is on disk when the agent hears the run ended. CF8: asked of main's guard (phase "after") when main
+        gave its fd. A check that ran out of time writes no row (it found nothing): the next command's check decides."""
         facts = run.facts or {}
-        if facts.get("scan_root") is None:
+        root = facts.get("scan_root")
+        if root is None:
+            return
+        if self.guard is not None and facts.get("scan_main", True):
+            # L1.5: after-asks are outside self.runs and self.scans; their own bound keeps main's open checks below
+            # its cap with room for every session's before-check. No slot within STALL_S: no verdict, no row.
+            if not self.after_asks.acquire(timeout=STALL_S):
+                return
+            try:
+                ok, code, detail, busy = self.guard.ask(root, facts.get("cls"), "after")
+            except Refusal:
+                return  # no verdict (silence, cap, EOF, garbled): out of time is not "cannot scan", no row
+            finally:
+                self.after_asks.release()
+            if ok or busy:
+                return
+            operation = "hard-link-appeared" if code == "hard-links" else "cannot-scan-after-run"
+            try:
+                # L2.3: main's sentence says what the run could reach; the verdict carries no path list (contract).
+                core._refusal_row(self.validator.index, {"ts": iso_now(), "pid": run.proc.pid, "process": "hard-link",
+                                                         "operation": operation, "target": root,
+                                                         "detail": detail[:REFUSED_DETAIL_CLIP],
+                                                         "sessionId": facts.get("session"), "root": root})
+            except OSError:
+                pass
             return
         try:
-            core.check_hardlinks_after_run(self.validator.index, [facts["scan_root"]], run.proc.pid, facts.get("session"),
-                                           facts.get("cls"), deadline=time.monotonic() + SCAN_BUDGET_S)
+            core.check_hardlinks_after_run(self.validator.index, [root], run.proc.pid, facts.get("session"),
+                                           facts.get("cls"), deadline=time.monotonic() + FIRST_SCAN_CAP_S,
+                                           stall_s=core.FIRST_SCAN_STALL_S)
         except Exception:  # noqa: BLE001 — a record that failed never keeps the run's exit from the stub
             pass
 
@@ -2258,7 +2538,8 @@ def main() -> int:
         journal_dir = os.environ.get("ICLONE_LAUNCHER_JOURNAL_DIR", "")
         if not os.path.isabs(socket_path) or not os.path.isabs(journal_dir):
             raise RuntimeError("ICLONE_LAUNCHER_SOCKET and ICLONE_LAUNCHER_JOURNAL_DIR must be absolute paths")
-        launcher = Launcher(index, socket_path, journal_dir, roots=runtime_roots(os.environ))
+        launcher = Launcher(index, socket_path, journal_dir, roots=runtime_roots(os.environ),
+                            guard=guard_from_env(os.environ))
         launcher.bind()
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(f"icloneOS confinement launcher could not start: {exc}\n")

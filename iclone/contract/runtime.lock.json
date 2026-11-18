@@ -5,7 +5,7 @@
     "upstreamReference": "10b388300a63d83857fac3ca4f8b05b64e01bc50"
   },
   "verifiedAgainst": {
-    "rev": "fc5c4e2d9101d0c120f2cfe8e9ba9086f13a554a",
+    "rev": "38728b1966330f7b0e8f3970100cabc2e04b72bf",
     "openrpcSha256": "a826e83867ee8a2ed15f4cf16901d054078fe67db2771f393065009f385ce140",
     "specTier": "openrpc",
     "result": "amber:3-roots"

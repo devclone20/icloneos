@@ -16,8 +16,10 @@ import sys
 
 FORWARDED = (signal.SIGTERM, signal.SIGINT, signal.SIGHUP, signal.SIGQUIT)
 UNREACHABLE = "the launcher is not answering"
-# fx20 (lens5 M1): the launcher may scan a folder for up to SCAN_BUDGET_S (launcher.py, 30 s) before it answers, so
+# fx20 (lens5 M1): the launcher may wait SCAN_BUDGET_S (launcher.py, 30 s) for a scan slot before it answers, so
 # waiting less would tell the agent "not answering" while it is working. Connecting and sending stay at 10 s.
+# CF8: while it scans, the launcher sends {"progress": {"dirs": N}} at least every PROGRESS_FORWARD_S; each one
+# restarts this wait (a socket timeout is per receive), so a long first scan that progresses is waited for.
 REPLY_TIMEOUT_S = 60.0
 
 
@@ -43,6 +45,11 @@ def _recv_msg(sock, buffered):
         if not chunk:
             raise EOFError
         buffered.extend(chunk)
+
+
+def _is_progress(msg):
+    """A progress frame only: never an answer, so it can neither start nor refuse the command."""
+    return isinstance(msg, dict) and set(msg) == {"progress"} and isinstance(msg["progress"], dict)
 
 
 def main(argv):
@@ -71,6 +78,8 @@ def main(argv):
         sock.settimeout(REPLY_TIMEOUT_S)
         buffered = bytearray()
         reply = _recv_msg(sock, buffered)
+        while _is_progress(reply):
+            reply = _recv_msg(sock, buffered)
     except (OSError, EOFError, ValueError):
         _refuse(UNREACHABLE)
     if not isinstance(reply, dict) or reply.get("ok") is not True:

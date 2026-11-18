@@ -5,11 +5,12 @@
  * FULL scan and then keeps the tree (section 5). hardlinks.ts is the guard; hardlinks-walker.ts is main's side of
  * the worker.
  *
- * ONE FILE, pure `node:fs`: no Electron, no addon, no import of the app and no relative import. This file is the
- * worker's entry (bundled as dist/hardlinks-walk-worker.cjs, or run as TypeScript source under Node's type
- * stripping, which resolves no extensionless relative import), and the spawn audit pins it as the only code the
- * worker runs. The worker starts only with `workerData.icloneTask === 'hardlink-walk'` (hardlinks-walker.ts spawns
- * it), so importing this file anywhere else runs nothing.
+ * ONE FILE, pure `node:fs` (Electron's `original-fs` when present, section 0): no Electron import, no addon, no
+ * import of the app and no relative import. This file is the worker's entry (bundled as
+ * dist/hardlinks-walk-worker.cjs, or run as TypeScript source under Node's type stripping, which resolves no
+ * extensionless relative import), and the spawn audit pins it as the only code the worker runs. The worker starts
+ * only with `workerData.icloneTask === 'hardlink-walk'` (hardlinks-walker.ts spawns it), so importing this file
+ * anywhere else runs nothing.
  *
  * Why resident (CF7, critic rounds B-M1 to B5-M1): every earlier design handed the records to main, and every path
  * that then touched them on main — install, copy, fold, compare, incremental walk — cost the tree (520 000 folders on
@@ -23,10 +24,54 @@
  * (`TreeVerdict`), `dump` with `dumped` {entries} (tests and the in-process hand-over of a small tree only: the guard
  * never asks for the records). A request that fails answers `error` for that id alone.
  */
-import { type BigIntStats, type Dirent, lstatSync, readdirSync, type Stats } from 'node:fs'
-import { lstat, readdir } from 'node:fs/promises'
+import * as nodeFs from 'node:fs'
+import type { BigIntStats, Dirent, Stats } from 'node:fs'
+import * as nodeFsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { isMainThread, type MessagePort, parentPort, workerData } from 'node:worker_threads'
+
+// ─── 0. The file system the guard sees ──────────────────────────────────────────────────────────────────────────
+// v0.0.8 FX-ASAR: inside Electron (main and its worker threads) `node:fs` serves every `*.asar` FILE as a virtual
+// directory, and a malformed one makes `lstat` throw "Invalid package" with no errno. The owner's project holds asar
+// parser probes, so the walk saw files as folders, could not stat them, and refused every command ("cannot scan
+// <dir>"). Every guard and confinement call on a project path goes through `original-fs`, Electron's fs without that
+// interception: the kernel's view, the one Seatbelt enforces. Under plain Node (tests, tsx) there is no such module
+// and `node:fs` is that view already. Defined here, not in project-fs.ts, because this file may not import relatively.
+
+/** Node's fs as the confinement code uses it: the sync module and its promises API. */
+export interface ProjectFs {
+  readonly sync: typeof nodeFs
+  readonly promises: typeof nodeFsPromises
+}
+
+export type GetBuiltinModule = (id: string) => unknown
+
+const FS_FUNCTIONS = ['lstatSync', 'readdirSync', 'realpathSync', 'statSync', 'existsSync'] as const
+const FS_PROMISE_FUNCTIONS = ['lstat', 'readdir', 'realpath'] as const
+
+const hasFunctions = (candidate: unknown, names: readonly string[]): candidate is object =>
+  typeof candidate === 'object' &&
+  candidate !== null &&
+  names.every(name => typeof Reflect.get(candidate, name) === 'function')
+
+const isNodeFs = (candidate: unknown): candidate is typeof nodeFs =>
+  hasFunctions(candidate, FS_FUNCTIONS) &&
+  hasFunctions(Reflect.get(candidate, 'promises'), FS_PROMISE_FUNCTIONS) &&
+  typeof Reflect.get(Reflect.get(candidate, 'realpathSync'), 'native') === 'function'
+
+/** Electron's `original-fs` when the runtime has it (any Electron process or thread), else `node:fs`. */
+export function selectProjectFs(getBuiltinModule: GetBuiltinModule | undefined): ProjectFs {
+  const original = getBuiltinModule?.('original-fs')
+
+  return isNodeFs(original)
+    ? { sync: original, promises: original.promises }
+    : { sync: nodeFs, promises: nodeFsPromises }
+}
+
+export const projectFs: ProjectFs = selectProjectFs(id => process.getBuiltinModule(id))
+
+const { lstatSync, readdirSync } = projectFs.sync
+const { lstat, readdir } = projectFs.promises
 
 const within = (child: string, parent: string) => child === parent || child.startsWith(`${parent}${path.sep}`)
 
@@ -699,11 +744,13 @@ export class TreeState {
     return this.commit(over)
   }
 
-  async walkIncremental(): Promise<TreeVerdict> {
+  /** `onDir` (FX-STALE): once per folder reached, so a check waiting on this walk of the whole tree sees it move. */
+  async walkIncremental(onDir?: () => void): Promise<TreeVerdict> {
     let reached = 0
 
     const { records, listed } = await walkTree(this.root, this.records, () => {
       reached += 1
+      onDir?.()
 
       if (reached > this.maxDirs) {
         throw new TreeOutgrown(this.maxDirs)
@@ -837,7 +884,7 @@ export type RecordEntry = [string, DirRecord | typeof UNSTATABLE]
 
 /** What a walk worker posts to main. */
 export type WalkMessage =
-  | { type: 'progress'; dirs: number }
+  | { type: 'progress'; dirs: number; id?: number }
   | { type: 'done'; dirs: number; scan: TreeScan; oneVolume: boolean }
   | { type: 'answer'; id: number; verdict: TreeVerdict }
   | { type: 'dumped'; id: number; entries: RecordEntry[] }
@@ -975,7 +1022,34 @@ export async function runWalk(
   }
 }
 
-/** One request against the resident tree, answered by id; a failure answers `error` for that id alone. */
+/** FX-STALE: a folder counter that reports through `emit` at most every PROGRESS_EVERY_MS while the count moves, and
+ *  once more on `flush` (the same rule as a full scan's `progress`). */
+export function progressCounter(emit: (dirs: number) => void): { onDir: () => void; flush: () => void } {
+  let dirs = 0
+  let told = 0
+  let toldAt = performance.now()
+
+  const tell = (force: boolean) => {
+    const at = performance.now()
+
+    if (dirs !== told && (force || at - toldAt >= PROGRESS_EVERY_MS)) {
+      told = dirs
+      toldAt = at
+      emit(dirs)
+    }
+  }
+
+  return {
+    onDir: () => {
+      dirs += 1
+      tell(false)
+    },
+    flush: () => tell(true)
+  }
+}
+
+/** One request against the resident tree, answered by id; a failure answers `error` for that id alone. A `walk`
+ *  (every folder stat-ed) posts `progress` with its id while it runs (FX-STALE). */
 export async function serveRequest(
   tree: TreeState,
   request: WalkRequest,
@@ -987,7 +1061,11 @@ export async function serveRequest(
     } else if (request.type === 'apply') {
       post({ type: 'answer', id: request.id, verdict: await tree.applyDirty(request.dirty) })
     } else {
-      post({ type: 'answer', id: request.id, verdict: await tree.walkIncremental() })
+      const counter = progressCounter(dirs => post({ type: 'progress', id: request.id, dirs }))
+      const verdict = await tree.walkIncremental(counter.onDir)
+
+      counter.flush()
+      post({ type: 'answer', id: request.id, verdict })
     }
   } catch (error) {
     post({ type: 'error', id: request.id, message: error instanceof Error ? error.message : String(error) })

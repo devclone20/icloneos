@@ -17,6 +17,7 @@ import {
   checkBeforeStart,
   createHardlinkGuard,
   type HardlinkMeasure,
+  onFirstScanChange,
   refreshCadence,
   type RefreshPhase,
   residentDirsBudgetFor,
@@ -121,6 +122,8 @@ interface WorldOptions {
   walkFull?: Parameters<typeof createHardlinkGuard>[0]['walkFull']
   refreshStallMs?: number
   idleReleaseMs?: number
+  /** FX-SLEEP: the guard's awake clock; by default the fake wall clock (time passing awake). */
+  awake?: () => number
 }
 
 function world(fsEvents: FsEventsSource | null, files = 40, options: WorldOptions = {}) {
@@ -151,6 +154,9 @@ function world(fsEvents: FsEventsSource | null, files = 40, options: WorldOption
     fsEvents,
     fsEventsChoice: options.choice ?? 'always',
     now: options.now,
+    // FX-SLEEP: these tests model time passing AWAKE (the guard ages a stream-backed root in awake time); a sleep, with
+    // no awake time, is the FX-SLEEP block below (sleepClocks).
+    awake: options.awake ?? (options.now ? () => options.now!().getTime() : undefined),
     onMeasure: (_root, how) => measured.push(how),
     onFullScan: dir => {
       scans.push(dir)
@@ -461,6 +467,30 @@ describe.skipIf(!REAL)('FSEV: the real stream (own addon, same-stream canary bar
     expect(Math.max(...work)).toBeLessThan(5)
   }, 120_000)
 
+  // CF8 L2.5, OPEN (FX-E note): main's events path is blind to a link made OUT of the root. link(2) gives the stream no
+  // event for the source file (probed: nothing under the root), and the new name is outside the watched root, so the
+  // cached answer stands. The assertion is the one wanted; `it.fails` keeps the reproduction until the fix (a watch
+  // over the run's other write roots, or a file re-stat in the after phase) lands, and turns red the day it does.
+  it.fails('CF8 L2.5: a link made OUT of the root during a run (new name outside, its event outside the stream) is refused after the run', async () => {
+    const w = await warmReal(200)
+    const inside = path.join(w.project, 'tree', 'd0', 'f0')
+    const exitedAtMs = Date.now()
+
+    // The run's own step: the project file gets a second name the stream never sees (outside the watched root).
+    linkSync(inside, path.join(w.outside, 'carried-out'))
+    await new Promise(resolve => setTimeout(resolve, 1_500))
+
+    try {
+      expect(await w.guard.check(w.project, undefined, exitedAtMs)).toMatchObject({
+        ok: false,
+        appeared: { paths: [inside] }
+      })
+      expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [inside] } })
+    } finally {
+      w.guard.close()
+    }
+  }, 60_000)
+
   it('L1-1: a root stream FSEvents took but that delivers nothing (dead without a signal) is never trusted', async () => {
     const addon = ADDON as IcloneFsevents
     const decoy = realOrSelf(mkdtempSync(path.join(os.tmpdir(), 'v007-fsev-decoy-')))
@@ -748,6 +778,123 @@ describe("V-1b: the age bound and prewarm never put a full scan inside a command
     expect(answer).toMatchObject({ ok: true })
     expect(paces).toEqual(['fast', 'fast'])
     expect(w.refreshes).toEqual(['started', 'installed'])
+  })
+
+  /** FX-SLEEP: a wall clock and an awake clock driven apart: a sleep moves the first alone. */
+  function sleepClocks() {
+    const wall = clocked()
+    let awakeMs = 1_000_000
+
+    return { wall, awake: () => awakeMs, awakeFor: (ms: number) => (awakeMs += ms) }
+  }
+
+  it('FX-SLEEP: after a 61-min sleep (wall clock only), the first command is answered from the stream: no walk, no scan', async () => {
+    const fake = fakeSource()
+    const clocks = sleepClocks()
+    const w = world(fake.source, 400, { now: clocks.wall.now, awake: clocks.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+    clocks.awakeFor(30_000)
+    clocks.wall.set(30_000)
+    // The lid closes for 61 min: Date jumps, mach_absolute_time does not.
+    clocks.wall.set(30_000 + 61 * MIN)
+
+    const scansBefore = w.scans.length
+
+    counts.dirLstat = 0
+    expect(await checkBeforeStart(w.guard, w.project, 'build', 3_000)).toMatchObject({ ok: true })
+    expect(w.measured.at(-1)).toBe('events-cached')
+    expect(w.scans.length).toBe(scansBefore)
+    expect(counts.dirLstat).toBe(0)
+    expect(w.refreshes).toEqual([])
+  })
+
+  it('FX-SLEEP (security kept): past the bound in AWAKE time, the stale cached answer never answers; a link planted with no event is refused', async () => {
+    const fake = fakeSource()
+    const clocks = sleepClocks()
+    const w = world(fake.source, 40, { now: clocks.wall.now, awake: clocks.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+
+    // Planted with no event (a name made outside for an inside inode moves no inside folder): only a scan sees it.
+    const planted = path.join(w.project, 'src', 'deep', 'silent')
+
+    linkSync(path.join(w.outside, 'secret'), planted)
+    // A sleep first (no awake time) ...
+    clocks.wall.set(61 * MIN)
+    expect(await w.guard.check(w.project)).toMatchObject({ ok: true, cached: true })
+    // ... then 5 min + 1 s awake: past the bound, the walk decides.
+    clocks.awakeFor(5 * MIN + 1_000)
+    clocks.wall.set(66 * MIN + 1_000)
+    expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [planted] } })
+  })
+
+  it('FX-SLEEP (security kept): a wall clock stepped back is still stale (A2-m5), whatever the awake clock says', async () => {
+    const fake = fakeSource()
+    const clocks = sleepClocks()
+    const w = world(fake.source, 40, { now: clocks.wall.now, awake: clocks.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+
+    const planted = path.join(w.project, 'src', 'deep', 'silent')
+
+    linkSync(path.join(w.outside, 'secret'), planted)
+    clocks.wall.set(-MIN)
+    expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [planted] } })
+  })
+
+  it('FX-SLEEP (security kept): a walked root (no stream: a network volume) still ages in wall time across a sleep', async () => {
+    const clocks = sleepClocks()
+    const w = world(null, 40, { now: clocks.wall.now, awake: clocks.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+
+    const planted = path.join(w.project, 'src', 'deep', 'silent')
+
+    linkSync(path.join(w.outside, 'secret'), planted)
+    clocks.wall.set(61 * MIN)
+    expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [planted] } })
+  })
+
+  it('FX-SLEEP: a stream-backed root is not idle-released by a sleep at its refresh tick; 31 min awake still releases it', async () => {
+    const fake = fakeSource()
+    const clocks = sleepClocks()
+    const realSetTimeout = globalThis.setTimeout
+    let refreshTick = null as (() => void) | null
+
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation(((handler: () => void, ms?: number, ...rest: unknown[]) => {
+      if ((ms ?? 0) >= MIN) {
+        refreshTick = handler
+
+        return realSetTimeout(() => undefined, 0)
+      }
+
+      return realSetTimeout(handler, ms, ...rest)
+    }) as typeof setTimeout)
+
+    try {
+      const w = world(fake.source, 40, { now: clocks.wall.now, awake: clocks.awake, idleReleaseMs: 10 * MIN })
+
+      expect((await w.guard.check(w.project)).ok).toBe(true)
+      expect(refreshTick).not.toBeNull()
+      // A night's sleep, then the tick fires on wake: not idle (no awake time passed), so no release.
+      clocks.wall.set(8 * 60 * MIN)
+      clocks.awakeFor(MIN)
+      refreshTick?.()
+      await new Promise(resolve => realSetTimeout(resolve, 50))
+      expect(w.refreshes).not.toContain('released')
+      expect(fake.live()).toHaveLength(1)
+
+      // 31 min awake with no check: the next tick releases it.
+      clocks.awakeFor(31 * MIN)
+      clocks.wall.set(8 * 60 * MIN + 32 * MIN)
+      refreshTick?.()
+      await new Promise(resolve => realSetTimeout(resolve, 50))
+      expect(w.refreshes).toContain('released')
+      expect(fake.live()).toHaveLength(0)
+    } finally {
+      vi.restoreAllMocks()
+    }
   })
 
   it('CF5 B3-M1 (fake clock): a paced refresh running when a command needs it is promoted: aborted, and a full-speed scan answers', async () => {
@@ -1056,6 +1203,8 @@ describe("V-1b: the age bound and prewarm never put a full scan inside a command
       fsEvents: fake.source,
       fsEventsChoice: 'always',
       now: options.now,
+      // FX-SLEEP: time passing awake (see world()).
+      awake: options.now ? () => options.now!().getTime() : undefined,
       idleReleaseMs: options.idleReleaseMs,
       residentDirsBudget: WORKER_BASE_DIRS + 40,
       onMeasure: (root, how) => measured.push([root, how]),
@@ -1425,5 +1574,199 @@ describe("V-1b: the age bound and prewarm never put a full scan inside a command
 
     linkSync(path.join(w.outside, 'secret'), planted)
     expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [planted] } })
+  })
+})
+
+describe('FX-STALE (B1-M1, D3): every walk of the whole tree a check waits on is a first scan (progress, the cap)', () => {
+  const MIN = 60_000
+
+  /** Wall and awake clocks: `pass` is time passing awake (both move), `stepBack` an NTP step of the wall clock. */
+  function clocks() {
+    let wall = Date.parse('2026-11-10T12:00:00Z')
+    let awakeMs = 1_000_000
+
+    return {
+      now: () => new Date(wall),
+      awake: () => awakeMs,
+      pass: (ms: number) => {
+        wall += ms
+        awakeMs += ms
+      },
+      stepBack: (ms: number) => {
+        wall -= ms
+      },
+      /** A Mac sleep: the wall clock alone moves. */
+      sleep: (ms: number) => {
+        wall += ms
+      }
+    }
+  }
+
+  it('A r1 (3): a walked root (no stream: a network volume) ages in WALL time across a 6-min sleep (under the 30-min idle release): a name made outside for an inside file is found', async () => {
+    const clock = clocks()
+    const w = world(null, 40, { now: clock.now, awake: clock.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+
+    // A second name OUTSIDE for an inside file: no inside folder changes, so only a full walk past the bound sees it.
+    const inside = path.join(w.project, 'tree', 'd0', 'f0')
+
+    linkSync(inside, path.join(w.outside, 'second-name'))
+    clock.sleep(6 * MIN)
+
+    const scans = w.scans.length
+
+    expect(await w.guard.check(w.project)).toMatchObject({ ok: false, block: { paths: [inside] } })
+    expect(w.scans.length).toBe(scans + 1)
+  })
+
+  /** The folder counts main's progress frames carry (`firstScanDirs`, what guard-channel's ticker sends) at every
+   *  first-scan change of `root` while `run` runs. */
+  async function progressDuring<T>(guard: { firstScanDirs(root: string): number | null }, root: string, run: () => Promise<T>) {
+    const seen: number[] = []
+
+    const off = onFirstScanChange(() => {
+      const reached = guard.firstScanDirs(root)
+
+      if (reached !== null) {
+        seen.push(reached)
+      }
+    })
+
+    try {
+      return { result: await run(), seen }
+    } finally {
+      off()
+    }
+  }
+
+  /** A refresh walk that reaches a folder every 50 ms for `ms` before the real walk (a big tree), once armed. */
+  function slowWalk(ms: number) {
+    const state = { armed: false }
+
+    const walkFull: WorldOptions['walkFull'] = async (root, options) => {
+      if (state.armed) {
+        for (let reached = 1; reached * 50 <= ms; reached += 1) {
+          await new Promise(resolve => setTimeout(resolve, 50))
+          options?.onProgress?.(reached)
+        }
+      }
+
+      return walkInWorker(root, options)
+    }
+
+    return { state, walkFull }
+  }
+
+  it('past the age bound in AWAKE time: the re-walk (refreshed) reports its folders while the check waits', async () => {
+    const fake = fakeSource()
+    const clock = clocks()
+    const w = world(fake.source, 400, { now: clock.now, awake: clock.awake })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+
+    const scans = w.scans.length
+
+    clock.pass(5 * MIN + 1_000)
+
+    const { result, seen } = await progressDuring(w.guard, w.project, () => w.guard.check(w.project))
+
+    expect(result).toMatchObject({ ok: true })
+    expect(w.refreshes).toContain('started')
+    expect(w.scans.length).toBe(scans)
+    expect(Math.max(0, ...seen)).toBeGreaterThan(0)
+    expect(w.guard.firstScanProgress(w.project)).toBeNull()
+  })
+
+  it('a wall clock stepped back: the re-walk reports its folders while the check waits, from its start', async () => {
+    const fake = fakeSource()
+    const clock = clocks()
+    const atRefreshStart: Array<number | null> = []
+    let guard: ReturnType<typeof world>['guard'] | null = null
+    let project = ''
+
+    const w = world(fake.source, 400, {
+      now: clock.now,
+      awake: clock.awake,
+      // Just after the full-speed refresh began (before its walk): is the check waiting on it shown as a first scan?
+      onRefreshWalk: async () => {
+        await new Promise(resolve => setTimeout(resolve, 20))
+        atRefreshStart.push(guard?.firstScanProgress(project) ?? null)
+      }
+    })
+
+    guard = w.guard
+    project = w.project
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+    clock.stepBack(MIN)
+
+    const { result, seen } = await progressDuring(w.guard, w.project, () => w.guard.check(w.project))
+
+    expect(result).toMatchObject({ ok: true })
+    expect(w.refreshes).toContain('started')
+    expect(atRefreshStart.length).toBeGreaterThan(0)
+    expect(atRefreshStart.every(at => at !== null)).toBe(true)
+    expect(Math.max(0, ...seen)).toBeGreaterThan(0)
+  })
+
+  for (const resident of ['in this process', 'in a worker'] as const) {
+    it(`a stream voided (MustScanSubDirs), tree ${resident}: the stat of every folder reports progress`, async () => {
+      const fake = fakeSource()
+
+      const w = world(fake.source, 400, {
+        walkFull:
+          resident === 'in a worker'
+            ? (root, options) => walkInWorker(root, { ...options, inProcessMaxDirs: 1 })
+            : undefined
+      })
+
+      expect((await w.guard.check(w.project)).ok).toBe(true)
+      fake.emit(w.project, FSE.MustScanSubDirs)
+
+      const { result, seen } = await progressDuring(w.guard, w.project, () => w.guard.check(w.project))
+
+      expect(result).toMatchObject({ ok: true })
+      expect(w.measured.at(-1)).toMatch(/^walk/)
+      expect(Math.max(0, ...seen)).toBeGreaterThan(0)
+      expect(w.guard.firstScanProgress(w.project)).toBeNull()
+    })
+  }
+
+  it('a stale re-walk longer than the plain deadline is answered, not refused (deadline 300 ms, walk ~1.2 s)', async () => {
+    const fake = fakeSource()
+    const clock = clocks()
+    const slow = slowWalk(1_200)
+    const w = world(fake.source, 400, { now: clock.now, awake: clock.awake, walkFull: slow.walkFull })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+    clock.pass(5 * MIN + 1_000)
+    slow.state.armed = true
+
+    const answer = await checkBeforeStart(w.guard, w.project, 'build', 300, {
+      firstScanDeadlineMs: 10_000,
+      stallMs: 1_000,
+      pollMs: 50
+    })
+
+    expect(answer).toMatchObject({ ok: true })
+  })
+
+  it('a stale re-walk still advancing at the first-scan cap is refused at the cap (cap 700 ms, walk ~2 s)', async () => {
+    const fake = fakeSource()
+    const clock = clocks()
+    const slow = slowWalk(2_000)
+    const w = world(fake.source, 400, { now: clock.now, awake: clock.awake, walkFull: slow.walkFull })
+
+    expect((await w.guard.check(w.project)).ok).toBe(true)
+    clock.pass(5 * MIN + 1_000)
+    slow.state.armed = true
+
+    const answer = await checkBeforeStart(w.guard, w.project, 'build', 300, {
+      firstScanDeadlineMs: 700,
+      stallMs: 1_000,
+      pollMs: 50
+    })
+
+    expect(answer).toMatchObject({ ok: false, unanswered: 'timeout', detail: expect.stringMatching(/did not finish within 1 s/) })
   })
 })

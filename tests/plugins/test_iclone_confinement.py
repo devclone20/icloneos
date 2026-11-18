@@ -1219,18 +1219,58 @@ class TestSeatbeltLive:
         seatbelt = sys.modules[type(env).__module__]
         core = seatbelt.core
         scanned = []
-        monkeypatch.setattr(core, "check_hardlinks", lambda index, r, cls=None: scanned.append(r))
-        monkeypatch.setattr(seatbelt.SeatbeltEnvironment, "runtime_can_list", lambda self_, p: p != os.path.realpath(other))
+        bounds = []
+
+        def check(index, r, cls=None, **kw):
+            scanned.append(r)
+            bounds.append(kw.get("deadline"))
+
+        monkeypatch.setattr(core, "check_hardlinks", check)
         monkeypatch.setattr(core, "runtime_confined", lambda: True)
         monkeypatch.setattr(core, "via_launcher", lambda argv: argv)  # the launcher itself is proven in test_iclone_launcher
         argv = env.sandbox_argv(["/bin/sh", "-c", "true"], None, os.path.realpath(other))
         assert f"PROJECT_ROOT={os.path.realpath(other)}" in argv and scanned == [env._scratch]
+        # CF8 D1 (designed change, was: the window project scanned here too): through the launcher, the window
+        # project is the launcher's as well (it asks main's guard), so no walk of it runs in this runtime per command;
+        # the scratch, the runtime's own, is still checked here, within a bound.
         env.sandbox_argv(["/bin/sh", "-c", "true"], None, str(project))
-        assert scanned[-2:] == [str(project), env._scratch]
+        assert scanned == [env._scratch, env._scratch] and all(b is not None for b in bounds)
         # Without a launcher nothing else scans: the runtime's own scan runs and refuses as before.
         monkeypatch.setattr(core, "runtime_confined", lambda: False)
         env.sandbox_argv(["/bin/sh", "-c", "true"], None, os.path.realpath(other))
         assert scanned[-2] == os.path.realpath(other)
+        env.sandbox_argv(["/bin/sh", "-c", "true"], None, str(project))
+        assert scanned[-2:] == [str(project), env._scratch]
+
+    def test_cf8_a_window_project_the_confined_runtime_cannot_open_is_still_the_command_s_project(self, tmp_path, monkeypatch):
+        """Lead (FX-PERF security finding): a project opened in a window after the runtime started is outside the
+        runtime's profile, so the runtime cannot open it (EPERM). The command there must still be judged as that
+        project (named to the launcher, which asks main over fd 3), never fall back to the runtime's own project,
+        which would leave a planted outside link in the window project unchecked."""
+        root, project, _, _, env = self.world(tmp_path, monkeypatch)
+        other = os.path.realpath(self.other_project(root))
+        seatbelt = sys.modules[type(env).__module__]
+        core = seatbelt.core
+        real_open = os.open
+
+        def confined_open(path, flags, *a, **k):
+            if os.path.realpath(os.fsdecode(path)) == other:
+                raise PermissionError(1, "Operation not permitted", path)
+            return real_open(path, flags, *a, **k)
+
+        scanned = []
+        monkeypatch.setattr(core, "check_hardlinks", lambda index, r, cls=None, **kw: scanned.append(r))
+        monkeypatch.setattr(core, "runtime_confined", lambda: True)
+        monkeypatch.setattr(core, "via_launcher", lambda argv: argv)
+        monkeypatch.setattr(core.os, "open", confined_open)
+        token = seatbelt._REQUEST.set({"cwd": other})
+        try:
+            chosen, refused = env.request_project()
+        finally:
+            seatbelt._REQUEST.reset(token)
+        assert (chosen, refused) == (other, None)
+        argv = env.sandbox_argv(["/bin/sh", "-c", "true"], None, chosen)
+        assert f"PROJECT_ROOT={other}" in argv and other not in scanned and scanned == [env._scratch]
 
     def test_fx18_f1_a_reported_cwd_the_runtime_cannot_stat_is_kept(self, tmp_path, monkeypatch):
         root, project, _, _, env = self.world(tmp_path, monkeypatch)

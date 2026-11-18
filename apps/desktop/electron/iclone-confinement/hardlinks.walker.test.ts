@@ -11,6 +11,7 @@
 import { execFileSync } from 'node:child_process'
 import {
   chmodSync,
+  existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
@@ -45,7 +46,8 @@ import {
   residentInProcess,
   type StartWalkWorker,
   WALK_WORKER_HEAP_MB,
-  walkInWorker
+  walkInWorker,
+  walkSourceUrl
 } from './hardlinks-walker'
 
 const dirs: string[] = []
@@ -160,6 +162,36 @@ describe('CF1: the full scan in a worker thread', () => {
     expect(inProcess).toBeGreaterThan(0.5)
     expect(inWorker).toBeLessThan(0.25)
   }, 120_000)
+})
+
+describe('FX-G1: the source worker starts in every realm main runs in', () => {
+  it('a realm whose global URL resolves to http: (jsdom, the ui project) still walks: the worker URL is built by node:url', async () => {
+    const { root } = project(10, 2)
+    const RealmURL = globalThis.URL
+
+    // What jsdom's URL gave the live rehearsals (fx32p): a relative URL against import.meta.url came out http:.
+    class HttpURL extends RealmURL {
+      constructor(input: string | URL, base?: string | URL) {
+        super(base === undefined ? input : String(input), base === undefined ? undefined : 'http://localhost:3000/')
+      }
+    }
+
+    globalThis.URL = HttpURL as typeof URL
+
+    try {
+      expect(new URL('./hardlinks-walk.ts', import.meta.url).protocol).toBe('http:')
+      expect(walkSourceUrl(import.meta.url).protocol).toBe('file:')
+      expect(existsSync(walkSourceUrl(import.meta.url))).toBe(true)
+      const resident = await walkInWorker(root)
+
+      expect(resident.scan).toEqual(scanOf((await walkTree(root, null)).records))
+      resident.release()
+    } finally {
+      globalThis.URL = RealmURL
+    }
+
+    expect(liveWalkWorkers()).toBe(0)
+  })
 })
 
 describe('CF4 (B2-m3): the background refresh walks paced, the first scan flat out', () => {

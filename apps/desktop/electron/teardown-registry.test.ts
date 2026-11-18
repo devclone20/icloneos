@@ -136,6 +136,11 @@ const RESOURCES: Record<string, Partial<Record<Kind, Entry>>> = {
   'iclone-confinement/hardlinks.ts': {
     fsevents: { n: 1, teardown: ['iclone-confinement/hardlinks.ts#hardlink guards'] }
   },
+  // v0.0.8 CF8: main's side of the launcher's fd-3 guard channel, one progress ticker per open check; each is cleared
+  // by its answer or the channel's close, and quit clears every one still armed.
+  'iclone-confinement/guard-channel.ts': {
+    interval: { n: 1, teardown: ['iclone-confinement/guard-channel.ts#guard channel progress tickers'] }
+  },
   // v0.0.7 CF1: the F7 guard's full scan, one worker thread per scan (the bundled script or the TypeScript source);
   // quit terminates every one still running, and a guard's close aborts its own.
   'iclone-confinement/hardlinks-walker.ts': {

@@ -55,7 +55,8 @@ describe.skipIf(!PERF_V007_ENABLED)('v0.0.7 PERF: 20 000 hard links refused, ack
   let group: string
 
   beforeAll(() => {
-    tree = makeFixture(['--files', String(DIRS), '--dirs', String(DIRS)])
+    // CF8: the owner's 7.45 files per folder (3 895 210 / 522 597, CF8_DESIGN.md "Measured"); v0.0.7 had 3 000.
+    tree = makeFixture(['--files', String(Math.round((DIRS * 3_895_210) / 522_597)), '--dirs', String(DIRS)])
 
     const outside = path.join(path.dirname(tree.root), 'outside')
 

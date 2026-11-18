@@ -16,10 +16,14 @@
  *   dies (it checks its parent), so it is never orphaned.
  * - The socket's directory is a real directory, created 0700 (re-tightened if it existed): a symlink there refuses
  *   the start rather than putting the socket somewhere else.
+ * - CF8: with `guardChannel`, the spawn has one more stdio entry, fd 3 (a socketpair, duplex), and the env names it
+ *   (ICLONE_GUARD_FD=3). Main's end is close-on-exec (libuv), so no other child of main inherits it; one channel per
+ *   launcher process, closed when that process exits or is stopped. The launcher must not pass fd 3 on (its side).
  */
 import { type ChildProcess, spawn as nodeSpawn, type SpawnOptions } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { Duplex } from 'node:stream'
 
 import type { RuntimeRoots } from './runtime-profile'
 
@@ -32,6 +36,8 @@ export const RESTART_BACKOFF_MS = 500
 
 export const LAUNCHER_PATH = '/usr/bin:/bin:/usr/sbin:/sbin'
 const READY_RE = /^ICLONE-LAUNCHER-READY (\d+)$/
+/** CF8: the fd the launcher reads main's guard on (CF8_DESIGN.md). */
+export const GUARD_FD = 3
 
 export type LauncherState = 'down' | 'up'
 
@@ -39,7 +45,13 @@ export type LauncherState = 'down' | 'up'
 export type LauncherChild = Pick<
   ChildProcess,
   'exitCode' | 'kill' | 'on' | 'once' | 'pid' | 'signalCode' | 'stderr' | 'stdout'
->
+> &
+  Partial<Pick<ChildProcess, 'stdio'>>
+
+/** CF8: serves main's guard on one launcher process's fd 3 (guard-channel.ts); `close` ends it. `onClosed` is called
+ *  when the channel ends by itself (the launcher's framing broke, an error): that launcher is ended, so the restart
+ *  path gives a fresh fd 3 instead of a launcher that refuses every scanned command until the app restarts (L1.4). */
+export type LauncherGuardServe = (channel: Duplex, onClosed: (why: string) => void) => { close(why?: string): void }
 
 export type LauncherSpawn = (command: string, args: string[], options: SpawnOptions) => LauncherChild
 
@@ -60,6 +72,8 @@ export interface LauncherOptions {
   log: (line: string) => void
   spawn?: LauncherSpawn
   now?: () => number
+  /** CF8: main's guard on fd 3. Absent: three stdio entries and no ICLONE_GUARD_FD (the launcher's own fallback). */
+  guardChannel?: LauncherGuardServe
 }
 
 export interface Launcher {
@@ -70,9 +84,14 @@ export interface Launcher {
 
 /** The launcher's whole environment: the contract's variables, nothing else. */
 export function launcherEnv(
-  options: Pick<LauncherOptions, 'hermesHome' | 'home' | 'journalDir' | 'socketPath'> & { roots: RuntimeRoots; spec: string }
-) {
+  options: Pick<LauncherOptions, 'hermesHome' | 'home' | 'journalDir' | 'socketPath'> & {
+    roots: RuntimeRoots
+    spec: string
+    guardFd?: number
+  }
+): Record<string, string> {
   return {
+    ...(options.guardFd === undefined ? {} : { ICLONE_GUARD_FD: String(options.guardFd) }),
     ICLONE_CONFINEMENT_SPEC: options.spec,
     ICLONE_LAUNCHER_SOCKET: options.socketPath,
     ICLONE_LAUNCHER_JOURNAL_DIR: options.journalDir,
@@ -201,9 +220,10 @@ export function createLauncher(options: LauncherOptions): Launcher {
             journalDir: options.journalDir,
             roots: roots(),
             socketPath: options.socketPath,
-            spec: spec()
+            spec: spec(),
+            guardFd: options.guardChannel ? GUARD_FD : undefined
           }),
-          stdio: ['ignore', 'pipe', 'pipe']
+          stdio: options.guardChannel ? ['ignore', 'pipe', 'pipe', 'pipe'] : ['ignore', 'pipe', 'pipe']
         })
       } catch (error) {
         options.log(`[confinement] launcher could not start: ${(error as Error).message}`)
@@ -286,6 +306,26 @@ export function createLauncher(options: LauncherOptions): Launcher {
 
         fail()
       })
+
+      if (options.guardChannel) {
+        const end = launched.stdio?.[GUARD_FD]
+
+        if (!(end instanceof Duplex)) {
+          options.log('[confinement] launcher has no guard channel on fd 3; stopping it')
+          settle('down')
+          void terminate(launched)
+        } else {
+          const channel = options.guardChannel(end, why => {
+            if (child === launched && alive(launched) && stopping === null) {
+              options.log(`[confinement] launcher's guard channel closed (${why}); restarting the launcher`)
+              void terminate(launched)
+            }
+          })
+
+          // One channel per process: closed at its exit (stop, crash, refused start); a restart serves a new one.
+          launched.once('exit', () => channel.close('the launcher exited'))
+        }
+      }
     })
 
     return starting

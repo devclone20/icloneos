@@ -186,6 +186,8 @@ describe.skipIf(!PERF_V007_ENABLED)(
       const guard = createHardlinkGuard({
         ackFile: path.join(os.tmpdir(), `pv7-mem-${process.pid}`, 'confinement', 'acks.json'),
         now: () => new Date(Date.now() + shiftMs),
+        // FX-SLEEP: the shift is awake time (a stream-backed root idles in awake time).
+        awake: () => performance.now() + shiftMs,
         residentDirsBudget: budgetDirs,
         idleReleaseMs: IDLE_RELEASE_MS,
         onMeasure: (root, how) => measured.push([root, how]),
