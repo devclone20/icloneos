@@ -29,3 +29,23 @@ export function buildBrowserWindowUrl(
 
   return `${pathToFileURL(rendererIndexPath!).toString()}${query}#/`
 }
+
+/**
+ * v0.0.9 F6 — the 3D iNFT's own window. `?win=stage3d` before the '#', like `?win=browser`. Nothing else rides the
+ * URL: which iNFT it shows is the hand-off record the main window wrote (src/app/home/stage3d-window/handoff.ts), so
+ * no page-supplied value ever reaches a URL main builds.
+ */
+export function buildStage3dWindowUrl({
+  devServer,
+  rendererIndexPath
+}: { devServer?: null | string; rendererIndexPath?: string } = {}): string {
+  const query = '?win=stage3d'
+
+  if (devServer) {
+    const base = devServer.endsWith('/') ? devServer.slice(0, -1) : devServer
+
+    return `${base}/${query}#/`
+  }
+
+  return `${pathToFileURL(rendererIndexPath!).toString()}${query}#/`
+}

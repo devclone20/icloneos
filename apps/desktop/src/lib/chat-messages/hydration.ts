@@ -2,8 +2,10 @@ import { skillInvocationText } from '@hermes/shared'
 
 import { extractImageRefs } from '@/lib/embedded-images'
 import { dedupeGeneratedImageEchoesInParts } from '@/lib/generated-images'
+import { $interimAssistantMessages } from '@/store/interim-assistant-messages'
 import type { MessageReaction, SessionMessage } from '@/types/hermes'
 
+import { dropPreToolStreamedTextInEveryTurn } from './interim-off'
 import { assistantTextPart, chatMessageText, dedupeRepeatedTextInParts, reasoningPart, textPart } from './parts'
 import {
   applyStoredToolResult,
@@ -319,8 +321,14 @@ export function toChatMessages(messages: SessionMessage[]): ChatMessage[] {
       : message
   )
 
+  // display.interim_assistant_messages off: a stored turn drops the commentary before its last tool call too, so a
+  // resume or a post-turn re-read shows what the live view shows (interim-off.ts).
+  const settled = $interimAssistantMessages.get()
+    ? withoutGeneratedImageEchoes
+    : dropPreToolStreamedTextInEveryTurn(withoutGeneratedImageEchoes)
+
   return withUniqueToolCallIds(
-    withoutGeneratedImageEchoes.filter(
+    settled.filter(
       m => chatMessageText(m).trim() || m.parts.some(part => part.type !== 'text') || m.attachmentRefs?.length
     )
   )

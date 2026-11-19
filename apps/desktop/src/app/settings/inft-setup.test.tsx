@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
@@ -7,12 +10,10 @@ const noop = vi.fn()
 vi.mock('./inft-setup-cli', () => ({
   useAcpCliStep: () => ({
     cli: { ok: false },
-    cliInstall: { running: false },
-    cliUpdate: null,
+    cliState: { running: false },
+    onRepairResult: noop,
     skills: null,
     skillsBusy: false,
-    installCli: noop,
-    checkCliUpdate: noop,
     teachAgent: noop
   })
 }))
@@ -45,6 +46,10 @@ vi.mock('./inft-setup-profile', () => ({
   useProfileStep: () => ({ profileSlug: 'iclone-6', profileExists: false })
 }))
 
+import { f1bAcpBundled } from '@/i18n/en/v009-f1b'
+import { slugForInft } from '@/iclone-shared/inft-slug'
+
+import { $acpConfigMap } from '../home/acp-setup'
 import { $inftRoster, $privySession } from '../home/privy-session'
 import { $activeInft } from '../home/stage-store'
 
@@ -84,14 +89,21 @@ describe('InftSetupPane — every step on the Settings row', () => {
 
     expect(rows.length).toBe(12)
 
-    for (const title of [copy.picker.title, copy.cli.title, copy.auth.title, copy.card.title, copy.live.title]) {
+    const titles = [copy.picker.title, f1bAcpBundled.stepTitle, copy.auth.title, copy.card.title, copy.live.title]
+
+    for (const title of titles) {
       expect(screen.getByText(title)).toBeTruthy()
     }
 
     const cli = rows.find(row => row.id === 'iws-step-cli')!
 
-    expect(within(cli).getByRole('button', { name: copy.cli.install })).toBeTruthy()
-    expect(within(cli).getByText(copy.cli.hint)).toBeTruthy()
+    // v0.0.9 (F1-B): the CLI ships inside the app — no Install (nor Check for updates) in step 1, only its status line.
+    // Literal words (the retired copy keys are gone from inft-setup-wizard-copy.ts, W1b).
+    expect(within(cli).queryByRole('button', { name: 'Install now' })).toBeNull()
+    expect(within(cli).queryByRole('button', { name: 'Check for updates' })).toBeNull()
+    expect(within(cli).queryByRole('button', { name: 'Update now' })).toBeNull()
+    expect(within(cli).queryByText('Install the Virtuals connector')).toBeNull()
+    expect(within(cli).getByText(f1bAcpBundled.stepHint)).toBeTruthy()
 
     // Nothing interactive outside a row.
     const loose = [...container.querySelectorAll('button,input,textarea,select')].filter(
@@ -120,5 +132,35 @@ describe('InftSetupPane — every step on the Settings row', () => {
     expect(pressed.length).toBe(1)
     expect(pressed[0].textContent).toContain('#6')
     $activeInft.set(null)
+  })
+})
+
+// Q tests-perf 4: Register identity signs an on-chain transaction; main refuses it unless the click landed on the control
+// the preload's owner-click lock recognises. The selector is read from preload.ts itself, so dropping the attribute in
+// the UI (or renaming it on one side) turns this red instead of refusing every Register in the real app.
+describe('Register identity carries the owner-click marker the preload looks for', () => {
+  it('the rendered Register button matches the ACP register lock selector', () => {
+    const preload = readFileSync(resolve(__dirname, '../../../electron/preload.ts'), 'utf8')
+    const selector = preload.match(/closest\('(\[data-acp-register-confirm\])'\)/)?.[1]
+
+    expect(selector).toBe('[data-acp-register-confirm]')
+
+    const id = 'base:0xabc:6'
+
+    $privySession.set({ status: 'in' } as never)
+    $inftRoster.set([{ id, name: 'iclone', chain: 'base', bootstrap: { version: '1' } } as never])
+    $activeInft.set({ id } as never)
+    $acpConfigMap.set({ [slugForInft(id)]: { authenticated: true, agentId: 'agent-1', cli: true, signerReady: true } } as never)
+
+    render(
+      <MemoryRouter>
+        <InftSetupPane navigate={noop} onClose={noop} />
+      </MemoryRouter>
+    )
+
+    const register = screen.getByRole('button', { name: copy.signer.register })
+
+    expect(register.matches(selector!)).toBe(true)
+    $acpConfigMap.set({})
   })
 })

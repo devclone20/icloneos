@@ -46,3 +46,19 @@ describe('iNFT setup wizard copy', () => {
     }
   })
 })
+
+// v0.0.9 W1b (F1-B item 6): the CLI ships inside the app, so step 1 has no Install / Check for updates / Update now.
+// Its old words must not linger in the catalogue (a dead key invites a dead button back). Red on the old copy.
+describe('iNFT setup wizard copy · retired CLI install words', () => {
+  const RETIRED = ['title', 'hint', 'ready', 'install', 'checkUpdate', 'updateNow', 'updateAvailable']
+
+  it.each(Object.keys(INFT_WIZARD_COPY) as (keyof typeof INFT_WIZARD_COPY)[])('%s has none of them', locale => {
+    const cli = INFT_WIZARD_COPY[locale].cli as Record<string, unknown>
+
+    for (const key of RETIRED) {
+      expect(cli[key], `${locale} cli.${key}`).toBeUndefined()
+    }
+
+    expect(Object.keys(cli).sort()).toEqual(['checking', 'keychain', 'notTaught', 'reteach', 'taught', 'unknownError'])
+  })
+})

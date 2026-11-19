@@ -91,9 +91,11 @@ test('cut, copy, and select all gray out in an empty composer', async () => {
 
   await selectAll.waitFor({ state: 'visible', timeout: 10_000 })
 
-  await expect(selectAll).toHaveAttribute('data-disabled', /.*/)
-  await expect(page.getByRole('menuitem', { name: /^Cut/ })).toHaveAttribute('data-disabled', /.*/)
-  await expect(page.getByRole('menuitem', { name: /^Copy/ })).toHaveAttribute('data-disabled', /.*/)
+  // Reviewed port (v0.0.9): upstream's radix rows carry data-disabled; icloneOS's own menu rows mark a disabled
+  // verb with aria-disabled="true" (src/app/context-menu/menu.tsx:279), the attribute assistive tech reads.
+  await expect(selectAll).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.getByRole('menuitem', { name: /^Cut/ })).toHaveAttribute('aria-disabled', 'true')
+  await expect(page.getByRole('menuitem', { name: /^Copy/ })).toHaveAttribute('aria-disabled', 'true')
 
   await page.keyboard.press('Escape')
 })
@@ -117,7 +119,10 @@ test('paste enables when the clipboard holds text', async () => {
   await paste.waitFor({ state: 'visible', timeout: 10_000 })
 
   // The clipboard probe is an async IPC — the item enables when it lands.
-  await expect.poll(() => paste.getAttribute('data-disabled'), { timeout: 10_000 }).toBeNull()
+  // Reviewed port (v0.0.9): enabled = no aria-disabled (menu.tsx:279); data-disabled never exists on these rows,
+  // so the upstream check passed vacuously. The row is first seen disabled-or-not, then must settle enabled.
+  await expect.poll(() => paste.getAttribute('aria-disabled'), { timeout: 10_000 }).toBeNull()
+  await expect(paste).toHaveAttribute('role', 'menuitem')
 
   await page.keyboard.press('Escape')
 })

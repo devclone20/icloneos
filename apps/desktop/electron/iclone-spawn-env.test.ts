@@ -220,6 +220,40 @@ describe('isolatePythonEnv', () => {
   })
 })
 
+describe('v0.0.9 Q decision 4 — the dependency pin is never inherited', () => {
+  const ambient = { HERMES_DEPENDENCY_HOME: '/x', HERMES_DISABLE_LAZY_INSTALLS: '0', HOME: '/h' }
+
+  it('isolatePythonEnv drops an ambient HERMES_DEPENDENCY_HOME / HERMES_DISABLE_LAZY_INSTALLS (red on the old seal)', () => {
+    expect(isolatePythonEnv(ambient, '/rt')).toEqual({ HOME: '/h' })
+  })
+
+  it('the seal takes the pin only from main\'s explicit appEnv, and nothing else from it', () => {
+    const plain = sealHermesSpawnEnv(ambient, { gateEnv: {}, role: 'primary', runtimeRoot: '/rt' })
+
+    expect(plain.HERMES_DEPENDENCY_HOME).toBeUndefined()
+    expect(plain.HERMES_DISABLE_LAZY_INSTALLS).toBeUndefined()
+
+    const managed = sealHermesSpawnEnv(ambient, {
+      appEnv: { HERMES_DEPENDENCY_HOME: '/rt/.iclone-deps/hermes', HERMES_DISABLE_LAZY_INSTALLS: '1', PYTHONPATH: '/evil' },
+      gateEnv: {},
+      role: 'primary',
+      runtimeRoot: '/rt'
+    })
+
+    expect(managed).toMatchObject({ HERMES_DEPENDENCY_HOME: '/rt/.iclone-deps/hermes', HERMES_DISABLE_LAZY_INSTALLS: '1' })
+    expect(managed.PYTHONPATH).toBeUndefined()
+  })
+
+  it('the gate env still wins over everything', () => {
+    const env = sealHermesSpawnEnv(
+      {},
+      { appEnv: { HERMES_DEPENDENCY_HOME: '/a' }, gateEnv: { HERMES_DEPENDENCY_HOME: '/gate' }, role: 'pool', runtimeRoot: '/rt' }
+    )
+
+    expect(env.HERMES_DEPENDENCY_HOME).toBe('/gate')
+  })
+})
+
 describe('sealHermesSpawnEnv', () => {
   const gateEnv = {
     ICLONE_POLICY_FILE: '/ud/p.json',

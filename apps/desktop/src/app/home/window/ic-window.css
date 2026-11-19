@@ -9,6 +9,47 @@
   box-sizing: border-box;
 }
 
+/* v0.0.9 r4b/r4d (critic-r4 04-light, eng r4-m3): the window root is where the app puts the keyboard (tabindex -1,
+   pane-focus.ts). A pointer focus draws nothing. A keyboard focus (the split menu's drop, a pane handing the keyboard
+   on) draws an INSET ring in the house keyboard-ring token (--ic-accent-strong), inside the frame, never the page's gold outline round it
+   (WCAG 2.4.7). The Esc that cancels a Dock drag must not turn an earlier pointer focus into that ring: dock-split.ts
+   marks the root `data-ic-focus-quiet` for that one key (no .focus() call), and the mark goes on the next key or blur. */
+.ic-win:focus-visible {
+  /* The strong accent, as the divider's keyboard ring: ≥ 3:1 in every skin (split-preview-contrast.test.ts). */
+  outline: 2px solid var(--ic-accent-strong);
+  outline-offset: -2px;
+}
+
+/* r5 (design R5-5): in light the strong accent read as the pane's own resting gilt hairline. The light ring is the
+   darker CTA gold (≥ 4:1 against both the surface and that hairline, measured) and stands 1px inside it, so the two
+   never merge into one line. */
+:root[data-hermes-theme='iclone-light'] .ic-win:focus-visible {
+  outline-color: var(--ic-cta-fill);
+  outline-offset: -3px;
+}
+
+.ic-win:focus:not(:focus-visible),
+.ic-win[data-ic-focus-quiet]:focus-visible {
+  outline: none;
+}
+
+/* v0.0.9 pass 4 (critic-G 11-light): the inset outline is drawn UNDER the window's children, and the plate
+   (.ic-win__plate: absolute, inset 0, the opaque surface) covers it, so on screen the ring read as faint or absent.
+   The ring that a user sees is this layer ABOVE the plate, head and body (--ic-z-local-overlay, the controls' own
+   rung): the same tokens, a 2px inset ring (an outline on the overlay, which Chromium draws in its radius), hit-transparent. Measured ≥ 3:1 against the pane
+   surface and the backdrop around the frame in every skin (pane-focus-ring-contrast.test.ts). The quiet and pointer
+   rules above drop it with the outline. */
+.ic-win:focus-visible:not([data-ic-focus-quiet])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: var(--ic-z-local-overlay);
+  border-radius: inherit;
+  outline: 2px solid var(--ic-pane-focus-ring);
+  outline-offset: -2px;
+  pointer-events: none;
+}
+
 /* ── self: the EconomyOS windows ── */
 
 /* The fading surface: an empty layer the opacity slider thins away to reveal
@@ -107,7 +148,11 @@
 }
 
 .ic-win > .ic-win__controls .iop {
-  position: static;
+  /* In the column's flow and the box its hit ring hangs on. Relative lays out as static only with NO offset: the lone
+     slider's own fixed placement (home.css: top 52px, right 30px) must be cleared, or relative shifts it 30px off the
+     column's axis into the content (design N4). */
+  position: relative;
+  inset: auto;
 }
 
 /* ── under-shell: Message ── */
@@ -140,6 +185,14 @@
   transition: right var(--ic-dur-base) var(--ic-ease-spring);
 }
 
+/* v0.0.9 design 4 (critic r1): two panes side by side read as two of the same window. The Message column leaves the
+   margin and sits inside its own card at the self windows' inset (14px from its top and inline-end edges), where its
+   head's end padding (--ic-win-controls-clear) already keeps the head's content clear of it. */
+:root[data-ic-panes='split'] .ic-win__controls:not(.ic-win > *) {
+  top: calc(var(--iwin-outer-top, var(--ic-frame-top)) + 14px);
+  right: calc(var(--iwin-outer-right, var(--ic-frame-right)) + 14px);
+}
+
 /* A right-edge island (FILES / the collection) lands on exactly this column.
    The island is a global layer, so it wins the pixel however high this z is —
    the window was left with no reachable close button. Step out from under it
@@ -149,7 +202,8 @@
 }
 
 .ic-win__controls:not(.ic-win > *) .iop {
-  position: static;
+  position: relative;
+  inset: auto;
 }
 
 /* The window controls (× · expand · opacity) sit on a 98%-opaque ink surface,
@@ -175,6 +229,20 @@
     border-color var(--ic-dur-fast) var(--ic-ease-std),
     color var(--ic-dur-fast) var(--ic-ease-std),
     transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+/* v0.0.9 design 6 (critic r1): the 26px chip keeps its look; its hit area is 34px — a transparent ring 4px out. */
+.ic-win__controls > button,
+.ic-wmenu__trigger {
+  position: relative;
+}
+
+.ic-win__controls > button::before,
+.ic-wmenu__trigger::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
 }
 
 .ic-win__controls > button:hover {
@@ -246,4 +314,490 @@
 
 :root[dir='rtl'] .ic-win__controls[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
   transform: translateX(calc(-100% - 24px));
+}
+
+:root[dir='rtl'][data-ic-panes='split'] .ic-win__controls:not(.ic-win > *) {
+  left: calc(var(--iwin-outer-left, var(--ic-frame-left)) + 14px);
+}
+
+/* ── v0.0.9 F6: panes ────────────────────────────────────────────────────────
+   A pane folded into a tab behind the focused one stays mounted (its state, its scroll, its draft) and is not drawn.
+   The Message window's pieces live in a display:contents wrapper so the tree its shells and CSS expect is unchanged. */
+.ic-win[data-pane='hidden'] {
+  display: none;
+}
+
+.ic-win__fold {
+  display: contents;
+}
+
+.ic-win__fold[data-folded] {
+  display: none;
+}
+
+/* ── v0.0.9 F6: the window menu (window-menu.tsx) ────────────────────────────
+   The trigger is the chip the expand button was; the menu is an opaque plate that opens to the LEFT of the column
+   (the column hugs the window's right edge), radius md, group titles in Sans 13 at text-2, the option that describes
+   the pane right now on the hover fill. */
+.ic-wmenu {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.ic-wmenu__trigger {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-ctl-line);
+  background: var(--ic-ctl-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  box-shadow: var(--ic-ctl-shadow);
+  color: var(--ic-ctl-ink);
+  cursor: pointer;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std),
+    transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ic-wmenu__trigger:hover,
+.ic-wmenu[data-open] > .ic-wmenu__trigger {
+  background: var(--ic-ctl-hover-fill);
+  border-color: var(--ic-ctl-hover-line);
+  color: var(--ic-ctl-hover-ink);
+}
+
+.ic-wmenu__trigger:active {
+  transform: scale(0.94);
+}
+
+.ic-wmenu__trigger:focus-visible,
+.ic-wmenu__item:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+.ic-wmenu__panel {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 10px);
+  z-index: var(--ic-z-local-peak);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: var(--ic-radius-md);
+  border: 1px solid var(--ic-border-subtle);
+  background: var(--ic-surface);
+  box-shadow: var(--ic-shadow-panel);
+  color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
+  pointer-events: auto;
+  animation: ic-wmenu-in var(--ic-dur-fast) var(--ic-ease-spring);
+}
+
+/* The pointer crosses the 10px gap between the icon and the plate without leaving the menu. */
+.ic-wmenu__panel::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 12px;
+}
+
+.ic-wmenu__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.ic-wmenu__title {
+  padding: 8px 10px 4px;
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--ic-text-2);
+}
+
+.ic-wmenu__sep {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--ic-border-subtle);
+}
+
+.ic-wmenu__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  color: var(--ic-text-1);
+  font: inherit;
+  font-size: 13px;
+  text-align: start;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+/* r4d (design r4 F6-1): only hover and keyboard focus paint the row; the current state is a check at the row's end. */
+.ic-wmenu__item:hover:not([aria-disabled='true']),
+.ic-wmenu__item:focus-visible {
+  background: var(--ic-fill-hover);
+}
+
+.ic-wmenu__check {
+  display: inline-flex;
+  margin-inline-start: auto;
+  color: var(--ic-accent-strong);
+}
+
+.ic-wmenu__item[data-active] .ic-wmenu__glyph {
+  color: var(--ic-accent);
+}
+
+.ic-wmenu__item[aria-disabled='true'] {
+  color: var(--ic-text-3);
+  cursor: default;
+}
+
+.ic-wmenu__item[aria-disabled='true']:hover {
+  background: transparent;
+}
+
+.ic-wmenu__glyph {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: var(--ic-text-2);
+}
+
+.ic-wmenu__label {
+  flex: 1 1 auto;
+}
+
+@keyframes ic-wmenu-in {
+  from {
+    opacity: 0;
+    transform: translateX(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ic-wmenu__panel {
+    animation: none;
+  }
+}
+
+:root[dir='rtl'] .ic-wmenu__panel {
+  right: auto;
+  left: calc(100% + 10px);
+}
+
+:root[dir='rtl'] .ic-wmenu__panel::after {
+  left: auto;
+  right: 100%;
+}
+
+/* ── v0.0.9 F6: the pane layer (pane-layer.tsx) ──────────────────────────────
+   The probe is the frame itself, invisible: its width is the panes' usable width. */
+.ic-pane-probe {
+  position: fixed;
+  top: var(--ic-frame-top);
+  right: var(--ic-frame-right);
+  bottom: var(--ic-frame-bottom);
+  left: var(--ic-frame-left);
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The divider: an 8px hit target down the seam between two panes, drawn as a 1px hairline. */
+.ihome .ic-pane-divider {
+  position: fixed;
+  top: var(--ic-frame-top);
+  bottom: var(--ic-frame-bottom);
+  z-index: var(--ic-z-ihome-controls);
+  width: 8px;
+  cursor: col-resize;
+  touch-action: none;
+  pointer-events: auto;
+}
+
+.ic-pane-divider::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  bottom: 18px;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--ic-border-subtle);
+  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ic-pane-divider:hover::before,
+.ic-pane-divider:active::before,
+.ic-pane-divider:focus-visible::before {
+  background: var(--ic-border-strong);
+}
+
+/* a11y r1: a visible focus ring, distinct from hover (the 1px hairline alone measured 1.2–1.4:1), in the accent at
+   its strong step (≥ 3:1 in every skin — the plain light accent measures 2.8:1 on paper; split-preview-contrast.test.ts). */
+.ic-pane-divider:focus-visible {
+  outline: 2px solid var(--ic-accent-strong);
+  outline-offset: -2px;
+  border-radius: var(--ic-radius-pill);
+}
+
+.ic-pane-divider:focus-visible::before {
+  background: var(--ic-accent-strong);
+}
+
+/* The 8px seam is a 32px hit target: a transparent band 12px either side, the pointer events on the divider. */
+.ic-pane-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -12px;
+  right: -12px;
+}
+
+/* The ONE opacity control of two panes carries the same ≥ 32px hit ring as the column's buttons (the slider is
+   relative in both columns above). */
+.ic-win__controls .iop::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+}
+
+/* While the arrangement changes (a pane closes, a drop lands) the Message column snaps with its frame instead of
+   gliding behind it; its own transition is for the expand only. */
+:root[data-ic-panes-changing] .ic-win__controls:not(.ic-win > *) {
+  transition: none;
+}
+
+/* The folded pair: two tabs in the titlebar band, centred on the frame — one place whether the shown pane is framed
+   or filled (design 5, critic r1: at the frame's edge they straddled the pane and met its head chip). */
+.ihome .ic-pane-tabs {
+  position: fixed;
+  top: 10px;
+  left: var(--ic-frame-left);
+  right: var(--ic-frame-right);
+  z-index: var(--ic-z-ihome-controls);
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.ihome .ic-pane-tab {
+  min-height: 32px;
+  padding: 0 14px;
+  border-radius: var(--ic-radius-pill);
+  /* v0.0.9 r3 (design N8): the two tabs were the same white pill, told apart only by ink weight. The resting tab is
+     a quiet glint (it still reads over any field under the band); only the shown one is the lit chrome plate, edged in
+     the strong accent (≥ 3:1, split-preview-contrast.test) and set at 500. */
+  border: 1px solid transparent;
+  background: var(--ic-chip-fill);
+  color: var(--ic-text-2);
+  font-family: var(--ic-font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.ihome .ic-pane-tab:hover {
+  background: var(--ic-ctl-hover-fill);
+  color: var(--ic-ctl-hover-ink);
+}
+
+.ihome .ic-pane-tab[aria-selected='true'] {
+  border-color: var(--ic-accent-strong);
+  background: var(--ic-ctl-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  box-shadow: var(--ic-ctl-shadow);
+  color: var(--ic-ctl-ink);
+  font-weight: 500;
+}
+
+.ihome .ic-pane-tab:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── v0.0.9 F6 · owner addition: the split preview while a Dock icon is dragged (dock-split-preview.tsx) ────────
+   One fixed layer on the frame; its halves are absolute inside it, so nothing in the app reflows. It comes in, and
+   every change of side or plan is drawn, with opacity and transforms only. Over the panes and their controls (its own
+   rung, ic-layers.ts), under the modals. */
+.ihome .ic-split-preview {
+  position: fixed;
+  z-index: var(--ic-z-ihome-split-preview);
+  pointer-events: none;
+  animation: ic-split-in var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.ic-split-preview__half {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--ic-radius-lg);
+  /* The half that keeps its pane: a visible edge (--ic-border-strong), its fill faint, never faded as a whole — the
+     label inside stays fully opaque (a11y r1: an opacity on the half took the label under AA over a pale field). */
+  border: 2px solid var(--ic-border-strong);
+  background: var(--ic-fill-hover);
+  transform: scale(0.985);
+  transition:
+    transform var(--ic-dur-base) var(--ic-ease-spring),
+    background var(--ic-dur-base) var(--ic-ease-std),
+    border-color var(--ic-dur-base) var(--ic-ease-std);
+}
+
+/* The drop target: the strong accent, ≥ 3:1 against the pane under it in every skin
+   (split-preview-contrast.test.ts). */
+.ic-split-preview__half[data-role='incoming'] {
+  border-color: var(--ic-accent-strong);
+  background: var(--ic-accent-soft);
+  transform: scale(1);
+}
+
+.ic-split-preview__whole {
+  left: 0;
+  right: 0;
+}
+
+/* r4d (design r4 F6-2): a whole-frame plan (replaces · opens as a tab) veils the live pane under it with the house
+   scrim, in both skins, so its label never sits on running text (02-light printed "Email replaces Settings" over the
+   "Machine" row). The drop target keeps its accent tint on top of the veil. */
+/* r5 (design R5-1): the scrim alone read as a faint grey in light, and the label still sat on the "Machine" row.
+   The veil is the pane's own surface at 88 %, in both skins, so the rows under it fall back to a ghost and the
+   centred label pill reads on clear space. */
+.ic-split-preview__half.ic-split-preview__whole {
+  background: color-mix(in srgb, var(--ic-surface) var(--ic-a88), transparent);
+}
+
+.ic-split-preview__half.ic-split-preview__whole[data-role='incoming'] {
+  background:
+    linear-gradient(var(--ic-accent-soft), var(--ic-accent-soft)),
+    color-mix(in srgb, var(--ic-surface) var(--ic-a88), transparent);
+}
+
+/* v0.0.9 F6 path (design G): in the light skin the pane's own surface veiled nothing (paper on paper); the light veil
+   is toned (--ic-split-veil), so it reads as a veil and the paper label pill stands on it. */
+:root[data-hermes-theme='iclone-light'] .ic-split-preview__half.ic-split-preview__whole {
+  background: var(--ic-split-veil);
+}
+
+:root[data-hermes-theme='iclone-light'] .ic-split-preview__half.ic-split-preview__whole[data-role='incoming'] {
+  background: linear-gradient(var(--ic-accent-soft), var(--ic-accent-soft)), var(--ic-split-veil);
+}
+
+.ic-split-preview__label {
+  padding: 6px 14px;
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-surface);
+  border: 1px solid var(--ic-ctl-line);
+  color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
+  font-size: 13px;
+  line-height: 18px;
+  transform: translateY(4px);
+  transition: transform var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.ic-split-preview__half[data-role='incoming'] .ic-split-preview__label {
+  transform: translateY(0);
+}
+
+/* Off the frame: only the chip under the pointer, the halves gone (a release here cancels). */
+.ic-split-preview[data-plan='outside'] .ic-split-preview__chip {
+  opacity: 0.6;
+}
+
+.ic-split-preview__chip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  margin: 10px 0 0 12px;
+  padding: 4px 10px;
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-surface);
+  border: 1px solid var(--ic-ctl-line);
+  box-shadow: var(--ic-ctl-shadow);
+  color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
+  font-size: 12px;
+  white-space: nowrap;
+  will-change: transform;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+@keyframes ic-split-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ihome .ic-split-preview {
+    animation: none;
+  }
+
+  .ic-split-preview__half,
+  .ic-split-preview__label,
+  .ic-split-preview__chip {
+    transition: none;
+  }
+}
+
+/* v0.0.9 r3 (design N1): the Dock's split menu has its own placement. The Dock sits at the left edge (the right in RTL),
+   so it opens INWARD; dock-split-menu.tsx then measures it (menu-placement.ts: flip, clamp into the viewport) and writes
+   left/top. These rules are the unmeasured first frame and the pointer bridge on the side it actually opened. */
+.ic-wmenu__panel.dock-split-menu {
+  right: auto;
+  left: calc(100% + 10px);
+  animation-name: ic-dock-menu-in;
+}
+
+:root[dir='rtl'] .ic-wmenu__panel.dock-split-menu {
+  right: calc(100% + 10px);
+  left: auto;
+}
+
+.ic-wmenu__panel.dock-split-menu::after {
+  right: 100%;
+  left: auto;
+}
+
+.ic-wmenu__panel.dock-split-menu[data-side='left']::after {
+  right: auto;
+  left: 100%;
+}
+
+@keyframes ic-dock-menu-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
 }

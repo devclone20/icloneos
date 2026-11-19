@@ -21,7 +21,14 @@ interface Rule {
    *  interactive prompt for anything it is not told, and a prompt with no TTY
    *  hangs until the timeout — so a write that would prompt is refused here. */
   require?: string[][]
+  /** F1-S: a write only the owner's own click may send from the window: main refuses it on `iclone:acp-run` without a
+   *  matching owner confirm (gesture-locks-acp.ts). The agent's own door is governed by its permission mode instead. */
+  owner?: AcpOwnerLock
 }
+
+/** F1-S: the owner-click lock that opens a write — the ERC-8004 registration (signs a transaction) or a catalogue
+ *  write (offering create/update/delete, resource create). */
+export type AcpOwnerLock = 'acp-market' | 'acp-register'
 
 const re =
   (pattern: RegExp): Validator =>
@@ -90,7 +97,10 @@ const RULES: Record<string, Rule> = {
   },
   'agent signer-policy': { flags: { '--agent-id': id } },
   // ERC-8004 identity registration — signs one transaction, on the owner's click.
-  'agent register-erc8004': { flags: { '--agent-id': id, '--chain-id': int(1, 99_999_999) } },
+  'agent register-erc8004': {
+    flags: { '--agent-id': id, '--chain-id': int(1, 99_999_999) },
+    owner: 'acp-register'
+  },
 
   // wallet — reads only
   'wallet address': {},
@@ -154,6 +164,7 @@ const RULES: Record<string, Rule> = {
   // from Message; every flag the CLI would otherwise prompt for is required.
   'offering create': {
     flags: OFFERING_FIELDS,
+    owner: 'acp-market',
     require: [
       ['--name'],
       ['--description'],
@@ -168,9 +179,14 @@ const RULES: Record<string, Rule> = {
   },
   'offering update': {
     flags: { '--offering-id': id, ...OFFERING_FIELDS },
-    require: [['--offering-id']]
+    require: [['--offering-id']],
+    owner: 'acp-market'
   },
-  'offering delete': { flags: { '--offering-id': id, '--force': true }, require: [['--offering-id'], ['--force']] },
+  'offering delete': {
+    flags: { '--offering-id': id, '--force': true },
+    require: [['--offering-id'], ['--force']],
+    owner: 'acp-market'
+  },
   'resource list': {},
   'resource create': {
     flags: {
@@ -181,18 +197,26 @@ const RULES: Record<string, Rule> = {
       '--hidden': true,
       '--no-hidden': true
     },
-    require: [['--name'], ['--description'], ['--url'], ['--params'], ['--hidden', '--no-hidden']]
+    require: [['--name'], ['--description'], ['--url'], ['--params'], ['--hidden', '--no-hidden']],
+    owner: 'acp-market'
   },
   'subscription list': {},
+  // v0.0.9 Q (security m3): subscriptions are Market catalogue writes, on the owner's click like offerings.
   'subscription create': {
     flags: { '--name': text(120), '--price': decimal, '--duration-days': oneOf('7', '15', '30', '90') },
-    require: [['--name'], ['--price'], ['--duration-days']]
+    require: [['--name'], ['--price'], ['--duration-days']],
+    owner: 'acp-market'
   },
   'subscription update': {
     flags: { '--id': id, '--price': decimal, '--duration-days': oneOf('7', '15', '30', '90') },
-    require: [['--id']]
+    require: [['--id']],
+    owner: 'acp-market'
   },
-  'subscription delete': { flags: { '--id': id, '--force': true }, require: [['--id'], ['--force']] },
+  'subscription delete': {
+    flags: { '--id': id, '--force': true },
+    require: [['--id'], ['--force']],
+    owner: 'acp-market'
+  },
   'job list': { flags: { '--all': true, '--legacy': true } },
   'job history': { flags: { '--job-id': id, '--chain-id': int(1, 99_999_999) } },
 
@@ -337,6 +361,23 @@ export function ruleFor(args: string[]): Rule | undefined {
   const key = commandKey(args)
 
   return key === undefined ? undefined : RULES[key]
+}
+
+/** F1-S: the owner-click lock this argv needs, or null (a read, or a write outside F1-S). Pure: the sandboxed preload
+ *  picks its tracker with it, main checks the same answer. */
+export function ownerLockOf(args: unknown): AcpOwnerLock | null {
+  if (!Array.isArray(args)) {
+    return null
+  }
+
+  const key = commandKey(args.map(String))
+
+  return (key === undefined ? undefined : RULES[key].owner) ?? null
+}
+
+/** F1-S: the command words of an argv (e.g. `offering create`) for an audit reason, or null when it names none. */
+export function commandOf(args: readonly string[]): string | null {
+  return commandKey(args) ?? null
 }
 
 // Proven read-only against the bundled CLI: none of these writes its config

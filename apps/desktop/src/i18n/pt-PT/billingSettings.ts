@@ -195,6 +195,10 @@ export const ptPtBillingSettings: BillingSettingsCopy = {
     failedGeneric: 'Tente novamente ou use outro cartão no portal.',
     unconfirmedTitle: 'A sua última cobrança ainda não está confirmada',
     unconfirmed: 'Verifique o seu saldo no portal antes de tentar novamente.',
+    openPurchase: (amount: string) =>
+      `A sua compra de ${amount} ficou sem resposta clara. Tentar novamente conclui essa mesma compra e nunca cobra duas vezes; verifique o portal antes de comprar outro valor.`,
+    lapsedPurchase: (amount: string) =>
+      `A sua compra de ${amount} de há pouco nunca teve resposta clara e já é antiga demais para ser concluída com segurança. Verifique o seu saldo no portal; a próxima compra é uma compra nova.`,
     checkFailedTitle: 'Não foi possível verificar a cobrança',
     untrackedTitle: 'Não é possível acompanhar esta cobrança',
     untrackedMessage: 'A cobrança foi aceite, mas não pode ser acompanhada. Verifique o seu saldo no portal.',

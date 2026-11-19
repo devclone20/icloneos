@@ -363,7 +363,9 @@ describe('refreshSessions identity + loading hygiene', () => {
 
   it('clears initial loading after a failed source activation advances the gateway epoch', async () => {
     const pending = deferred<SidebarSessionsResponse>()
-    listSidebarSessions.mockReturnValue(pending.promise)
+    // Reviewed (v0.0.9, G 868394f2dd): the refresh now asks again in the new epoch, so the second answer is the
+    // current source's own; the stale one must still never be committed, and the loading state is still released.
+    listSidebarSessions.mockReturnValueOnce(pending.promise).mockResolvedValueOnce(sidebar({ sessions: [] }))
     const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
 
     let refresh!: Promise<void>
@@ -384,6 +386,79 @@ describe('refreshSessions identity + loading hygiene', () => {
       await refresh
     })
 
+    expect($sessions.get()).toEqual([])
+    expect($sessionsLoading.get()).toBe(false)
+  })
+})
+
+// v0.0.9 G 868394f2dd (image-attachment-resume :238, an app race under load): on a cold boot two refreshes start
+// (the boot step and the background sync on gateway open), then the gateway activation epoch moves while both are in
+// flight. Both answers were rightly discarded as stale, but nothing fetched again in the new epoch, so the sidebar
+// kept only what a by-id resolve had put there (no preview) until some later event. The latest refresh, discarded
+// only because the epoch moved, now fetches again for the current epoch; the stale answer is still never committed.
+describe('refreshSessions after the activation epoch moves mid-flight', () => {
+  it('fetches again in the new epoch and commits that answer, never the stale one', async () => {
+    const stale = deferred<SidebarSessionsResponse>()
+
+    listSidebarSessions
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce(sidebar({ sessions: [row('fresh', { preview: 'first ask' })] }))
+    const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
+
+    let refresh!: Promise<void>
+
+    act(() => {
+      refresh = result.current.refreshSessions()
+    })
+
+    gatewayScope.epoch += 1
+
+    await act(async () => {
+      stale.resolve(sidebar({ sessions: [row('stale')] }))
+      await refresh
+    })
+
+    expect(listSidebarSessions).toHaveBeenCalledTimes(2)
+    expect($sessions.get().map(session => [session.id, session.preview])).toEqual([['fresh', 'first ask']])
+    expect($sessionsLoading.get()).toBe(false)
+  })
+
+  it('does not fetch again when a newer refresh already owns the list', async () => {
+    const first = deferred<SidebarSessionsResponse>()
+
+    listSidebarSessions
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce(sidebar({ sessions: [row('newer')] }))
+    const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
+
+    const firstRefresh = result.current.refreshSessions()
+
+    gatewayScope.epoch += 1
+    const newerRefresh = result.current.refreshSessions()
+
+    await act(async () => {
+      await newerRefresh
+      first.resolve(sidebar({ sessions: [row('stale')] }))
+      await firstRefresh
+    })
+
+    expect(listSidebarSessions).toHaveBeenCalledTimes(2)
+    expect($sessions.get().map(session => session.id)).toEqual(['newer'])
+  })
+
+  it('stops fetching again after a bounded number of epoch moves', async () => {
+    listSidebarSessions.mockImplementation(async () => {
+      gatewayScope.epoch += 1
+
+      return sidebar({ sessions: [row('never-current')] })
+    })
+    const { result } = renderHook(() => useSessionListActions({ profileScope: 'default' }))
+
+    await act(async () => {
+      await result.current.refreshSessions()
+    })
+
+    expect(listSidebarSessions.mock.calls.length).toBeLessThanOrEqual(4)
     expect($sessions.get()).toEqual([])
     expect($sessionsLoading.get()).toBe(false)
   })

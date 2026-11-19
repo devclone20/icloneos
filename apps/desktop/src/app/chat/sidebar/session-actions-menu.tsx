@@ -172,7 +172,7 @@ function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; session
           onSelect={() => {
             triggerHaptic('selection')
             moveSessionToProject(sessionId, node.id, profile)
-              .then(() => notify({ durationMs: 2_000, kind: 'success', message: p.movedTo(node.label) }))
+              .then(() => notify({ kind: 'success', message: p.movedTo(node.label) }))
               .catch(err => notifyError(err, p.moveFailed))
           }}
         >
@@ -712,7 +712,7 @@ function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, prof
       const result = await renameSessionPreferringRpc(sessionId, next, profile)
       const finalTitle = result.title || next || ''
       setSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, title: finalTitle || null } : s)))
-      notify({ durationMs: 2_000, kind: 'success', message: r.renamed })
+      notify({ kind: 'success', message: r.renamed })
       onOpenChange(false)
     } catch (err) {
       notifyError(err, r.renameFailed)

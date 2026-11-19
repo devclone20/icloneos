@@ -532,3 +532,28 @@ test('a base that is an option never reaches git: no upload-pack runs and no wor
     fs.rmSync(cloneDir, { recursive: true, force: true })
   }
 })
+
+test('addWorktree: a project opened through a symlinked path gets its worktree in that same spelling (G :209)', async () => {
+  // v0.0.9 G 914237d39d: a project opened as /tmp/… (macOS: a link to /private/tmp) got its new worktree under git's
+  // real spelling, /private/tmp/…, so the session no longer sat under the project the person opened and the coding
+  // status (branch, cwd) vanished. The same holds for any folder reached through a link.
+  const real = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-wt-link-')))
+  const repo = path.join(real, 'repo')
+  const opened = path.join(real, 'opened')
+
+  try {
+    fs.mkdirSync(repo)
+    await ensureGitRepo('git', repo)
+    execFileSync('git', ['branch', 'cool/feature'], { cwd: repo })
+    fs.symlinkSync(repo, opened)
+
+    const created = await addWorktree(opened, { branch: 'e2e-link', name: 'e2e-link' }, 'git')
+    assert.ok(created.path.startsWith(`${opened}${path.sep}.worktrees${path.sep}`), created.path)
+    assert.equal(fs.realpathSync(created.path), path.join(repo, '.worktrees', 'e2e-link'))
+
+    const converted = await addWorktree(opened, { existingBranch: 'cool/feature' }, 'git')
+    assert.ok(converted.path.startsWith(`${opened}${path.sep}.worktrees${path.sep}`), converted.path)
+  } finally {
+    fs.rmSync(real, { recursive: true, force: true })
+  }
+})

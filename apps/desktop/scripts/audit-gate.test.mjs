@@ -14,6 +14,7 @@ import {
   isSyntheticAdvisory,
   advisoryId,
   APP_LOCKS,
+  ZOD_RENEWAL_V009,
   APP_VERSION,
   assertReport,
   assertReportScope,
@@ -33,6 +34,7 @@ import {
   untilVersion,
   WAIVED
 } from './audit-gate.mjs'
+import { pruneLock } from './acp-lock-prune.mjs'
 import { ICLONE_RUNTIME_PATHS } from './runtime-artifact.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -63,12 +65,32 @@ const SUB_FIXTURE = {
   'scripts/whatsapp-bridge': 'whatsapp-bridge',
   'plugins/platforms/photon/sidecar': 'photon-sidecar'
 }
-// `npm audit --json --package-lock-only` of each APP_LOCKS lock (the Privy sign-in page), 2026-11-17, by the gate's
-// runAudit (the first report with GHSA-fc5q-39xc-vjpf, picomatch; the 2026-11-03 one predates it).
-const APP_FIXTURE = { 'iclone/privy/login-island': 'npm-audit-privy-login-island-2026-11-17.json' }
-// `npm audit --json --package-lock-only` of the ACP_LOCKS lock (the optional ACP CLI), 2026-11-17, by the gate's runAudit
-// (the first report with GHSA-fc5q-39xc-vjpf, picomatch; the 2026-11-04 ones predate it).
-const ACP_FIXTURE = { 'apps/desktop/acp-cli-lock': 'npm-audit-acp-cli-lock-2026-11-17.json' }
+// `npm audit --json --package-lock-only` of each APP_LOCKS lock (the Privy sign-in page), 2026-11-18, by the gate's
+// arguments, of the v0.0.9 lock: anymatch is the inert stub (login-island/stubs/anymatch), so no picomatch. The
+// 2026-11-17 report (the v0.0.8 lock, with picomatch 2.3.2 and GHSA-fc5q-39xc-vjpf) is kept for the reintroduction test.
+const APP_FIXTURE = { 'iclone/privy/login-island': 'npm-audit-privy-login-island-2026-11-18-overrides.json' }
+// The same lock before the waiver work (2026-11-18, picomatch already out): decode-uri-component 0.2.2 and the two
+// zod 3.22.4 copies still in it. Kept for their reintroduction test.
+const APP_REPORT_PRE_OVERRIDES = 'npm-audit-privy-login-island-2026-11-18.json'
+// `npm audit --json --package-lock-only` of the ACP_LOCKS lock (the optional ACP CLI), 2026-11-18, by the gate's
+// arguments, of the v0.0.9 lock: tsup's build-only subtree pruned (scripts/acp-lock-prune.mjs), so no picomatch. npm
+// keyed acp-node's synthetic advisory the other way that day (the matchSynthetic rule waives it). The 2026-11-17 report
+// (the v0.0.8 lock, with picomatch 4.0.7) keeps the exact-id tests and the reintroduction test.
+const ACP_FIXTURE = { 'apps/desktop/acp-cli-lock': 'npm-audit-acp-cli-lock-2026-11-18.json' }
+const ACP_REPORT_1117 = 'npm-audit-acp-cli-lock-2026-11-17.json'
+const APP_REPORT_1117 = 'npm-audit-privy-login-island-2026-11-17.json'
+
+/** `lock` with a picomatch row put back at `node_modules/picomatch`: what a regenerated v0.0.8-style lock would carry. */
+function withPicomatch(lock, version) {
+  const back = structuredClone(lock)
+  back.packages['node_modules/picomatch'] = {
+    version,
+    resolved: `https://registry.npmjs.org/picomatch/-/picomatch-${version}.tgz`,
+    license: 'MIT'
+  }
+
+  return back
+}
 const subReport = (dir, when = '') =>
   JSON.parse(fs.readFileSync(path.join(FIXTURES, `npm-audit-${SUB_FIXTURE[dir]}${when}-2026-10-30.json`), 'utf8'))
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'audit-gate-'))
@@ -428,18 +450,18 @@ if (offline) {
     )
     // Was "6 waived" while the Electron 40.10.2 waiver existed; the repo list is empty since Electron 44.
     assert.match(run.stdout, /\[audit-gate\] GREEN: .* 0 failing, 0 waived/)
-    // The Privy sign-in lock is judged too: green with its 5 waived findings (owner decision 2026-11-03/04 for 4;
-    // picomatch: lead decision 2026-11-17).
+    // The Privy sign-in lock is judged too: green with its 1 waived finding (zod 3.25.76, owner decision 2026-11-03/04);
+    // picomatch, decode-uri-component and zod 3.22.4 are no longer in the lock (v0.0.9): neither waived nor failing.
     assert.match(
       run.stdout,
-      /\[audit-gate\] lock iclone\/privy\/login-island:\n.*answered 200\n(?:WAIVED .*\n| {2}.*\n)*\[audit-gate\] GREEN: .* 0 failing, 5 waived, 0 stale/
+      /\[audit-gate\] lock iclone\/privy\/login-island:\n.*answered 200\n(?:WAIVED .*\n| {2}.*\n)*\[audit-gate\] GREEN: .* 0 failing, 1 waived, 0 stale/
     )
-    // And the optional ACP CLI's lock: green with its 3 waived findings (owner decision 2026-11-03/04 for 2;
-    // picomatch: lead decision 2026-11-17).
+    // And the optional ACP CLI's lock: green with its 2 waived findings (owner decision 2026-11-03/04); no picomatch.
     assert.match(
       run.stdout,
-      /\[audit-gate\] lock apps\/desktop\/acp-cli-lock:\n.*answered 200\n(?:WAIVED .*\n| {2}.*\n)*\[audit-gate\] GREEN: .* 0 failing, 3 waived, 0 stale/
+      /\[audit-gate\] lock apps\/desktop\/acp-cli-lock:\n.*answered 200\n(?:WAIVED .*\n| {2}.*\n)*\[audit-gate\] GREEN: .* 0 failing, 2 waived, 0 stale/
     )
+    assert.doesNotMatch(run.stdout, /picomatch|GHSA-fc5q-39xc-vjpf/)
     assert.doesNotMatch(run.stdout, /RED/)
   })
 
@@ -673,18 +695,12 @@ describe("audit gate (G-45, v0.0.4 review M2): the runtime's other npm locks", (
 
 describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and is judged, with explicit waivers', () => {
   const DIR = 'iclone/privy/login-island'
-  // `npm audit --json --package-lock-only` of iclone/privy/login-island/package-lock.json, 2026-11-17, run by the
-  // gate's runAudit (stamped; the registry answered 200).
+  // `npm audit --json --package-lock-only` of iclone/privy/login-island/package-lock.json, 2026-11-18, with the gate's
+  // arguments (stamped; the registry answered 200).
   const REPORT = JSON.parse(fs.readFileSync(path.join(FIXTURES, APP_FIXTURE[DIR]), 'utf8'))
   const LOCK_IN = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package-lock.json'), 'utf8'))
   const WAIVERS = APP_LOCKS[DIR]
-  const ACCEPTED = [
-    'decode-uri-component@0.2.2 GHSA-qr28-fpjm-wq7f',
-    'picomatch@2.3.2 GHSA-fc5q-39xc-vjpf',
-    'zod@3.22.4 GHSA-mrhx-c7xc-m3w5',
-    'zod@3.22.4 GHSA-mrhx-c7xc-m3w5',
-    'zod@3.25.76 GHSA-mrhx-c7xc-m3w5'
-  ]
+  const ACCEPTED = ['zod@3.25.76 GHSA-mrhx-c7xc-m3w5']
   const judgeIn = (waived = WAIVERS, version = APP_VERSION) => judge(REPORT, LOCK_IN, waived, version, lockNodes)
   const ids = list => list.map(f => `${f.id} ${f.advisory}`).sort()
 
@@ -699,24 +715,19 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     assert.equal(Object.keys(SUB_LOCKS).includes(DIR), false)
   })
 
-  test('with the waivers it is green: exactly the zod, decode-uri-component and picomatch highs are waived, nothing else', () => {
+  test('with the waivers it is green: exactly the zod 3.25.76 high is waived, nothing else', () => {
     const verdict = judgeIn()
 
     assert.deepEqual([verdict.failing, verdict.stale, verdict.untied, verdict.expired], [[], [], [], []])
     assert.deepEqual(ids(verdict.waived), ACCEPTED)
-    assert.deepEqual(Object.keys(WAIVERS).sort(), [
-      'decode-uri-component@0.2.2',
-      'picomatch@2.3.2',
-      'zod@3.22.4',
-      'zod@3.25.76'
-    ])
+    assert.deepEqual(Object.keys(WAIVERS).sort(), ['zod@3.25.76'])
 
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.equal(code, 0, lines.join('\n'))
-    assert.match(lines.at(-1), /GREEN: .* 0 failing, 5 waived, 0 stale/)
+    assert.match(lines.at(-1), /GREEN: .* 0 failing, 1 waived, 0 stale/)
     assert.ok(
-      lines.some(line => /^WAIVED zod@3\.25\.76 until v0\.0\.9/.test(line)),
+      lines.some(line => /^WAIVED zod@3\.25\.76 until v0\.0\.10/.test(line)),
       lines.join('\n')
     )
   })
@@ -731,14 +742,6 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
       lines.some(line => /^FAIL zod@3\.25\.76 high GHSA-mrhx-c7xc-m3w5 /.test(line)),
       lines.join('\n')
     )
-    assert.ok(
-      lines.some(line => /^FAIL decode-uri-component@0\.2\.2 high GHSA-qr28-fpjm-wq7f /.test(line)),
-      lines.join('\n')
-    )
-    assert.ok(
-      lines.some(line => /^FAIL picomatch@2\.3\.2 high GHSA-fc5q-39xc-vjpf /.test(line)),
-      lines.join('\n')
-    )
   })
 
   test('without only the zod@3.25.76 entry, that finding is red', () => {
@@ -749,13 +752,25 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     assert.equal(render(verdict, rest).code, 1)
   })
 
-  test('without only the picomatch@2.3.2 entry, that finding is red (mutant)', () => {
-    const rest = Object.fromEntries(Object.entries(WAIVERS).filter(([id]) => id !== 'picomatch@2.3.2'))
-    const verdict = judgeIn(rest)
-    const { lines, code } = render(verdict, rest)
+  test('v0.0.9: picomatch is out of the lock, and putting it back is red: no waiver covers it (reintroduction)', () => {
+    assert.equal(
+      Object.entries(LOCK_IN.packages).some(
+        ([key, row]) => key.endsWith('node_modules/picomatch') || row.name === 'picomatch'
+      ),
+      false
+    )
+    assert.equal(Object.hasOwn(REPORT.vulnerabilities, 'picomatch'), false)
 
-    assert.deepEqual(ids(verdict.failing), ['picomatch@2.3.2 GHSA-fc5q-39xc-vjpf'])
-    assert.deepEqual(verdict.stale, [])
+    // The v0.0.8 report (picomatch 2.3.2, GHSA-fc5q-39xc-vjpf) against the lock with picomatch put back.
+    const before = JSON.parse(fs.readFileSync(path.join(FIXTURES, APP_REPORT_1117), 'utf8'))
+    const verdict = judge(before, withPicomatch(LOCK_IN, '2.3.2'), WAIVERS, APP_VERSION, lockNodes)
+    const { lines, code } = render(verdict, WAIVERS)
+
+    // (That v0.0.8 report also names the old zod 3.22.4 nodes, which now hold the 4.6.7 override; only picomatch matters.)
+    assert.deepEqual(
+      ids(verdict.failing).filter(id => id.startsWith('picomatch@')),
+      ['picomatch@2.3.2 GHSA-fc5q-39xc-vjpf']
+    )
     assert.equal(code, 1)
     assert.ok(
       lines.some(line => /^FAIL picomatch@2\.3\.2 high GHSA-fc5q-39xc-vjpf /.test(line)),
@@ -763,15 +778,83 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     )
   })
 
-  test('the 2026-11-03 report predates GHSA-fc5q-39xc-vjpf: against it the picomatch waiver is STALE (red)', () => {
-    const before = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES, 'npm-audit-privy-login-island-2026-11-03.json'), 'utf8')
-    )
-    const verdict = judge(before, LOCK_IN, WAIVERS, APP_VERSION, lockNodes)
+  test('v0.0.9: anymatch is the in-repo inert stub, by a root dependency and an override of every copy', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package.json'), 'utf8'))
+    const stub = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'stubs', 'anymatch', 'package.json'), 'utf8'))
 
-    assert.deepEqual(verdict.failing, [])
-    assert.deepEqual(verdict.stale, [{ id: 'picomatch@2.3.2', advisory: 'GHSA-fc5q-39xc-vjpf' }])
-    assert.equal(render(verdict, WAIVERS).code, 1)
+    assert.equal(pkg.dependencies.anymatch, 'file:./stubs/anymatch')
+    assert.equal(pkg.overrides.anymatch, '$anymatch')
+    assert.deepEqual(LOCK_IN.packages['node_modules/anymatch'], { resolved: 'stubs/anymatch', link: true })
+    assert.equal(stub.name, 'anymatch')
+    assert.equal(
+      ['dependencies', 'optionalDependencies', 'peerDependencies'].some(field => Object.hasOwn(stub, field)),
+      false
+    )
+    assert.deepEqual(
+      Object.keys(LOCK_IN.packages).filter(key => /(^|\/)anymatch$/.test(key)),
+      ['node_modules/anymatch', 'stubs/anymatch']
+    )
+    // The shipped bundle holds neither (it never did: the stub changed no byte of privy-login.js, sha256 3287799b).
+    const bundle = fs.readFileSync(path.join(REPO, 'iclone', 'privy', 'privy-login.js'), 'utf8')
+
+    assert.equal(/anymatch|picomatch/.test(bundle), false)
+  })
+
+  test('v0.0.9: decode-uri-component and the zod 3.22.4 copies are overridden out of the lock', () => {
+    const pkg = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package.json'), 'utf8'))
+    const rows = Object.entries(LOCK_IN.packages)
+
+    assert.equal(pkg.overrides['query-string'], '10.0.0')
+    assert.equal(pkg.overrides['zod@3.22.4'], '4.6.7')
+    assert.deepEqual(
+      rows.filter(([key]) => /(^|\/)decode-uri-component$/.test(key)),
+      []
+    )
+    assert.deepEqual(
+      rows.filter(([key]) => /(^|\/)query-string$/.test(key)).map(([key, row]) => `${key}@${row.version}`),
+      ['node_modules/query-string@10.0.0']
+    )
+    assert.deepEqual(
+      rows
+        .filter(([key]) => /(^|\/)zod$/.test(key))
+        .map(([key, row]) => `${key}@${row.version}`)
+        .sort(),
+      [
+        'node_modules/@reown/appkit-wallet/node_modules/zod@4.6.7',
+        'node_modules/@wagmi/connectors/node_modules/zod@4.6.7',
+        'node_modules/zod@3.25.76'
+      ]
+    )
+    assert.equal(Object.hasOwn(REPORT.vulnerabilities, 'decode-uri-component'), false)
+
+    // The shipped bundle holds none of them (privy-login.js is byte-identical, sha256 3287799b): no query-string or
+    // decode-uri-component code, and no zod 4 (its internals carry `_zod`; the bundled zod is 3.25.76's v3 API).
+    const bundle = fs.readFileSync(path.join(REPO, 'iclone', 'privy', 'privy-login.js'), 'utf8')
+
+    assert.equal(/decode-uri-component|query-string|%\[a-f0-9\]\{2\}|_zod\b/.test(bundle), false)
+  })
+
+  test('v0.0.9: putting decode-uri-component 0.2.2 or zod 3.22.4 back is red: no waiver covers them (reintroduction)', () => {
+    const before = JSON.parse(fs.readFileSync(path.join(FIXTURES, APP_REPORT_PRE_OVERRIDES), 'utf8'))
+    const back = structuredClone(LOCK_IN)
+
+    back.packages['node_modules/decode-uri-component'] = { version: '0.2.2', license: 'MIT' }
+    back.packages['node_modules/@reown/appkit-wallet/node_modules/zod'].version = '3.22.4'
+    back.packages['node_modules/@wagmi/connectors/node_modules/zod'].version = '3.22.4'
+
+    const verdict = judge(before, back, WAIVERS, APP_VERSION, lockNodes)
+    const { lines, code } = render(verdict, WAIVERS)
+
+    assert.deepEqual(ids(verdict.failing), [
+      'decode-uri-component@0.2.2 GHSA-qr28-fpjm-wq7f',
+      'zod@3.22.4 GHSA-mrhx-c7xc-m3w5',
+      'zod@3.22.4 GHSA-mrhx-c7xc-m3w5'
+    ])
+    assert.equal(code, 1)
+    assert.ok(
+      lines.some(line => /^FAIL decode-uri-component@0\.2\.2 high GHSA-qr28-fpjm-wq7f /.test(line)),
+      lines.join('\n')
+    )
   })
 
   test('each waiver stores the severity it accepted: high', () => {
@@ -803,25 +886,19 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
   })
 
   test('a waiver that records no severity is refused the same way (accepted at none)', () => {
-    const bare = Object.fromEntries(
-      Object.entries(WAIVERS['decode-uri-component@0.2.2']).filter(([key]) => key !== 'severity')
-    )
-    const waivers = { ...WAIVERS, 'decode-uri-component@0.2.2': bare }
+    const bare = Object.fromEntries(Object.entries(WAIVERS['zod@3.25.76']).filter(([key]) => key !== 'severity'))
+    const waivers = { ...WAIVERS, 'zod@3.25.76': bare }
     const verdict = judgeIn(waivers)
 
     assert.deepEqual(
       verdict.mismatched.map(m => `${m.id} ${m.accepted} ${m.severity}`),
-      ['decode-uri-component@0.2.2 none high']
+      ['zod@3.25.76 none high']
     )
     assert.equal(render(verdict, waivers).code, 1)
   })
 
   test('each owner-decided waiver names its advisory, the reason, the worst case, the owner decision and its date', () => {
-    const expected = {
-      'zod@3.25.76': 'GHSA-mrhx-c7xc-m3w5',
-      'zod@3.22.4': 'GHSA-mrhx-c7xc-m3w5',
-      'decode-uri-component@0.2.2': 'GHSA-qr28-fpjm-wq7f'
-    }
+    const expected = { 'zod@3.25.76': 'GHSA-mrhx-c7xc-m3w5' }
 
     for (const [id, ghsa] of Object.entries(expected)) {
       const entry = WAIVERS[id]
@@ -836,61 +913,21 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
         'accepted by the owner 2026-11-03/04',
         're-decided 2026-11-05 for v0.0.6 by the security review; removed when a compatible fix exists',
         're-reviewed 2026-11-10 for v0.0.7: still no compatible fix',
-        're-decided for v0.0.8 (2026-11-13)'
+        're-decided for v0.0.8 (2026-11-13)',
+        'renewed for v0.0.9 to v0.0.10 by the owner ("renew", 2026-11-18)',
+        'zod 3.x latest = 3.25.76 (no fix)',
+        '@privy-io/react-auth 3.52.0 still resolves zod 3'
       ]) {
         assert.ok(entry.reason.includes(text), `${id}: ${text}`)
       }
 
       assert.ok(entry.until.includes('re-decided each release; removed when a compatible fix exists (backlog'), id)
-      assert.deepEqual(untilVersion(entry.until), [0, 0, 9], id)
+      // zod renewal (2026-11-18): renewed once, to v0.0.10.
+      assert.deepEqual(untilVersion(entry.until), [0, 0, 10], id)
     }
 
     for (const consumer of ['@privy-io/api-base', '@coinbase/cdp-sdk', 'x402', '@reown/appkit-wallet']) {
       assert.ok(WAIVERS['zod@3.25.76'].reason.includes(consumer), consumer)
-    }
-
-    for (const text of [
-      '@wagmi/connectors',
-      '@walletconnect/utils',
-      'query-string 7',
-      'semver-major @privy-io/react-auth'
-    ]) {
-      assert.ok(WAIVERS['decode-uri-component@0.2.2'].reason.includes(text), text)
-    }
-  })
-
-  test('the picomatch waiver names its advisory, no fix, the path, why it is unreachable, the worst case and the lead decision', () => {
-    const entry = WAIVERS['picomatch@2.3.2']
-
-    assert.equal(entry.severity, 'high')
-    assert.deepEqual(entry.advisories, {
-      'GHSA-fc5q-39xc-vjpf': 'HIGH, CWE-1333: ReDoS through single-branch repeated extglobs'
-    })
-
-    for (const text of [
-      'GHSA-fc5q-39xc-vjpf',
-      'no compatible fix',
-      'no patched release',
-      '@walletconnect/keyvaluestorage > unstorage > anymatch > picomatch',
-      'neither anymatch nor picomatch is in privy-login.js',
-      'only unstorage core is bundled',
-      'DoS of the sign-in window only',
-      'no data or code is exposed',
-      'decided for v0.0.8 (2026-11-17) by the lead with a reviewed reachability check',
-      'removed when a patched picomatch exists or the dependency leaves the tree'
-    ]) {
-      assert.ok(entry.reason.includes(text), text)
-    }
-
-    assert.ok(entry.until.includes('re-decided each release; removed when a compatible fix exists (backlog'))
-    assert.deepEqual(untilVersion(entry.until), [0, 0, 9])
-  })
-
-  test('the picomatch waiver does not claim the owner decision of 2026-11-03/04 nor the earlier re-decisions', () => {
-    const { reason } = WAIVERS['picomatch@2.3.2']
-
-    for (const text of ['accepted by the owner', '2026-11-03/04', '2026-11-05', '2026-11-10', '2026-11-13']) {
-      assert.equal(reason.includes(text), false, text)
     }
   })
 
@@ -904,9 +941,6 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
 
   test('each sign-in waiver says what the shipped bundle holds of it', () => {
     assert.ok(WAIVERS['zod@3.25.76'].reason.includes('this copy is in privy-login.js'))
-    assert.ok(WAIVERS['zod@3.22.4'].reason.includes('in the lock but not in privy-login.js'))
-    assert.ok(WAIVERS['decode-uri-component@0.2.2'].reason.includes('neither package is in privy-login.js'))
-    assert.ok(WAIVERS['picomatch@2.3.2'].reason.includes('neither anymatch nor picomatch is in privy-login.js'))
   })
 
   test('at v0.0.8 every waiver still apply, and the gate is green: the re-decision of this release', () => {
@@ -917,15 +951,29 @@ describe('audit gate (G-42, v0.0.5): the Privy sign-in lock ships in the app and
     assert.equal(render(verdict, WAIVERS).code, 0)
   })
 
-  test('at v0.0.9 every waiver has EXPIRED, and the gate is red', () => {
+  // v0.0.9 zod renewal (owner "renew", 2026-11-18): red on b290e6d7f3, where every waiver said `until v0.0.9`.
+  test('zod renewal: at v0.0.9 every waiver still applies (renewed to v0.0.10), and the gate is green', () => {
     const verdict = judgeIn(WAIVERS, '0.0.9')
+
+    assert.deepEqual([verdict.failing, verdict.stale, verdict.untied, verdict.expired], [[], [], [], []])
+    assert.deepEqual(ids(verdict.waived), ACCEPTED)
+    assert.equal(render(verdict, WAIVERS).code, 0)
+
+    for (const entry of Object.values(WAIVERS)) {
+      assert.ok(entry.reason.includes(ZOD_RENEWAL_V009), 'records the renewal and the upgrade check')
+      assert.match(entry.reason, /reachability \(2026-11-18\)/)
+    }
+  })
+
+  test('zod renewal: at v0.0.10 every waiver has EXPIRED, and the gate is red', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.10')
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.deepEqual(verdict.expired.map(e => e.id).sort(), Object.keys(WAIVERS).sort())
     assert.deepEqual(ids(verdict.failing), ACCEPTED)
     assert.equal(code, 1)
     assert.ok(
-      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.9/.test(line)),
+      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.10/.test(line)),
       lines.join('\n')
     )
   })
@@ -1005,23 +1053,21 @@ describe('audit gate: a report says what npm audited, and an --omit=dev report i
   })
 })
 
-describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with three explicit waivers', () => {
+describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with two explicit waivers', () => {
   const DIR = 'apps/desktop/acp-cli-lock'
   // `npm audit --json --package-lock-only` of apps/desktop/acp-cli-lock/package-lock.json, 2026-11-17, run by the
-  // gate's runAudit (stamped; the registry answered 200).
-  const REPORT = JSON.parse(fs.readFileSync(path.join(FIXTURES, ACP_FIXTURE[DIR]), 'utf8'))
+  // gate's runAudit (stamped; the registry answered 200): the report whose acp-node synthetic id is the waived one, so
+  // the exact-match tests below use it. Its picomatch 4.0.7 finding is on no node of the v0.0.9 lock (not shipped).
+  const REPORT = JSON.parse(fs.readFileSync(path.join(FIXTURES, ACP_REPORT_1117), 'utf8'))
+  // The fresh report of the v0.0.9 lock (2026-11-18): what the gate judges now, with matchSynthetic.
+  const FRESH = JSON.parse(fs.readFileSync(path.join(FIXTURES, ACP_FIXTURE[DIR]), 'utf8'))
   const LOCK_IN = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package-lock.json'), 'utf8'))
   const WAIVERS = ACP_LOCKS[DIR]
   const ZOD = 'zod@3.25.76'
   const ACP_NODE = '@virtuals-protocol/acp-node@0.3.0-beta-subscription.2'
-  const PICOMATCH = 'picomatch@4.0.7'
-  const ACCEPTED = [
-    `${ACP_NODE} ${ACP_NODE_NPM_ADVISORY}`,
-    `${PICOMATCH} GHSA-fc5q-39xc-vjpf`,
-    `${ZOD} GHSA-mrhx-c7xc-m3w5`
-  ]
-  const judgeIn = (waived = WAIVERS, version = APP_VERSION, report = REPORT) =>
-    judge(report, LOCK_IN, waived, version, lockNodes)
+  const ACCEPTED = [`${ACP_NODE} ${ACP_NODE_NPM_ADVISORY}`, `${ZOD} GHSA-mrhx-c7xc-m3w5`]
+  const judgeIn = (waived = WAIVERS, version = APP_VERSION, report = REPORT, lock = LOCK_IN) =>
+    judge(report, lock, waived, version, lockNodes)
   const ids = list => list.map(f => `${f.id} ${f.advisory}`).sort()
   const without = id => Object.fromEntries(Object.entries(WAIVERS).filter(([key]) => key !== id))
 
@@ -1036,7 +1082,7 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
     assert.equal(Object.keys({ ...SUB_LOCKS, ...APP_LOCKS }).includes(DIR), false)
   })
 
-  test('with the waivers it is green: exactly the zod high, its acp-node meta-advisory and picomatch are waived', () => {
+  test('with the waivers it is green: exactly the zod high and its acp-node meta-advisory are waived', () => {
     const verdict = judgeIn()
 
     assert.deepEqual(
@@ -1044,12 +1090,78 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
       [[], [], [], [], []]
     )
     assert.deepEqual(ids(verdict.waived), ACCEPTED)
-    assert.deepEqual(Object.keys(WAIVERS).sort(), [ACP_NODE, PICOMATCH, ZOD])
+    assert.deepEqual(Object.keys(WAIVERS).sort(), [ACP_NODE, ZOD])
+    assert.ok(verdict.outside.includes('picomatch'), 'the v0.0.8 picomatch finding is on no node of this lock')
 
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.equal(code, 0, lines.join('\n'))
-    assert.match(lines.at(-1), /GREEN: .* 0 failing, 3 waived, 0 stale/)
+    assert.match(lines.at(-1), /GREEN: .* 0 failing, 2 waived, 0 stale/)
+  })
+
+  test('v0.0.9: the fresh report of the pruned lock, judged as the gate does, is green with no picomatch at all', () => {
+    assert.equal(Object.hasOwn(FRESH.vulnerabilities, 'picomatch'), false)
+
+    const verdict = judge(FRESH, LOCK_IN, WAIVERS, APP_VERSION, lockNodes, { matchSynthetic: true })
+    const { lines, code } = render(verdict, WAIVERS)
+
+    assert.deepEqual([verdict.failing, verdict.stale, verdict.mismatched], [[], [], []], lines.join('\n'))
+    assert.deepEqual(verdict.waived.map(w => w.id).sort(), [ACP_NODE, ZOD])
+    assert.equal(code, 0, lines.join('\n'))
+  })
+
+  test('v0.0.9: picomatch is out of the lock, and putting it back is red: no waiver covers it (reintroduction)', () => {
+    assert.equal(
+      Object.entries(LOCK_IN.packages).some(
+        ([key, row]) => key.endsWith('node_modules/picomatch') || row.name === 'picomatch'
+      ),
+      false
+    )
+
+    const verdict = judgeIn(WAIVERS, APP_VERSION, REPORT, withPicomatch(LOCK_IN, '4.0.7'))
+    const { lines, code } = render(verdict, WAIVERS)
+
+    assert.deepEqual(ids(verdict.failing), ['picomatch@4.0.7 GHSA-fc5q-39xc-vjpf'])
+    assert.equal(code, 1)
+    assert.ok(
+      lines.some(line => /^FAIL picomatch@4\.0\.7 high GHSA-fc5q-39xc-vjpf /.test(line)),
+      lines.join('\n')
+    )
+  })
+
+  test('v0.0.9: the committed lock carries no row reachable only through tsup (acp-lock-prune --check)', () => {
+    const pkgText = fs.readFileSync(path.join(REPO, DIR, 'package.json'), 'utf8')
+    const lockText = fs.readFileSync(path.join(REPO, DIR, 'package-lock.json'), 'utf8')
+
+    assert.deepEqual(pruneLock(pkgText, lockText).removed, [])
+    // A regenerated lock (npm puts tsup's subtree back) is caught: the v0.0.8 rows reappear as prunable.
+    const regenerated = structuredClone(LOCK_IN)
+    regenerated.packages['node_modules/tsup'] = {
+      version: '8.5.1',
+      resolved: 'https://registry.npmjs.org/tsup/-/tsup-8.5.1.tgz',
+      integrity: `sha512-${'A'.repeat(86)}==`,
+      license: 'MIT',
+      dependencies: { tinyglobby: '^0.2.11' }
+    }
+    regenerated.packages['node_modules/tinyglobby'] = {
+      version: '0.2.17',
+      resolved: 'https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.17.tgz',
+      integrity: `sha512-${'B'.repeat(86)}==`,
+      license: 'MIT',
+      dependencies: { picomatch: '^4.0.4' }
+    }
+    regenerated.packages['node_modules/picomatch'] = {
+      version: '4.0.7',
+      resolved: 'https://registry.npmjs.org/picomatch/-/picomatch-4.0.7.tgz',
+      integrity: `sha512-${'C'.repeat(86)}==`,
+      license: 'MIT'
+    }
+
+    assert.deepEqual(pruneLock(pkgText, JSON.stringify(regenerated)).removed, [
+      'node_modules/picomatch',
+      'node_modules/tinyglobby',
+      'node_modules/tsup'
+    ])
   })
 
   test('without the waivers it is red, and the gate names every finding', () => {
@@ -1059,7 +1171,7 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
     assert.equal(render(verdict, {}).code, 1)
   })
 
-  for (const id of [ZOD, ACP_NODE, PICOMATCH]) {
+  for (const id of [ZOD, ACP_NODE]) {
     test(`without only the ${id} entry, that finding is red (mutant)`, () => {
       const rest = without(id)
       const verdict = judgeIn(rest)
@@ -1102,7 +1214,7 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
   })
 
   test('a severity mismatch is refused: red', () => {
-    for (const id of [ZOD, ACP_NODE, PICOMATCH]) {
+    for (const id of [ZOD, ACP_NODE]) {
       const rerated = { ...WAIVERS, [id]: { ...WAIVERS[id], severity: 'critical' } }
       const verdict = judgeIn(rerated)
 
@@ -1132,7 +1244,10 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
         'accepted by the owner 2026-11-03/04',
         're-decided 2026-11-05 for v0.0.6 by the security review; removed when a compatible fix exists',
         're-reviewed 2026-11-10 for v0.0.7: still no compatible fix',
-        're-decided for v0.0.8 (2026-11-13)'
+        're-decided for v0.0.8 (2026-11-13)',
+        'renewed for v0.0.9 to v0.0.10 by the owner ("renew", 2026-11-18)',
+        'zod 3.x latest = 3.25.76 (no fix)',
+        '@privy-io/react-auth 3.52.0 still resolves zod 3'
       ]) {
         assert.ok(entry.reason.includes(text), `${id}: ${text}`)
       }
@@ -1140,47 +1255,12 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
       assert.ok(entry.until.includes('re-decided each release; removed when a compatible fix exists'), id)
       assert.ok(entry.until.includes('backlog: move the ACP CLI to acp-node-v2'), id)
       assert.ok(entry.until.includes('still needs zod 3 through @account-kit/infra'), id)
-      assert.deepEqual(untilVersion(entry.until), [0, 0, 9], id)
+      // zod renewal (2026-11-18): renewed once, to v0.0.10.
+      assert.deepEqual(untilVersion(entry.until), [0, 0, 10], id)
     }
 
     for (const text of ['@account-kit/infra', '@aa-sdk/core', 'acp-node-v2']) {
       assert.ok(WAIVERS[ACP_NODE].reason.includes(text), text)
-    }
-  })
-
-  test('the picomatch waiver names its advisory, no fix, the path, why it is unreachable, the worst case and the lead decision', () => {
-    const entry = WAIVERS[PICOMATCH]
-
-    assert.equal(entry.severity, 'high')
-    assert.deepEqual(entry.advisories, {
-      'GHSA-fc5q-39xc-vjpf': 'HIGH, CWE-1333: ReDoS through single-branch repeated extglobs'
-    })
-
-    for (const text of [
-      'GHSA-fc5q-39xc-vjpf',
-      'no compatible fix',
-      'no patched release',
-      'only the optional ACP CLI',
-      '@virtuals-protocol/acp-node > tsup',
-      'tsup is a build tool acp-node lists as a runtime dependency',
-      "nothing in the CLI's module graph from dist/bin/acp.js loads tsup",
-      'DoS of that one process only',
-      'no data or code is exposed',
-      'decided for v0.0.8 (2026-11-17) by the lead with a reviewed reachability check',
-      'removed when a patched picomatch exists or the dependency leaves the tree'
-    ]) {
-      assert.ok(entry.reason.includes(text), text)
-    }
-
-    assert.equal(entry.until, WAIVERS[ZOD].until)
-    assert.deepEqual(untilVersion(entry.until), [0, 0, 9])
-  })
-
-  test('the picomatch waiver does not claim the owner decision of 2026-11-03/04 nor the earlier re-decisions', () => {
-    const { reason } = WAIVERS[PICOMATCH]
-
-    for (const text of ['accepted by the owner', '2026-11-03/04', '2026-11-05', '2026-11-10', '2026-11-13']) {
-      assert.equal(reason.includes(text), false, text)
     }
   })
 
@@ -1200,15 +1280,29 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
     assert.equal(render(verdict, WAIVERS).code, 0)
   })
 
-  test('at v0.0.9 every waiver has EXPIRED, and the gate is red', () => {
+  // v0.0.9 zod renewal (owner "renew", 2026-11-18): red on b290e6d7f3, where every waiver said `until v0.0.9`.
+  test('zod renewal: at v0.0.9 every waiver still applies (renewed to v0.0.10), and the gate is green', () => {
     const verdict = judgeIn(WAIVERS, '0.0.9')
+
+    assert.deepEqual([verdict.failing, verdict.stale, verdict.untied, verdict.expired], [[], [], [], []])
+    assert.deepEqual(ids(verdict.waived), ACCEPTED)
+    assert.equal(render(verdict, WAIVERS).code, 0)
+
+    for (const entry of Object.values(WAIVERS)) {
+      assert.ok(entry.reason.includes(ZOD_RENEWAL_V009), 'records the renewal and the upgrade check')
+      assert.match(entry.reason, /reachability \(2026-11-18\)/)
+    }
+  })
+
+  test('zod renewal: at v0.0.10 every waiver has EXPIRED, and the gate is red', () => {
+    const verdict = judgeIn(WAIVERS, '0.0.10')
     const { lines, code } = render(verdict, WAIVERS)
 
     assert.deepEqual(verdict.expired.map(e => e.id).sort(), Object.keys(WAIVERS).sort())
     assert.deepEqual(ids(verdict.failing), ACCEPTED)
     assert.equal(code, 1)
     assert.ok(
-      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.9/.test(line)),
+      lines.some(line => /^EXPIRED waiver zod@3\.25\.76: until v0\.0\.10/.test(line)),
       lines.join('\n')
     )
   })
@@ -1217,15 +1311,14 @@ describe('audit gate (G-42, v0.0.5): the optional ACP CLI lock is judged, with t
 describe('audit gate (v0.0.5): the ACP lock waives a RE-KEYED npm synthetic id only through already-waived GHSAs', () => {
   // npm builds acp-node's synthetic id from whichever vulnerable dependency it resolves first (@aa-sdk/core or
   // @account-kit/infra, both only through zod): the same lock gives one of two ids from run to run. The re-keyed
-  // fixture is a real run of the same lock on 2026-11-04 (v005/work/v005rel-acpgate/today/REKEY_CHECK.md). It predates
-  // GHSA-fc5q-39xc-vjpf (picomatch, 2026-11-17), so it is judged with the waivers of its day: the lock's list without the
-  // picomatch entry (a subset, which only removes waivers), against which that entry would be STALE (asserted below).
+  // fixture is a real run of the same lock on 2026-11-04 (v005/work/v005rel-acpgate/today/REKEY_CHECK.md); the
+  // 2026-11-17 one carries the other id (and the v0.0.8 picomatch finding, on no node of the v0.0.9 lock).
   const DIR = 'apps/desktop/acp-cli-lock'
-  const OLD = JSON.parse(fs.readFileSync(path.join(FIXTURES, ACP_FIXTURE[DIR]), 'utf8'))
+  const OLD = JSON.parse(fs.readFileSync(path.join(FIXTURES, ACP_REPORT_1117), 'utf8'))
   const NEW = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'npm-audit-acp-cli-lock-2026-11-04-rekeyed.json'), 'utf8'))
   const LOCK_IN = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package-lock.json'), 'utf8'))
   const LOCK_WAIVERS = ACP_LOCKS[DIR]
-  const WAIVERS = Object.fromEntries(Object.entries(LOCK_WAIVERS).filter(([id]) => id !== 'picomatch@4.0.7'))
+  const WAIVERS = LOCK_WAIVERS
   const ACP_NODE = '@virtuals-protocol/acp-node@0.3.0-beta-subscription.2'
   const synth = report => report.vulnerabilities['@virtuals-protocol/acp-node'].via.find(v => typeof v === 'object')
   const judgeAcp = (report, waived = WAIVERS, matchSynthetic = true) =>
@@ -1244,25 +1337,11 @@ describe('audit gate (v0.0.5): the ACP lock waives a RE-KEYED npm synthetic id o
     }
   })
 
-  test('the 2026-11-04 re-keyed fixture predates picomatch: only that entry differs, and against it that entry is STALE', () => {
-    assert.deepEqual(
-      Object.keys(LOCK_WAIVERS).filter(id => !Object.hasOwn(WAIVERS, id)),
-      ['picomatch@4.0.7']
-    )
-    assert.equal(Object.hasOwn(NEW.vulnerabilities, 'picomatch'), false)
-
-    const verdict = judgeAcp(NEW, LOCK_WAIVERS)
-
-    assert.deepEqual(verdict.failing, [])
-    assert.deepEqual(verdict.stale, [{ id: 'picomatch@4.0.7', advisory: 'GHSA-fc5q-39xc-vjpf' }])
-    assert.equal(render(verdict, LOCK_WAIVERS).code, 1)
-  })
-
-  test('(a) the old id (the 2026-11-17 report, every waiver of the lock): green, 3 waived, 0 stale', () => {
+  test('(a) the old id (the 2026-11-17 report, every waiver of the lock): green, 2 waived, 0 stale', () => {
     const verdict = judgeAcp(OLD, LOCK_WAIVERS)
 
     assert.deepEqual([verdict.failing, verdict.stale, verdict.mismatched], [[], [], []])
-    assert.equal(verdict.waived.length, 3)
+    assert.equal(verdict.waived.length, 2)
     assert.equal(render(verdict, LOCK_WAIVERS).code, 0)
   })
 
@@ -1384,9 +1463,7 @@ describe("audit gate (v0.0.5, lens r2): the synthetic match accepts ONLY npm's o
   const DIR = 'apps/desktop/acp-cli-lock'
   const NEW = JSON.parse(fs.readFileSync(path.join(FIXTURES, 'npm-audit-acp-cli-lock-2026-11-04-rekeyed.json'), 'utf8'))
   const LOCK_IN = JSON.parse(fs.readFileSync(path.join(REPO, DIR, 'package-lock.json'), 'utf8'))
-  // The waivers of the re-keyed fixture's day (2026-11-04): the lock's list without picomatch, whose advisory postdates
-  // it (it would be STALE here; see the re-keyed suite above).
-  const WAIVERS = Object.fromEntries(Object.entries(ACP_LOCKS[DIR]).filter(([id]) => id !== 'picomatch@4.0.7'))
+  const WAIVERS = ACP_LOCKS[DIR]
   const ACP_NODE = '@virtuals-protocol/acp-node@0.3.0-beta-subscription.2'
   const NAME = '@virtuals-protocol/acp-node'
   const synth = report => report.vulnerabilities[NAME].via.find(v => typeof v === 'object')
@@ -1488,5 +1565,54 @@ describe("audit gate (v0.0.5, lens r2): the synthetic match accepts ONLY npm's o
     const accepted = judgeAcp(NEW).waived.find(w => w.id === ACP_NODE)
 
     assert.match(accepted.reason, /every high\/critical advisory in its chain is a GHSA waived in this lock/)
+  })
+})
+
+// v0.0.9 (GHSA-fc5q-39xc-vjpf, picomatch ReDoS, vulnerable range <= 4.0.7, no patched release as of 2026-11-18): no lock
+// the gate judges ships a vulnerable picomatch, and no waiver names it, so a reintroduction is red offline here and
+// online in the gate (no waiver covers the finding).
+describe('audit gate (v0.0.9): no shipped lock carries picomatch <= 4.0.7, and nothing waives it', () => {
+  const vulnerable = version => {
+    const [major, minor, patch] = version.split(/[.-]/).map(Number)
+
+    return major < 4 || (major === 4 && minor === 0 && patch <= 7)
+  }
+
+  test('the advisory range check reads versions right', () => {
+    for (const v of ['2.3.2', '3.0.2', '4.0.5', '4.0.7']) assert.equal(vulnerable(v), true, v)
+    for (const v of ['4.0.8', '4.1.0', '5.0.0']) assert.equal(vulnerable(v), false, v)
+  })
+
+  test('every gate target: no shipped node is a picomatch in the vulnerable range', () => {
+    for (const target of gateTargets(REPO)) {
+      const lock = JSON.parse(fs.readFileSync(path.join(target.dir, 'package-lock.json'), 'utf8'))
+      const hits = [...target.nodesOf(lock).values()].filter(
+        id => id.startsWith('picomatch@') && vulnerable(id.slice('picomatch@'.length))
+      )
+
+      assert.deepEqual(hits, [], String(target.label ?? 'repo'))
+    }
+  })
+
+  test('the bundled locks (sign-in page, ACP CLI) carry no picomatch row at all, dev or not', () => {
+    for (const dir of [...Object.keys(APP_LOCKS), ...Object.keys(ACP_LOCKS)]) {
+      const lock = JSON.parse(fs.readFileSync(path.join(REPO, dir, 'package-lock.json'), 'utf8'))
+      const rows = Object.entries(lock.packages).filter(
+        ([key, row]) => /(^|\/)picomatch$/.test(key) || row.name === 'picomatch'
+      )
+
+      assert.deepEqual(rows, [], dir)
+    }
+  })
+
+  test('no waiver list names picomatch or GHSA-fc5q-39xc-vjpf', () => {
+    const lists = { WAIVED, ...SUB_LOCKS, ...APP_LOCKS, ...ACP_LOCKS }
+
+    for (const [label, list] of Object.entries(lists)) {
+      for (const [id, entry] of Object.entries(list)) {
+        assert.equal(id.startsWith('picomatch@'), false, `${label}: ${id}`)
+        assert.equal(Object.hasOwn(entry.advisories ?? {}, 'GHSA-fc5q-39xc-vjpf'), false, `${label}: ${id}`)
+      }
+    }
   })
 })

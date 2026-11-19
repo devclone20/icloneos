@@ -1,12 +1,11 @@
 /**
- * REL-6 — the installed ACP CLI tree's manifest: every file's sha256, size and mode, the tree's own digest, and an
- * HMAC over the whole body with a key the OS seals (safeStorage → Keychain), so a process that can write userData can
- * neither change a file unseen nor re-write the manifest to match.
+ * The ACP CLI tree's manifest: every file's sha256, size and mode, and the tree's own digest.
  *
- * NO UNSEALED TREE (critic M2, lead ruling on m7). A check needs the sealed key and a manifest MAC that verifies with
- * it. No sealer (the OS or session cannot seal) ⇒ `unsealable`; a key file that is missing, is not a plain file, or
- * does not open ⇒ `key-unopenable`. Both are refusals: deleting, replacing or locking the key file can only make the
- * tree refuse, never run unsigned. Only an install (the owner's click, audited) may write a new key.
+ * v0.0.9 (owner decision 17 Nov, replaces ruling 26): the app SHIPS the CLI. The manifest is written at BUILD time
+ * (materialise.ts) and travels inside the signed app with the tree it describes (Resources/acp-tools/MANIFEST.json,
+ * bundle.ts). Its authority is the app's own code signature and macOS's App Management protection of a signed bundle
+ * — no longer an HMAC with a key the Keychain seals on the first click (blocker K: Keychain off ⇒ no install). The
+ * working copy the CLI runs from (userData/acp-cli/<lock>) is checked against the BUNDLE's manifest, never its own.
  *
  * Two checks:
  *   - full: walk the tree; the set of files must be EXACTLY the manifest's (an extra file is a refusal: Node would load
@@ -16,14 +15,15 @@
  *     cannot be set back from user space) sends the caller to a full check. A quick pass is only ever a "nothing moved
  *     since the last full pass".
  */
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { promises as fsp, lstatSync, readFileSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { promises as fsp } from 'node:fs'
 import path from 'node:path'
 
 import type { AcpToolsProblemInfo } from '../../src/iclone-shared/acp-tools'
-import { writeFileAtomicSync } from '../lib/atomic-write'
 
 export const MANIFEST_FILE = 'MANIFEST.json'
+/** v0.0.3–v0.0.8: the Keychain-sealed manifest key beside the npm-installed trees. Never read or written any more; a
+ *  leftover one is not a stray (the check names it so the audit does not cry wolf on every upgraded Mac). */
 export const KEY_FILE = 'manifest-key.sealed'
 const STAT_CONCURRENCY = 64
 
@@ -48,12 +48,12 @@ export interface ManifestBody {
   treeSha256: string
 }
 
+/** A v0.0.3–v0.0.8 npm install's manifest (HMAC with the sealed key). Only record.ts still names its shape. */
 export interface AcpManifest extends ManifestBody {
-  /** HMAC-SHA256 (hex) of the canonical body with the sealed key. Always present: there is no unsealed tree. */
   mac: string
 }
 
-/** The OS sealing seam (V3-F keys.ts shape): main passes safeStorage; tests pass a double. */
+/** The OS sealing seam (V3-F keys.ts shape): main still builds one (sealer.ts); the ACP tools no longer need it. */
 export interface KeySealer {
   seal: (plain: string) => string
   unseal: (sealed: string) => string
@@ -88,7 +88,7 @@ export function treeDigest(files: Record<string, ManifestEntry>): string {
   return hash.digest('hex')
 }
 
-/** The body in a fixed key order, files sorted: what the MAC covers. */
+/** The body in a fixed key order, files sorted (what a writer serialises, so equal trees give equal bytes). */
 export function canonicalBody(body: ManifestBody): string {
   const files: Record<string, ManifestEntry> = {}
 
@@ -116,84 +116,26 @@ export function canonicalBody(body: ManifestBody): string {
   })
 }
 
-export type KeyAnswer = { ok: true; key: Buffer } | { ok: false; reason: 'unsealable' | 'key-unopenable' }
+export const isHex = (value: unknown, length: number): value is string =>
+  typeof value === 'string' && value.length === length && /^[0-9a-f]+$/.test(value)
 
-/** The manifest key under `root`, for a CHECK: read and unsealed, never created. Any failure is a refusal. */
-export function openManifestKey(root: string, sealer: KeySealer | null): KeyAnswer {
-  if (!sealer) {
-    return { ok: false, reason: 'unsealable' }
-  }
-
-  const file = path.join(root, KEY_FILE)
-
-  try {
-    if (!lstatSync(file).isFile()) {
-      return { ok: false, reason: 'key-unopenable' }
-    }
-
-    const key = Buffer.from(sealer.unseal(readFileSync(file, 'utf8').trim()), 'hex')
-
-    if (key.length === 32) {
-      return { ok: true, key }
-    }
-  } catch {
-    // missing, unreadable, or sealed by another login / a reset keychain
-  }
-
-  return { ok: false, reason: 'key-unopenable' }
+/** A relative tree path: `/`-separated, no empty part, no `..`, not absolute. */
+export function isTreePath(rel: string): boolean {
+  return !rel.startsWith('/') && !rel.includes('\\') && !rel.split('/').some(part => part === '..' || part === '')
 }
 
 /**
- * The manifest key for an INSTALL (the owner's click, audited): the existing one when it opens, else a new one written
- * over whatever is at its path, then read back through the OS to prove the seal round-trips. A new key makes every
- * manifest the old one signed fail its MAC, which is the honest answer for trees nobody can vouch for.
+ * The body's shape and its tree digest (no authentication: the caller decides where the manifest's authority comes
+ * from — for the bundled CLI, the signed app it was read from).
  */
-export function createManifestKey(root: string, sealer: KeySealer | null): KeyAnswer {
-  const open = openManifestKey(root, sealer)
-
-  if (open.ok || !sealer) {
-    return open
-  }
-
-  const file = path.join(root, KEY_FILE)
-  const key = randomBytes(32)
-
-  try {
-    rmSync(file, { recursive: true, force: true })
-    writeFileAtomicSync(file, `${sealer.seal(key.toString('hex'))}\n`, { mode: 0o600, dirMode: 0o700 })
-  } catch {
-    return { ok: false, reason: 'key-unopenable' }
-  }
-
-  const again = openManifestKey(root, sealer)
-
-  return again.ok && again.key.equals(key) ? again : { ok: false, reason: 'unsealable' }
-}
-
-export function signManifest(body: ManifestBody, key: Buffer): AcpManifest {
-  return { ...body, mac: createHmac('sha256', key).update(canonicalBody(body)).digest('hex') }
-}
-
-const isHex = (value: unknown, length: number): value is string =>
-  typeof value === 'string' && value.length === length && /^[0-9a-f]+$/.test(value)
-
-/** Parse and authenticate `MANIFEST.json`: shape, tree digest, and the MAC with the sealed key (always). */
-export function readManifest(
-  dir: string,
-  key: Buffer
-): { ok: true; manifest: AcpManifest } | ({ ok: false } & AcpToolsProblemInfo) {
-  let raw: unknown
-
-  try {
-    raw = JSON.parse(readFileSync(path.join(dir, MANIFEST_FILE), 'utf8'))
-  } catch {
-    return { ok: false, reason: 'manifest-missing' }
-  }
-
-  const m = raw as Partial<AcpManifest>
+export function checkManifestBody(
+  raw: unknown
+): { ok: true; body: ManifestBody } | ({ ok: false } & AcpToolsProblemInfo) {
+  const m = raw as Partial<ManifestBody> | null
 
   if (
     !m ||
+    typeof m !== 'object' ||
     m.v !== 1 ||
     !isHex(m.lockSha256, 64) ||
     !isHex(m.treeSha256, 64) ||
@@ -203,15 +145,16 @@ export function readManifest(
     typeof m.packages !== 'number' ||
     typeof m.addons !== 'string' ||
     !m.files ||
-    typeof m.files !== 'object'
+    typeof m.files !== 'object' ||
+    Array.isArray(m.files)
   ) {
     return { ok: false, reason: 'manifest-malformed' }
   }
 
   for (const [rel, entry] of Object.entries(m.files)) {
     if (
-      rel.startsWith('/') ||
-      rel.split('/').some(part => part === '..' || part === '') ||
+      !isTreePath(rel) ||
+      rel === MANIFEST_FILE ||
       !entry ||
       !isHex(entry.sha256, 64) ||
       typeof entry.size !== 'number' ||
@@ -222,19 +165,13 @@ export function readManifest(
     }
   }
 
-  const manifest = m as AcpManifest
+  const body = m as ManifestBody
 
-  if (treeDigest(manifest.files) !== manifest.treeSha256) {
+  if (treeDigest(body.files) !== body.treeSha256) {
     return { ok: false, reason: 'manifest-digest' }
   }
 
-  const expected = createHmac('sha256', key).update(canonicalBody(manifest)).digest('hex')
-
-  if (!isHex(manifest.mac, 64) || !timingSafeEqual(Buffer.from(manifest.mac), Buffer.from(expected))) {
-    return { ok: false, reason: 'manifest-signature' }
-  }
-
-  return { ok: true, manifest }
+  return { ok: true, body }
 }
 
 async function pool<T>(items: T[], limit: number, run: (item: T) => Promise<void>): Promise<void> {
@@ -260,7 +197,7 @@ const mark = (stat: { ino: bigint; size: bigint; mtimeNs: bigint; ctimeNs: bigin
 })
 
 /** Full check of `dir` against its manifest (MANIFEST.json itself excluded from the file set). */
-export async function verifyTree(dir: string, manifest: AcpManifest): Promise<VerifyResult> {
+export async function verifyTree(dir: string, manifest: ManifestBody): Promise<VerifyResult> {
   const snapshot: Snapshot = new Map()
   const seen = new Set<string>()
   const files: string[] = []

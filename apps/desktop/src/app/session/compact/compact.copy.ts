@@ -4,6 +4,9 @@
 export const compactCopy = {
   aborted: 'Compaction aborted · nothing was changed',
   busy: 'Wait for the turn to finish',
+  /** v0.0.9 G GF-7: the owner's line when a /compress meets a running turn (the runtime's text names the substrate
+   *  and a terminal shortcut). */
+  busyLine: 'The agent is still replying. Stop it, then run /compress.',
   button: 'Compact session',
   buttonShort: 'Compact',
   compacted: 'Compacted',

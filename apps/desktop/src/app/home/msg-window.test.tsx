@@ -41,6 +41,12 @@ vi.stubGlobal(
   }
 )
 
+/** v0.0.9 F6: the expand/retract button became the window menu; its Fill is the old expand (it toggles). */
+function chooseFill() {
+  fireEvent.click(screen.getByRole('button', { name: 'Window options for Message' }), { detail: 1 })
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Fill' }), { detail: 1 })
+}
+
 describe('MessageWindow iT boundary', () => {
   afterEach(() => {
     cleanup()
@@ -141,7 +147,9 @@ describe('MessageWindow session sidebar', () => {
     )
 
     expect(window.document.querySelector('header.imsg-head')?.hasAttribute('data-expanded')).toBe(true)
-    expect(screen.getByRole('button', { name: 'Retract message window' })).toBeTruthy()
+    // v0.0.9 F6: the expand/retract button became the window menu; Fill is active when the window is expanded.
+    fireEvent.click(screen.getByRole('button', { name: 'Window options for Message' }), { detail: 1 })
+    expect(screen.getByRole('menuitem', { name: 'Fill' }).dataset.active).toBe('true')
   })
 
   it('expanded, the head and the sidebar are marked so both clear the macOS window buttons', () => {
@@ -157,7 +165,7 @@ describe('MessageWindow session sidebar', () => {
     expect(head()?.hasAttribute('data-expanded')).toBe(false)
     expect(nav().hasAttribute('data-expanded')).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand message window' }))
+    chooseFill()
     expect(head()?.hasAttribute('data-expanded')).toBe(true)
     expect(nav().hasAttribute('data-expanded')).toBe(true)
 
@@ -167,7 +175,7 @@ describe('MessageWindow session sidebar', () => {
     expect(head()?.hasAttribute('data-expanded')).toBe(true)
     expect(nav().hasAttribute('data-expanded')).toBe(true)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retract message window' }))
+    chooseFill()
     expect(nav().hasAttribute('data-expanded')).toBe(false)
   })
 

@@ -40,7 +40,15 @@ import { openExternalUrl, openPreviewInBrowser } from './shell-open'
 import type { connectionRuntimeState, windowsState } from './state'
 import { resolveHermesBackend } from './updates'
 import { setAndPersistZoomLevel } from './window-events'
-import { createBrowserWindow, createInstanceWindow, createSessionWindow, wakeIndicatorController } from './windows'
+import {
+  closeStage3dWindow,
+  createBrowserWindow,
+  createInstanceWindow,
+  createSessionWindow,
+  createStage3dWindow,
+  isStage3dWindowOpen,
+  wakeIndicatorController
+} from './windows'
 
 interface WindowIpcDeps {
   connectionRuntimeState: typeof connectionRuntimeState
@@ -423,5 +431,36 @@ export function registerWindowIpc({ connectionRuntimeState, windowsState }: Wind
     if (!(await openPreviewInBrowser(url))) {
       throw new Error('Invalid preview URL')
     }
+  })
+
+  // v0.0.9 F6: the 3D iNFT in its own window. The app document only (the same sender rule as openExternal: never a
+  // guest, a sub-frame or another page), and no argument: the window reads which iNFT from the app's own storage, so
+  // nothing a page sends reaches a URL or a path here. The opener is the window that asked (the window opens on the
+  // side opposite it, and closes if it navigates away).
+  ipcMain.handle('hermes:stage3d-window:open', event => {
+    if (!isAppDocument(event, 'hermes:stage3d-window:open')) {
+      throw new Error('Refused: not the app window')
+    }
+
+    const opener = BrowserWindow.fromWebContents(event.sender)
+
+    createStage3dWindow(opener && !opener.isDestroyed() ? opener : null)
+
+    return { ok: true }
+  })
+
+  ipcMain.handle('hermes:stage3d-window:close', event => {
+    if (!isAppDocument(event, 'hermes:stage3d-window:close')) {
+      throw new Error('Refused: not the app window')
+    }
+
+    // Already gone: still tell the asker, so a "Bring back" never waits on a window that does not exist.
+    if (!isStage3dWindowOpen()) {
+      event.sender.send('hermes:stage3d-window:closed')
+
+      return
+    }
+
+    closeStage3dWindow()
   })
 }

@@ -1,5 +1,5 @@
 // The Book's honest states (contract §2.7) and the select-all confirmation.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { toInftCards } from '@/app/home/inft-scan'
@@ -105,7 +105,8 @@ describe('the iNFT Book view', () => {
 
     fill(store, 400, 'partial')
     expect(screen.getByText(copy.partial(400))).toBeTruthy()
-    expect(screen.getByRole('button', { name: copy.retry })).toBeTruthy()
+    // r4d: the alert's Rescan (one verb with the page's own Rescan).
+    expect(within(screen.getByRole('alert')).getByRole('button', { name: copy.retry })).toBeTruthy()
   })
 
   it('header counts, and select-all on more than 24 asks first', async () => {

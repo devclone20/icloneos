@@ -8,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 
 import { diskFold } from '../iclone-confinement/disk-name'
+import { MAX_SOCKET_PATH_BYTES, socketPath, type SocketPlace } from '../iclone-confinement/launcher-socket'
 import { CONSENT_CAPABILITY_KEYS, type ConsentRecord } from '../iclone-consent'
 
 import { type Ceiling, CREDENTIAL_READ_FLOOR } from './modes'
@@ -18,6 +19,41 @@ export interface PolicyPathsInput {
   home: string
   /** The Hermes checkout the backend runs from: its gate code is the confinement (floor 7). */
   hermesRoot: string | null
+  /** Where the private socket folder is computed from (launcher-socket.ts); absent: this process's real temp dir and uid. */
+  socketPlace?: SocketPlace
+}
+
+const realOrSame = (value: string): string => {
+  try {
+    return realpathSync(value)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * v0.0.9 (lead decision): main's sockets (launcher, agent, pay, pane) live in the short private socket folder of this
+ * userData, outside it. That folder is the agent's to write no more than userData/run was: a pay.sock planted there
+ * collects other spawns' tokens. Computed through launcher-socket.ts, both places it can be: the per-user temp dir and
+ * its /tmp fallback (also by /tmp's real name). Deny-only: it narrows every profile, never opens one.
+ */
+export function socketFolders(input: PolicyPathsInput): string[] {
+  const place = input.socketPlace ?? {
+    tmpdir: realOrSame(os.tmpdir()),
+    uid: typeof process.getuid === 'function' ? process.getuid() : 0
+  }
+
+  const perUser = path.dirname(socketPath(input.userDataDir, 'acp', place))
+
+  // The fallback socketPath takes when the per-user path is too long, forced by a temp dir longer than any socket path.
+  const fallback = path.dirname(
+    socketPath(input.userDataDir, 'acp', { tmpdir: `/${'x'.repeat(MAX_SOCKET_PATH_BYTES)}`, uid: place.uid })
+  )
+
+  // The per-user folder also by the temp dir's own spelling (/var/folders is /private/var/folders), when it differs.
+  const spelled = input.socketPlace ? perUser : path.join(os.tmpdir(), path.basename(perUser))
+
+  return [...new Set([perUser, spelled, fallback, fallback.replace(/^\/tmp\//, '/private/tmp/')])]
 }
 
 /**
@@ -46,6 +82,7 @@ export function protectedPaths(input: PolicyPathsInput): string[] {
     // the first gives a fresh green chain; forging the second puts a process outside the sandbox's own accounting.
     path.join(input.userDataDir, 'acp-work'),
     confinementMembersDir(input.home),
+    ...socketFolders(input),
     ...(input.hermesRoot ? [input.hermesRoot] : [])
   ]
 }

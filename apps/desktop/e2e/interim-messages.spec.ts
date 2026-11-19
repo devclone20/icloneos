@@ -29,7 +29,8 @@
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
 
-import { expect, type Page, test } from '@playwright/test'
+// v0.0.9 e2e harness: the shared test (ready claims, error-banner guard), not the bare Playwright one.
+import { expect, type Page, test } from './test'
 
 import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
 import { INTERIM_TEXTS, restartMockServer } from './mock-server'

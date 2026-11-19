@@ -193,6 +193,10 @@ export const jaBillingSettings: BillingSettingsCopy = {
     failedGeneric: 'もう一度試すか、ポータルで別のカードをお使いください。',
     unconfirmedTitle: '前回の支払いはまだ確認されていません',
     unconfirmed: 'もう一度試す前に、ポータルで残高をご確認ください。',
+    openPurchase: (amount: string) =>
+      `${amount} の購入に明確な応答がありませんでした。再試行すると同じ購入を完了し、二重に請求されることはありません。別の金額を購入する前にポータルをご確認ください。`,
+    lapsedPurchase: (amount: string) =>
+      `以前の ${amount} の購入には明確な応答がなく、安全に完了するには古すぎます。ポータルで残高をご確認ください。次の購入は新しい購入になります。`,
     checkFailedTitle: '支払いを確認できませんでした',
     untrackedTitle: 'この支払いは追跡できません',
     untrackedMessage: '支払いは受け付けられましたが追跡できません。ポータルで残高をご確認ください。',

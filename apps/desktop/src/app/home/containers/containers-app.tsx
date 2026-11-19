@@ -13,6 +13,7 @@ import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { Ban, Check, ChevronRight, CircleDashed, Square, X } from 'lucide-react'
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { ISOLATION_TITLE, IsolationControl, IsolationOffLine } from '@/components/permissions/isolation-control'
 import { OverflowTip, Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -690,9 +691,13 @@ function NarrowedNote({
               <span data-confinement-confirm="">
                 <Action onClick={() => onAllow(offer)}>{copy.narrowed.allow}</Action>
               </span>
-              <p className="icont__allow-means" role={outcome === 'failed' ? 'alert' : undefined}>
-                {outcome === 'failed' ? copy.narrowed.allowFailed : copy.narrowed.allowMeans}
-              </p>
+              {outcome === 'failed' ? (
+                <IcAlert className="icont__allow-means" tone="error">
+                  {copy.narrowed.allowFailed}
+                </IcAlert>
+              ) : (
+                <p className="icont__allow-means">{copy.narrowed.allowMeans}</p>
+              )}
             </div>
           )}
         </div>

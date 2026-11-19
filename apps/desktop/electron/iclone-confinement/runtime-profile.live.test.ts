@@ -15,6 +15,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { judgeProbe, parseProbe, PROBE_MARK } from '../iclone-hermes-plugins'
 
 import { attachLayer, probeAnswers, RUNTIME_PROBE, type RuntimeProbe, type RuntimeProbeAnswers, type WorldLayer } from './launcher-live-harness'
+import { prepareSocket } from './launcher-socket'
 import { readRunEvents, runFiles, type RunStartEvent } from './runs'
 import {
   createRuntimeWorld,
@@ -24,6 +25,7 @@ import {
   type RuntimeWorldOptions
 } from './runtime-live-harness'
 import { launcherLedgerDir } from './runtime-profile'
+import { launcherSocketFile } from './runtime-profile'
 import { auditSbpl, debuggerDenials } from './sbpl'
 
 import { readAckCommands, readAckPids, sweepAcks } from './index'
@@ -65,7 +67,10 @@ describe.skipIf(!live)('runtime profile (live, macOS Seatbelt)', () => {
     const project = path.join(root, 'project')
     const probeFile = path.join(project, 'probe.py')
     const token = path.join(paths.membersDir, 'project+0123456789ab+-+0123456789abcdef0123456789abcdef')
-    const launcherSocket = path.join(paths.userDataDir, 'confinement', 'run', 'launcher.sock')
+    // v0.0.9: the launcher socket is in its own private folder (launcher-socket.ts), prepared as main prepares it.
+    const launcherSocket = launcherSocketFile(paths.userDataDir)
+
+    prepareSocket(launcherSocket)
     const foreignSocket = path.join(outside, 'other.sock')
 
     writeFileSync(probeFile, RUNTIME_PROBE)
@@ -105,6 +110,9 @@ describe.skipIf(!live)('runtime profile (live, macOS Seatbelt)', () => {
       { id: 'write scratch', k: 'write', path: path.join(paths.scratchRoot, 'probe.tmp'), expect: 'allowed' },
       { id: 'write runtime tmp', k: 'write', path: path.join(root, 'tmp', 'probe.tmp'), expect: 'allowed' },
       { id: 'connect launcher socket', k: 'connect', path: launcherSocket, expect: 'allowed' },
+      // v0.0.9 (owner check): the profile opens exactly the socket literal, never its private folder.
+      { id: 'list the launcher socket folder', k: 'list', path: path.dirname(launcherSocket), expect: 'refused' },
+      { id: 'write in the launcher socket folder', k: 'write', path: path.join(path.dirname(launcherSocket), 'probe.tmp'), expect: 'refused' },
       { id: 'write run dir', k: 'write', path: path.join(paths.userDataDir, 'confinement', 'run', 'probe.tmp'), expect: 'allowed' },
       // The launcher's ledger: the record of what ran is never the runtime's to read or rewrite.
       { id: 'read ledger journal', k: 'read', path: path.join(launcherLedgerDir(paths.userDataDir), 'runs.jsonl'), expect: 'refused' },
@@ -249,7 +257,10 @@ describe.skipIf(!live)('runtime profile, unix sockets and IP one by one (live, m
 
     const { paths, root, outside } = world
     const probeFile = path.join(root, 'project', 'probe.py')
-    const launcherSocket = path.join(paths.userDataDir, 'confinement', 'run', 'launcher.sock')
+    // v0.0.9: the launcher socket is in its own private folder (launcher-socket.ts), prepared as main prepares it.
+    const launcherSocket = launcherSocketFile(paths.userDataDir)
+
+    prepareSocket(launcherSocket)
     const foreignSocket = path.join(outside, 'other.sock')
     const closing = () => net.createServer(socket => socket.end())
     const permToken = path.join(world.facts.permDir!, 'perm.token')
@@ -821,6 +832,7 @@ for (const layout of LAYOUTS) {
             return false
           }
         }
+
         const until = Date.now() + 8_000
 
         while (running() && Date.now() < until) {

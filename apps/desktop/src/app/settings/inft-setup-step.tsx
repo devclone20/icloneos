@@ -81,10 +81,11 @@ export const stepRowId = (notesKey: string) => `iws-step-${notesKey}`
 
 /**
  * One numbered wizard step on THE Settings row: the step's one sentence as the title (its number or a check in
- * front), the detail as the hint, the step's main action at the trailing edge, and everything else — status,
- * secondary actions, output, "ask hermes" and the owner's notes — under it.
+ * front), the detail as the hint, and under it the step's main action, then everything else — status, secondary
+ * actions, output, "ask hermes" and the owner's notes.
  */
 export function Step({
+  active = true,
   children,
   control,
   done,
@@ -96,6 +97,8 @@ export function Step({
   state,
   title
 }: {
+  /** v0.0.9 G GF-3: the step the owner is on. Only it offers "Ask the agent / Add notes"; others keep saved notes. */
+  active?: boolean
   children?: ReactNode
   control?: ReactNode
   done: boolean
@@ -108,11 +111,15 @@ export function Step({
   title: string
 }) {
   const copy = useInftWizardCopy().step
+  const hasSavedNotes = Boolean(kit.notes.notes[notesKey]?.text)
 
   return (
     <SettingRow
       below={
         <div className="iws__step-body">
+          {/* v0.0.9 G GF-2: the step's main action sits under its text, like every other step action, never detached
+              at the row's trailing edge. */}
+          {control ? <div className="iws__row">{control}</div> : null}
           {children}
           {state?.note && <p className="iws__note">{state.note}</p>}
           {state?.stalled && (
@@ -124,18 +131,22 @@ export function Step({
           )}
           {state?.error && <p className="iws__error">{state.error}</p>}
           {state?.output && <pre className="iws__out">{state.output}</pre>}
-          <div className="iws__row">
-            <Tip label={copy.askTip}>
-              <button className="iws__ask" onClick={onAskHermes} type="button">
-                <MessageSquare size={13} strokeWidth={1.8} /> {copy.ask}
-              </button>
-            </Tip>
-            <StepNoteEditor key={notesKey} kit={kit} notesKey={notesKey} />
-          </div>
+          {(active || hasSavedNotes) && (
+            <div className="iws__row">
+              {active && (
+                <Tip label={copy.askTip}>
+                  <button className="iws__ask" onClick={onAskHermes} type="button">
+                    <MessageSquare size={13} strokeWidth={1.8} /> {copy.ask}
+                  </button>
+                </Tip>
+              )}
+              <StepNoteEditor key={notesKey} kit={kit} notesKey={notesKey} />
+            </div>
+          )}
         </div>
       }
-      control={control}
-      hint={hint}
+      // v0.0.9 G GF-9: the step's text sits in the title column, with its actions.
+      hint={hint ? <span className="iws__step-hint">{hint}</span> : undefined}
       id={stepRowId(notesKey)}
       title={
         <span className="inline-flex items-center gap-2.5">

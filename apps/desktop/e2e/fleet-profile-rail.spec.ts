@@ -22,6 +22,8 @@ import {
   createSandbox,
   launchDesktop,
   type MockBackendFixture,
+  closeSettings,
+  openSessionsAndBots,
   type Sandbox,
   waitForAppReady,
   writeEnvFile,
@@ -207,7 +209,6 @@ const rail = (page: Page) => page.locator('[data-slot="profile-rail"]')
 const gatewayGroup = (page: Page, id: string) =>
   rail(page).locator(`[data-slot="profile-rail-gateway"][data-connection-id="${id}"]`)
 
-const activeGatewayLabel = (page: Page) => page.getByRole('button', { name: /^Registered gateways: / })
 
 async function groupOrder(page: Page): Promise<Array<[string, boolean]>> {
   return rail(page)
@@ -251,10 +252,22 @@ test.describe('fleet profile rail — two registered gateways', () => {
     // Let boot settle fully (the gateway health item reports "ready" once the
     // primary socket is open) so the boot-time launch-mode restore has run
     // before any click — the rail must then hold whatever the user picks.
-    await expect(page.locator('[data-slot="statusbar"]').getByText('ready', { exact: true })).toBeVisible({
-      timeout: 120_000
-    })
+    // Reviewed port (v0.0.9): icloneOS mounts no statusbar (no <WiredPane part="statusbar"> anywhere; the gateway
+    // health readout and the "Registered gateways" switcher live there upstream). waitForAppReady above already
+    // waited for main's backend.ready, the same primary-socket-open point. The rail is in the old left sidebar,
+    // which icloneOS hosts in Settings › Sessions & Bots (src/app/settings/sessions-bots.tsx:45): open it there.
     await page.waitForTimeout(2_000)
+  })
+
+  // Settings is opened per test and closed after it, so every test starts from the ready home (the per-test
+  // readiness claim, e2e/test.ts) and then works in Settings › Sessions & Bots.
+  test.beforeEach(async () => {
+    await openSessionsAndBots(page)
+    await expect(rail(page)).toBeVisible({ timeout: 60_000 })
+  })
+
+  test.afterEach(async () => {
+    await closeSettings(page)
   })
 
   test.afterAll(async () => {
@@ -265,10 +278,8 @@ test.describe('fleet profile rail — two registered gateways', () => {
   })
 
   test('lays both gateways on one strip, active gateway in its registry slot', async () => {
-    // The statusbar readout names the gateway the workspace is on.
-    await expect(activeGatewayLabel(page)).toHaveAttribute('aria-label', 'Registered gateways: This device', {
-      timeout: 60_000
-    })
+    // The gateway the workspace is on (upstream: the statusbar readout; icloneOS: the rail's active group).
+    await expect(gatewayGroup(page, 'local')).toHaveAttribute('data-active', 'true', { timeout: 60_000 })
 
     // The remote gateway's group appears once the roster has enumerated it.
     const homelab = gatewayGroup(page, REMOTE_ID)
@@ -311,11 +322,12 @@ test.describe('fleet profile rail — two registered gateways', () => {
     await gatewayGroup(page, REMOTE_ID)
       .getByRole('button', { name: `inbox · ${REMOTE_LABEL}` })
       .click()
+    // Reviewed port (v0.0.9): in icloneOS the re-home takes the workspace to the chat (Settings closes with it), so
+    // the rail is read again where it lives, in Settings › Sessions & Bots.
+    await openSessionsAndBots(page)
 
-    // The workspace follows the agent: statusbar readout flips to Homelab…
-    await expect(activeGatewayLabel(page)).toHaveAttribute('aria-label', `Registered gateways: ${REMOTE_LABEL}`, {
-      timeout: 120_000
-    })
+    // The workspace follows the agent: the active gateway flips to Homelab (upstream: the statusbar readout)…
+    await expect(gatewayGroup(page, REMOTE_ID)).toHaveAttribute('data-active', 'true', { timeout: 120_000 })
 
     // …Homelab's group is now the active one, on the clicked profile…
     const homelab = gatewayGroup(page, REMOTE_ID)
@@ -346,7 +358,9 @@ test.describe('fleet profile rail — two registered gateways', () => {
     await expect(menu).toBeVisible()
     await expect(menu.getByRole('menuitem', { name: 'Switch to research on This device' })).toBeVisible()
     await expect(menu.getByRole('menuitem', { name: 'Rename…' })).toBeVisible()
-    await expect(menu.getByRole('menuitem', { name: 'Edit SOUL.md…' })).toBeVisible()
+    // Reviewed port (v0.0.9): icloneOS names the SOUL.md editor "Edit the character…" (src/i18n/en/profiles.ts:81);
+    // the dialog it opens is still the owning gateway's SOUL.md (profile-switcher.tsx:648, next test).
+    await expect(menu.getByRole('menuitem', { name: 'Edit the character…' })).toBeVisible()
     await expect(menu.getByRole('menuitem', { name: 'Delete' })).toBeVisible()
     await expect(menu.getByRole('menuitem', { name: 'Connect to a remote host…' })).toHaveCount(0)
 
@@ -358,7 +372,7 @@ test.describe('fleet profile rail — two registered gateways', () => {
   test('editing SOUL.md on an at-rest square reads the owning gateway, not the foreground one', async () => {
     const square = gatewayGroup(page, 'local').getByRole('button', { name: 'research · This device' })
     await square.click({ button: 'right' })
-    await page.getByRole('menu', { name: 'Actions' }).getByRole('menuitem', { name: 'Edit SOUL.md…' }).click()
+    await page.getByRole('menu', { name: 'Actions' }).getByRole('menuitem', { name: 'Edit the character…' }).click()
 
     const dialog = page.getByRole('dialog')
     await expect(dialog).toBeVisible()
@@ -370,10 +384,9 @@ test.describe('fleet profile rail — two registered gateways', () => {
   test('switching back lands on the clicked profile of This device and keeps the order', async () => {
     test.setTimeout(180_000)
     await gatewayGroup(page, 'local').getByRole('button', { name: 'research · This device' }).click()
+    await openSessionsAndBots(page)
 
-    await expect(activeGatewayLabel(page)).toHaveAttribute('aria-label', 'Registered gateways: This device', {
-      timeout: 120_000
-    })
+    await expect(gatewayGroup(page, 'local')).toHaveAttribute('data-active', 'true', { timeout: 120_000 })
     const local = gatewayGroup(page, 'local')
     await expect(local).toHaveAttribute('data-active', 'true', { timeout: 30_000 })
     await expect(local.getByRole('button', { name: 'research', exact: true })).toHaveAttribute('aria-pressed', 'true', {

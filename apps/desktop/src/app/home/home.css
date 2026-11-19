@@ -59,27 +59,28 @@
    at global-home, so its rungs can never outrank a global rung above it.
    Upstream overlay views sit at 50, upstream modals at 120.
 
-    37  --ic-z-global-stage        .istage-layer: the field + live 3D iNFT, and the Message window plate on them
-    38  --ic-z-global-chat         the chat surface (the shell, clipped into the Message window)
-    39  --ic-z-global-shells       the iT shells (it-host.tsx parks them over the iT slots)
-    40  --ic-z-global-home         .ihome: all the chrome of the ihome scope lives in here
-    46  --ic-z-global-files        .ifiles: the Files island (mounted app-wide)
-    39  --ic-z-ihome-frame         .iwin-frame: the window's champagne border (decor)
-    41  --ic-z-ihome-itwin         .itwin: the iT terminal filling the window
-    42  --ic-z-ihome-chrome        .imsg-side: the Message window's session sidebar
-    43  --ic-z-ihome-econ          .iecon: a dock window opened over the Message window
-    44  --ic-z-ihome-dock          .dock: the rail, above the windows it opens
-    45  --ic-z-ihome-inft-tab      .inft-tab: the collections tab on the stage edge
-    60  --ic-z-ihome-controls      .iwin-controls .iop: the window's controls
-    61  --ic-z-ihome-inft-scrim    .inft-scrim: collections, modal, above every control
-    62  --ic-z-ihome-inft-panel    .inft-panel
-    64  --ic-z-ihome-wallet-scrim  .iwbal-scrim: wallet, modal
-    65  --ic-z-ihome-wallet-panel  .iwbal
-     1  --ic-z-local-base          lifted off the flow (plate, rail, cell, checkbox)
-     2  --ic-z-local-raised        over a base part (pane divider)
-     3  --ic-z-local-overlay       over the content (pane close, window controls)
-     4  --ic-z-local-float         floating header or flash region
-     5  --ic-z-local-peak          menus and a dragged card
+    37  --ic-z-global-stage         .istage-layer: the field + live 3D iNFT, and the Message window plate on them
+    38  --ic-z-global-chat          the chat surface (the shell, clipped into the Message window)
+    39  --ic-z-global-shells        the iT shells (it-host.tsx parks them over the iT slots)
+    40  --ic-z-global-home          .ihome: all the chrome of the ihome scope lives in here
+    46  --ic-z-global-files         .ifiles: the Files island (mounted app-wide)
+    39  --ic-z-ihome-frame          .iwin-frame: the window's champagne border (decor)
+    41  --ic-z-ihome-itwin          .itwin: the iT terminal filling the window
+    42  --ic-z-ihome-chrome         .imsg-side: the Message window's session sidebar
+    43  --ic-z-ihome-econ           .iecon: a dock window opened over the Message window
+    44  --ic-z-ihome-dock           .dock: the rail, above the windows it opens
+    45  --ic-z-ihome-inft-tab       .inft-tab: the collections tab on the stage edge
+    60  --ic-z-ihome-controls       .iwin-controls .iop: the window's controls
+    61  --ic-z-ihome-split-preview  .ic-split-preview: the Dock-drag split preview, over the panes and their controls
+    62  --ic-z-ihome-inft-scrim     .inft-scrim: collections, modal, above every control
+    63  --ic-z-ihome-inft-panel     .inft-panel
+    64  --ic-z-ihome-wallet-scrim   .iwbal-scrim: wallet, modal
+    65  --ic-z-ihome-wallet-panel   .iwbal
+     1  --ic-z-local-base           lifted off the flow (plate, rail, cell, checkbox)
+     2  --ic-z-local-raised         over a base part (pane divider)
+     3  --ic-z-local-overlay        over the content (pane close, window controls)
+     4  --ic-z-local-float          floating header or flash region
+     5  --ic-z-local-peak           menus and a dragged card
 
    Rule for anything added later: a piece with a scrim is modal and belongs
    ABOVE the window controls; a piece without one belongs below them.
@@ -266,6 +267,23 @@
   transform: translateY(-1px);
   background: linear-gradient(180deg, var(--ic-connect-hover-top), var(--ic-connect-hover-end));
   box-shadow: var(--ic-shadow-cta);
+}
+
+/* v0.0.9 r3 (design N5): on paper the hero's glass CTA read as disabled; the light skin's is a solid plate. */
+:root[data-hermes-theme='iclone-light'] .ihome__connect {
+  border-color: var(--ic-cta-fill);
+  background: var(--ic-cta-fill);
+  color: var(--ic-cta-ink);
+}
+
+:root[data-hermes-theme='iclone-light'] .ihome__connect:hover {
+  border-color: var(--ic-cta-fill-hover);
+  background: var(--ic-cta-fill-hover);
+}
+
+:root[data-hermes-theme='iclone-light'] .ihome__connect-badge {
+  background: color-mix(in srgb, var(--ic-cta-ink) var(--ic-a20), transparent);
+  color: var(--ic-cta-ink);
 }
 
 .ihome__connect-badge {
@@ -654,4 +672,89 @@
 :root[dir='rtl'] .ihome__dismiss {
   right: auto;
   left: 14px;
+}
+
+/* ── v0.0.9 F6: the 3D iNFT as a pane ──────────────────────────────────────
+   Its window menu rides the card's top-right corner beside the dismiss ×; the menu opens to the left, inside the
+   card. A placement (Fill, one half) moves the card with inline insets (stage3d-window/stage-pane.tsx) — the same
+   rect math as the Dock panes (window/rect.ts). */
+.ihome__stage--live {
+  transition:
+    top var(--ic-dur-base) var(--ic-ease-spring),
+    right var(--ic-dur-base) var(--ic-ease-spring),
+    bottom var(--ic-dur-base) var(--ic-ease-spring),
+    left var(--ic-dur-base) var(--ic-ease-spring),
+    border-radius var(--ic-dur-base) var(--ic-ease-spring);
+}
+
+.ihome__stage-menu {
+  position: absolute;
+  top: 14px;
+  right: 48px;
+  z-index: var(--ic-z-local-float);
+}
+
+:root[dir='rtl'] .ihome__stage-menu {
+  right: auto;
+  left: 48px;
+}
+
+/* While the iNFT performs in its own window: one calm line and a way back, centred on the card's field. */
+.istage-away {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 48px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.istage-away__line {
+  margin: 0;
+  font-family: 'Noto Serif Display ExtraCondensed', serif;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  letter-spacing: 0.04em;
+  color: var(--ic-text-1);
+  opacity: 0.9;
+}
+
+.istage-away__back {
+  padding: 8px 18px;
+  border-radius: var(--ic-radius-pill);
+  border: 1px solid var(--ic-stage-btn-line);
+  background: var(--ic-chip-fill);
+  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
+  color: var(--ic-stage-ink-bright);
+  font-size: var(--ic-type-md);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  pointer-events: auto;
+  transition:
+    background var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.istage-away__back:hover {
+  background: var(--ic-chip-fill-hover);
+}
+
+.istage-away__back:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.istage-away__back:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ihome__stage--live {
+    transition: none;
+  }
 }

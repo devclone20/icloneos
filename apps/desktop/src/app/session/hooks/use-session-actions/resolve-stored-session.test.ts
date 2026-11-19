@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as HermesModule from '@/hermes'
 import { getSession } from '@/hermes'
+import { type ChatMessage, preserveLocalAssistantErrors } from '@/lib/chat-messages'
 import { $activeGatewayProfile, $profiles } from '@/store/profile'
 import { $cronSessions, $messagingSessions, $sessions } from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
@@ -151,5 +152,90 @@ describe('resolveStoredSession profile ownership', () => {
     mockGetSession.mockResolvedValueOnce(session({ id: 's1', profile: 'default' }))
 
     await expect(resolveSessionProfile('s1')).resolves.toBe('default')
+  })
+})
+
+// v0.0.9 e2e b2: the single-session answer (GET /api/sessions/{id}) has no list-only fields such as `preview`.
+// Upserting it must merge over the list row it replaces, never drop what the answer does not carry.
+describe('resolveStoredSession keeps list-only fields on upsert', () => {
+  beforeEach(() => {
+    $cronSessions.set([])
+    $messagingSessions.set([])
+    $profiles.set(profiles('default', 'meta'))
+    $activeGatewayProfile.set('meta')
+    mockGetSession.mockReset()
+    // A profile-less row with more than one profile is unresolved, so the by-id answer is fetched and upserted.
+    $sessions.set([session({ id: 's1', pinned: true, preview: 'first ask, as the list shows it', title: 'old title' })])
+  })
+
+  afterEach(() => {
+    $sessions.set([])
+    $profiles.set([])
+    $activeGatewayProfile.set('default')
+  })
+
+  it("keeps the row's preview when the resolved session carries none", async () => {
+    mockGetSession.mockResolvedValueOnce(session({ id: 's1', profile: 'meta', title: 'kept title' }))
+
+    await resolveStoredSession('s1')
+
+    expect($sessions.get()).toHaveLength(1)
+    const row = $sessions.get()[0]
+    expect(row.preview).toBe('first ask, as the list shows it')
+    expect(row.pinned).toBe(true)
+    // What the answer does carry still wins.
+    expect(row.title).toBe('kept title')
+    expect(row.profile).toBe('meta')
+  })
+
+  it('takes an explicit new preview from the resolved session', async () => {
+    mockGetSession.mockResolvedValueOnce(session({ id: 's1', preview: 'fresh preview', profile: 'meta' }))
+
+    await resolveStoredSession('s1')
+
+    expect($sessions.get()).toHaveLength(1)
+    expect($sessions.get()[0].preview).toBe('fresh preview')
+  })
+})
+
+// v0.0.9 G 868394f2dd: b2's upsert merge (the row keeps its list preview) and r4's localNotice (the desktop's own
+// system line survives a transcript refresh) landed together. Both must hold through one reload-shaped sequence:
+// the by-id upsert, then a transcript refresh from the stored rows.
+describe('a refresh after an upsert keeps both the row preview and a local notice', () => {
+  beforeEach(() => {
+    $cronSessions.set([])
+    $messagingSessions.set([])
+    $profiles.set(profiles('default', 'meta'))
+    $activeGatewayProfile.set('meta')
+    mockGetSession.mockReset()
+    $sessions.set([session({ id: 's1', preview: 'first ask, as the list shows it', title: 'old title' })])
+  })
+
+  afterEach(() => {
+    $sessions.set([])
+    $profiles.set([])
+    $activeGatewayProfile.set('default')
+  })
+
+  it('keeps the preview on the upserted row and the notice in the refreshed transcript', async () => {
+    mockGetSession.mockResolvedValueOnce(session({ id: 's1', profile: 'meta', title: 'kept title' }))
+
+    await resolveStoredSession('s1')
+
+    const user: ChatMessage = { id: 'stored-user', parts: [{ text: 'ask', type: 'text' }], role: 'user' }
+    const reply: ChatMessage = { id: 'stored-reply', parts: [{ text: 'Hello.', type: 'text' }], role: 'assistant' }
+
+    const notice: ChatMessage = {
+      id: 'system-1',
+      localNotice: true,
+      parts: [{ text: '/compress · error: session busy', type: 'text' }],
+      role: 'system'
+    }
+
+    const refreshed = preserveLocalAssistantErrors([user, reply], [user, reply, notice])
+
+    expect($sessions.get()).toHaveLength(1)
+    expect($sessions.get()[0]).toMatchObject({ preview: 'first ask, as the list shows it', title: 'kept title' })
+    expect(refreshed.map(message => message.id)).toEqual(['stored-user', 'stored-reply', 'system-1'])
   })
 })

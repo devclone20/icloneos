@@ -12,6 +12,7 @@ import type { JSX } from 'react'
 import { useEffect, useRef } from 'react'
 
 import { useI18n } from '@/i18n'
+import { f5Collection } from '@/i18n/en/v009-f5'
 
 import { OwnershipDialogHost } from './ownership-dialog'
 import { useEdgeAutoHide } from './window/edge-autohide'
@@ -63,7 +64,7 @@ export function CollectionsTab({ onToggle, open }: CollectionsTabProps): JSX.Ele
         ref={tabRef}
         type="button"
       >
-        <span className="inft-tab__label">iNFT</span>
+        <span className="inft-tab__label">{f5Collection.tabLabel}</span>
       </button>
       {/* A sibling, never a child: portal events bubble through React parents. */}
       <OwnershipDialogHost />

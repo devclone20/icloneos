@@ -39,13 +39,17 @@ async function setZoomPercent(percent: number): Promise<void> {
   await expect.poll(readZoomPercent).toBe(percent)
 }
 
-async function gotoRoute(route: string): Promise<void> {
+// Reviewed port (v0.0.9): `landing` is where icloneOS settles after the hop. An address the app holds (a page,
+// an overlay, Settings) lands on itself. An unknown session id first routes as a session (`:sessionId`,
+// app/contrib/surfaces.tsx:113), then the resume finds no such session and the app falls back to a fresh draft
+// on `#/` (use-route-resume.ts:165-170 -> use-session-actions/index.ts:424); upstream kept the phantom route.
+async function gotoRoute(route: string, landing: string = route): Promise<void> {
   const page = fixture!.page
 
   await page.evaluate(target => {
     window.location.hash = target
   }, route)
-  await page.waitForFunction(target => window.location.hash === `#${target}`, route)
+  await page.waitForFunction(target => window.location.hash === `#${target}`, landing)
 }
 
 test.beforeAll(async () => {
@@ -65,8 +69,20 @@ test('a non-default UI scale survives navigation to never-zoomed routes', async 
   // like to the per-URL store. Pre-fix, the first hop reports 100%.
   const fresh = `/e2e-zoom-${Date.now()}`
 
-  for (const route of [`${fresh}-one`, `${fresh}-two`, '/settings?tab=config%3Aappearance']) {
-    await gotoRoute(route)
+  // Reviewed port (v0.0.9): icloneOS answers a phantom session id with a fresh draft on `#/`, so the upstream
+  // fresh-id hops become a session hop plus the app's own held addresses, none of which has a zoom record in the
+  // throwaway profile (createSandbox pins level 0 only). Each hop asserts its landing exactly, then the scale.
+  const hops: Array<[route: string, landing: string]> = [
+    [`${fresh}-one`, '/'],
+    ['/starmap', '/starmap'],
+    [`${fresh}-two`, '/'],
+    ['/webhooks', '/webhooks'],
+    ['/skills', '/skills'],
+    ['/settings?tab=config%3Aappearance', '/settings?tab=config%3Aappearance']
+  ]
+
+  for (const [route, landing] of hops) {
+    await gotoRoute(route, landing)
     await expect.poll(readZoomPercent, { message: `UI scale after navigating to ${route}` }).toBe(SCALE)
   }
 })

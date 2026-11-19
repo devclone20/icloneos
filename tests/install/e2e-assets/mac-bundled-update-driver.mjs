@@ -64,6 +64,7 @@ const launchEnv = updateWindowEnvironment(
 );
 const app = await _electron.launch({
   executablePath: appBin,
+  args: ['--use-mock-keychain'],
   cwd: path.dirname(appBin),
   // Inherit the driver env: HERMES_HOME / HOME / updates feed config must
   // reach the main process exactly as a user's double-click would.

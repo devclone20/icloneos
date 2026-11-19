@@ -138,6 +138,8 @@ function preserveStructuralParts(message: ChatMessage, previous: ChatMessage): C
 //   timestamp  — presentation-only (sort/age display), never affects transcript equality
 //   attachmentRefs — composer-side metadata; already reconciled in reconcileResumeMessages
 //   rowId — durable backend identity; stable for a given row, never changes what's painted
+//   localNotice — marks the desktop's own system line for the refresh merge (reconciliation.ts); the line's text
+//                 (parts) is what is painted, and the flag never changes after the line is written
 //
 // If your new field affects what the user sees in the transcript, add it to
 // COMPARED. If it's metadata that shouldn't trigger a re-render, add it to
@@ -165,7 +167,7 @@ const COMPARED_FIELDS = [
   'durationS'
 ] as const
 
-const IGNORED_FIELDS = ['attachmentRefs', 'parts', 'rowId'] as const
+const IGNORED_FIELDS = ['attachmentRefs', 'localNotice', 'parts', 'rowId'] as const
 
 // Compile-time check: every ChatMessagePart discriminant must be handled by
 // chatPartsEquivalent. If @assistant-ui adds a new part type, this fails tsc.
@@ -721,6 +723,7 @@ export function preserveLocalPendingTurnMessages(
 const safelyPersistedInflightUser = Symbol('safelyPersistedInflightUser')
 
 type LiveSessionProjection = Pick<SessionResumeResponse, 'inflight' | 'queued' | 'session_id'> & {
+  turn_started_at?: null | number
   [safelyPersistedInflightUser]?: true
 }
 
@@ -784,7 +787,16 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
   const latestUserIndex = messages.map(message => message.role).lastIndexOf('user')
   const latestUserRun: ChatMessage[] = []
 
-  for (let index = latestUserIndex; index >= 0; index -= 1) {
+  // The running turn by IDENTITY, not by text (v0.0.9 pass 4): the gateway's turn_started_at stamps the turn, and
+  // the stored rows inside it (the prompt, the output sealed by a correction, the correction itself, persisted when
+  // the correction landed) are that turn's, whatever they say. The walk below stops at a committed assistant row,
+  // which such a sealed segment is, and an earlier turn's identical prompt must never stand in for this one.
+  const turnStartedAt = typeof projection.turn_started_at === 'number' && projection.turn_started_at > 0 ? projection.turn_started_at : null
+
+  const runningTurnRows =
+    turnStartedAt === null ? null : messages.filter(message => typeof message.timestamp === 'number' && message.timestamp >= turnStartedAt)
+
+  for (let index = turnStartedAt === null ? latestUserIndex : -1; index >= 0; index -= 1) {
     const candidate = messages[index]
 
     if (candidate.role === 'user') {
@@ -799,6 +811,14 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
 
     break
   }
+
+  if (runningTurnRows) {
+    latestUserRun.push(...runningTurnRows.filter(message => message.role === 'user'))
+  }
+
+  // Output of this turn the store already holds, in order: a projected pre-correction segment i is the turn's i-th
+  // stored assistant row (position in the turn, not text).
+  const persistedTurnSegments = runningTurnRows?.filter(message => message.role === 'assistant').length ?? 0
 
   const persistedInLatestRun = (text: string): boolean =>
     latestUserRun.some(
@@ -887,7 +907,7 @@ export function appendLiveSessionProjection(messages: ChatMessage[], projection:
       const boundary = Math.min(Math.max(entry.offset as number, cursor), inflightAssistant.length)
       const segment = inflightAssistant.slice(cursor, boundary)
 
-      if (segment.trim()) {
+      if (segment.trim() && index >= persistedTurnSegments) {
         // Sealed pre-correction output. The `inflight-assistant-` prefix marks
         // it a live-tail row so repeated resumes keep the user run intact.
         projected.push({
@@ -1370,19 +1390,43 @@ export function restoreListedSession(session: SessionInfo, slice?: ListedSession
   setSessions(prepend)
 }
 
+/**
+ * The single-session answer (`GET /api/sessions/{id}`) is not a list row: it
+ * has no list-only fields such as `preview` (the list's correlated first-user
+ * SELECT, absent from `db.get_session`). Merge it over the row it replaces so
+ * those survive; only a field the answer actually carries (not `undefined`)
+ * wins. Replacing the row outright dropped the Detailed density's preview line
+ * after a reload's route restore until the next list refresh (v0.0.9 e2e b2).
+ */
+export function mergeResolvedSession(existing: SessionInfo | undefined, session: SessionInfo): SessionInfo {
+  if (!existing) {
+    return session
+  }
+
+  const merged: Record<string, unknown> = { ...existing }
+
+  for (const [key, value] of Object.entries(session)) {
+    if (value !== undefined) {
+      merged[key] = value
+    }
+  }
+
+  return merged as unknown as SessionInfo
+}
+
 function upsertResolvedSession(session: SessionInfo, storedSessionId: string) {
   const lineage = session._lineage_root_id ?? session.id
+  const sameLineage = (existing: SessionInfo) => (existing._lineage_root_id ?? existing.id) === lineage
 
-  setSessions(prev => [
-    session,
-    ...prev.filter(existing => {
-      if (sessionMatchesStoredId(existing, storedSessionId)) {
-        return false
-      }
+  setSessions(prev => {
+    const existing =
+      prev.find(row => sessionMatchesStoredId(row, storedSessionId)) ?? prev.find(row => sameLineage(row))
 
-      return (existing._lineage_root_id ?? existing.id) !== lineage
-    })
-  ])
+    return [
+      mergeResolvedSession(existing, session),
+      ...prev.filter(row => !sessionMatchesStoredId(row, storedSessionId) && !sameLineage(row))
+    ]
+  })
 }
 
 export async function resolveStoredSession(

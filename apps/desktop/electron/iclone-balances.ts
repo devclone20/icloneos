@@ -2,6 +2,8 @@ import * as https from 'node:https'
 
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
+import { activeFixtureWallet } from './fixture-wallet'
+
 /**
  * iCLONE OS — multi-chain native-coin balances (main process).
  *
@@ -423,6 +425,21 @@ let initialized = false
  * Call once, at app ready — see this feature's integration report for the
  * exact one-line main.ts patch. Idempotent, matching `initIclonePrivy`.
  */
+/** The fixture wallet's rows, in the display order of the real chains; another address reads all zero. */
+export function fixtureBalances(balances: Readonly<Record<string, string>>, isFixture: boolean): IcloneBalancesResult {
+  return {
+    ok: true,
+    fetchedAt: Date.now(),
+    rows: CHAINS.map(spec => ({
+      key: spec.key,
+      chain: spec.chain,
+      symbol: spec.symbol,
+      balance: (isFixture && balances[spec.key]) || '0',
+      ok: true
+    }))
+  }
+}
+
 export function initIcloneBalances(): void {
   if (initialized) {
     return
@@ -435,6 +452,17 @@ export function initIcloneBalances(): void {
     (_event: IpcMainInvokeEvent, address: unknown, solAddress?: unknown): Promise<IcloneBalancesResult> => {
       if (typeof address !== 'string') {
         return Promise.resolve({ ok: false, rows: [], fetchedAt: Date.now() })
+      }
+
+      // v0.0.9 r3: a fixture run answers its fixture rows and touches no RPC (dev/test builds only).
+      const fixture = activeFixtureWallet()
+
+      if (fixture) {
+        const answer = fixture.balancesFail
+          ? { ok: false, rows: [], fetchedAt: Date.now() }
+          : fixtureBalances(fixture.balances, address.toLowerCase() === fixture.address.toLowerCase())
+
+        return new Promise(resolve => setTimeout(() => resolve(answer), fixture.balancesDelayMs))
       }
 
       return fetchIcloneBalances(address, typeof solAddress === 'string' ? solAddress : undefined)

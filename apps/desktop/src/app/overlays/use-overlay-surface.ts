@@ -16,6 +16,12 @@ const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabi
 interface OverlaySurfaceOptions {
   /** The element that takes focus on mount, when the scope itself cannot (default: the scope). */
   focusRef?: RefObject<HTMLElement | null>
+  /**
+   * Whether the surface owns the keyboard right now (default true). v0.0.9 F6: Settings beside another pane does not
+   * while the other pane has the focus — no Tab trap pulling the keyboard back in, no Esc layer closing Settings
+   * from the other pane. The focus-in on mount and the restore on unmount are unaffected.
+   */
+  active?: boolean
 }
 
 /**
@@ -33,7 +39,7 @@ interface OverlaySurfaceOptions {
  */
 export function useOverlaySurface<T extends HTMLElement = HTMLDivElement>(
   onClose: () => void,
-  { focusRef }: OverlaySurfaceOptions = {}
+  { active = true, focusRef }: OverlaySurfaceOptions = {}
 ): RefObject<T | null> {
   const scopeRef = useRef<T>(null)
 
@@ -42,6 +48,20 @@ export function useOverlaySurface<T extends HTMLElement = HTMLDivElement>(
     const focusTarget = () => focusRef?.current ?? scopeRef.current
 
     focusTarget()?.focus({ preventScroll: true })
+
+    return () => {
+      if (previous && previous.isConnected) {
+        previous.focus({ preventScroll: true })
+      }
+    }
+  }, [focusRef])
+
+  useEffect(() => {
+    if (!active) {
+      return
+    }
+
+    const focusTarget = () => focusRef?.current ?? scopeRef.current
 
     const trap = (event: KeyboardEvent) => {
       const scope = scopeRef.current
@@ -78,16 +98,14 @@ export function useOverlaySurface<T extends HTMLElement = HTMLDivElement>(
 
     window.addEventListener('keydown', trap, true)
 
-    return () => {
-      window.removeEventListener('keydown', trap, true)
-
-      if (previous && previous.isConnected) {
-        previous.focus({ preventScroll: true })
-      }
-    }
-  }, [focusRef])
+    return () => window.removeEventListener('keydown', trap, true)
+  }, [active, focusRef])
 
   useEffect(() => {
+    if (!active) {
+      return
+    }
+
     const releaseLayer = pushEscapeLayer(ESCAPE_PRIORITY.overlay)
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -106,7 +124,7 @@ export function useOverlaySurface<T extends HTMLElement = HTMLDivElement>(
       window.removeEventListener('keydown', onKeyDown)
       releaseLayer()
     }
-  }, [onClose])
+  }, [active, onClose])
 
   return scopeRef
 }

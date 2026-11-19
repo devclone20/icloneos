@@ -123,6 +123,37 @@ describe('privy session restore', () => {
     expect(store.$privyRestoring.get()).toBe(false)
   })
 
+  it("sign-out hands back main's answer: ok only when main erased the session, its error otherwise (critic m1)", async () => {
+    const store = await boot()
+
+    const bridge = (window as unknown as { hermesDesktop: { iclonePrivy: { logout: ReturnType<typeof vi.fn> } } })
+      .hermesDesktop.iclonePrivy
+
+    await expect(store.logoutPrivy()).resolves.toEqual({ ok: true })
+
+    bridge.logout.mockResolvedValueOnce({ ok: false, error: 'partition busy' })
+    await expect(store.logoutPrivy()).resolves.toEqual({ ok: false, error: 'partition busy' })
+
+    bridge.logout.mockRejectedValueOnce(new Error('ipc gone'))
+    await expect(store.logoutPrivy()).resolves.toEqual({ ok: false, error: 'ipc gone' })
+    expect(store.$privySession.get().status).toBe('out')
+  })
+
+  it("sign-out forgets the wallet's balances: the next wallet never sees them (Q renderer 1)", async () => {
+    const store = await boot()
+    const balances = await import('./wallet-balances')
+
+    push?.({ status: 'in', address: ADDRESS, userId: 'u', label: 'owner' })
+    balances.$walletBalances.set({
+      address: ADDRESS,
+      status: 'ready',
+      rows: [{ key: 'ethereum', chain: 'Ethereum', symbol: 'ETH', balance: '1.5', ok: true }],
+      fetchedAt: Date.now()
+    })
+    store.logoutPrivy()
+    expect(balances.$walletBalances.get()).toEqual({ address: null, status: 'idle', rows: [], fetchedAt: null })
+  })
+
   it('a corrupt or foreign entry is ignored (no restore, no throw)', async () => {
     window.localStorage.setItem(KEY, '{"address":"not-an-address"}')
 

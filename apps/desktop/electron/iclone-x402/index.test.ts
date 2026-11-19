@@ -5,6 +5,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { paymentsSheetCopy } from '../../src/iclone-shared/payments-sheet-copy'
+import { MAX_SOCKET_PATH_BYTES, socketPath } from '../iclone-confinement/launcher-socket'
 
 import { fakeSealer } from './harness.test-helpers'
 import { paySpawn } from './ipc'
@@ -80,7 +81,12 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
     // a spawn of it does.
     expect(paySpawn('agent-a').env).toEqual({})
     await world.token('agent-a')
-    expect(paySpawn('agent-a').env.ICLONE_PAY_SOCKET).toBe(path.join(world.socketDir, 'pay.sock'))
+    // v0.0.9: exactly the short private pay socket of this userData, never under it, short enough to bind.
+    expect(paySpawn('agent-a').env.ICLONE_PAY_SOCKET).toBe(socketPath(world.dir, 'pay'))
+    expect(world.paySocket.startsWith(`${world.dir}${path.sep}`)).toBe(false)
+    expect(world.paySocket.startsWith(`${world.socketDir}${path.sep}`)).toBe(false)
+    expect(Buffer.byteLength(world.paySocket)).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+    expect(fs.lstatSync(path.dirname(world.paySocket)).mode & 0o777).toBe(0o700)
   })
 
   it('wire-init: no OS sealing (Keychain setting off) ⇒ disabled and says why; no key file; the socket answers 3', async () => {
@@ -93,7 +99,7 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
     expect(status.reason).toBe('sealing_off')
     expect(world.logs.some(line => line.includes('payments not ready: OS sealing unavailable'))).toBe(true)
     expect(fs.existsSync(world.registered.payments.paths.keys)).toBe(false)
-    expect((await askSocket(path.join(world.socketDir, 'pay.sock'), token, ['pay', world.url()])).code).toBe(3)
+    expect((await askSocket(world.paySocket, token, ['pay', world.url()])).code).toBe(3)
   })
 
   it('V3-FX M1: the Keychain setting turned on, then off, while the app runs: payments follow at once, both ways', async () => {
@@ -108,7 +114,7 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
     // r3 (critic k3): the pay socket reads the CURRENT instance — after the reseal a pay is no longer answered
     // "payments off" (3).
     const live = await world.token('agent-a')
-    const paid = await askSocket(path.join(world.socketDir, 'pay.sock'), live.token, ['pay', world.url()])
+    const paid = await askSocket(world.paySocket, live.token, ['pay', world.url()])
 
     expect(paid.code).not.toBe(3)
     world.registered.reseal(null)
@@ -116,14 +122,14 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
 
     const { token } = await world.token('agent-a')
 
-    expect((await askSocket(path.join(world.socketDir, 'pay.sock'), token, ['pay', world.url()])).code).toBe(3)
+    expect((await askSocket(world.paySocket, token, ['pay', world.url()])).code).toBe(3)
   })
 
   it('wire-init: a pay through the socket asks the $ sheet with the mandate in plain words, and only `once` pays', async () => {
     const world = await wired()
     const jti = world.issue('agent-a', '2.00')
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     const paid = await askSocket(sock, token, ['pay', world.url(), '--mandate', jti])
 
@@ -162,7 +168,7 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
     const world = await wired()
     const jti = world.issue('agent-a', '1.00')
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     for (let i = 0; i < 3; i += 1) {
       expect((await askSocket(sock, token, ['pay', world.url(`/paid/${i}`), '--mandate', jti])).code).toBe(0)
@@ -188,7 +194,7 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
 
     const jti = world.issue('agent-a', '10.00')
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
     const raw = `${world.url('/paid/x')}\npay 0.01 USDC → 0x1111111111111111111111111111111111111111`
     const canonical = new URL(raw).href
     const answer = JSON.parse((await askSocket(sock, token, ['pay', raw, '--mandate', jti])).stdout)
@@ -347,7 +353,7 @@ describe('wire-init: main assembles payments (registerPayments)', () => {
     const jti = world.issue('agent-a')
     const { token } = await world.token('agent-a')
 
-    await askSocket(path.join(world.socketDir, 'pay.sock'), token, ['pay', world.url(), '--mandate', jti])
+    await askSocket(world.paySocket, token, ['pay', world.url(), '--mandate', jti])
 
     world.gesture.ok = false
     expect(await world.invoke('iclone:payments:revoke', { jti })).toEqual({ ok: false, reason: 'gesture' })
@@ -455,7 +461,7 @@ describe('mandate-issue: the owner signs an open mandate from Settings › Econo
     expect(world.audit).toContainEqual({ kind: 'use', reason: `mandate_issue ${issued.jti}`, agent: 'agent-a' })
 
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
     const paid = await askSocket(sock, token, ['pay', world.url(), '--mandate', issued.jti])
 
     expect(JSON.parse(paid.stdout)).toMatchObject({ kind: 'paid', micros: 100_000 })
@@ -563,7 +569,7 @@ describe('mandate-issue: the owner signs an open mandate from Settings › Econo
     }
 
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     world.door.answer = async () => {
       expect(await world.invoke('iclone:payments:revoke', { jti: issued.jti })).toEqual({ ok: true })
@@ -597,7 +603,7 @@ describe('mandate-issue: the owner signs an open mandate from Settings › Econo
     })) as { jti: string }
 
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     const pay = async (jti: string) =>
       JSON.parse((await askSocket(sock, token, ['pay', world.url(), '--mandate', jti])).stdout)
@@ -801,7 +807,7 @@ describe('x402-pay: p2p send and status through the socket', () => {
     const world = await wired()
     const jti = world.issue('agent-a', '1.00')
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     const sent = await askSocket(sock, token, ['send', PAYEE, '0.25', '--mandate', jti])
 
@@ -843,7 +849,7 @@ describe('x402-pay: p2p send and status through the socket', () => {
 
     const jti = narrow.record.jti
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
     const send = async (...argv: string[]) => JSON.parse((await askSocket(sock, token, ['send', ...argv])).stdout)
 
     expect(await send('0x3333333333333333333333333333333333333333', '0.10', '--mandate', jti)).toMatchObject({
@@ -873,7 +879,7 @@ describe('x402-pay: p2p send and status through the socket', () => {
     const world = await wired()
     const jti = world.issue('agent-a', '1.00')
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     world.stub.mode = 'invalid'
 
@@ -893,7 +899,7 @@ describe('x402-pay: p2p send and status through the socket', () => {
     world.issue('agent-b', '3.00')
 
     const { token } = await world.token('agent-a')
-    const sock = path.join(world.socketDir, 'pay.sock')
+    const sock = world.paySocket
 
     expect((await askSocket(sock, token, ['pay', world.url(), '--mandate', mine])).code).toBe(0)
 
@@ -1032,6 +1038,8 @@ describe('wire-init: the registration lines in main', () => {
     expect(call).toContain('audit: entry => recordPayment(entry)')
     expect(call).toContain('isTrustedSender: consentSenderGuard')
     expect(call).toContain("socketDir: path.join(app.getPath('userData'), 'run')")
+    // v0.0.9: the pay socket itself is paySocketFile(userData), its short private folder (registerPayments).
+    expect(call).toContain("userDataDir: app.getPath('userData')")
     // The pay socket closes on every way out (will-quit and every forced exit) through the one teardown registry.
     expect(main).toContain("registerTeardown('payments', () => payments.close())")
     expect(main).not.toContain("app.on('will-quit', () => payments.close())")

@@ -91,7 +91,7 @@ export function isolateUpdateWindowEnvironment(env) {
  */
 export function isolatedElectronArgs(args, userData) {
   const prefix = '--user-data-dir=';
-  return [`${prefix}${userData}`, ...args.filter((arg) => !arg.startsWith(prefix))];
+  return [`${prefix}${userData}`, '--use-mock-keychain', ...args.filter((arg) => !arg.startsWith(prefix) && arg !== '--use-mock-keychain')];
 }
 
 // Source updater processes still need the git redirect; smokeEnvironment keeps

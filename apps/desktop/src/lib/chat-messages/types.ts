@@ -42,6 +42,9 @@ export type ChatMessage = {
   rowId?: number
   /** Emoji reactions on this message — one per author (see MessageReaction). */
   reactions?: MessageReaction[]
+  /** v0.0.9: a system line the desktop wrote itself (a slash command's answer, a refused /compress). The stored
+   *  transcript never holds it, so a refresh keeps it in place instead of dropping it (reconciliation.ts). */
+  localNotice?: boolean
 }
 
 export type GatewayEventPayload = {
@@ -56,6 +59,8 @@ export type GatewayEventPayload = {
   name?: string
   tool_id?: string
   tool_call_id?: string
+  /** tool.complete for a call the gate or confinement refused before it ran (tui_gateway _on_tool_refused). */
+  refused?: boolean
   args?: unknown
   arguments?: unknown
   context?: string

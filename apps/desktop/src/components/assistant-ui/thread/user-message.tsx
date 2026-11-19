@@ -42,17 +42,30 @@ export function StickyHumanMessageContainer({
     // while attachments below it scroll away.
     <>
       <div
-        className="group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-stretch gap-0 self-end overflow-visible bg-(--ic-surface-glass) px-4 pb-(--conversation-turn-gap) pt-1"
+        className={STICKY_HUMAN_ROW_CLASS}
         data-message-id={messageId}
         data-role="user"
         data-slot="aui_user-message-root"
       >
+        {/* v0.0.9 G GF-6: while the row is stuck (styles.css scroll-state query) these cover the strip above it, where
+            a half-cut reply line showed, and fade the edge under it, so the next line never butts against the slab. */}
+        <span aria-hidden data-slot="sticky-human-mask" />
+        <span aria-hidden data-slot="sticky-human-fade" />
         {children}
       </div>
       {attachments}
     </>
   )
 }
+
+/**
+ * The sticky row that pins a user prompt to the top of the thread. v0.0.9 G GF-M1 (MAJOR): its slab is the OPAQUE
+ * --ic-surface (ink-900 dark, paper light), never --ic-surface-glass: the scrolled reply slides under it, and a
+ * translucent slab drew that text through the pinned prompt so neither could be read (sticky-human-slab.test.ts).
+ * The HUD keeps its own rule (static, transparent rows, styles.css).
+ */
+export const STICKY_HUMAN_ROW_CLASS =
+  'group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-stretch gap-0 self-end overflow-visible bg-(--ic-surface) px-4 pb-(--conversation-turn-gap) pt-1'
 
 // Shared "user bubble" base. Both the read-only message and the inline
 // edit composer render the same bubble surface (rounded glass card);

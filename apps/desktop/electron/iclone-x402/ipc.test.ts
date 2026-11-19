@@ -6,6 +6,7 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { MAX_SOCKET_PATH_BYTES, SocketFolderError, socketPath } from '../iclone-confinement/launcher-socket'
 import { buildAllProfileSpecs } from '../iclone-confinement/profiles'
 import { globToSbplRegex, renderSbpl } from '../iclone-confinement/sbpl'
 import { callingSession } from '../iclone-permissions/calling-session'
@@ -13,6 +14,7 @@ import { callingSession } from '../iclone-permissions/calling-session'
 import type { PaymentAuditEntry, PayResult, X402Client } from './client'
 import {
   parsePayRequest,
+  paySocketFile,
   type PaySocketServer,
   paySpawn,
   payTokenFile,
@@ -66,7 +68,9 @@ const request = (token: string, argv: unknown[], extra: Record<string, unknown> 
 const tokenOf = (env: Record<string, string>) => fs.readFileSync(env.ICLONE_PAY_TOKEN_FILE, 'utf8').trim()
 
 interface Rig {
+  base: string
   dir: string
+  userData: string
   server: PaySocketServer
   audit: PaymentAuditEntry[]
   calls: { agent: string; url: string }[]
@@ -76,10 +80,18 @@ interface Rig {
 const rigs: Rig[] = []
 
 async function rig(
-  options: { hang?: boolean; client?: boolean; bindProfile?: (slug: string) => ProfileBinding; onVerb?: () => void } = {}
+  options: {
+    hang?: boolean
+    client?: boolean
+    bindProfile?: (slug: string) => ProfileBinding
+    onVerb?: () => void
+    /** The userData below the base (a deliberately long one proves the socket left it). */
+    userData?: string
+  } = {}
 ): Promise<Rig> {
-  // A short base: macOS sun_path is 104 bytes.
-  const dir = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'v3jw-')), 'run')
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'v3jw-'))
+  const userData = options.userData ? path.join(base, options.userData) : base
+  const dir = path.join(userData, 'run')
   const audit: PaymentAuditEntry[] = []
   const calls: { agent: string; url: string }[] = []
   const waiting: (() => void)[] = []
@@ -99,8 +111,11 @@ async function rig(
     send: async () => ({ kind: 'refused', reason: 'no_mandate', detail: 'test' }) satisfies PayResult
   }
 
+  fs.mkdirSync(userData, { recursive: true })
+
   const server = await startPaySocketServer({
     dir,
+    socket: paySocketFile(userData),
     verb: () => ({
       client: options.client === false ? null : client,
       audit: { record: entry => audit.push(entry) },
@@ -111,7 +126,7 @@ async function rig(
     bindProfile: options.bindProfile ?? (() => ({ home: HOME }))
   })
 
-  const made: Rig = { dir, server, audit, calls, release: () => waiting.splice(0).forEach(resolve => resolve()) }
+  const made: Rig = { base, dir, userData, server, audit, calls, release: () => waiting.splice(0).forEach(resolve => resolve()) }
 
   rigs.push(made)
 
@@ -122,7 +137,7 @@ afterEach(() => {
   for (const made of rigs.splice(0)) {
     made.release()
     made.server.close()
-    fs.rmSync(path.dirname(made.dir), { recursive: true, force: true })
+    fs.rmSync(made.base, { recursive: true, force: true })
   }
 
   setActivePaySocket(null)
@@ -142,6 +157,65 @@ describe('wire-socket: the pay socket, a token per spawn', () => {
     expect(minted.env.ICLONE_PAY_HOME).toBe(HOME)
     expect(JSON.stringify(minted.env)).not.toContain(token)
     expect(minted.env.ICLONE_PAY_SOCKET).toBe(server.socketPath)
+  })
+
+  it('v0.0.9: the pay socket lives in the short private folder of this userData, never under it; tokens stay in run', async () => {
+    const long = path.join('a-deliberately-long-userData-folder-name-0123456789abcdef', 'Application Support', 'icloneOS')
+    const { dir, userData, server } = await rig({ userData: long })
+
+    // The old place overflowed sun_path for this userData (it fails by construction).
+    expect(Buffer.byteLength(path.join(dir, 'pay.sock'))).toBeGreaterThan(MAX_SOCKET_PATH_BYTES)
+    expect(paySocketFile(userData)).toBe(socketPath(userData, 'pay'))
+    expect(server.socketPath).toBe(socketPath(userData, 'pay'))
+    expect(path.basename(server.socketPath)).toBe('pay.sock')
+    expect(server.socketPath.startsWith(`${userData}${path.sep}`)).toBe(false)
+    expect(Buffer.byteLength(server.socketPath)).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+
+    const folder = path.dirname(server.socketPath)
+    const tmp = fs.realpathSync(os.tmpdir())
+
+    expect(
+      (path.dirname(folder) === tmp && /^ic-[0-9a-f]{10}$/.test(path.basename(folder))) ||
+        /^\/tmp\/\d+-[0-9a-f]{10}$/.test(folder)
+    ).toBe(true)
+    // Checked before the listen: a real folder of ours, exactly 0700; the socket 0600.
+    expect(fs.lstatSync(folder).isDirectory()).toBe(true)
+    expect(fs.lstatSync(folder).mode & 0o777).toBe(0o700)
+    expect(fs.statSync(server.socketPath).mode & 0o777).toBe(0o600)
+
+    // The spawn env names that same path; the token file stays in userData/run; a client connects there.
+    const minted = server.mint('agent-a')
+
+    expect(minted.env.ICLONE_PAY_SOCKET).toBe(socketPath(userData, 'pay'))
+    expect(path.dirname(minted.env.ICLONE_PAY_TOKEN_FILE)).toBe(dir)
+
+    const answer = await ask(socketPath(userData, 'pay'), request(tokenOf(minted.env), ['stop']))
+
+    expect(JSON.parse(answer.stdout)).toEqual({ kind: 'stopped' })
+  })
+
+  it('v0.0.9: a pay socket folder that is not exactly ours and 0700 is refused before any listen', async () => {
+    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'v3jw-'))
+    const socket = paySocketFile(base)
+
+    fs.mkdirSync(path.dirname(socket), { mode: 0o755 })
+
+    try {
+      await expect(
+        startPaySocketServer({
+          dir: path.join(base, 'run'),
+          socket,
+          verb: () => ({ client: null, audit: null, stop: () => true }),
+          audit: null,
+          log: () => undefined,
+          bindProfile: () => ({ home: HOME })
+        })
+      ).rejects.toThrow(SocketFolderError)
+      expect(fs.existsSync(socket)).toBe(false)
+    } finally {
+      fs.rmSync(path.dirname(socket), { recursive: true, force: true })
+      fs.rmSync(base, { recursive: true, force: true })
+    }
   })
 
   it('S6: the verb runs with the session the request names, and with none when it names none', async () => {
@@ -330,6 +404,7 @@ describe('Jm2: one token file per spawn, named by its spawn id, in the 0700 run 
 
     const server = await startPaySocketServer({
       dir,
+      socket: paySocketFile(base),
       verb: () => ({ client: null, audit: null, stop: () => true }),
       audit: null,
       log: line => logs.push(line),

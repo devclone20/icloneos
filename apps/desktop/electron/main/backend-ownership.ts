@@ -133,6 +133,20 @@ async function backendParentMatches(entry: BackendOwnershipEntry) {
   }
 }
 
+const KILL_SETTLE_MS = 1000
+
+async function settleAfterKill(identity: BackendIdentity): Promise<boolean | undefined> {
+  const deadline = Date.now() + KILL_SETTLE_MS
+  let remaining: boolean | undefined
+
+  do {
+    await new Promise(resolve => setTimeout(resolve, 50))
+    remaining = await processIdentityMatches(identity)
+  } while (remaining !== false && Date.now() < deadline)
+
+  return remaining
+}
+
 async function stopOwnedBackend(identity: BackendIdentity) {
   if ((await processIdentityMatches(identity)) !== true) {
     return
@@ -172,8 +186,8 @@ async function stopOwnedBackend(identity: BackendIdentity) {
     }
   }
 
-  await new Promise(resolve => setTimeout(resolve, 50))
-  const remaining = await processIdentityMatches(identity)
+  // A killed process is gone once the OS reaped it: give that a moment (up to 1 s) before calling the stop failed.
+  const remaining = await settleAfterKill(identity)
 
   if (remaining !== false) {
     throw new Error(`Backend PID ${identity.pid} did not stop cleanly.`)

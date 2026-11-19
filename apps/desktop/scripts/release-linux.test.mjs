@@ -103,12 +103,23 @@ describe('electron-builder linux config', () => {
     assert.equal(b.deb.afterInstall, undefined, 'a custom postinst would drop the chrome-sandbox setup')
   })
 
-  test('REL-6: no platform packs the ACP CLI; mac, win and linux ship only the pin (lockfile + our launcher)', () => {
+  // v0.0.9 F1-B (owner decision 17 Nov, replaces REL-6's "no platform packs the CLI"): every platform ships the pin
+  // (+ its NOTICES.md) and the ONE materialised tree `build/acp-tools` → `acp-tools`, nothing else ACP-named.
+  test('F1-B: mac, win and linux ship the pin (lockfile, NOTICES, our launcher) and exactly the bundled ACP tree', () => {
     assert.equal(b.executableName, 'iclone os')
     const pin = [
-      { from: 'acp-cli-lock', to: 'acp-pin', filter: ['package.json', 'package-lock.json'] },
+      { from: 'acp-cli-lock', to: 'acp-pin', filter: ['package.json', 'package-lock.json', 'NOTICES.md'] },
       { from: 'scripts/acp-launch.cjs', to: 'acp-pin/launch.cjs' }
     ]
+    const bundle = { from: 'build/acp-tools', to: 'acp-tools' }
+    assert.ok(!(b.extraResources ?? []).some(entry => /acp/.test(entry.to)), 'no ACP entry outside the platform blocks')
+    for (const entries of [b.mac.extraResources, b.win.extraResources, b.linux.extraResources]) {
+      assert.deepEqual(
+        entries.filter(entry => entry.to.startsWith('acp-tools') || entry.from.startsWith('build/acp-tools')),
+        [bundle]
+      )
+    }
+    assert.ok(pkg.scripts.build.includes('node scripts/stage-acp-bundle.mjs'), 'the build materialises the bundle')
     for (const entries of [b.extraResources, b.mac.extraResources, b.win.extraResources, b.linux.extraResources]) {
       assert.ok(
         !entries.some(entry => /acp-cli/.test(entry.to) || /^build\/acp-cli/.test(entry.from)),
@@ -302,7 +313,7 @@ describe('release-linux', () => {
       exists: () => true,
       scanBinaries: () => ({ elf: [], machO: [] }),
       hygiene: () => [],
-      acpAbsent: () => ({ ok: true, problems: [] }),
+      acpPack: () => ({ ok: true, problems: [] }),
       sha256File: file => createHash('sha256').update(path.basename(file)).digest('hex'),
       chmod() {},
       readText: file =>
@@ -632,10 +643,12 @@ echo '{"ok":true,"stage":"'"$2"'"}'
       releaseLinux({ arch: 'arm64', skipBuild: true }, wrongArch.deps),
       /Architecture is amd64, expected arm64/
     )
-    const carried = fakeDeps({ acpAbsent: () => ({ ok: false, problems: ['1 acp-cli dir(s) in the pack'] }) })
+    const carried = fakeDeps({
+      acpPack: () => ({ ok: false, problems: ['1 acp-cli dir(s) outside Resources/acp-tools'] })
+    })
     await assert.rejects(
       releaseLinux({ arch: 'x64', skipBuild: true }, carried.deps),
-      /carries the ACP CLI.*acp-cli dir/
+      /does not ship the ACP CLI as built.*acp-cli dir/
     )
     const foreignArch = fakeDeps()
     await assert.rejects(releaseLinux({ arch: 'ia32', skipBuild: false }, foreignArch.deps), /unknown arch ia32/)

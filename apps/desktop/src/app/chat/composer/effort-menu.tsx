@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 
 import { useSessionView } from '@/app/chat/session-view'
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -232,9 +233,9 @@ export function EffortMenu({
           ))}
         </DropdownMenuRadioGroup>
         {thinkingOn && (!listed || wireState === 'clamped') ? (
-          <p className="px-2 py-1.5 text-[0.6875rem] text-(--ic-warning)" data-testid="effort-wire-note" role="note">
+          <IcAlert className="mx-2 my-1.5" testId="effort-wire-note" tone="warning">
             {sends && sends !== effective ? COPY.sends(levelName(sends, names)) : COPY.notOnRoute(label)}
-          </p>
+          </IcAlert>
         ) : null}
         {mayLower ? (
           <p

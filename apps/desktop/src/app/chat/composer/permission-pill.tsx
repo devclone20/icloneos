@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useId, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { ModeResetNotice } from '@/components/permissions/mode-reset-notice'
 import { Button } from '@/components/ui/button'
 import { codiconIcon } from '@/components/ui/codicon'
@@ -292,9 +293,9 @@ export function PermissionPill({ compact = false, disabled = false }: { compact?
           </p>
         ) : null}
         {error ? (
-          <p className={cn('px-2 pb-1.5 text-(--ic-danger)', META_TEXT)} role="alert">
+          <IcAlert className="mx-2 mb-1.5" tone="error">
             {error}
-          </p>
+          </IcAlert>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

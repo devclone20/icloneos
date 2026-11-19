@@ -13,6 +13,8 @@ import path from 'node:path'
 
 import { app, ipcMain } from 'electron'
 
+import { activeFixtureWallet, FIXTURE_MODEL_URL, fixtureModelGlb } from './fixture-wallet'
+
 const MAX_BYTES = 64 * 1024 * 1024
 const TIMEOUT_MS = 45000
 const MAX_REDIRECTS = 4
@@ -99,6 +101,12 @@ function download(url: string, redirects = 0): Promise<Buffer> {
 }
 
 async function fetchModel(url: string): Promise<IcloneModelResult> {
+  // v0.0.9 r3b (MR3-1): a fixture run's one model, built in code, never fetched or cached. A packaged build has no
+  // fixture, so the same URL goes to the network and fails (`.invalid` never resolves).
+  if (url === FIXTURE_MODEL_URL && activeFixtureWallet()) {
+    return { ok: true, data: fixtureModelGlb() }
+  }
+
   try {
     const cached = cachePath(url)
 

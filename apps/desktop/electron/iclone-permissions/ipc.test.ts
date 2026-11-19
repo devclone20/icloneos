@@ -5,6 +5,8 @@ import path from 'node:path'
 
 import { afterAll, describe, expect, it } from 'vitest'
 
+import { MAX_SOCKET_PATH_BYTES, socketPath } from '../iclone-confinement/launcher-socket'
+
 import { verifyAuditChain } from './audit'
 import {
   permissionsSpawn,
@@ -42,10 +44,16 @@ describe('registerPermissions: the spawn seam and the writers other fronts use',
   })
 
   it('F-2: a spawn gets the lock and its fd in env, the key only on its pipe line', () => {
-    const spawn = permissionsSpawn(path.join(dir, 'run'))
+    const spawn = permissionsSpawn(dir)
     const key = spawn.keyLine?.trim().split(' ')[2] ?? ''
 
     expect(spawn.env).toMatchObject({ ICLONE_POLICY_LOCK: '1', ICLONE_POLICY_KEY_FD: '3' })
+    // v0.0.9: the agent socket (perm and acp verbs) is the short private one of this userData, never under it; its
+    // token stays in userData/run, where the confined runtime may read it.
+    expect(spawn.env.ICLONE_PERM_SOCKET).toBe(socketPath(dir, 'acp'))
+    expect(spawn.env.ICLONE_PERM_SOCKET?.startsWith(`${dir}${path.sep}`)).toBe(false)
+    expect(Buffer.byteLength(spawn.env.ICLONE_PERM_SOCKET ?? '')).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+    expect(spawn.env.ICLONE_PERM_TOKEN_FILE).toBe(path.join(dir, 'run', 'acp.token'))
     expect(key).toMatch(/^[0-9a-f]{64}$/)
     expect(JSON.stringify(spawn.env)).not.toContain(key)
     expect(authority.state().enforcement).toBe('starting')
@@ -100,7 +108,7 @@ describe('registerPermissions: the spawn seam and the writers other fronts use',
 
   it('T7 (critic r2 m4): attach(child) → hello → enforced; the child exits → exited() → no-agent; a replacement → enforced', () => {
     const spawnOne = (pid: number) => {
-      const spawn = permissionsSpawn(path.join(dir, 'run'))
+      const spawn = permissionsSpawn(dir)
       const child = Object.assign(new EventEmitter(), { pid })
 
       spawn.attach(child)

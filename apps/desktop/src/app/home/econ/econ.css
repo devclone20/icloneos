@@ -158,7 +158,7 @@
   gap: 10px;
   font-size: var(--ic-type-sm);
   letter-spacing: 0.08em;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   white-space: nowrap;
 }
 
@@ -225,7 +225,8 @@
   flex: 1 1 auto;
   display: grid;
   place-items: center;
-  padding: 40px 64px 40px 28px;
+  /* Symmetric (design N3): the old 64/28 split made room for an in-content opacity slider that moved to the chrome. */
+  padding: 40px 32px;
   text-align: center;
 }
 
@@ -559,6 +560,21 @@
   background: linear-gradient(180deg, var(--ic-econ-gilt-30), var(--ic-accent-soft));
 }
 
+/* v0.0.9 r3 (design N5): on paper the gilt gradient (pale accent on pale accent) reads as disabled; the light skin's
+   primary is a solid plate, ink on accent-strong (cta-contrast.test.ts). */
+:root[data-hermes-theme='iclone-light'] .e-btn--primary {
+  border-color: var(--ic-cta-fill);
+  background: var(--ic-cta-fill);
+  color: var(--ic-cta-ink);
+  box-shadow: none;
+  font-weight: 500;
+}
+
+:root[data-hermes-theme='iclone-light'] .e-btn--primary:hover {
+  border-color: var(--ic-cta-fill-hover);
+  background: var(--ic-cta-fill-hover);
+}
+
 .e-btn--quiet {
   border-color: transparent;
   background: transparent;
@@ -863,6 +879,9 @@ html[data-text-size='large'] .e-stats {
 }
 
 .e-empty__icon {
+  /* The svg is display:block under preflight, so text-align never centred it (design N3). */
+  display: flex;
+  justify-content: center;
   margin-bottom: 8px;
   color: var(--e-faint);
 }
@@ -885,25 +904,10 @@ html[data-text-size='large'] .e-stats {
   margin-top: 12px;
 }
 
+/* v0.0.9 F4b — the note is IcAlert (components/ic/ic-page.css owns its plate, icon and colours); only its place in
+   an EconomyOS app is set here. */
 .e-note {
   margin: 12px 20px;
-  padding: 10px 14px;
-  border-radius: var(--e-radius);
-  border: 1px solid var(--e-line-strong);
-  background: var(--e-raised);
-  font-size: var(--ic-type-md);
-  line-height: 1.5;
-  color: var(--e-mute);
-}
-
-.e-note--warn {
-  border-color: var(--ic-econ-warn-40);
-  color: var(--e-warn);
-}
-
-.e-note--error {
-  border-color: var(--ic-econ-down-40);
-  color: var(--e-down);
 }
 
 .e-skeleton {
@@ -1009,7 +1013,7 @@ html[data-text-size='large'] .e-stats {
   width: 22px;
   height: 22px;
   border-radius: var(--ic-radius-pill);
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   cursor: pointer;
 }
 

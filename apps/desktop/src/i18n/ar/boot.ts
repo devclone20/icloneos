@@ -15,7 +15,7 @@ export const boot: TranslationOverrides['boot'] = {
   errors: {
     backgroundExited: 'خرجت عملية الوكيل الخلفية.',
     backgroundExitedDuringStartup: 'خرجت عملية الوكيل الخلفية أثناء بدء التشغيل.',
-    backendStopped: 'توقف الخلفية',
+    backendStopped: 'توقف الوكيل',
     desktopBootFailed: 'فشل تشغيل سطح المكتب',
     gatewayConnectionLost: 'انقطع الاتصال بالبوابة',
     gatewayConnectionLostDetail:

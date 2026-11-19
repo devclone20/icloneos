@@ -6,6 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import type { AgentUpdateCopy } from '@/i18n/en'
 import { Loader2 } from '@/lib/icons'
@@ -160,9 +161,7 @@ export function ReviewHoldButton({
         </span>
       </Button>
       {refused && (
-        <span className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-secondary)" role="alert">
-          {copy.reviewRefused}
-        </span>
+        <IcAlert tone="warning">{copy.reviewRefused}</IcAlert>
       )}
     </div>
   )

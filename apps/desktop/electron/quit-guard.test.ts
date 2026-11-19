@@ -38,7 +38,7 @@ test('quitPromptFor names the running chats', () => {
   const prompt = quitPromptFor({ count: 2, titles: ['Fix login', 'Ship docs'] }, false)
 
   assert.ok(prompt)
-  assert.equal(prompt.message, 'Hermes is still working on 2 chats.')
+  assert.equal(prompt.message, 'The agent is still working on 2 chats.')
   assert.ok(prompt.detail.includes('• Fix login'))
   assert.ok(prompt.detail.includes('• Ship docs'))
 })
@@ -47,17 +47,27 @@ test('quitPromptFor summarizes past the list cap and counts untitled work', () =
   const prompt = quitPromptFor({ count: 9, titles: ['a', 'b', 'c', 'd', 'e', 'f'] }, false)
 
   assert.ok(prompt)
-  assert.equal(prompt.message, 'Hermes is still working on 9 chats.')
+  assert.equal(prompt.message, 'The agent is still working on 9 chats.')
   assert.ok(prompt.detail.includes('• d'))
   assert.ok(!prompt.detail.includes('• e'))
   assert.ok(prompt.detail.includes('• 5 more'))
+})
+
+test('quitPromptFor never names the engine (v0.0.9 r3, eng n6)', () => {
+  for (const count of [1, 3]) {
+    const prompt = quitPromptFor({ count, titles: ['a'] }, false)
+
+    assert.ok(prompt)
+    assert.ok(!/hermes/i.test(prompt.message), prompt.message)
+    assert.ok(!/hermes/i.test(prompt.detail), prompt.detail)
+  }
 })
 
 test('quitPromptFor speaks singular for one chat', () => {
   const prompt = quitPromptFor({ count: 1, titles: [] }, false)
 
   assert.ok(prompt)
-  assert.equal(prompt.message, 'Hermes is still working on 1 chat.')
+  assert.equal(prompt.message, 'The agent is still working on 1 chat.')
   assert.ok(prompt.detail.includes('mid-turn'))
 })
 
@@ -71,7 +81,7 @@ test('quitPromptFor asks about a background command when no chat is running (fx2
 
 test('quitPromptFor adds background commands to a running chat, and an update handoff skips both (fx21)', () => {
   const prompt = quitPromptFor({ count: 1, titles: ['Fix login'] }, false, 2)
-  assert.equal(prompt?.message, 'Hermes is still working on 1 chat.')
+  assert.equal(prompt?.message, 'The agent is still working on 1 chat.')
   assert.match(prompt?.detail ?? '', /Quitting also stops 2 background commands\./)
   assert.equal(quitPromptFor({ count: 0, titles: [] }, true, 3), null)
   assert.doesNotMatch(quitPromptFor({ count: 1, titles: [] }, false)?.detail ?? '', /background/)

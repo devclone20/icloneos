@@ -9,8 +9,14 @@ import type { AgentIdentity } from '../types'
 
 const runAcp = vi.fn()
 const requestComposerInsert = vi.fn()
+// F1-S: the owner-click confirm main requires before a catalogue write (owner-write.ts); granted unless a test refuses it.
+const confirmOwnerWrite = vi.fn()
 
 vi.mock('../../acp-setup', () => ({ runAcp: (...args: unknown[]) => runAcp(...args) }))
+
+vi.mock('../owner-write', () => ({
+  confirmOwnerWrite: (...args: unknown[]) => confirmOwnerWrite(...args)
+}))
 
 vi.mock('../../../chat/composer/focus', () => ({
   requestComposerFocus: () => undefined,
@@ -141,6 +147,7 @@ function answer(argv: string[]): unknown {
 }
 
 beforeEach(() => {
+  confirmOwnerWrite.mockImplementation(() => Promise.resolve({ ok: true }))
   runAcp.mockImplementation(async (_inftId: string, argv: string[]) => ({
     ok: true,
     code: 0,
@@ -151,6 +158,7 @@ beforeEach(() => {
 
 afterEach(() => {
   runAcp.mockReset()
+  confirmOwnerWrite.mockReset()
   requestComposerInsert.mockReset()
   overrides = {}
   vi.useRealTimers()
@@ -862,4 +870,69 @@ test('My resources publishes a new endpoint and hands changes to the iNFT', asyn
     '--json'
   ])
   expect(await screen.findByText('Published “Price feed”.')).toBeTruthy()
+})
+
+// ── F1-S: the owner-click lock on the catalogue writes ───────────────────────
+
+test('F1-S: the delete takes the owner confirm inside the click, for exactly the argv it then runs', async () => {
+  overrides = { 'offering list': [OWN], 'offering delete': { success: true } }
+
+  mount({ identity: identityOf('agent-1') })
+  await openOwn(/My offerings/)
+  fireEvent.click(await screen.findByText('Crypto news report'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+
+  const button = within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', {
+    name: /Delete offering/
+  })
+
+  // The control the preload's lock counts a real click on.
+  expect(button.hasAttribute('data-acp-market-confirm')).toBe(true)
+
+  fireEvent.click(button)
+
+  // Synchronously, inside the click: before any await, so the preload still sees the owner's gesture.
+  expect(confirmOwnerWrite).toHaveBeenCalledTimes(1)
+
+  await waitFor(() => expect(argvOf('offering delete')).toHaveLength(1))
+
+  const [inftId, argv] = confirmOwnerWrite.mock.calls[0] as [string, string[]]
+  const ran = runAcp.mock.calls.find(call => (call[1] as string[]).slice(0, 2).join(' ') === 'offering delete')
+
+  expect(argv).toEqual(['offering', 'delete', '--offering-id', 'off-1', '--force', '--json'])
+  expect(ran?.[0]).toBe(inftId)
+  expect(ran?.[1]).toEqual(argv)
+})
+
+test('F1-S: the editors’ submit control carries the market lock marker', async () => {
+  overrides = { 'subscription list': [] }
+
+  mount({ identity: identityOf('agent-1') })
+  await openOwn(/My offerings/)
+  await screen.findByText('No offerings yet')
+  fireEvent.click(screen.getAllByRole('button', { name: /New offering/ })[0])
+
+  const form = await screen.findByRole('form', { name: 'New offering' })
+
+  expect(within(form).getByRole('button', { name: 'Create offering' }).hasAttribute('data-acp-market-confirm')).toBe(
+    true
+  )
+})
+
+test('F1-S: without the owner’s confirm nothing is sent, and the pane says why', async () => {
+  overrides = { 'offering list': [OWN], 'offering delete': { success: true } }
+  confirmOwnerWrite.mockImplementation(() =>
+    Promise.resolve({ ok: false, error: '[acp-write:gesture] this write needs your own click on its button' })
+  )
+
+  mount({ identity: identityOf('agent-1') })
+  await openOwn(/My offerings/)
+  fireEvent.click(await screen.findByText('Crypto news report'))
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+  fireEvent.click(
+    within(screen.getByRole('group', { name: 'Confirm delete' })).getByRole('button', { name: /Delete offering/ })
+  )
+
+  expect(await screen.findByText(/This needs your own click on its button/)).toBeTruthy()
+  expect(argvOf('offering delete')).toHaveLength(0)
 })

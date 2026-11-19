@@ -52,7 +52,8 @@ export const ECON_ORDER: EconKind[] = ['email', 'wallet', 'bank', 'hyperliquid',
 
 export const ECON_APPS: Record<EconKind, EconAppMeta> = {
   email: {
-    title: 'email',
+    // r5 (design, pane chip casing): the pane titles are cased like the other panes ("Settings", "Message").
+    title: 'Email',
     label: 'Email',
     tone: 'email',
     Icon: IcEmail,
@@ -60,7 +61,7 @@ export const ECON_APPS: Record<EconKind, EconAppMeta> = {
     data: () => import('./email/email-data')
   },
   wallet: {
-    title: 'wallet',
+    title: 'Wallet',
     label: 'Wallet',
     tone: 'wallet',
     Icon: IcWallet,
@@ -68,7 +69,7 @@ export const ECON_APPS: Record<EconKind, EconAppMeta> = {
     data: () => import('./wallet/wallet-data')
   },
   bank: {
-    title: 'bank card',
+    title: 'Bank card',
     label: 'Bank Card',
     tone: 'card',
     Icon: IcCard,
@@ -76,7 +77,7 @@ export const ECON_APPS: Record<EconKind, EconAppMeta> = {
     data: () => import('./bank/bank-data')
   },
   hyperliquid: {
-    title: 'hyperliquid',
+    title: 'Hyperliquid',
     label: 'Hyperliquid',
     tone: 'hyperliquid',
     Icon: IcHyperliquid,
@@ -84,7 +85,7 @@ export const ECON_APPS: Record<EconKind, EconAppMeta> = {
     data: () => import('./hyperliquid/hyperliquid-data')
   },
   acp: {
-    title: 'acp market',
+    title: 'ACP Market',
     label: 'ACP Market',
     tone: 'market',
     Icon: IcMarket,

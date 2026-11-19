@@ -39,6 +39,7 @@ vi.mock('electron', () => ({
 }))
 
 import { initIcloneAcp } from './iclone-acp'
+import { acpSocketFile } from './iclone-acp-ipc'
 import { RESEND_AT_MARK } from './iclone-acp-signup'
 
 const CONTRACT = '0x' + '4d'.repeat(20)
@@ -83,7 +84,8 @@ const rendererRun = (inftId: string, argv: string[]) =>
 const agentRun = (inft: string, argv: string[]) =>
   new Promise<Frame[]>((resolve, reject) => {
     const token = readFileSync(path.join(runDir, 'acp.token'), 'utf8').trim()
-    const socket = net.createConnection(path.join(runDir, 'acp.sock'))
+    // v0.0.9: the agent door listens on the short private socket of this userData, never under userData/run.
+    const socket = net.createConnection(acpSocketFile(lab.userData))
     let data = ''
 
     socket.on('connect', () => socket.write(`${JSON.stringify({ v: 1, token, inft, argv })}\n`))

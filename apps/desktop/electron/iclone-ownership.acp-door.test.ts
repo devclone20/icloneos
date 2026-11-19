@@ -90,7 +90,8 @@ beforeAll(async () => {
   const item = { id: LOST_ID, chain: 'Robinhood', contract: C, tokenId: '7', name: '#7', image: null, configured: true }
   await s.observe(OWNER, [item])
   setOwnershipGateRoot(lab.userData)
-  initIcloneAcp({ isTrustedSender: () => true }) // sender guard covered in iclone-acp.sender.test.ts
+  // sender guard covered in iclone-acp.sender.test.ts; every id here is one main's scans returned (critic m5)
+  initIcloneAcp({ isTrustedSender: () => true, isKnownInft: () => true })
 })
 
 afterAll(() => {

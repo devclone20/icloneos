@@ -64,6 +64,7 @@ import { packedElectronDist, stageChromiumLicenses } from './electron-licenses.m
 import { stageGetWindows, stageIcloneFsevents, stageNodePty } from './stage-native-deps.mjs'
 import { BUNDLE_DIR, PIN_PATH, readPin, verifyRuntimeBundle } from './fetch-runtime-pin.mjs'
 import { findRuntimePython, runtimeEqualsRepo } from './runtime-artifact.mjs'
+import { ensureAcpBundleFor } from './stage-acp-bundle.mjs'
 import { stageIclonePlugins } from './stage-iclone-plugins.mjs'
 
 export function cleanStaleAppOutDir(appOutDir) {
@@ -204,8 +205,16 @@ export default async function beforePack(context) {
           `[before-pack] pinned Hermes runtime bundle verified for ${platform}-${archName}: it is this repository at HEAD (RT-5)`
         )
       }
-      // REL-6 (ruling 26): no platform packs the ACP CLI. The app installs it at first use from the npm registry
-      // (electron/iclone-acp-tools/); the bundle carries only Resources/acp-pin (scripts/acp-pack-absent.mjs).
+      // v0.0.9 (owner decision 17 Nov, replaces ruling 26): every platform SHIPS the ACP CLI (Resources/acp-tools).
+      // `npm run build` staged it for the build host; a pack for another target re-stages it for THAT target (no smoke
+      // run: its binaries do not run here), so the bundle is always the pack's own platform and arch. A staged tree
+      // that is this target's and still verifies is kept as is (a release's signed and resealed tree among them).
+      if (archName !== 'universal') {
+        const acp = await ensureAcpBundleFor({ platform, arch: archName, log: line => console.log(line) })
+        console.log(
+          `[before-pack] ACP CLI ${acp.manifest.cliVersion} bundled for ${acp.manifest.target} (${acp.kept ? 'kept' : 'staged'}, tree ${acp.manifest.treeSha256.slice(0, 12)})`
+        )
+      }
     }
   } catch (err) {
     // This one SHOULD fail the build — a missing/wrong native binary for the

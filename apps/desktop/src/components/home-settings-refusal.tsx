@@ -1,6 +1,7 @@
 import { Copy, Loader2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { IcButton } from '@/components/onboarding/ic-system'
 import { useI18n } from '@/i18n'
 import type { HomeSettingsFinding, HomeSettingsRefusal, HomeSettingsReplaceFailure } from '@/iclone-shared/home-settings'
@@ -130,9 +131,7 @@ export function HomeSettingsRefusalPanel({ doing = 'start', onChange, profile, r
           ) : null}
 
           {outcome?.file === finding.file && outcome.failure ? (
-            <p className="ic-sys-body text-(--ic-danger)" role="alert">
-              {copy.homeSettingsCopyFailed[outcome.failure](outcome.target)}
-            </p>
+            <IcAlert tone="error">{copy.homeSettingsCopyFailed[outcome.failure](outcome.target)}</IcAlert>
           ) : null}
         </div>
       ))}

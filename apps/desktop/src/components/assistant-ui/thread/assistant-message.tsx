@@ -237,8 +237,11 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
             <AssistantStatusSlot />
             <AssistantPreviewEmbeds />
             <MessagePrimitive.Error>
+              {/* v0.0.9 F4b — type 3 skin (IcAlert's error plate and ink; the primitive keeps its own parts: the
+                  message, the dismiss and the recovery actions, which IcAlert's single action cannot hold). */}
               <ErrorPrimitive.Root
-                className="mt-1.5 flex flex-col gap-1.5 rounded-lg border border-[color-mix(in_srgb,var(--ic-danger)_35%,transparent)] bg-[color-mix(in_srgb,var(--ic-danger)_7%,transparent)] px-3 py-2 text-[0.78rem] leading-5 text-[color-mix(in_srgb,var(--ic-danger)_78%,var(--ic-text-ramp-80))]"
+                className="mt-1.5 flex flex-col gap-1.5 rounded-(--ic-radius-sm) border border-(--ic-danger-soft) bg-(--ic-danger-soft) px-3 py-2 text-(length:--ic-type-md) leading-5 text-(--ic-danger-ink) [overflow-wrap:anywhere]"
+                data-tone="error"
                 role="alert"
               >
                 <div className="flex items-start gap-1.5">

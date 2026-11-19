@@ -4,8 +4,11 @@ import { type TestInfo } from '@playwright/test'
 
 import {
   buildAppEnv,
+  conversationRow,
   createSandbox,
   launchDesktop,
+  newConversation,
+  openConversationList,
   type Sandbox,
   waitForAppReady,
   writeEnvFile,
@@ -75,11 +78,13 @@ async function setupSeededDesktop(mockServer?: MockServerOptions): Promise<Seede
   }
 }
 
+// The icloneOS Message pane's own conversation list (the upstream `[data-slot="sidebar"]` is not in this app).
 function sessionRow(page: Page) {
-  return page.locator('[data-slot="sidebar"] button').filter({ hasText: SESSION_TITLE }).first()
+  return conversationRow(page, SESSION_TITLE)
 }
 
 async function openSeededSession(page: Page): Promise<void> {
+  await openConversationList(page)
   const row = sessionRow(page)
   await row.waitFor({ state: 'visible', timeout: 60_000 })
   await row.click()
@@ -91,9 +96,7 @@ async function openSeededSession(page: Page): Promise<void> {
 }
 
 async function openNewSession(page: Page): Promise<void> {
-  const button = page.locator('[data-slot="sidebar"] button').filter({ hasText: 'New session' }).first()
-  await button.waitFor({ state: 'visible', timeout: 10_000 })
-  await button.click()
+  await newConversation(page)
   await page.waitForFunction(
     expected => !(document.querySelector('[data-slot="aui_thread-viewport"]')?.textContent ?? '').includes(expected),
     EXPECTED_TEXT,

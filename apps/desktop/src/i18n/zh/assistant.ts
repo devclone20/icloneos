@@ -5,6 +5,7 @@ export const assistant: Translations['assistant'] = {
     loadingSession: '正在加载会话',
     showEarlier: '显示更早的消息',
     loadingResponse: '智能体正在加载回复',
+    agentWorking: '智能体正在工作',
     resumeWhenBackgroundDone: count =>
       count === 1 ? '后台任务完成后将自动继续' : `${count} 个后台任务完成后将自动继续`,
     thinking: '思考中',
@@ -124,6 +125,13 @@ export const assistant: Translations['assistant'] = {
     statusRecovered: '已恢复',
     statusDone: '完成',
     permissionAsked: '已请求您的许可',
+    refused: '已拒绝',
+    refusedByMode: (tool, mode) => `${tool} 未运行：此对话的权限模式（${mode}）不允许。`,
+    refusedNoGateway: tool => `${tool} 未运行：无法连接 icloneOS，因此只允许读取。`,
+    refusedGeneric: tool => `${tool} 未运行：icloneOS 不允许此操作。`,
+    refusedChangeMode: '更改权限模式',
+    refusedSentToAgent: '发送给代理的内容',
+    statusRefused: '运行前被拒绝',
     memoryWriteNoted: '已记下记忆写入',
     actions: {
       read: '已读取',

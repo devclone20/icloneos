@@ -2029,6 +2029,40 @@ def _(rid, params: dict) -> dict:
         timeout_err=(5002, "command timed out (30s)"), on_result=done)
 
 
+def _progress_tool_refused(sid: str, name: str | None, _preview: str | None, kw: dict) -> None:
+    """iclone-seam: v009-rt refusal visibility. A refused call (permission gate, Manual mode, scope, guardrail) as a
+    ``tool.start`` + ``tool.complete`` pair with ``refused: true`` and the reason: never silent, and never gated on
+    display.tool_progress, because a refusal is not tool chrome. The call never ran (agent.tool_executor
+    notify_tool_refused fires after the refusal)."""
+    import json
+    import uuid
+
+    name = str(name or "tool")
+    args = kw.get("refused_args") if isinstance(kw.get("refused_args"), dict) else {}
+    if _connector_lifecycle_is_stale(sid, name, args):
+        return
+    tool_id = str(kw.get("tool_call_id") or "") or f"refused:{uuid.uuid4().hex[:12]}"
+    start: dict = {"tool_id": tool_id, "name": name, "context": _tool_ctx(name, args)}
+    if (labels := _tool_labels(name, args)) is not None:
+        start["labels"] = labels
+    if args:
+        start["args"] = args
+    _emit_tool_lifecycle("tool.start", sid, name, args, start)
+    result = kw.get("result")
+    try:
+        parsed = json.loads(result) if isinstance(result, str) else result
+    except Exception:
+        parsed = result
+    reason = str(kw.get("reason") or "") or (
+        str(parsed.get("error") or parsed.get("message") or "") if isinstance(parsed, dict) else str(result or ""))
+    complete = {k: v for k, v in start.items() if k != "context"}
+    complete.update(result=parsed, refused=True, error=reason, summary=f"Refused: {reason}" if reason else "Refused")
+    _emit_tool_lifecycle("tool.complete", sid, name, args, complete)
+
+
 def register(server) -> None:
     """Rebind this module's helpers + handlers onto ``server`` and register the handlers."""
     bind_module(globals(), server, skip=("_",))
+    # iclone-seam: v009-rt refusal visibility. tool_progress._on_tool_progress dispatches on this table (registered
+    # before this module); the agent sends ``tool.refused`` through the progress callback it already has.
+    server._PROGRESS_HANDLERS["tool.refused"] = (server._progress_tool_refused, None)

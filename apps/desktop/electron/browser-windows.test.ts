@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'vitest'
 
-import { buildBrowserWindowUrl } from './browser-windows'
+import { buildBrowserWindowUrl, buildStage3dWindowUrl } from './browser-windows'
 
 test('buildBrowserWindowUrl puts win=browser before the hash (dev server)', () => {
   const url = buildBrowserWindowUrl('url:browser-1', { devServer: 'http://localhost:5173' })
@@ -38,4 +38,20 @@ test('buildBrowserWindowUrl builds a packaged file URL with the flag before the 
   const url = buildBrowserWindowUrl('abc', { rendererIndexPath: '/opt/app/index.html' })
 
   assert.match(url, /^file:\/\/.*index\.html\?win=browser&tab=abc#\/$/)
+})
+
+// v0.0.9 F6: the 3D iNFT's own window — the flag before the hash, and nothing else on the URL (the iNFT rides the
+// app's own storage, never a value a page could put in a URL main builds).
+test('buildStage3dWindowUrl puts win=stage3d before the hash and carries nothing else', () => {
+  const url = buildStage3dWindowUrl({ devServer: 'http://localhost:5173/' })
+
+  assert.equal(url, 'http://localhost:5173/?win=stage3d#/')
+  assert.ok(url.indexOf('?win=stage3d') < url.indexOf('#'))
+})
+
+test('buildStage3dWindowUrl points at the packaged renderer file', () => {
+  const url = buildStage3dWindowUrl({ rendererIndexPath: '/Applications/iclone os.app/Contents/Resources/index.html' })
+
+  assert.ok(url.startsWith('file:///'))
+  assert.ok(url.endsWith('index.html?win=stage3d#/'))
 })

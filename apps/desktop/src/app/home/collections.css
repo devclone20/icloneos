@@ -1,19 +1,20 @@
-/* Right-edge "collections inft" control — pull tab + frosted panel of
-   metallic iNFT cards. Glass chrome mirrors dock.css / home.css / econ-panel
-   (same rgba(215,201,166,*) champagne hairlines, `--dt-midground` /
-   `--dt-foreground` tokens, `blur(var(--ic-blur-glass))` family, `'Noto Serif Display ExtraCondensed', serif` display
-   font). The cards are quiet by owner rule: the METAL lives
-   ONLY on the 1px edge hairline — no full-card foil, brush or glare.
-     .inft-card (gentle tilt, ±3.5°)
-       > __chrome (dark base + soft bevels)
-       > __art    (render or placeholder + bottom scrim, via ::after)
-       > __edge   (the machined arris: 1px metallic hairline, angle drifts
-                   a few degrees with the pointer — barely perceptible)
-       > __meta   (name / collection / chain chip / badge)
+/* Right-edge iNFT Collection (v0.0.9 F5) — the pull tab, then the panel and its portrait card grid.
+   Every value is a token (ic-tokens.css: the --ic-inft-* knobs); nothing here writes a colour, radius, shadow,
+   blur or z literal (scripts/ic-style-ratchet.mjs).
 
-   Tilt + the edge angle read `--px` / `--py`, written from ONE rAF-throttled
-   pointermove per card in collections.tsx — this file only ever *reads*
-   those vars, and only ever animates transform/opacity, never geometry. */
+     .inft-panel            the right-edge island, clamp(384px, 34vw, 560px)
+       > __header           title (display) · count (mono) · Open iNFT Book · ✕
+       > __notice           partial scan: inline alert + Retry
+       > __scroll > __body  the grid: 1 column, 2 from 460 px of useful width (collections.tsx measures it)
+     .inft-card             4:5 portrait, quiet tilt (4°), the metal on the 1px edge only
+       > __edge             the machined arris: a hairline whose light walks with the pointer
+       > __open             the primary action, covering the card (Tab · Enter)
+       > __state            one state in the corner
+       > __art > __plate    the detail plate, sliding up inside the art on hover / focus
+       > __caption          name (display, wraps, never cut) · collection · chain (mono)
+
+   Tilt and the edge angle read `--px` / `--py`, written from ONE rAF-throttled pointermove per card in
+   collections.tsx — this file only ever reads those vars, and only animates transform / opacity. */
 
 /* ── Pull tab ──────────────────────────────────────────────────────────── */
 
@@ -64,6 +65,11 @@
 
 .inft-tab:hover .inft-tab__label,
 .inft-tab:focus-visible .inft-tab__label {
+  opacity: 1;
+}
+
+/* v0.0.9 G-2 (design G): in the light skin the 11px label rests at full ink (AA); the 0.9 rest stays the dark skins'. */
+:root[data-hermes-theme='iclone-light'] .inft-tab__label {
   opacity: 1;
 }
 
@@ -118,15 +124,25 @@
     transform: none;
   }
 }
+/* The single entry to collections answered hover only in the light theme —
+   in the dark themes the label nudged 0.1 opacity and nothing else. Same
+   fill every sibling pill uses, plus the house focus ring. */
+.inft-tab:hover,
+.inft-tab:focus-visible {
+  background: var(--ic-tab-hover-fill);
+}
+
+.inft-tab:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
 
 /* ── Scrim + panel ─────────────────────────────────────────────────────── */
 
 .inft-scrim {
   position: fixed;
   inset: 0;
-  /* Modal: above every piece of the Message window's chrome (see THE LADDER
-     in home.css). At z 41 the scrim dimmed the stage but the window's own
-     controls and its conversation rail kept floating on top of the panel. */
+  /* Modal: above every piece of the Message window's chrome (THE LADDER in home.css). */
   z-index: var(--ic-z-ihome-inft-scrim);
 
   background: var(--ic-home-veil-35);
@@ -134,9 +150,7 @@
   transition: opacity var(--ic-dur-slow) var(--ic-ease-std);
 }
 
-/* Belt and braces for the strand class of bug: a scrim mid-close (or one a
-   stalled close leaves behind) must never eat the app's clicks — its only job
-   while closing is to fade. */
+/* A scrim mid-close (or one a stalled close leaves behind) must never eat the app's clicks. */
 .inft-scrim[data-phase='closing'] {
   pointer-events: none;
 }
@@ -156,7 +170,8 @@
   bottom: 28px;
   right: 12px;
   z-index: var(--ic-z-ihome-inft-panel);
-  width: min(384px, 92vw);
+  /* Same string collections.tsx publishes through claimRightEdge(). */
+  width: min(var(--ic-inft-panel-w), calc(100vw - 24px));
 
   display: flex;
   flex-direction: column;
@@ -168,8 +183,9 @@
   -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
   box-shadow: var(--ic-inft-panel-shadow);
   color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
 
-  transform: translateX(100%);
+  transform: translateX(calc(100% + 12px));
   transition: none;
 }
 
@@ -179,7 +195,7 @@
 }
 
 .inft-panel[data-phase='closing'] {
-  transform: translateX(100%);
+  transform: translateX(calc(100% + 12px));
   transition: transform var(--ic-dur-slow) var(--ic-ease-spring);
 }
 
@@ -195,10 +211,12 @@
   }
 
   .inft-panel[data-phase='open'] {
+    transform: none;
     opacity: 1;
   }
 
   .inft-panel[data-phase='closing'] {
+    transform: none;
     opacity: 0;
   }
 }
@@ -207,39 +225,66 @@
 
 .inft-panel__header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   flex-shrink: 0;
-  padding: 20px 18px 14px;
+  gap: 12px;
+  padding: var(--ic-inft-panel-pad) var(--ic-inft-panel-pad) 16px;
+}
+
+.inft-panel__heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .inft-panel__title {
-  font:
-    600 13px/1 -apple-system,
-    BlinkMacSystemFont,
-    'SF Pro Display',
-    sans-serif;
-  text-transform: lowercase;
-  letter-spacing: 0.12em;
-  color: var(--ic-home-accent-80);
+  text-wrap: balance;
+  margin: 0;
+  font-family: var(--ic-inft-font-display);
+  font-size: var(--ic-inft-title-size);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: 0.005em;
+  color: var(--ic-text-1);
+}
+
+.inft-panel__count {
+  margin: 0;
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-inft-meta-size);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  color: var(--ic-text-2);
+}
+
+.inft-panel__actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .inft-panel__close {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border: 0;
   border-radius: var(--ic-radius-sm);
-  background: var(--ic-fill-hover);
-  color: inherit;
+  background: transparent;
+  color: var(--ic-text-2);
   cursor: pointer;
-  transition: background-color var(--ic-dur-fast) var(--ic-ease-spring);
+  transition:
+    background-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
 }
 
 .inft-panel__close:hover,
 .inft-panel__close:focus-visible {
-  background: var(--ic-hairline-accent);
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-1);
 }
 
 .inft-panel__close:focus-visible {
@@ -247,39 +292,118 @@
   outline-offset: 2px;
 }
 
-.inft-panel__empty {
-  color: var(--ic-home-ink-54);
+/* Partial scan: what loaded stays; one line names what is missing, one action fetches it again. */
+.inft-panel__notice {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 0 var(--ic-inft-panel-pad) 14px;
 }
 
-.inft-panel__body {
+.inft-panel__notice .icpg__alert,
+.inft-panel__state .icpg__alert {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.inft-panel__scroll {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 2px var(--ic-inft-panel-pad) var(--ic-inft-panel-pad);
+}
 
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+/* The grid. The column count is collections.tsx's measurement of THIS box's width (2 from 460 px). */
+.inft-panel__body {
+  display: grid;
+  grid-template-columns: repeat(var(--inft-cols, 1), minmax(0, 1fr));
+  align-items: start;
+  gap: var(--ic-inft-grid-gap);
   margin: 0;
-  padding: 4px 18px 20px;
+  padding: 0;
   list-style: none;
+}
+
+/* ── States: one editorial line and its one action ─────────────────────── */
+
+.inft-panel__state {
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+  padding-top: 28px;
+}
+
+.inft-panel__state--error {
+  justify-items: stretch;
+}
+
+.inft-panel__state--error .icpg__btn {
+  justify-self: start;
+}
+
+/* r4d (design r4 F5-2): the raw scan text, behind Details. */
+.inft-panel__detail {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  padding: 9px 11px;
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-fill-hover);
+  color: var(--ic-text-2-aa);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.inft-panel__detail[hidden] {
+  display: none;
+}
+
+.inft-panel__state-mark {
+  width: 36px;
+  height: 36px;
+  color: var(--ic-text-3);
+}
+
+.inft-panel__line {
+  max-width: 30ch;
+  margin: 0;
+  font-family: var(--ic-inft-font-display);
+  font-size: var(--ic-inft-title-size);
+  font-weight: 700;
+  line-height: 1.12;
+  color: var(--ic-text-1);
+  /* v0.0.9 r3 (design N9): no widow ("…to see your / iNFTs"). */
+  text-wrap: balance;
+}
+
+.inft-panel__rule {
+  max-width: 44ch;
+  margin: 0;
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  color: var(--ic-text-2);
 }
 
 /* ── Card entrance (stagger, mount-only) ──────────────────────────────── */
 
 .inft-card-slot {
   display: block;
+  min-width: 0;
   opacity: 0;
-  transform: translateX(24px);
+  transform: translateY(10px);
   animation: inft-card-in var(--ic-dur-slow) var(--ic-ease-spring) forwards;
   animation-delay: calc(var(--i, 0) * 40ms);
-  /* Reorder displacement rides the `translate` property — independent from
-     the entrance animation's transform. */
+  /* Reorder displacement rides the `translate` property — independent from the entrance transform. */
   transition: translate var(--ic-dur-base) var(--ic-ease-std);
 }
 
-/* After the first drag the stagger retires for good: React reorders move
-   <li> nodes, and a moved node would replay its CSS animation (flash). */
+/* After the first drag the stagger retires for good: a moved <li> would replay its animation (flash). */
 .inft-panel__body--settled .inft-card-slot {
   animation: none;
   opacity: 1;
@@ -287,28 +411,434 @@
 }
 
 .inft-card-slot--dragging {
-  transition: none;
-  z-index: var(--ic-z-local-peak);
   position: relative;
+  z-index: var(--ic-z-local-peak);
+  transition: none;
 }
 
 .inft-card-slot--dragging .inft-card {
+  box-shadow: var(--ic-inft-card-shadow);
+}
+
+.inft-card-slot--dragging .inft-card__open {
   cursor: grabbing;
-  touch-action: none;
-  box-shadow: var(--ic-shadow-card);
 }
 
 @keyframes inft-card-in {
   from {
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateY(10px);
   }
 
   to {
     opacity: 1;
-    transform: translateX(0);
+    transform: none;
   }
 }
+
+/* ── Card ─────────────────────────────────────────────────────────────── */
+
+.inft-card {
+  --px: 0.5;
+  --py: 0.5;
+
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+
+  border: 1px solid var(--ic-inft-card-line);
+  border-radius: var(--ic-radius-lg);
+  background: var(--ic-inft-card-fill);
+
+  transform: perspective(1100px) rotateX(calc((0.5 - var(--py)) * var(--ic-inft-card-tilt)))
+    rotateY(calc((var(--px) - 0.5) * var(--ic-inft-card-tilt)));
+  transition:
+    border-color var(--ic-dur-base) var(--ic-ease-std),
+    box-shadow var(--ic-dur-slow) var(--ic-ease-std);
+}
+
+/* No transform transition while the pointer drives --px/--py per frame (it would fight the writes); the
+   elastic settle only applies once the pointer leaves. */
+.inft-card:not(:hover):not(:focus-within) {
+  transition:
+    transform 600ms var(--ic-ease-spring),
+    border-color var(--ic-dur-base) var(--ic-ease-std),
+    box-shadow var(--ic-dur-slow) var(--ic-ease-std);
+}
+
+.inft-card:hover,
+.inft-card:focus-within {
+  border-color: var(--ic-inft-card-line-hover);
+  box-shadow: var(--ic-inft-card-shadow);
+  will-change: transform;
+}
+
+/* The ring belongs to the card, drawn when its primary action has keyboard focus. */
+.inft-card:has(> .inft-card__open:focus-visible) {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 3px;
+}
+
+/* The primary action: transparent, the whole card. */
+.inft-card__open {
+  position: absolute;
+  inset: 0;
+  z-index: var(--ic-z-local-base);
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.inft-card__open:focus-visible {
+  outline: none;
+}
+
+/* The metal, by owner rule, lives ONLY on the edge: a 1px hairline whose light walks a few degrees with the
+   pointer, like light along a machined arris. */
+.inft-card__edge {
+  position: absolute;
+  inset: 0;
+  z-index: var(--ic-z-local-float);
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    calc(125deg + (var(--px) - 0.5) * 40deg),
+    var(--ic-inft-edge-lo) 0%,
+    var(--ic-inft-edge-hi) 46%,
+    var(--ic-inft-edge-lo) 72%
+  );
+  -webkit-mask:
+    linear-gradient(var(--ic-surface) 0 0) content-box,
+    linear-gradient(var(--ic-surface) 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(var(--ic-surface) 0 0) content-box,
+    linear-gradient(var(--ic-surface) 0 0);
+  mask-composite: exclude;
+  opacity: 0.45;
+  transition: opacity var(--ic-dur-slow) var(--ic-ease-std);
+}
+
+.inft-card:hover .inft-card__edge,
+.inft-card:focus-within .inft-card__edge {
+  opacity: 1;
+}
+
+/* One state, top-left, on its own small dark chip so it reads on any art. */
+.inft-card__state {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: var(--ic-z-local-overlay);
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--ic-inft-badge-dim-line);
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-inft-badge-fill);
+  color: var(--ic-inft-badge-dim);
+  font-size: var(--ic-type-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.inft-card__state[data-tone='gold'] {
+  border-color: var(--ic-inft-badge-gold-line);
+  color: var(--ic-inft-badge-gold);
+}
+
+/* Art: full width, the card's flexible part. */
+/* v0.0.9 r4d (design r4 F5-1): the ART box is 4:5, not the card. With the whole card at 4:5 (caption included) a 4:5
+   artwork was drawn into a box about 412×450 and `cover` trimmed its top and bottom — heads, helmets, the fixture
+   label. Now the art shows whole and the card grows by its caption. */
+.inft-card__art {
+  position: relative;
+  flex: none;
+  aspect-ratio: 4 / 5;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--ic-inft-art-fill);
+}
+
+.inft-card__media {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.inft-card__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--ic-dur-slow) var(--ic-ease-spring);
+}
+
+.inft-card:hover .inft-card__img {
+  transform: scale(1.03);
+}
+
+.inft-card__placeholder {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+}
+
+.inft-card__headmark {
+  width: 38%;
+  height: auto;
+  color: var(--ic-inft-art-mark);
+}
+
+/* ── Detail plate (hover · keyboard focus) ────────────────────────────── */
+
+.inft-card__plate {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  z-index: var(--ic-z-local-overlay);
+  /* r5 (design R5-7): the plate keeps to the bottom 40 % of the art, so the art's face (a visor, a helmet) stays in
+     view while the plate is up; a card too small for its facts scrolls inside the plate instead of climbing. */
+  max-height: calc(40% - 8px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 12px 10px;
+
+  border: 1px solid var(--ic-inft-plate-line);
+  border-radius: var(--ic-radius-md);
+  /* Near-opaque, no backdrop-filter: a blur under a sliding plate repaints every frame (DESIGN.md motion). */
+  background: var(--ic-inft-plate-fill);
+  color: var(--ic-inft-plate-ink);
+
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(calc(100% + 12px));
+  transition:
+    transform var(--ic-dur-base) var(--ic-ease-spring),
+    opacity var(--ic-dur-fast) var(--ic-ease-std),
+    visibility 0s linear var(--ic-dur-base);
+}
+
+.inft-card:hover .inft-card__plate,
+.inft-card:focus-within .inft-card__plate {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition:
+    transform var(--ic-dur-base) var(--ic-ease-spring),
+    opacity var(--ic-dur-fast) var(--ic-ease-std),
+    visibility 0s linear 0s;
+}
+
+/* A card in a reorder drag shows no plate. */
+.inft-card[data-dragging] .inft-card__plate {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.inft-card__facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 5px 12px;
+  margin: 0;
+  font-size: var(--ic-inft-meta-size);
+}
+
+.inft-card__fact {
+  display: contents;
+}
+
+.inft-card__fact dt {
+  color: var(--ic-inft-plate-ink-2);
+}
+
+.inft-card__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.inft-card__mono {
+  font-family: var(--ic-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.inft-card__contract {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.inft-card__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 7px;
+  border: 1px solid var(--ic-inft-plate-line);
+  border-radius: var(--ic-radius-pill);
+  background: transparent;
+  color: var(--ic-inft-plate-ink);
+  font-size: var(--ic-type-xs);
+  cursor: pointer;
+}
+
+.inft-card__copy:hover {
+  border-color: var(--ic-inft-plate-ink-2);
+}
+
+.inft-card__copy[data-state='copied'] {
+  color: var(--ic-success);
+}
+
+.inft-card__copy[data-state='failed'] {
+  color: var(--ic-danger);
+}
+
+.inft-card__plate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.inft-card__plate-btn {
+  display: inline-flex;
+  align-items: center;
+  /* 32px hit target (design 9, critic r1; the spec's anatomy). */
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--ic-inft-plate-line);
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  color: var(--ic-inft-plate-ink);
+  font-size: var(--ic-type-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color var(--ic-dur-fast) var(--ic-ease-std),
+    border-color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.inft-card__plate-btn:hover {
+  border-color: var(--ic-inft-plate-ink-2);
+}
+
+.inft-card__plate-btn--primary {
+  border-color: var(--ic-gilt);
+  background: var(--ic-gilt);
+  color: var(--ic-night);
+}
+
+.inft-card__plate-btn--primary:hover {
+  border-color: var(--ic-accent-strong);
+  background: var(--ic-accent-strong);
+}
+
+.inft-card__copy:focus-visible,
+.inft-card__plate-btn:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* ── Caption: the name is never cut ───────────────────────────────────── */
+
+.inft-card__caption {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 12px 14px 14px;
+  pointer-events: none;
+}
+
+.inft-card__name {
+  font-family: var(--ic-inft-font-display);
+  font-size: var(--ic-inft-name-size);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  color: var(--ic-text-1);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.inft-card__meta {
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-inft-meta-size);
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  color: var(--ic-text-2);
+  overflow-wrap: anywhere;
+}
+
+/* ── Loading: skeletons in the card's exact shape ─────────────────────── */
+
+.inft-skel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  padding-bottom: 14px;
+  border: 1px solid var(--ic-inft-card-line);
+  border-radius: var(--ic-radius-lg);
+  background: var(--ic-inft-card-fill);
+}
+
+.inft-skel__art,
+.inft-skel__line {
+  display: block;
+  background: var(--ic-inft-skeleton);
+  background-size: 220% 100%;
+  animation: inft-skeleton-sweep 1.3s ease-in-out infinite;
+}
+
+.inft-skel__art {
+  flex: none;
+  /* The card's exact shape: a 4:5 art box, then the caption lines (F5-1). */
+  aspect-ratio: 4 / 5;
+  margin-bottom: 4px;
+}
+
+.inft-skel__line {
+  width: 68%;
+  height: 12px;
+  margin: 0 14px;
+  border-radius: var(--ic-radius-xs);
+}
+
+.inft-skel__line--short {
+  width: 44%;
+  height: 10px;
+}
+
+@keyframes inft-skeleton-sweep {
+  from {
+    background-position: 130% 0;
+  }
+
+  to {
+    background-position: -70% 0;
+  }
+}
+
+/* ── Reduced motion: no tilt, no slide, no sweep — state still shows ──── */
 
 @media (prefers-reduced-motion: reduce) {
   .inft-card-slot {
@@ -327,284 +857,30 @@
       opacity: 1;
     }
   }
-}
 
-/* ── Card — 7-layer metallic stack ────────────────────────────────────── */
-
-.inft-card {
-  --px: 0.5;
-  --py: 0.5;
-  --pd: 0;
-
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 200px;
-  padding: 0;
-
-  border: 0;
-  border-radius: var(--ic-radius-lg);
-  background: transparent;
-  isolation: isolate;
-  cursor: pointer;
-  text-align: left;
-
-  transform: perspective(1100px) rotateX(calc((0.5 - var(--py)) * 7deg)) rotateY(calc((var(--px) - 0.5) * 7deg));
-  transform-style: preserve-3d;
-}
-
-/* No transition while the pointer drives --px/--py per frame (it would fight
-   the writes); the elastic settle only applies once the pointer leaves. */
-.inft-card:not(:hover):not(:focus-visible) {
-  transition: transform 600ms var(--ic-ease-spring);
-}
-
-.inft-card:hover,
-.inft-card:focus-visible {
-  will-change: transform;
-}
-
-.inft-card:focus-visible {
-  outline: 2px solid var(--ic-accent);
-  outline-offset: 3px;
-}
-
-/* House glass — the same frosted grammar as the dock rail and econ panels:
-   translucent ink + blur + a quiet champagne hairline (owner rule: cards in
-   the iclone frame theme, transparent frosted). */
-.inft-card__chrome {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-
-  /* Pure house frost — no gray tint (owner rule): the same glass as the
-     dock tiles and window tabs, only blur + a whisper of white. */
-  background: var(--ic-fill-hover);
-  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
-  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
-  border: 1px solid var(--ic-home-ink-14);
-  box-shadow: var(--ic-shadow-tile);
-}
-
-.inft-card__art {
-  position: absolute;
-  inset: 1px;
-  overflow: hidden;
-  border-radius: var(--ic-radius-lg);
-  pointer-events: none;
-}
-
-/* Legibility scrim ONLY over real art — a plain frosted card stays pure
-   glass, no gray gradient (owner rule). */
-.inft-card__art:has(.inft-card__img)::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, var(--ic-home-veil-54) 0%, var(--ic-home-veil-14) 42%, transparent 72%);
-}
-
-.inft-card__img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  opacity: 0.92;
-  object-fit: cover;
-}
-
-.inft-card__placeholder {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  /* Transparent: the frosted chrome underneath IS the tile. */
-  background: var(--ic-fill-hover);
-}
-
-/* The iCLONE head mark on empty cards — quiet frost-gray silhouette. */
-.inft-card__headmark {
-  width: 96px;
-  height: 96px;
-  fill: var(--ic-text-1);
-  opacity: 0.26;
-}
-
-/* The metal, by owner rule, lives ONLY on the edge: a 1px hairline whose
-   gradient angle drifts a few degrees with the pointer — barely perceptible,
-   like light walking along a machined arris. */
-.inft-card__edge {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  pointer-events: none;
-  background: var(--ic-home-ink-14);
-  -webkit-mask:
-    linear-gradient(var(--ic-surface) 0 0) content-box,
-    linear-gradient(var(--ic-surface) 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(var(--ic-surface) 0 0) content-box,
-    linear-gradient(var(--ic-surface) 0 0);
-  mask-composite: exclude;
-  opacity: 0.5;
-  transition: opacity var(--ic-dur-slow) var(--ic-ease-std);
-}
-
-.inft-card:hover .inft-card__edge,
-.inft-card:focus-visible .inft-card__edge {
-  opacity: 0.85;
-}
-
-.inft-card__meta {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 12px 14px;
-}
-
-.inft-card__top-row {
-  position: absolute;
-  top: 11px;
-  right: 13px;
-}
-
-.inft-card__chain {
-  display: inline-flex;
-  align-items: center;
-  height: 20px;
-  padding: 0 9px;
-  border-radius: var(--ic-radius-pill);
-  border: 1px solid var(--ic-home-ink-14);
-  background: var(--ic-fill-hover);
-  font-size: var(--ic-type-2xs);
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--ic-home-ink-72);
-}
-
-.inft-card__bottom-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.inft-card__text {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.inft-card__name {
-  overflow: hidden;
-  font-family: 'Noto Serif Display ExtraCondensed', serif;
-  font-size: var(--ic-type-lg);
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  color: var(--ic-home-ink-72);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inft-card__collection {
-  overflow: hidden;
-  margin-top: 3px;
-  font-size: var(--ic-type-2xs);
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.13em;
-  color: var(--ic-home-danger-60);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.inft-card__badge {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  height: 18px;
-  padding: 0 8px;
-  border-radius: var(--ic-radius-pill);
-  font-size: var(--ic-type-2xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  white-space: nowrap;
-}
-
-.inft-card__badge--gold {
-  border: 1px solid var(--ic-home-danger-40);
-  background: var(--ic-home-danger-10);
-  color: var(--ic-home-danger-88);
-}
-
-.inft-card__badge--dim {
-  border: 1px solid var(--ic-home-ink-14);
-  background: var(--ic-fill-hover);
-  color: var(--ic-home-ink-45);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .inft-card {
+  .inft-card,
+  .inft-card:not(:hover):not(:focus-within) {
     transform: none !important;
     transition: none !important;
   }
 
-  .inft-card__edge {
-    background: linear-gradient(135deg, var(--ic-home-accent-45), var(--ic-home-ink-30), var(--ic-home-gilt-40));
-    transition: none !important;
-  }
-}
-
-/* The single entry to collections answered hover only in the light theme —
-   in the dark themes the label nudged 0.1 opacity and nothing else. Same
-   fill every sibling pill uses, plus the house focus ring. */
-.inft-tab:hover,
-.inft-tab:focus-visible {
-  background: var(--ic-tab-hover-fill);
-}
-
-.inft-tab:focus-visible {
-  outline: 2px solid var(--ic-accent);
-  outline-offset: 2px;
-}
-
-/* Scan-in-progress: card-shaped shimmer slots in the wallet skeleton's exact
-   grammar, so "loading" and "empty" stop wearing the same face. */
-.inft-panel__skeletons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 14px;
-}
-
-.inft-panel__skeleton {
-  height: 200px;
-  border-radius: var(--ic-radius-lg);
-  background: linear-gradient(100deg, var(--ic-fill-hover) 32%, var(--ic-border-subtle) 48%, var(--ic-fill-hover) 64%);
-  background-size: 220% 100%;
-  animation: inft-skeleton-sweep 1.3s ease-in-out infinite;
-}
-
-@keyframes inft-skeleton-sweep {
-  from {
-    background-position: 130% 0;
+  .inft-card__img,
+  .inft-card:hover .inft-card__img {
+    transform: none;
+    transition: none;
   }
 
-  to {
-    background-position: -70% 0;
+  .inft-card__plate,
+  .inft-card:hover .inft-card__plate,
+  .inft-card:focus-within .inft-card__plate {
+    transform: none;
+    transition:
+      opacity var(--ic-dur-fast) var(--ic-ease-std),
+      visibility 0s linear 0s;
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .inft-panel__skeleton {
+  .inft-skel__art,
+  .inft-skel__line {
     animation: none;
-    opacity: 0.7;
   }
 }

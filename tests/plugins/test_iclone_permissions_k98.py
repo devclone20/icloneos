@@ -82,3 +82,54 @@ def test_project_writes_beside_the_store_names_stay_ordinary(plugin, tmp_path):
     res = _decide_all_modes(plugin, "write_file", {"path": str(tmp_path / "acp-work" / "audit" / "notes.md")},
                             str(tmp_path), protectedPaths=PROTECTED)
     assert all(c.floor is None for _, c in res.values())
+
+
+# v0.0.9 (lead decision, socket writer 2): main's sockets left userData for the short private socket folder of that
+# userData (apps/desktop/electron/iclone-confinement/launcher-socket.ts), per-user and its /tmp fallback. main's
+# protectedPaths carries both (the fixture pins them), so with the Seatbelt off an agent tool can neither write,
+# rename, replace nor plant anything there: a planted pay.sock would collect other spawns' pay tokens.
+SOCKET_DIRS = FIXTURE.get("socketFolders", [])
+
+SOCKET_TERMINAL = [
+    "rm -f {d}/pay.sock",
+    "mv {d}/pay.sock /tmp/x",
+    "ln -sf /tmp/evil.sock {d}/pay.sock",
+    "python3 -c \"import socket; s=socket.socket(socket.AF_UNIX); s.bind('{d}/pay.sock')\"",
+    "touch {d}/planted",
+    "cp /tmp/evil.sock {d}/acp.sock",
+    "rm -rf {d}",
+]
+
+
+def test_the_fixture_names_the_socket_folders():
+    assert len(SOCKET_DIRS) == 3, SOCKET_DIRS
+    assert all(d in PROTECTED for d in SOCKET_DIRS)
+
+
+@pytest.mark.parametrize("folder", range(3))
+@pytest.mark.parametrize("command", SOCKET_TERMINAL)
+def test_terminal_cannot_touch_the_socket_folder(plugin, tmp_path, folder, command):
+    cmd = command.format(d=SOCKET_DIRS[folder])
+    got = _floored_everywhere(plugin, "terminal", {"command": cmd}, str(tmp_path))
+    for mode, (outcome, rule, floor) in got.items():
+        assert (outcome, rule) == ("refuse", "floor"), (mode, cmd, got[mode])
+
+
+@pytest.mark.parametrize("folder", range(3))
+@pytest.mark.parametrize("name", ["pay.sock", "acp.sock", "launcher.sock", "planted"])
+def test_file_tools_cannot_write_in_the_socket_folder(plugin, tmp_path, folder, name):
+    target = f"{SOCKET_DIRS[folder]}/{name}"
+    for tool, args in (("write_file", {"path": target, "content": ""}),
+                       ("patch", {"mode": "patch", "patch": f"*** Begin Patch\n*** Delete File: {target}\n*** End Patch\n"})):
+        got = _floored_everywhere(plugin, tool, args, str(tmp_path))
+        for mode, (outcome, rule, floor) in got.items():
+            assert (outcome, rule) == ("refuse", "floor"), (mode, tool, target, got[mode])
+
+
+def test_without_the_socket_folders_the_same_writes_are_not_floored(plugin, tmp_path):
+    """Negative control: the floor comes from main's socket-folder entries."""
+    without = [p for p in PROTECTED if p not in SOCKET_DIRS]
+    for d in SOCKET_DIRS:
+        res = _decide_all_modes(plugin, "terminal", {"command": f"touch {d}/planted"}, str(tmp_path),
+                                protectedPaths=without)
+        assert any(c.floor is None for _, c in res.values()), d

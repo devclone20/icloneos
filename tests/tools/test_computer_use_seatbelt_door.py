@@ -147,12 +147,16 @@ def test_nothing_the_request_carries_reaches_the_driver(tmp_path):
     assert plan["start"]["unconfined"] is True and "outside the Seatbelt" in plan["start"]["command"]
 
 
-def test_serve_goes_through_launchservices_and_gets_a_sitter(tmp_path, monkeypatch):
+def test_serve_goes_through_launchservices_and_gets_a_sitter(request, monkeypatch):
     sat = []
     monkeypatch.setattr(door, "start_sitter", lambda exe, path, python: sat.append((exe, path)) or "s")
-    d = door.Door("/tmp/f54", "/h", "", locator=lambda *_: ("/x.app", ""))
+    folder = Path(f"/tmp/f54p{os.getpid()}")  # the launcher's checked private folder: real, this user's, 0700, short
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(mode=0o700)
+    request.addfinalizer(lambda: shutil.rmtree(folder, ignore_errors=True))
+    d = door.Door(str(folder), "/h", "", locator=lambda *_: ("/x.app", ""))
     plan = d.plan({"argv": [door.COMMAND, "serve", "--embedded", "--socket", SOCK, "--no-permissions-gate", "--permission-mode", "standard"]})
-    path = "/tmp/f54/" + SOCK + ".sock"
+    path = str(folder / (SOCK + ".sock"))
     assert plan["argv"][:5] == [door.OPEN, "-n", "-g", "-a", "/x.app"] and path in plan["argv"]
     assert "CUA_DRIVER_RS_TELEMETRY_ENABLED=0" in plan["argv"]
     assert sat == [("/x.app/Contents/MacOS/cua-driver", path)]

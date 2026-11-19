@@ -89,3 +89,39 @@ describe('outerInset', () => {
     expect(outerInset('left')).toBe('var(--iwin-outer-left, var(--ic-frame-left))')
   })
 })
+
+// v0.0.9 F6: a pane on one side of the frame moves only its inner edge, by the other side's share (px from
+// pane-layout.ts). Fails before F6: the rect ignored any slot and every window covered the whole frame.
+describe('a pane slot (two panes side by side)', () => {
+  const AREA = 1344
+
+  it('the left pane keeps the frame left and moves its right edge in by the right pane + divider', () => {
+    const style = windowRectStyle(false, { area: AREA, slot: { place: 'left', left: 0, width: 668 } })
+
+    expect(style.left).toBe('var(--ic-frame-left)')
+    expect(style.right).toBe('calc(var(--ic-frame-right) + 676px)')
+    expect(style.top).toBe('var(--ic-frame-top)')
+    expect(style.bottom).toBe('var(--ic-frame-bottom)')
+  })
+
+  it('the right pane starts after the left pane + divider and keeps the frame right', () => {
+    const style = windowRectStyle(false, { area: AREA, slot: { place: 'right', left: 676, width: 668 } })
+
+    expect(style.left).toBe('calc(var(--ic-frame-left) + 676px)')
+    expect(style.right).toBe('var(--ic-frame-right)')
+  })
+
+  it('a filled pane ignores its slot: the whole app', () => {
+    const style = windowRectStyle(true, { area: AREA, slot: { place: 'left', left: 0, width: 668 } })
+
+    expect(style.left).toBe('0px')
+    expect(style.right).toBe('0px')
+  })
+
+  it('the Message window publishes its slot to the shells', () => {
+    publishShellRect(false, { area: AREA, slot: { place: 'right', left: 676, width: 668 } })
+
+    expect(rootVar('--iwin-outer-left')).toBe('calc(var(--ic-frame-left) + 676px)')
+    expect(rootVar('--iwin-outer-right')).toBe('var(--ic-frame-right)')
+  })
+})

@@ -112,16 +112,51 @@ export const SUBAGENT_EVENT_TYPES = new Set([
   'subagent.complete'
 ])
 
-// Anonymous progress events that carry todos but no name still belong to the
-// todo stream; named todo events are obviously routed there too.
+/** The runtime Todo tool's names: `todo_list` (tools/todo_tool.py:230) and its legacy alias `todo`. */
+const TODO_TOOL_NAMES = new Set(['todo', 'todo_list'])
+
+/** The `tool_call` bridge name (tools/tool_search_catalog.py: TOOL_CALL_NAME); todo_list is deferred behind it. */
+const TOOL_CALL_BRIDGE = 'tool_call'
+
+/** The Todo call a `tool_call` bridge wraps, when it wraps exactly one (the runtime's is_todo_tool_call rule). */
+function bridgedTodoArgs(args: unknown): unknown {
+  const record = parseMaybeRecord(args)
+  const calls = Array.isArray(record.calls) ? record.calls : record.name ? [record] : []
+
+  if (calls.length !== 1) {
+    return undefined
+  }
+
+  const call = recordOrEmpty(calls[0])
+
+  return typeof call.name === 'string' && TODO_TOOL_NAMES.has(call.name) ? (call.arguments ?? {}) : undefined
+}
+
+// The Todo tool's events, under any of its names or through the bridge, normalized to `todo` (the name the status
+// stack and the silent-row rule key on). Anonymous progress events that carry todos still belong to the todo stream.
 export function toTodoPayload(payload: GatewayEventPayload | undefined): GatewayEventPayload | undefined {
   if (!payload) {
     return undefined
   }
 
-  const isTodo = payload.name === 'todo' || (!payload.name && Object.hasOwn(payload, 'todos'))
+  const name = typeof payload.name === 'string' ? payload.name : ''
+
+  if (name === TOOL_CALL_BRIDGE) {
+    const inner = bridgedTodoArgs(payload.args)
+
+    return inner === undefined ? undefined : { ...payload, args: inner, name: 'todo', tool_id: payload.tool_id || 'todo-live' }
+  }
+
+  const isTodo = TODO_TOOL_NAMES.has(name) || (!name && Object.hasOwn(payload, 'todos'))
 
   return isTodo ? { ...payload, name: 'todo', tool_id: payload.tool_id || 'todo-live' } : undefined
+}
+
+/** A snapshot's revision (the runtime's monotonic TodoStore counter), when it carries one. */
+export function todoRevision(payload: GatewayEventPayload | undefined): number | undefined {
+  const raw = (payload as Record<string, unknown> | undefined)?.revision
+
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined
 }
 
 function parseMaybeRecord(value: unknown): Record<string, unknown> {

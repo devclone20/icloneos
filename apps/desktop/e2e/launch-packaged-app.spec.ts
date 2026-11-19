@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
 import { PACKAGED_BINARY_PATH, type PackagedAppFixture, packagedBinaryExists, setupPackagedApp } from './fixtures'
 import { expect, test } from './test'
 import { expectVisualSnapshot } from './visual-snapshot'
@@ -25,9 +28,14 @@ test.afterAll(async () => {
   fixture = null
 })
 
-test('window opens with the Hermes title', async () => {
-  const title = await fixture!.page.title()
-  expect(title).toContain('Hermes')
+// Reviewed loosening (v0.0.9 e2e triage, class A): the upstream expectation was "Hermes"; the product title is
+// index.html's `<title>iclone os</title>`, read from the file so both move together.
+test('window opens with the product title (index.html)', async () => {
+  const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'index.html'), 'utf8')
+  const product = /<title>([^<]+)<\/title>/.exec(html)?.[1]
+
+  expect(product).toBe('iclone os')
+  expect(await fixture!.page.title()).toBe(product)
 })
 
 test('renderer loads and shows DOM content', async () => {

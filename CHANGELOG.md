@@ -3,6 +3,47 @@
 All notable changes to iclone os. Each release lists its assets — the DMG, the zip and `SHA256SUMS.txt` — on the
 [Releases](https://github.com/devclone20/icloneos/releases) page.
 
+## v0.0.9, beta version (2026-11-20)
+
+icloneOS v0.0.9 is a beta version.
+
+This release adds no new feature. It makes what the app already has work reliably, and it redesigns the parts that were weak: EconomyOS setup, the Hermes agent start, the repair kit, notifications, the iNFT Collection and wallet panels, and windows and panes.
+
+### Fixed
+
+- EconomyOS setup buttons now work. The Install button of step 1 never worked, because one gesture lock was never watched; every lock is now created and watched in one place, and a test fails if one is not.
+- The app now includes the Virtuals ACP CLI (1.0.38, verified at build time), so step 1 shows "included · verified" instead of an Install button. Repair puts the included copy back without the network if a file changed.
+- The agent can run the included Virtuals ACP CLI (acp --version) from inside the sandbox, without an install prompt and without downloading anything.
+- With Isolation on, an old record in ~/.hermes/installs no longer stops the agent from starting on the runtime the app installs; in our test the agent started with such a record in place.
+- When the Hermes backend stops while the app runs, the app restarts it by itself after 1, 2, 4, 8 and 16 seconds, at most five times in 10 minutes, and shows a calm status line meanwhile. The iNFT open on the home screen connects when the backend is ready and again after a restart, with no need to close and open it. In our test on a development build, 20 reopenings in a row with an iNFT open each connected without any action.
+- The repair kit now covers seven known problems, among them an old record in ~/.hermes/installs, a broken runtime, disabled app plugins and wrong folder permissions. Before it changes anything it saves a dated copy, and it never deletes: it moves things aside.
+- When you click Repair in the repair kit, it moves such a record aside into a dated folder and keeps a manifest that can undo the move; in our tests the same repair was refused when a script or a synthetic click started it, and the agent still started afterwards with Isolation on.
+- The boot error screen now closes with its cross and with Esc. The app then opens with the agent stopped, shows a banner with Retry and "Show details", and the agent still does not start without its permission gate.
+
+### Changed
+
+- Registering an ERC-8004 identity, writing ACP Market offerings and resources, and Billing "Buy credits" now need your own click in the app window. In our tests a script or a synthetic click was refused. After a lost answer, a purchase and its key stay open for up to 12 hours; a Buy of a different amount waits until you press "Try again".
+- One notification system with five kinds: toast, status banner, inline alert, decision dialog and a notification centre with the detail of each one. Text is shown whole, never cut with an ellipsis in an error sentence, and every close control works with the mouse and with Esc. The centre opens from the bell in the title bar.
+- The iNFT Collection panel has a new grid with loading, empty, partial and error states, a detail view on hover, and a clear "Open iNFT Book" action. The wallet panel shows the address, the network and the balances, with a copy button and a clear logout.
+- Each panel has one window menu: Move left, Move right, Fill and Arrange side by side, plus "Open in new window" on the 3D iNFT panel. At most two panels are open, each at least 375 pt wide, with a draggable divider. Drag a Dock icon onto the window to see the split preview, then drop to open two panels side by side; Esc cancels. The 3D iNFT can open in its own window and returns to the app when you close that window.
+
+### Security
+
+- Removed from the two locks we ship: picomatch (GHSA-fc5q-39xc-vjpf), decode-uri-component (GHSA-qr28-fpjm-wq7f) and the two nested zod 3.22.4 copies. The sign-in page bundle is byte-identical.
+- In our rebuild test, the runtime's own Seatbelt profile still bound: the kernel refused what the profile forbids.
+- In our test of the five Seatbelt profiles, a sandboxed command was still refused when it listed stand-in copies of ~/.ssh, ~/.aws, ~/.gnupg and ~/Library/Keychains.
+- The one HIGH advisory still waived (zod 3.25.76, GHSA-mrhx-c7xc-m3w5, and npm's meta-advisory on acp-node from it) is contained to the sign-in window and the optional ACP CLI, and the release gate refuses its waiver from v0.0.10.
+- Three waivers are renewed to v0.0.10 (advisory GHSA-mrhx-c7xc-m3w5, npm's meta-advisory on acp-node from it): zod 3.25.76 in the sign-in page lock, zod 3.25.76 in the optional ACP CLI lock, and @virtuals-protocol/acp-node 0.3.0-beta-subscription.2 in the same ACP CLI lock.
+- No compatible fix exists yet. zod 3.25.76 is the last 3.x, and the fix (zod 4.6.6) changes the API the Privy SDK and the ACP CLI's account-kit packages still use. The worst case is the sign-in window or the optional ACP CLI running out of memory; no data or code is exposed. Accepted again by the owner for this release.
+
+### Known limits
+
+- The known limits listed under v0.0.8 still apply.
+- The agent updates only with the app. There is no automatic return to an older agent runtime in this version.
+- Below 758 pt of window width, two panels do not fit side by side: the second one becomes a tab, and "Arrange side by side" is disabled.
+- The 20-reopenings test ran on a development build; the same proof on the public app comes after publication.
+- With two panels side by side and the iNFT island open, the "agent is not running" banner can sit over the edge of the neighbouring panel, and the island can cut off that panel's title. Both are planned for v0.0.10.
+
 ## v0.0.8, beta version (2026-11-18)
 
 icloneOS v0.0.8 is a beta version.

@@ -160,6 +160,25 @@ describe('DesktopInstallOverlay first-run setup', () => {
     expect(screen.queryByText(/runs its own verified copy of the agent runtime/)).toBeNull()
   })
 
+  it('critic m6: Install the agent locally is the owner-click control, and a refusal from main is said', async () => {
+    const desktop = installDesktopMock(
+      bootstrapState({
+        setupChoice: { platform: 'win32', activeRoot: 'C:\\Users\\me\\AppData\\Local\\hermes\\hermes-agent' }
+      })
+    )
+
+    desktop.continueBootstrapLocal = vi.fn().mockResolvedValue({ ok: false, refused: 'gesture' })
+    render(<DesktopInstallOverlay />)
+
+    const install = (await screen.findByText('Install the agent locally')).closest('button') as HTMLButtonElement
+
+    expect(install.hasAttribute('data-repair-kit-confirm')).toBe(true)
+    fireEvent.click(install)
+
+    expect(await screen.findByText('Local installation could not start. Restart iclone os and try again.')).toBeTruthy()
+    expect(install.disabled).toBe(false)
+  })
+
   it('surfaces a recoverable error when the local-bootstrap bridge is unavailable', async () => {
     const desktop = installDesktopMock(
       bootstrapState({

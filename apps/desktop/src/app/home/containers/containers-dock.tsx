@@ -15,6 +15,18 @@ const ContainersWindowBody = lazy(async () => ({ default: (await import('./conta
 
 export const $containersOpen = atom(false)
 
+/**
+ * v0.0.9 F6 (owner addition): Containers dropped beside another pane (or another pane dropped beside it) sits next to
+ * it instead of closing — the one-window rule below holds for the Dock's clicks only. Cleared when it closes.
+ */
+export const $containersBeside = atom(false)
+
+$containersOpen.subscribe(open => {
+  if (!open) {
+    $containersBeside.set(false)
+  }
+})
+
 /** The Dock tile; pass a stable `onOpen`. It closes whichever Dock window is open: one window at a time. */
 export function useContainersDockItem(hint: string | undefined, onOpen: () => void, onClose?: () => void): DockItem {
   const copy = useContainersCopy()
@@ -45,8 +57,10 @@ export function useContainersDockItem(hint: string | undefined, onOpen: () => vo
 }
 
 /** `blocked`: another Dock window took the stage. The window's code loads on its first open, never at boot. */
-export function LazyContainersWindow({ blocked }: { blocked: boolean }) {
+export function LazyContainersWindow({ blocked: anotherWindow }: { blocked: boolean }) {
   const open = useStore($containersOpen)
+  const beside = useStore($containersBeside)
+  const blocked = anotherWindow && !beside
 
   useEffect(() => {
     if (blocked) {

@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 
+import { activeFixtureWallet, fixtureBookPage } from './fixture-wallet'
 import { guardedHandler } from './iclone-consent'
 import type { IpcSenderEventLike } from './ipc-sender-guard'
 
@@ -348,6 +349,8 @@ interface InitInftBookOptions<T> {
   isTrustedSender: ScanSenderGuard
 }
 
+let fixtureBookScans = 0
+
 export function initInftBook<T>({ chains, readPage, isTrustedSender }: InitInftBookOptions<T>): void {
   // A sender the guard refuses (a <webview> guest, a subframe, the Privy window) gets null. No guard = refuse.
   guardedHandler(ipcMain, isTrustedSender ?? (() => false)).handle(
@@ -361,6 +364,25 @@ export function initInftBook<T>({ chains, readPage, isTrustedSender }: InitInftB
 
       if (cursor !== null && cursor !== undefined && !parsed) {
         return Promise.resolve({ ok: false, items: [], cursor: null, done: true, error: 'bad cursor' })
+      }
+
+      // v0.0.9 r3: a fixture run (dev/test builds only) answers the fixture's pages, offline.
+      const fixture = activeFixtureWallet()
+
+      if (fixture) {
+        if (address.toLowerCase() !== fixture.address.toLowerCase()) {
+          return Promise.resolve({ ok: false, items: [], cursor: null, done: true, error: 'fixture: not the fixture wallet' })
+        }
+
+        // A fresh Book scan starts with no cursor: count those (the first fails for `retry`, the Retry answers).
+        const attempt = cursor === null || cursor === undefined ? fixtureBookScans++ : Math.max(0, fixtureBookScans - 1)
+
+        return new Promise(resolve =>
+          setTimeout(
+            () => resolve(fixtureBookPage(fixture, attempt, cursor) as BookPage<T>),
+            fixture.scanDelayMs
+          )
+        )
       }
 
       return readBookPage(readPage, chains, address.toLowerCase(), parsed)

@@ -13,10 +13,11 @@ LOG = logging.getLogger(__name__)
 
 
 def _profiles_root() -> Path:
-    # Plugin discovery and dependency publication must use the same home root.
-    from pm.environments import dependency_home_root
+    # Plugin discovery and dependency publication must use the same home root: the home's data root,
+    # never a pinned dependency root (HERMES_DEPENDENCY_HOME holds dependency state only).
+    from pm.environments import data_home_root
 
-    return dependency_home_root() / "profiles"
+    return data_home_root() / "profiles"
 
 
 def read_home_selection(home: Path) -> Optional[dict[str, Any]]:
@@ -99,9 +100,9 @@ def dependency_homes() -> list[Path]:
     marker-less dirs must not put plugins into the shared environment.
     """
     from hermes_constants import PROFILE_ID_RE, named_profile_is_live
-    from pm.environments import dependency_home_root
+    from pm.environments import data_home_root
 
-    homes = [dependency_home_root()]
+    homes = [data_home_root()]
     root = _profiles_root()
     try:
         profiles = sorted(root.iterdir(), key=str)

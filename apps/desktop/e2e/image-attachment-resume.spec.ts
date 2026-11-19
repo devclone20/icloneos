@@ -16,8 +16,11 @@ import * as path from 'node:path'
 
 import {
   buildAppEnv,
+  conversationRow,
   createSandbox,
   launchDesktop,
+  newConversation,
+  openConversationList,
   type Sandbox,
   waitForAppReady,
   writeEnvFile,
@@ -89,8 +92,35 @@ async function setupSeededDesktop(): Promise<SeededFixture> {
   }
 }
 
+// The icloneOS Message pane's own conversation list (the upstream `[data-slot="sidebar"]` is not in this app).
+// Reviewed port (v0.0.9): a row is opened by its label, as a user does. icloneOS keeps the title the session was
+// created with, so the label is SESSION_TITLE (sessionTitle = title || preview, lib/chat-runtime.ts:52); the caption
+// is asserted on the row's preview line below.
 function sessionRow(page: Page) {
-  return page.locator('[data-slot="sidebar"] button').filter({ hasText: CAPTION }).first()
+  return conversationRow(page, SESSION_TITLE)
+}
+
+// Reviewed port (v0.0.9): the row's first-request preview line (session-row.tsx:528-537, Detailed density only).
+const PREVIEW_LINE = 'span.mt-1.truncate'
+// The density control's copy, held equal to the app's (i18n/en/settings/machine.ts:156-160).
+const DENSITY_DETAILED = 'Detailed'
+
+/**
+ * Reviewed port (v0.0.9): switch the session list to the Detailed density the way a user does, in Settings ›
+ * Appearance (appearance-settings.tsx:648-663), reached through the app's own `?tab=` door, then back to chat.
+ */
+async function showSessionPreviews(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.location.hash = '/settings?tab=config%3Aappearance'
+  })
+  const detailed = page.getByRole('button', { exact: true, name: DENSITY_DETAILED })
+  await detailed.waitFor({ state: 'visible', timeout: 30_000 })
+  await detailed.click()
+  await expect(detailed).toHaveAttribute('aria-pressed', 'true')
+  await page.evaluate(() => {
+    window.location.hash = '/'
+  })
+  await page.waitForFunction(() => window.location.hash === '#/')
 }
 
 // Inactive tabs stay mounted under a data-pane-hidden ancestor. Match the
@@ -104,6 +134,7 @@ function activeViewportText(surfaceSelector: string): string {
 }
 
 async function openSeededSession(page: Page): Promise<void> {
+  await openConversationList(page)
   const row = sessionRow(page)
   await row.waitFor({ state: 'visible', timeout: 60_000 })
   await row.click()
@@ -125,7 +156,7 @@ async function openSeededSession(page: Page): Promise<void> {
  * surface is empty rather than waiting for the old caption to leave the page.
  */
 async function openNewSession(page: Page): Promise<void> {
-  await page.locator('[data-slot="sidebar"] button[aria-label="New session"]').first().click()
+  await newConversation(page)
   await page.waitForFunction(
     ([expected, surfaceSelector]: [string, string]) => {
       const surfaces = document.querySelectorAll(surfaceSelector)
@@ -174,10 +205,19 @@ test.describe('attached image resume', () => {
 
     // The sidebar labels a session by its preview, so the caption has to lead
     // the persisted turn — a leading directive reads as a truncated file path.
+    // Reviewed port (v0.0.9): icloneOS keeps the title the session was created with (the row's label is
+    // sessionTitle = title || preview, lib/chat-runtime.ts:52), and a titled row shows the first-request preview
+    // on its own line only in the Detailed density (session-row-details.ts, session-row.tsx:528). So the user's
+    // own Settings › Appearance control turns that line on, and the same assertion runs on it: the preview line
+    // must open with the caption.
+    await showSessionPreviews(fixture.page)
+    await openConversationList(fixture.page)
     const row = sessionRow(fixture.page)
     await row.waitFor({ state: 'visible', timeout: 60_000 })
 
-    const label = (await row.textContent())?.trim() ?? ''
+    const preview = row.locator(PREVIEW_LINE)
+    await expect(preview, 'the titled row should carry exactly one preview line').toHaveCount(1)
+    const label = (await preview.textContent())?.trim() ?? ''
     expect(label.startsWith(CAPTION), `sidebar label should open with the caption: ${label}`).toBe(true)
 
     await openSeededSession(fixture.page)
@@ -187,8 +227,18 @@ test.describe('attached image resume', () => {
     // A reload drops every cached attachment ref, so the transcript has to come
     // back from the persisted turn alone.
     await fixture.page.reload()
+    // Readiness is re-proved in full; the fixture's openMessagePane waits for the restored Message window's composer
+    // (74b5b6ef59), so the reload no longer needs a local Dock workaround.
     await waitForAppReady(fixture, 120_000)
     await openNewSession(fixture.page)
+
+    // v0.0.9 app fix (upsertResolvedSession merges): the reload's route restore resolves the session by id, and that
+    // answer carries no preview. The row must keep its preview line instead of losing it until the next list refresh.
+    const reloadedPreview = sessionRow(fixture.page).locator(PREVIEW_LINE)
+    await expect(reloadedPreview, 'the preview line should survive the reload').toHaveCount(1)
+    await expect(reloadedPreview, 'the preview line should still open with the caption').toHaveText(
+      new RegExp(`^\\s*${CAPTION}`)
+    )
 
     await openSeededSession(fixture.page)
     await assertRendersThumbnail(fixture.page, 'cold reload')

@@ -85,7 +85,11 @@ test.describe('chat interaction with mock backend', () => {
     await expectVisualSnapshot(fixture!.page, { name: 'chat-with-messages', app: fixture!.app })
   })
 
-  test('offers stop, steer, and queue actions while busy', async ({}, testInfo) => {
+  // Reviewed port (v0.0.9): upstream turned the busy send button into "Steer" (steering-wheel icon). In icloneOS
+  // "Steer is just send" (src/app/chat/composer/controls.tsx:79): mid-turn a payload keeps the Send affordance
+  // (arrow-up), and while a blocking prompt holds the turn (the clarify here) that send queues instead of steering
+  // (composer/index.tsx:355-359). Same user contract: Stop when empty, send + queue with text, queue → paused.
+  test('offers stop, send, and queue actions while busy', async ({}, testInfo) => {
     const page = fixture!.page
     const composer = page.locator('[contenteditable="true"]').first()
     const primary = page.locator('[data-slot="composer-root"] button[type="submit"]')
@@ -106,7 +110,7 @@ test.describe('chat interaction with mock backend', () => {
 
     await composer.click()
     await composer.type('please answer tersely')
-    await expect(primary).toHaveAttribute('aria-label', /Steer/)
+    await expect(primary).toHaveAttribute('aria-label', 'Send')
     await expect(dictation).toBeVisible()
     await expect(speakReplies).toBeVisible()
     await expect(queue).toBeVisible()
@@ -122,11 +126,10 @@ test.describe('chat interaction with mock backend', () => {
 
     expect(controlLabels.indexOf('Voice dictation')).toBeLessThan(speakRepliesIndex)
     expect(speakRepliesIndex).toBeLessThan(controlLabels.indexOf('Queue message'))
-    expect(controlLabels.indexOf('Queue message')).toBeLessThan(
-      controlLabels.findIndex(label => label?.startsWith('Steer'))
-    )
-    await page.screenshot({ path: testInfo.outputPath('busy-composer-steer.png') })
-    await expect(primary.locator('svg.tabler-icon-steering-wheel')).toBeVisible()
+    expect(controlLabels.indexOf('Queue message')).toBeGreaterThanOrEqual(0)
+    expect(controlLabels.indexOf('Queue message')).toBeLessThan(controlLabels.indexOf('Send'))
+    await page.screenshot({ path: testInfo.outputPath('busy-composer-send.png') })
+    await expect(primary.locator('.codicon-arrow-up')).toBeVisible()
 
     await queue.click()
     await expect(primary).toHaveAttribute('aria-label', 'Stop')

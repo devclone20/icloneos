@@ -1,9 +1,11 @@
 // G4 k = 0: signed in, iNFTs in the wallet, none checked — Home says the rule
-// and offers the Book, instead of a broken or silent grid.
+// and offers the Book, instead of a broken or silent grid. Since v0.0.9 (F5) the
+// door is the header's Open iNFT Book, present in every state.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { en } from '@/i18n/en'
+import { f5Collection } from '@/i18n/en/v009-f5'
 
 import { CollectionsPanel } from './collections'
 
@@ -30,7 +32,7 @@ describe('the Home collection under the iNFT Book rule', () => {
     expect(screen.getByText('Home shows only the iNFTs you check in the iNFT Book.')).toBeTruthy()
     expect(screen.getByText(copy.homeEmpty)).toBeTruthy()
     expect(container.ownerDocument.querySelector('.inft-panel__body')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: copy.openBook }))
+    fireEvent.click(screen.getByRole('button', { name: f5Collection.openBook }))
     expect(onOpen).toHaveBeenCalledTimes(1)
     expect(errors).not.toHaveBeenCalled()
   })

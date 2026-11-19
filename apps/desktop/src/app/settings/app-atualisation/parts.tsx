@@ -56,10 +56,11 @@ type Tone = 'available' | 'error' | 'idle' | 'unknown' | 'warn'
 
 const TONE_CLASS: Record<Tone, string> = {
   available: 'border-primary/30 bg-primary/5',
-  error: 'border-destructive/35 bg-destructive/5',
+  // v0.0.9 F4b — error and warn wear the inline alert's tokens (type 3): the danger plate, or the raised plate.
+  error: 'border-(--ic-danger-soft) bg-(--ic-danger-soft)',
   idle: 'border-border/70 bg-muted/20',
   unknown: 'border-dashed border-border bg-transparent',
-  warn: 'border-amber-500/40 bg-amber-500/10'
+  warn: 'border-(--ic-border-subtle) bg-(--ic-surface-raised)'
 }
 
 function ToneIcon({ busy, tone }: { busy: boolean; tone: Tone }) {
@@ -83,7 +84,7 @@ function ToneIcon({ busy, tone }: { busy: boolean; tone: Tone }) {
     <AlertTriangle
       className={cn(
         'mt-0.5 size-4 shrink-0',
-        tone === 'error' ? 'text-destructive' : 'text-amber-600 dark:text-amber-400'
+        tone === 'error' ? 'text-(--ic-danger)' : 'text-(--ic-note-warning)'
       )}
     />
   )

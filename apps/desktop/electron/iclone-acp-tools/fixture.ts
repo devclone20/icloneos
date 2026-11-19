@@ -9,8 +9,10 @@ import path from 'node:path'
 import { gzipSync } from 'node:zlib'
 
 import { ADDONS_FILE, blobName } from '../../src/iclone-shared/acp-native'
-import { ACP_CLI_NAME, registryUrl } from '../../src/iclone-shared/acp-pin'
+import { ACP_CLI_NAME, type PinTarget, registryUrl } from '../../src/iclone-shared/acp-pin'
 
+import { materialiseBundle } from './materialise'
+import type { NativeAddons } from './native'
 import type { InstallRecord } from './record'
 
 export interface FixtureFile {
@@ -247,3 +249,32 @@ export function writeAddonDir(
 }
 
 const sha256 = (data: Buffer | string) => createHash('sha256').update(data).digest('hex')
+
+/**
+ * v0.0.9: the bundled tree a build would ship (Resources/acp-tools), materialised from the fake registry with the real
+ * build code (materialise.ts) — no network. Returns the manifest.
+ */
+export async function writeFixtureBundle(
+  registry: FixtureRegistry,
+  dir: string,
+  options: { target?: PinTarget; native?: NativeAddons; lockNotices?: string } = {}
+) {
+  return materialiseBundle({
+    pinDir: registry.pinDir,
+    outDir: dir,
+    target: options.target ?? { platform: 'darwin', arch: 'arm64' },
+    fetch: async url => {
+      const tgz = registry.tarballs.get(url)
+
+      if (!tgz) {
+        throw new Error(`404 ${url}`)
+      }
+
+      return tgz
+    },
+    native: options.native ?? { dir: null, required: false },
+    lockNotices: options.lockNotices ?? '# ACP CLI — fixture pin table\n',
+    now: () => new Date('2026-11-17T00:00:00Z'),
+    log: () => undefined
+  })
+}

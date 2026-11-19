@@ -7,6 +7,7 @@ import {
   createSandbox,
   launchDesktop,
   type MockBackendFixture,
+  openMessagePane,
   waitForAppReady,
   writeEnvFile,
   writeMockProviderConfig
@@ -65,10 +66,17 @@ let fixture: MockBackendFixture | null = null
 /** A dialog renders as `[data-slot="dialog-content"]` (components/ui/dialog.tsx). */
 const DIALOG = '[data-slot="dialog-content"]'
 
+/**
+ * The global worktree hotkey, `mod+shift+b` (src/lib/keybinds/actions.ts:99).
+ * Reviewed port (v0.0.9): upstream pressed Control+Shift+B, which is `mod` only off macOS. On macOS `mod` is Cmd and
+ * Control is a separate `ctrl` token (src/lib/keybinds/combo.ts:140-146), so the user's chord is ControlOrMeta.
+ */
+const WORKTREE_HOTKEY = 'ControlOrMeta+Shift+B'
+
 /** Open the worktree dialog with the global ⌘⇧B / ctrl+shift+B hotkey. */
 async function openWorktreeDialog(): Promise<void> {
   const page = fixture!.page
-  await page.keyboard.press('Control+Shift+B')
+  await page.keyboard.press(WORKTREE_HOTKEY)
   await expect(page.locator(DIALOG)).toBeVisible()
 }
 
@@ -102,9 +110,26 @@ test.beforeAll(async () => {
 
   await waitForAppReady(fixture, 120_000)
 
+  // Reviewed port (v0.0.9): in icloneOS the branch strip is developer chrome that shows only for a session anchored to
+  // a project the person opened, never for a cwd that merely is a git repo (use-coding-status-visible.ts:8-13, 25-28).
+  // So the user first opens the repo as a project, the way the app offers without a native picker: type its absolute
+  // path in the command palette and pick "Open folder as project" (command-palette/search-groups.ts:134-147, which runs
+  // the same openFolderAsProject as ⌘O, store/projects.ts:1402). That creates the project and a session anchored there.
+  await page.keyboard.press('ControlOrMeta+K')
+  const paletteSearch = page.getByRole('dialog', { name: 'Command palette' }).getByRole('combobox')
+  await expect(paletteSearch).toBeFocused()
+  await paletteSearch.fill(repo)
+  await page.getByText(`Open folder as project — ${repo}`).first().click()
+  await openMessagePane(page)
+
   // The coding rail, and thus the ⌘⇧B worktree dialog, mounts only after the
   // session resolves a cwd that holds a repo. This happens on the first turn.
-  const composer = page.locator('[contenteditable="true"]').first()
+  // Reviewed port (v0.0.9): the Message pane's own composer (the one openMessagePane awaits), never a hidden editable.
+  const composer = page
+    .locator('[data-slot="composer-root"] [contenteditable="true"]')
+    .filter({ visible: true })
+    .first()
+
   await composer.click()
   await composer.type('create a repo-backed e2e session', { delay: 2 })
   await page.keyboard.press('Enter')
@@ -218,6 +243,15 @@ test('creating a branch with ctrl-shift-b updates the composer git-status branch
 })
 
 test('ctrl-shift-b opens exactly one worktree dialog when a second composer is on screen', async ({}, testInfo) => {
+  // Reviewed port (v0.0.9): N/A (NA.b1.tsv). Upstream stacks a second session tile with ⌘T to get a second live
+  // composer. icloneOS renders no session tiles in this version ($sessionTilesRender is false, store/tile-render.ts:3-10),
+  // so ⌘T opens a fresh draft in the one main chat (contrib/wiring-routing.ts:18-24) and a second composer cannot be on
+  // screen. The one-dialog rule itself is still asserted by the create test above (exactly one dialog instance).
+  test.skip(
+    true,
+    'N/A in v0.0.9: upstream feature "stacked session tiles (⌘T) with a second composer" is absent; no session tiles render (store/tile-render.ts:3-10)'
+  )
+
   const page = fixture!.page
 
   // ⌘T / ctrl+T stacks a second session tile. That gives a second live composer
@@ -229,7 +263,7 @@ test('ctrl-shift-b opens exactly one worktree dialog when a second composer is o
   await page.keyboard.press('Control+T')
   await expect(page.locator('.coding-status-bar')).toHaveCount(2, { timeout: 20_000 })
 
-  await page.keyboard.press('Control+Shift+B')
+  await page.keyboard.press(WORKTREE_HOTKEY)
   await expect(page.locator(DIALOG).first()).toBeVisible()
   // Wait: let the effect of every subscriber flush before the count.
   await page.waitForTimeout(500)

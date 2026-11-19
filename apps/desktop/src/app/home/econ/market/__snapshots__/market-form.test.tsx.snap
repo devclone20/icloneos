@@ -212,7 +212,7 @@ exports[`OfferingEditor markup > a new, empty offering 1`] = `
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" type="submit">Create offering</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" type="submit">Create offering</button>
 </div>
 </footer>
 </form>"
@@ -427,12 +427,24 @@ exports[`OfferingEditor markup > a share-of-value offering saving after a failur
 </div>
 </div>
 <footer class="mk-editor__foot">
-<p class="e-note e-note--error" role="alert">Price must be a number.</p>
+<div class="icpg__alert e-note" data-slot="ic-alert" data-tone="error" role="alert">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tabler-icon tabler-icon-alert-circle icpg__alert-icon" aria-hidden="true">
+<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0">
+</path>
+<path d="M12 8v4">
+</path>
+<path d="M12 16h.01">
+</path>
+</svg>
+<div class="icpg__alert-text">
+<span>Price must be a number.</span>
+</div>
+</div>
 <div class="mk-editor__actions">
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" disabled="" type="submit">Creating…</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" disabled="" type="submit">Creating…</button>
 </div>
 </footer>
 </form>"
@@ -641,7 +653,7 @@ exports[`OfferingEditor markup > an offering being edited 1`] = `
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" type="submit">Save changes</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" type="submit">Save changes</button>
 </div>
 </footer>
 </form>"
@@ -768,7 +780,7 @@ exports[`ResourceEditor markup > a filled resource 1`] = `
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" type="submit">Publish resource</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" type="submit">Publish resource</button>
 </div>
 </footer>
 </form>"
@@ -892,12 +904,24 @@ exports[`ResourceEditor markup > a hidden resource saving after a failure 1`] = 
 </div>
 </div>
 <footer class="mk-editor__foot">
-<p class="e-note e-note--error" role="alert">The service refused the write.</p>
+<div class="icpg__alert e-note" data-slot="ic-alert" data-tone="error" role="alert">
+<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="tabler-icon tabler-icon-alert-circle icpg__alert-icon" aria-hidden="true">
+<path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0">
+</path>
+<path d="M12 8v4">
+</path>
+<path d="M12 16h.01">
+</path>
+</svg>
+<div class="icpg__alert-text">
+<span>The service refused the write.</span>
+</div>
+</div>
 <div class="mk-editor__actions">
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" disabled="" type="submit">Publishing…</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" disabled="" type="submit">Publishing…</button>
 </div>
 </footer>
 </form>"
@@ -1012,7 +1036,7 @@ exports[`ResourceEditor markup > a new, empty resource 1`] = `
 <span aria-live="polite" class="mk-editor__why">
 </span>
 <button class="e-btn e-btn--quiet" type="button">Cancel</button>
-<button class="e-btn e-btn--primary" type="submit">Publish resource</button>
+<button class="e-btn e-btn--primary" data-acp-market-confirm="" type="submit">Publish resource</button>
 </div>
 </footer>
 </form>"

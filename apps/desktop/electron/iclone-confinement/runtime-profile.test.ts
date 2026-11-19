@@ -4,7 +4,10 @@ import path from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { buildProfileSpec, type ConfinementPaths, KEYCHAIN_SERVICES, NEVER_EXEC } from './profiles'
+import { socketFolders } from '../iclone-permissions/classify-policy'
+
+import { MAX_SOCKET_PATH_BYTES, socketPath } from './launcher-socket'
+import { buildAllProfileSpecs, buildProfileSpec, type ConfinementPaths, KEYCHAIN_SERVICES, NEVER_EXEC, realOrSelf } from './profiles'
 import {
   generateRuntimeProfile,
   HERMES_HOME_NEVER_WRITTEN,
@@ -12,6 +15,7 @@ import {
   interpreterLinks,
   judgeHelperInterpreter,
   launcherLedgerDir,
+  launcherSocketFile,
   PYTHON_SOCKET_SUFFIX_MAX,
   type RuntimeFacts,
   runtimeProfileParams,
@@ -19,12 +23,13 @@ import {
   runtimeRunDir,
   runtimeSandboxArgv,
   runtimeTmpFolder,
+  runtimeWritableFolders,
   SANDBOX_EXEC_PATH,
   symlinkChain,
   UNIX_SOCKET_PATH_MAX,
   USERDATA_HOLES
 } from './runtime-profile'
-import { auditSbpl, debuggerDenials } from './sbpl'
+import { auditSbpl, debuggerDenials, renderSbpl } from './sbpl'
 
 const paths: ConfinementPaths = {
   home: '/Users/owner',
@@ -46,7 +51,9 @@ const facts: RuntimeFacts = {
   tmpDir: '/private/var/folders/xx/T/icloneos-runtime',
   cacheDir: '/private/var/folders/xx/C/icloneos-runtime',
   permDir: '/Users/owner/Library/Application Support/iclone os/run',
-  permSocket: '/Users/owner/Library/Application Support/iclone os/run/acp.sock',
+  // v0.0.9: main's agent socket is the short private one of this userData (launcher-socket.ts), never under it.
+  permSocket: socketPath('/Users/owner/Library/Application Support/iclone os', 'acp'),
+  paySocket: socketPath('/Users/owner/Library/Application Support/iclone os', 'pay'),
   policyFile: '/Users/owner/Library/Application Support/iclone os/run/policy-1.json'
 }
 
@@ -54,6 +61,20 @@ const text = generateRuntimeProfile(paths).text
 const code = text.split('\n').filter(line => line.trim() && !line.trimStart().startsWith(';'))
 const lastAllow = code.findLastIndex(line => /\(allow /.test(line))
 const tail = code.slice(lastAllow + 1).join('\n')
+
+function expectPrivateSocket(file: string, userDataDir: string, name: 'acp' | 'launcher' | 'pay'): void {
+  // v0.0.9 (owner decision): main's sockets left userData for their own short private folder (launcher-socket.ts),
+  // asserted at least as strictly as the old exact paths: exactly socketPath(userData, name), outside userData,
+  // inside the canonical per-user temp dir (or the /tmp/<uid> fallback), and short enough to bind.
+  expect(file).toBe(socketPath(userDataDir, name))
+  expect(file.startsWith(userDataDir)).toBe(false)
+  expect(file.startsWith(`${realpathSync(os.tmpdir())}/ic-`) || /^\/tmp\/\d+-/.test(file)).toBe(true)
+  expect(path.basename(path.dirname(file))).toMatch(/^(ic-|\d+-)[0-9a-f]{10}$/)
+  expect(path.basename(file)).toBe(`${name}.sock`)
+  expect(Buffer.byteLength(file)).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+}
+
+const expectPrivateLauncherSocket = (file: string, userDataDir: string) => expectPrivateSocket(file, userDataDir, 'launcher')
 
 describe('generateRuntimeProfile', () => {
   it('opens with a tagged (deny default) right after the version', () => {
@@ -504,6 +525,55 @@ describe('the userData policy across layouts', () => {
   })
 })
 
+describe('the launcher socket in the runtime profile (v0.0.9 owner check)', () => {
+  it('opens exactly the socket literal: a literal read and a unix-socket connect, never its folder or a subpath', () => {
+    // Metadata only (the plugin lstat()s the socket), on that literal: no file-read* of it.
+    expect(text).toContain(`(let ((f (iclone-literals '("LAUNCHER_SOCKET")))) (if (pair? f) (allow file-read-metadata (apply require-any f))))`)
+    expect(text).not.toContain(`(let ((f (iclone-literals '("LAUNCHER_SOCKET")))) (if (pair? f) (allow file-read* (apply require-any f))))`)
+    expect(text).toMatch(/\(iclone-sockets '\([^)]*"LAUNCHER_SOCKET"/)
+    // No subpath, no regex: LAUNCHER_SOCKET never appears in a subpath list.
+    expect(text).not.toMatch(/\(iclone-subpaths '\([^)]*"LAUNCHER_SOCKET"/)
+    expect(text).not.toMatch(/LAUNCHER_DIR|SOCKET_DIR/)
+  })
+
+  it('no parameter names the socket folder, and no writable folder holds it (the journal-dir env widens nothing)', () => {
+    const socket = launcherSocketFile(paths.userDataDir)
+    const folder = path.dirname(socket)
+    const params = runtimeProfileParams(paths, facts).filter(arg => arg !== '-D')
+
+    expect(params.some(arg => arg.split('=').slice(1).join('=') === realOrSelf(folder))).toBe(false)
+    expect(params.filter(arg => arg.startsWith('LAUNCHER_SOCKET='))).toEqual([`LAUNCHER_SOCKET=${realOrSelf(socket)}`])
+
+    for (const writable of runtimeWritableFolders(paths, facts)) {
+      expect(realOrSelf(folder).startsWith(`${writable}/`) || realOrSelf(folder) === writable, writable).toBe(false)
+    }
+  })
+})
+
+describe('v0.0.9: the private socket folder in the runtime and command profiles', () => {
+  const folders = socketFolders({ ...paths, hermesRoot: paths.hermesRoot })
+  const lines = (profile: string) => profile.split('\n').filter(line => folders.some(folder => line.includes(folder)))
+
+  it('the runtime profile never allows the folder; it only denies writes there (the sockets stay exact literals)', () => {
+    const named = lines(text)
+
+    expect(folders).toContain(path.dirname(socketPath(paths.userDataDir, 'pay')))
+    expect(named.length).toBeGreaterThan(0)
+    expect(named.every(line => line.startsWith('(deny file-write*'))).toBe(true)
+    expect(text.split('\n').filter(line => line.startsWith('(allow') && folders.some(folder => line.includes(folder)))).toEqual([])
+  })
+
+  it('every confined command profile denies writes there too, and allows nothing in it', () => {
+    for (const spec of buildAllProfileSpecs(paths)) {
+      const sbpl = renderSbpl(spec)
+      const named = lines(sbpl)
+
+      expect(named.length, spec.cls).toBeGreaterThan(0)
+      expect(named.every(line => line.startsWith('(deny ')), spec.cls).toBe(true)
+    }
+  })
+})
+
 describe('runtimeProfileParams', () => {
   const asMap = (list: string[]) => {
     const out: Record<string, string> = {}
@@ -523,11 +593,33 @@ describe('runtimeProfileParams', () => {
 
     expect(params.HERMES_HOME).toBe('/Users/owner/.hermes')
     expect(params.RUN_DIR).toBe(`${paths.userDataDir}/confinement/run`)
-    expect(params.LAUNCHER_SOCKET).toBe(`${paths.userDataDir}/confinement/run/launcher.sock`)
+    expectPrivateLauncherSocket(params.LAUNCHER_SOCKET, paths.userDataDir)
     expect(params.PYTHON_EXE).toBe(facts.python)
     expect(params.PROJECT).toBe('/Users/owner/code/app')
-    expect(params.PERM_SOCKET).toBe(facts.permSocket)
+    expectPrivateSocket(params.PERM_SOCKET, paths.userDataDir, 'acp')
+    expectPrivateSocket(params.PAY_SOCKET, paths.userDataDir, 'pay')
     expect(Object.values(params).every(value => value.startsWith('/'))).toBe(true)
+  })
+
+  it('v0.0.9: the agent socket passes only as the short private one of THIS userData, never the old place nor another', () => {
+    const permOf = (permSocket: string) => asMap(runtimeProfileParams(paths, { ...facts, permSocket })).PERM_SOCKET
+
+    expect(permOf(socketPath(paths.userDataDir, 'acp'))).toBe(socketPath(paths.userDataDir, 'acp'))
+    // The old place under userData, another family's socket, another userData's socket, a sibling in the folder.
+    expect(permOf(`${paths.userDataDir}/run/acp.sock`)).toBeUndefined()
+    expect(permOf(socketPath(paths.userDataDir, 'pay'))).toBeUndefined()
+    expect(permOf(socketPath('/Users/owner/Library/Application Support/other', 'acp'))).toBeUndefined()
+    expect(permOf(path.join(path.dirname(socketPath(paths.userDataDir, 'acp')), 'x.sock'))).toBeUndefined()
+  })
+
+  it('v0.0.9: the pay socket passes only as the short private one of THIS userData, never the old place nor another', () => {
+    const payOf = (paySocket: string) => asMap(runtimeProfileParams(paths, { ...facts, paySocket })).PAY_SOCKET
+
+    expect(payOf(socketPath(paths.userDataDir, 'pay'))).toBe(socketPath(paths.userDataDir, 'pay'))
+    expect(payOf(`${paths.userDataDir}/run/pay.sock`)).toBeUndefined()
+    expect(payOf(socketPath(paths.userDataDir, 'acp'))).toBeUndefined()
+    expect(payOf(socketPath('/Users/owner/Library/Application Support/other', 'pay'))).toBeUndefined()
+    expect(payOf(path.join(path.dirname(socketPath(paths.userDataDir, 'pay')), 'x.sock'))).toBeUndefined()
   })
 
   it('leaves out a project that is the home (main falls back to it), and holes outside userData', () => {

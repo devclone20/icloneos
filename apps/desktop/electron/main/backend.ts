@@ -16,6 +16,7 @@ import { resolveDesktopRemoteRoute } from '../desktop-remote-route'
 import { codePathEnv } from '../packaged-env'
 import { registrySshScopeForWindowRoute } from '../window-connection-route'
 
+import { resetBackendAutoRestart } from './backend-auto-restart'
 import {
   backendOwnership,
   desktopParentStartMarker,
@@ -188,6 +189,8 @@ export function stopBackendChild(child: OwnedBackendChild | null | undefined) {
 export function resetHermesConnection({ soft = false } = {}) {
   bootState.backendStartFailure = null
   bootState.remoteReauthFailure = null
+  // v0.0.9 F2: an explicit reset (repair, restart, re-home, apply) supersedes any pending automatic restart.
+  resetBackendAutoRestart()
   remoteLiveness.clear()
   const hermesProcess = backendConnectionState.invalidate()
   stopBackendChild(hermesProcess)

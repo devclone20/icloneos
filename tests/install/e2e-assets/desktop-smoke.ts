@@ -277,7 +277,7 @@ export type LaunchElectron = (launch: Parameters<typeof _electron.launch>[0]) =>
 
 // `launchApp` is a parameter so a test can substitute a failing launcher and
 // exercise the seeding that happens before the launch without touching Playwright.
-export async function runInstalledDesktopSmoke(options: SmokeOptions, launchApp: LaunchElectron = (launch) => _electron.launch(launch)): Promise<void> {
+export async function runInstalledDesktopSmoke(options: SmokeOptions, launchApp: LaunchElectron = (launch) => _electron.launch({ ...launch, args: [...(launch?.args ?? []), '--use-mock-keychain'] })): Promise<void> {
   const out = options.out
   fs.mkdirSync(out, { recursive: true })
   const receiptPath = path.join(out, `desktop-chat-${options.phase}.json`)

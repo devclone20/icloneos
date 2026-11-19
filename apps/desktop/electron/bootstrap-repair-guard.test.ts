@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 
-import { test } from 'vitest'
+import { describe, expect, it, test } from 'vitest'
 
-import { decideBootstrapRepair } from './bootstrap-repair-guard'
+import { decideBootstrapRepair, routeBootstrapRepair } from './bootstrap-repair-guard'
 
 test('first soft attempt with alive backend returns soft restart', () => {
   const decision = decideBootstrapRepair({
@@ -106,4 +106,22 @@ test('alive=false on a high attempt number still escalates (defense in depth)', 
   })
 
   assert.equal(decision.hardReinstall, true)
+})
+
+describe('routeBootstrapRepair (v0.0.9 F3: Repair follows the cause)', () => {
+  it.each([
+    ['install-state-not-writable', 'stale-install-record', false],
+    ['python-import', 'runtime-venv', true],
+    ['gate-not-loaded', 'gate-not-starting', false],
+    ['port-in-use', 'port-busy', false]
+  ] as const)('%s → the kit class %s (installer forced: %s)', (cause, kitClass, forceReinstall) => {
+    expect(routeBootstrapRepair(cause)).toMatchObject({ forceReinstall, kitClass })
+  })
+
+  it.each(['exit-nonzero', 'timeout', 'unknown', null, undefined] as const)(
+    '%s → no class repair: the soft/hard ladder decides, unchanged',
+    cause => {
+      expect(routeBootstrapRepair(cause)).toMatchObject({ forceReinstall: false, kitClass: null })
+    }
+  )
 })

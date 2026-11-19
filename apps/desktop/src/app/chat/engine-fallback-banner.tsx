@@ -1,23 +1,21 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useInRouterContext, useNavigate } from 'react-router'
 
 import { SETTINGS_ROUTE } from '@/app/routes'
 import { readFallbackSeen, writeFallbackSeen } from '@/app/settings/engine-settings-model'
+import { IcPageButton } from '@/components/ic/ic-page'
+import { IcStatusBanner } from '@/components/status-banner'
 import { enEngine } from '@/i18n/en'
-import { cn } from '@/lib/utils'
 import { $selectedStoredSessionId } from '@/store/session'
 
 const ENGINE_SETTINGS_LINK = `${SETTINGS_ROUTE}?tab=engine`
 const POLL_MS = 10_000
 const FRESH_MS = 10 * 60_000
 
-const BAR = cn(
-  'pointer-events-auto mx-auto mb-1 flex w-full max-w-(--composer-max-width,48rem) items-center gap-2 rounded-md px-3 py-1.5',
-  'border border-(--ic-border-subtle) bg-(--ic-surface-raised) text-xs text-(--ic-text-ramp-80)'
-)
-
-const LINK = 'shrink-0 rounded px-1.5 font-medium text-[color:var(--ic-text-1)] underline-offset-2 hover:underline'
+/** v0.0.9 F4b: a told-once fact about one answer, below the states that stop work (agent 100, billing 70, provider 60). */
+export const ENGINE_FALLBACK_PRIORITY = 30
 
 type Fallback = { at: number; reason: string; text: string }
 
@@ -165,7 +163,7 @@ export function EngineFallbackBanner() {
     }
   }, [bridge])
 
-  if (!fallback || boundSession !== selectedSession) {
+  if (!fallback || boundSession !== selectedSession || typeof document === 'undefined') {
     return null
   }
 
@@ -174,22 +172,19 @@ export function EngineFallbackBanner() {
     setFallback(null)
   }
 
-  return (
-    <div aria-live="polite" className={BAR} data-engine-fallback={fallback.reason} role="status">
-      <span aria-hidden="true" className="text-[color:var(--ic-danger)]">
-        ●
-      </span>
-      <span className="min-w-0 flex-1 truncate">{enEngine.fallback}</span>
-      {inRouter ? <FixLink onFix={dismiss} /> : null}
-      <button
-        aria-label={enEngine.dismiss}
-        className="shrink-0 rounded px-1 text-(--ic-text-2) hover:text-[color:var(--ic-text-1)]"
-        onClick={dismiss}
-        type="button"
-      >
-        ✕
-      </button>
-    </div>
+  // v0.0.9 F4b — type 2 (IcStatusBanner, portalled under the titlebar): the whole sentence wraps (it was one
+  // truncated line above the composer), Fix is the banner's action, ✕ puts it away.
+  return createPortal(
+    <IcStatusBanner
+      actions={inRouter ? <FixLink onFix={dismiss} /> : undefined}
+      data={{ 'data-engine-fallback': fallback.reason }}
+      dismissLabel={enEngine.dismiss}
+      onDismiss={dismiss}
+      priority={ENGINE_FALLBACK_PRIORITY}
+      title={enEngine.fallback}
+      tone="warning"
+    />,
+    document.body
   )
 }
 
@@ -197,15 +192,14 @@ function FixLink({ onFix }: { onFix: () => void }) {
   const navigate = useNavigate()
 
   return (
-    <button
-      className={LINK}
+    <IcPageButton
       onClick={() => {
         onFix()
         navigate(ENGINE_SETTINGS_LINK)
       }}
-      type="button"
+      tone="quiet"
     >
       {enEngine.fix}
-    </button>
+    </IcPageButton>
   )
 }

@@ -14,6 +14,7 @@
  * EXTERNAL content (OAuth portals) must NOT attach — third-party pages can log
  * tokens or PII we never want on disk.
  */
+import { fixtureSwitchLogLine, type FixtureWallet } from './fixture-wallet'
 
 interface ConsoleMessageDetails {
   level: number
@@ -67,6 +68,41 @@ export function attachRendererConsoleCapture(win: WindowLike, label: string, log
       log(formatted)
     }
   })
+}
+
+/** v0.0.9 r3b: the text of ANY console line (every level), both signatures; for a dev-only tap (fixture-wallet.ts). */
+export function attachRendererConsoleTap(win: WindowLike, tap: (message: unknown) => void): void {
+  win.webContents.on('console-message', (_event, detailsOrLevel, message) => {
+    tap(detailsOrLevel && typeof detailsOrLevel === 'object' ? (detailsOrLevel as ConsoleMessageDetails).message : message)
+  })
+}
+
+/**
+ * v0.0.9 r4 (eng r3b-m3): the fixture reopen-loop tap, attached ONLY in a dev/test run with an active fixture wallet.
+ * A production (packaged) window, or any run without a fixture, gets no listener at all, so it pays nothing for a dev
+ * hook. Three locks: the fixture is already null when packaged (codePathEnv + resolveFixtureWallet), and `isPackaged`
+ * is checked again here. Returns whether the tap was attached.
+ */
+export function attachFixtureSwitchTap(
+  win: WindowLike,
+  options: { fixture: FixtureWallet | null; isPackaged: boolean },
+  log: (line: string) => void
+): boolean {
+  const { fixture, isPackaged } = options
+
+  if (isPackaged || !fixture) {
+    return false
+  }
+
+  attachRendererConsoleTap(win, message => {
+    const line = fixtureSwitchLogLine(fixture, message)
+
+    if (line) {
+      log(line)
+    }
+  })
+
+  return true
 }
 
 /** Format a renderer error-boundary report (hermes:logs:renderer-error IPC)

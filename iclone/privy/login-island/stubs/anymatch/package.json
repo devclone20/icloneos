@@ -1,0 +1,10 @@
+{
+  "name": "anymatch",
+  "version": "3.1.3-iclone.0",
+  "description": "iclone os: inert stand-in for anymatch in the Privy sign-in island (v0.0.9). The real anymatch 3 pulls picomatch 2 (GHSA-fc5q-39xc-vjpf, ReDoS, no patched release); its only importer here is unstorage's Node fs driver (drivers/fs), which the browser bundle never includes. Calling it throws.",
+  "license": "MIT",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ]
+}

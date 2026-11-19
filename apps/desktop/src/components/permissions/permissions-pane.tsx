@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 
 import { Pill, SectionHeading, SettingsContent } from '@/app/settings/primitives'
 import { SettingRow } from '@/app/settings/setting-row'
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { codiconIcon } from '@/components/ui/codicon'
 import { useI18n } from '@/i18n'
@@ -144,21 +145,22 @@ export function PermissionsPane() {
         <section>
           <SectionHeading icon={ModeIcon} title={copy.title} />
           <p className="mb-2 text-[0.8125rem] text-(--ui-text-tertiary)">{copy.lead}</p>
-          <p
-            className={
-              state.enforcement === 'not-enforced' || state.enforcement === 'degraded'
-                ? 'mb-2 text-[0.75rem] leading-4 text-(--ic-danger)'
-                : 'mb-2 text-[0.75rem] leading-4 text-(--ui-text-tertiary)'
-            }
-            data-permission-enforcement={state.enforcement}
-            role={state.enforcement === 'not-enforced' || state.enforcement === 'degraded' ? 'alert' : undefined}
-          >
-            {state.enforcement === 'degraded' && keychain && !keychain.on
-              ? copy.enforcement['keychain-off']
-              : state.enforcement === 'degraded' && keychain && !keychain.atLaunch
-                ? copy.enforcement['keychain-restart']
-                : copy.enforcement[state.enforcement]}
-          </p>
+          {state.enforcement === 'not-enforced' || state.enforcement === 'degraded' ? (
+            <IcAlert className="mb-2" data={{ 'data-permission-enforcement': state.enforcement }} tone="error">
+              {state.enforcement === 'degraded' && keychain && !keychain.on
+                ? copy.enforcement['keychain-off']
+                : state.enforcement === 'degraded' && keychain && !keychain.atLaunch
+                  ? copy.enforcement['keychain-restart']
+                  : copy.enforcement[state.enforcement]}
+            </IcAlert>
+          ) : (
+            <p
+              className="mb-2 text-[0.75rem] leading-4 text-(--ui-text-tertiary)"
+              data-permission-enforcement={state.enforcement}
+            >
+              {copy.enforcement[state.enforcement]}
+            </p>
+          )}
           {state.enforcement === 'degraded' && keychain?.on && !keychain.atLaunch ? (
             // r3: the way the line names — a clean relaunch, after which the modes use the Keychain.
             <div className="mb-2">
@@ -186,14 +188,9 @@ export function PermissionsPane() {
           {/* A-1: a state file main refused or could not verify at launch — one alert each, deduplicated by wording
               (the two grant files share theirs); what is in force instead is in the sentence (store.ts). */}
           {integrityLines(state.integrity, copy.integrity).map(line => (
-            <p
-              className="mb-2 text-[0.75rem] leading-4 text-(--ic-danger)"
-              data-permission-integrity={line.key}
-              key={line.key}
-              role="alert"
-            >
+            <IcAlert className="mb-2" data={{ 'data-permission-integrity': line.key }} key={line.key} tone="error">
               {line.text}
-            </p>
+            </IcAlert>
           ))}
           <div aria-label={copy.scope.label} className="mb-1 flex flex-wrap items-center gap-1.5" role="radiogroup">
             <span className="me-1 text-[0.75rem] text-(--ui-text-tertiary)">{copy.scope.label}</span>

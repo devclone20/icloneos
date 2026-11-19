@@ -15,9 +15,36 @@
 
 import { _electron, test as base, type ElectronApplication, expect, type Page } from '@playwright/test'
 
+import { judgeReadiness } from './readiness'
+import { readinessFacts } from './readiness-page'
+import {
+  BOOTED_ANNOTATION,
+  currentClaim,
+  launchWasUnclaimed,
+  markReady,
+  NON_READY_ANNOTATION,
+  READY_ANNOTATION,
+  setSpecFileSource,
+  startTest,
+  UNCLAIMED_ANNOTATION
+} from './ready-state'
+
+/** The spec file of the running test or hook (beforeAll included), or '' outside Playwright. */
+function runningSpecFile(): string {
+  try {
+    return base.info().file
+  } catch {
+    return ''
+  }
+}
+
+setSpecFileSource(runningSpecFile)
+
 // Track error messages per test so afterEach can assert + report.
 const seenErrors: string[] = []
 let activePage: Page | null = null
+// The spec file whose launch installed activePage: another file's page (closed, or from its beforeAll) never answers.
+let activePageFile = ''
 // When true, the afterEach guard skips the error-banner check.
 // Set by tests that deliberately trigger error states (e.g. boot-failure).
 let errorBannersAllowed = false
@@ -43,6 +70,7 @@ export function allowErrorBanners(): void {
  */
 export function installErrorBannerGuard(page: Page): void {
   activePage = page
+  activePageFile = runningSpecFile()
 
   // Clear any errors from a previous test when a new page is created.
   seenErrors.length = 0
@@ -119,50 +147,92 @@ export async function collectErrorBanners(page: Page | null): Promise<string[]> 
   }
 }
 
-// Extended test fixture: wraps the default page with the error guard.
-export const test = base.extend({
+/** The page this test's own spec file launched, if any. */
+const ownPage = (file: string): Page | null => (activePage && activePageFile === file ? activePage : null)
+
+/**
+ * v0.0.9 eng G2-m1: the per-test readiness re-check, the ready annotations and the error-banner guard are ONE auto
+ * fixture. They were module-level beforeEach/afterEach/afterAll hooks, which Playwright attaches only to the first
+ * spec file that imports this module in a worker, so with 9 workers about 21 of 61 tests were judged and annotated.
+ * An auto fixture runs for every test in every file. Claims and the guarded page are keyed by spec file
+ * (ready-state.ts), which replaces the old per-file afterAll reset.
+ *
+ * Before the test (G-m5): a booted claim made in a beforeAll is re-proven, ready again only if the live app is ready
+ * now. After it: a test that claims a booted app must have reached ready, every test says which it was, and any error
+ * banner fails it, even when it already failed for another reason (an error banner often IS the root cause).
+ */
+export const test = base.extend<{ readyGuard: void }>({
   // Override the page fixture to auto-install the guard.
   page: async ({ page }, provide) => {
     installErrorBannerGuard(page)
     await provide(page)
-  }
-})
+  },
+  readyGuard: [
+    // eslint-disable-next-line no-empty-pattern -- Playwright reads fixtures from a destructuring pattern; this one needs none.
+    async ({}, use, testInfo) => {
+      errorBannersAllowed = false
+      startTest()
 
-// afterEach: fail the test if any error banners appeared.
-// Always fires — even if the test already failed for another reason.
-// An error banner often IS the root cause (e.g. "resume failed" from a
-// backend bug), and suppressing it when the test also fails on an
-// assertion hides the real problem.
-//
-// Uses `activePage` (set by installErrorBannerGuard) instead of the
-// default `page` fixture — Electron tests create their own page via
-// app.firstWindow(), so the default `page` fixture is undefined.
-// eslint-disable-next-line no-empty-pattern -- Playwright reads fixtures from a destructuring pattern; this hook needs none.
-base.afterEach(async ({}, testInfo) => {
-  const wasAllowed = errorBannersAllowed
-  // Reset for the next test.
-  errorBannersAllowed = false
+      const page = ownPage(testInfo.file)
 
-  if (wasAllowed) {
-    // Test opted out — clear any collected errors without asserting.
-    seenErrors.length = 0
+      if (currentClaim()?.kind === 'booted' && page && !page.isClosed()) {
+        if (judgeReadiness(await readinessFacts(page)) === 'ready') {
+          markReady()
+        }
+      }
 
-    return
-  }
+      await use()
 
-  const errors = await collectErrorBanners(activePage)
+      // A test marked fixme/skip never ran its body: there is no app to judge, and it counts nowhere.
+      if (testInfo.expectedStatus === 'skipped' || testInfo.status === 'skipped') {
+        errorBannersAllowed = false
 
-  if (errors.length > 0) {
-    throw new Error(
-      `Error banner(s) appeared during test "${testInfo.title}":\n` + errors.map(e => `  • ${e}`).join('\n')
-    )
-  }
-})
+        return
+      }
 
-// Reset for the next test file.
-base.afterAll(async () => {
-  seenErrors.length = 0
-  activePage = null
+      const claim = currentClaim()
+
+      if (claim?.kind === 'booted') {
+        testInfo.annotations.push({ type: BOOTED_ANNOTATION })
+
+        if (claim.ready) {
+          testInfo.annotations.push({ type: READY_ANNOTATION })
+        } else if (testInfo.status === testInfo.expectedStatus) {
+          throw new Error(
+            `"${testInfo.title}" drives a booted app but never reached ready (waitForAppReady): a test that never ` +
+              'reaches the permission gate cannot pass. Wait for ready in its beforeAll/beforeEach, or claim a non-ready state.'
+          )
+        }
+      } else if (claim?.kind === 'non-ready') {
+        testInfo.annotations.push({ type: NON_READY_ANNOTATION, description: claim.reason })
+      } else if (launchWasUnclaimed()) {
+        testInfo.annotations.push({ type: UNCLAIMED_ANNOTATION })
+
+        if (testInfo.status === testInfo.expectedStatus) {
+          throw new Error(`"${testInfo.title}" launched the app without claiming booted or non-ready (e2e/ready-state.ts)`)
+        }
+      }
+
+      const wasAllowed = errorBannersAllowed
+      errorBannersAllowed = false
+
+      if (wasAllowed) {
+        // Test opted out: clear any collected errors without asserting.
+        seenErrors.length = 0
+
+        return
+      }
+
+      const errors = await collectErrorBanners(ownPage(testInfo.file))
+
+      if (errors.length > 0) {
+        throw new Error(
+          `Error banner(s) appeared during test "${testInfo.title}":\n` + errors.map(e => `  • ${e}`).join('\n')
+        )
+      }
+    },
+    { auto: true }
+  ]
 })
 
 export { _electron, type ElectronApplication, expect, type Page }

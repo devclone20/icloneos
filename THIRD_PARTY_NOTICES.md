@@ -13,9 +13,10 @@ reproduces each licence text as the package ships it. The bundle also embeds one
 - iclone os itself: `LICENSE`.
 - Everything else the desktop app's bundles carry (React, three, mermaid, viem, … and their runtime closure): see
   "Desktop app (app.asar)", generated from the root `package-lock.json`.
-- The Virtuals ACP CLI is not shipped: when you choose to install it, the app downloads it from the npm registry,
-  each package under its own licence, and shows the installed packages' licence texts. The list of what it fetches
-  is `apps/desktop/acp-cli-lock/NOTICES.md` in the source repository.
+- The Virtuals ACP CLI ships in `Resources/acp-tools` (built from the pinned lockfile; each package under its own
+  licence): its packages, their declared licences and every licence file they carry are in
+  `Resources/acp-tools/NOTICES.md` (Settings › iNFT setup › step 1 › Licences); the package table alone is
+  `Resources/acp-pin/NOTICES.md` (`apps/desktop/acp-cli-lock/NOTICES.md` in the source repository).
 - The native add-ons of the ACP CLI that the macOS app ships in `Resources/acp-native` (keyring, bufferutil,
   utf-8-validate; MIT), with the Rust crates linked into the keyring binding: see "ACP native add-ons".
 - The fonts bundled in the app (Noto Serif Display ExtraCondensed, JetBrains Mono; SIL OFL 1.1): see "Fonts".

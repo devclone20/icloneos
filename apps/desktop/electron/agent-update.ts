@@ -625,6 +625,8 @@ export async function ensureFullPreUpdateBackup(deps: {
     args: string[],
     opts: { env: NodeJS.ProcessEnv; timeoutMs: number }
   ) => Promise<{ code: null | number }>
+  /** v0.0.9 point A: the runtime's own env (main/runtime-install-state.ts `managedRuntimeEnv`; empty for others). */
+  runtimeEnv: Readonly<Record<string, string>>
 }): Promise<{ changed: boolean; previous: null | string }> {
   const previous = readPreUpdateBackupMode(deps.readConfig(path.join(deps.hermesHome, 'config.yaml')))
 
@@ -634,7 +636,7 @@ export async function ensureFullPreUpdateBackup(deps: {
 
   const result = await deps
     .run(deps.hermesBin, ['config', 'set', 'updates.pre_update_backup', 'full'], {
-      env: { ...process.env, HERMES_HOME: deps.hermesHome },
+      env: { ...process.env, HERMES_HOME: deps.hermesHome, ...deps.runtimeEnv },
       timeoutMs: 20_000
     })
     .catch(() => ({ code: null }))

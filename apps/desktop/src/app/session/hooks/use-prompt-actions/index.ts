@@ -319,7 +319,9 @@ export function usePromptActions({
           const message: ChatMessage = {
             id: messageId,
             role,
-            parts: [textPart(body)]
+            parts: [textPart(body)],
+            // v0.0.9: the desktop's own system line (slash answers) is never stored; a refresh keeps it.
+            ...(role === 'system' ? { localNotice: true } : {})
           }
 
           // Mid-turn correction: arrival order. The bubble lands after the
@@ -661,7 +663,7 @@ export function usePromptActions({
 
           if (!up) {
             if (!options?.fromQueue) {
-              notify({ kind: 'warning', message: t.desktop.sendKeptNoBackend, survivesClear: true })
+              notify({ durationMs: 0, kind: 'warning', message: t.desktop.sendKeptNoBackend, survivesClear: true })
             }
 
             return false

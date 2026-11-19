@@ -640,6 +640,22 @@ export async function consentDoorCommand(
   return { code: answer.allowed ? 0 : 1, stdout: `${JSON.stringify(answer)}\n` }
 }
 
+/**
+ * v0.0.9 (lead decision, agent `acp` door): one permission ask on the sheet the app already shows, answered only by the
+ * owner's trusted click (`iclone:consent:door-answer` checks the gesture). No door yet = `busy` (never an allow).
+ */
+export function askOnActiveDoor(
+  slug: string,
+  permission: DoorPermission,
+  key: ConsentPermissionKey,
+  reason: string,
+  signal?: AbortSignal
+): Promise<PermissionDoorAnswer> {
+  return activeDoor
+    ? activeDoor.askPermissionShown(slug, permission, key, reason, signal)
+    : Promise.resolve({ outcome: 'busy', shown: false })
+}
+
 interface IpcMainLike {
   handle(channel: string, listener: (event: unknown, ...args: any[]) => unknown): void
 }

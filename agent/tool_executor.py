@@ -672,7 +672,43 @@ def _blocked_tool_result(agent, ref: _ToolCallRef, *, block_body: dict[str, Any]
         error_type = "guardrail_block"
         error_message = getattr(guardrail_decision, "message", None) or "Tool blocked by guardrail policy"
     ref.emit_post(agent, result, status="blocked", error_type=error_type, error_message=error_message)
+    if block_body is not None and block_error_type in _SHOWN_REFUSALS:
+        notify_tool_refused(agent, ref.name, ref.args, ref.call_id, result, error_message)
     return result
+
+
+# iclone-seam: v009-rt. The refusals an owner must see: a permission gate / Manual mode (plugin pre_tool_call) and a tool
+# outside the session's scope. A guardrail hard stop and a pruned-argument stop are the agent's own loop control, already
+# surfaced by the turn's halt; they keep upstream's silence (tests/agent/test_tool_call_guardrail_runtime.py).
+_SHOWN_REFUSALS = frozenset({"plugin_block", "tool_scope_block"})
+
+
+def notify_tool_refused(agent, name: str, args: Any, call_id: str | None, result: Any, reason: str | None) -> None:
+    """iclone-seam: v009-rt refusal visibility. Show a refused call (scope, plugin gate such as Manual mode, pruned
+    arguments, guardrail) to the surface driving the agent, as a ``tool.refused`` progress event carrying the reason.
+
+    A refused call never fires ``tool_start_callback`` / ``tool_complete_callback`` (it never started), so without
+    this the model was told and the owner saw nothing, as if the command had run. Presentation only: it fires after
+    the refusal is decided and nothing here can run the call. Surfaces that do not know the event ignore it (CLI,
+    messaging gateways); the TUI gateway renders it as a start/complete pair (tui_gateway/methods_tools.py)."""
+    # The stored tool row carries the same refusal (``_commit_tool_result`` pops this by call id): a reload or a
+    # switch back reads ``display_metadata.refused`` + ``display_metadata.refusal_reason``, never a row that ran.
+    if call_id:
+        try:
+            agent.__dict__.setdefault("_iclone_refusals", {})[call_id] = str(reason or "")
+        except Exception as exc:
+            logging.debug("Tool refused record error: %s", exc)
+    if not getattr(agent, "tool_progress_callback", None):
+        return
+    try:
+        call_args = args if isinstance(args, dict) else {}
+        display_args = _redact_tool_args_for_display(name, call_args) or call_args
+        text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False)
+    except Exception as exc:
+        logging.debug("Tool refused callback error: %s", exc)
+        return
+    _safe_callback(agent.tool_progress_callback, "Tool refused", "tool.refused", name, None, None,
+                   tool_call_id=call_id or "", refused_args=display_args, result=text, reason=str(reason or ""))
 
 
 def _pre_tool_block(agent, ref: _ToolCallRef):
@@ -1154,6 +1190,11 @@ def _commit_tool_result(
                 tool_message["display_metadata"] = metadata
         except Exception as callback_error:
             logging.debug("Tool result metadata callback error: %s", callback_error)
+    # iclone-seam: v009-rt refusal visibility, stored path (recorded by notify_tool_refused for this call id).
+    refusals = getattr(agent, "_iclone_refusals", None)
+    if isinstance(refusals, dict) and tool_call_id in refusals:
+        tool_message["display_metadata"] = {**(tool_message.get("display_metadata") or {}),
+                                            "refused": True, "refusal_reason": refusals.pop(tool_call_id)}
     messages.append(tool_message)
     if not _flush_session_db_after_tool_progress(agent, messages, stage=f"tool result {function_name}"):
         return None

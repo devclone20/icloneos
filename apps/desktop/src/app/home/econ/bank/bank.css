@@ -334,7 +334,7 @@ button.bk-card:focus-visible {
   font-size: var(--ic-type-2xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--bk-card-faint);
+  color: var(--ic-text-2-aa);
 }
 
 .bk-card__stripe {

@@ -1,7 +1,7 @@
 // REL-5 R5-2: the app ships every licence file a recipient needs, next to each other in Contents/Resources: LICENSE
 // (ours, MIT), NOTICE (the exceptions: artwork not MIT, Reown's required line, fonts, vendored skills) and
-// THIRD_PARTY_NOTICES.md (every third-party text, the fonts' OFL included; REL-6: the ACP CLI and its Go signer are not
-// shipped, the app installs them from npm). v0.0.2 shipped
+// THIRD_PARTY_NOTICES.md (every third-party text, the fonts' OFL included; v0.0.9: the ACP CLI ships in Resources/acp-tools
+// with its own NOTICES.md). v0.0.2 shipped
 // no NOTICE, so in the DMG the artwork read as MIT. The packed app is checked by RESUME run/gates/V3REL/packed_notices_gate.py.
 import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
@@ -24,7 +24,7 @@ test('LICENSE, NOTICE and THIRD_PARTY_NOTICES.md ship as extraResources on every
   }
 })
 
-test('the notices that ship carry the fonts OFL texts, and no ACP CLI (REL-6: installed from npm, not shipped)', () => {
+test("the notices that ship carry the fonts OFL texts, and point at the shipped ACP CLI's own notices (v0.0.9)", () => {
   const notices = readFileSync(join(desktop, '..', '..', 'THIRD_PARTY_NOTICES.md'), 'utf8')
   // M1 (REL-7): each font's whole licence text, verbatim (a heading and a copyright line are not enough).
   for (const family of FONT_FAMILIES) {
@@ -32,9 +32,11 @@ test('the notices that ship carry the fonts OFL texts, and no ACP CLI (REL-6: in
     assert.ok(notices.includes(`\`\`\`text\n${fontLicenceText(family)}\n\`\`\``), `${family.heading}: the full text`)
   }
 
-  assert.ok(!notices.includes('@virtuals-protocol/acp-cli'), 'the ACP CLI is not shipped, so it is not listed')
-  assert.ok(!notices.includes('acp-cli-signer'), 'nor its Go signer')
-  assert.match(notices, /The Virtuals ACP CLI is not shipped/)
+  // v0.0.9 (owner decision 17 Nov, replaces ruling 26): the CLI ships in Resources/acp-tools; its packages' own licence
+  // texts travel with it (Resources/acp-tools/NOTICES.md) and the pin's table beside the pin (Resources/acp-pin).
+  assert.ok(!/The Virtuals ACP CLI is not shipped/.test(notices), 'the notices no longer say the CLI is not shipped')
+  assert.match(notices, /The Virtuals ACP CLI ships in `Resources\/acp-tools`/)
+  assert.match(notices, /Resources\/acp-tools\/NOTICES\.md/)
   assert.match(notices, /apps\/desktop\/acp-cli-lock\/NOTICES\.md/)
   // REL-6 r3 (critic r2 M3): what ruling 33 does ship of it, the native add-ons, with their notices.
   assert.match(notices, /## ACP native add-ons \(Resources\/acp-native\)/)

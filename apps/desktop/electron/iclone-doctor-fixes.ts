@@ -214,7 +214,7 @@ export const FIXES: Record<string, FixImpl> = {
         args: ['-m', 'hermes_cli.main', 'config', 'set', 'updates.check', 'false'],
         backups: [file],
         timeoutMs: 20_000,
-        env: { ...process.env, HERMES_HOME: env.hermesHome, ...NO_LINKS_ENV }
+        env: { ...process.env, HERMES_HOME: env.hermesHome, ...env.runtimeEnv, ...NO_LINKS_ENV }
       }
     ]
   },

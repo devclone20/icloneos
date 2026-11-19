@@ -56,8 +56,31 @@ interface OpenState {
   id: IcWindowId
 }
 
+/** Windows whose next opening is at their usual size whatever the Settings choice: a Dock icon dropped beside another
+ *  pane opens the two side by side (dock-split.ts), never one filling the app. Kept a few seconds (a lazy window). */
+const framedOpenings = new Map<string, number>()
+const FRAMED_OPENING_MS = 4000
+
+export function openFramed(id: string, now: number = performance.now()): void {
+  framedOpenings.set(id, now + FRAMED_OPENING_MS)
+}
+
+export function clearFramedOpening(id?: string): void {
+  if (id === undefined) {
+    framedOpenings.clear()
+  } else {
+    framedOpenings.delete(id)
+  }
+}
+
 /** How a window opens right now: the Settings choice (Machine › Appearance), read at the opening only. */
 function opening(id: IcWindowId): OpenState {
+  const framedUntil = framedOpenings.get(id)
+
+  if (framedUntil !== undefined && performance.now() <= framedUntil) {
+    return { expanded: false, id }
+  }
+
   return { expanded: $dockWindowSize.get() === 'maximized', id }
 }
 

@@ -8,6 +8,8 @@ import os from 'node:os'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { socketPath } from '../iclone-confinement/launcher-socket'
+
 const h = vi.hoisted(() => ({
   confinementEnv: {} as Record<string, string>,
   ensure: vi.fn(),
@@ -206,7 +208,8 @@ describe('prepareHermesSpawn', () => {
       })
     )
     expect(h.ensure.mock.invocationCallOrder[0]!).toBeLessThan(h.permissions.mock.invocationCallOrder[0]!)
-    expect(h.permissions).toHaveBeenCalledWith('/ud/run')
+    // v0.0.9: the userData itself; permissionsSpawn names the short private agent socket from it (launcher-socket.ts).
+    expect(h.permissions).toHaveBeenCalledWith('/ud')
     expect(gated.seal({})).toEqual({
       ...LOCK,
       // Ruling 69: every gated runtime is told English (sealHermesSpawnEnv, 13554c3dff).
@@ -469,9 +472,11 @@ describe('runtime confinement: Hermes under the runtime profile, the launcher fi
         project: '/work',
         webDist: '/web',
         permDir: '/ud/run',
-        paySocket: '/ud/run/pay.sock'
+        // v0.0.9: the short private pay socket of this userData (launcher-socket.ts), never under it.
+        paySocket: socketPath('/ud', 'pay')
       })
     )
+    expect(socketPath('/ud', 'pay').startsWith('/ud/')).toBe(false)
   })
 
   it('the runtime-only temp folder is the confined Hermes TMPDIR; a pool backend names no pay socket', async () => {

@@ -71,6 +71,7 @@ export function SetupPackageRows() {
             </Pill>
             {one.state === 'failed' || one.state === 'skipped' ? (
               <Button
+                data-repair-kit-confirm=""
                 data-setup-retry={one.id}
                 disabled={retrying !== null}
                 onClick={() => {

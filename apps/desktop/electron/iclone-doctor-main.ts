@@ -10,6 +10,7 @@ import path from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, net, safeStorage, session, shell, systemPreferences } from 'electron'
 
 import { acpWrapperSource, registryRowFor, renderInftRegistry, shouldInstallAcpWrapper } from './iclone-acp'
+import { acpSocketFile, acpTokenFile } from './iclone-acp-ipc'
 import { consentAllows } from './iclone-consent'
 import { collectMacNames, diagnosticsFileHandlers, macNamesOnce } from './iclone-diagnostics-file'
 import { createDoctor, type Doctor, setActiveDoctor } from './iclone-doctor'
@@ -19,6 +20,9 @@ import { bundleUnderTest, type DoctorEnv, runningBundleId } from './iclone-docto
 interface InitDoctorDeps {
   hermesHome: string
   venvDir: string
+  /** v0.0.9 point A: the runtime's own env (main/runtime-install-state.ts `managedRuntimeEnv`), on every run of it.
+   *  Read per run: the runtime may be installed (or repaired) after the doctor is set up. */
+  runtimeEnv(): Readonly<Record<string, string>>
   isTrustedSender(event: Electron.IpcMainInvokeEvent, channel: string): boolean
   /** The local gateway this app spawned (pid + where it serves), or null (remote / not started). */
   gateway?(): { pid: number; baseUrl: Promise<string | null> } | null
@@ -164,6 +168,10 @@ export function initIcloneDoctor(deps: InitDoctorDeps): Doctor {
     userData,
     hermesHome: deps.hermesHome,
     venvDir: deps.venvDir,
+    // A getter: each run spreads the env (iclone-doctor.ts), so each run reads the runtime as it is then.
+    get runtimeEnv() {
+      return deps.runtimeEnv()
+    },
     icloneHome: path.join(app.getPath('home'), '.iclone-os'),
     appBundle,
     packaged: app.isPackaged,
@@ -218,7 +226,7 @@ export function initIcloneDoctor(deps: InitDoctorDeps): Doctor {
     acp: {
       wrapperSource: () =>
         shouldInstallAcpWrapper(app.isPackaged)
-          ? acpWrapperSource(path.join(userData, 'run', 'acp.sock'), path.join(userData, 'run', 'acp.token'))
+          ? acpWrapperSource(acpSocketFile(userData), acpTokenFile(userData))
           : null,
       registryText: () => ownRegistryText(userData)
     },

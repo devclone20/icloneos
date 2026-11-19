@@ -1,4 +1,4 @@
-/* The Message window's empty-conversation line: small, white, the size of the
+/* The Message window's empty-conversation line: small, white (ink in the light skin: --ic-text-intro), the size of the
    hint lines in the middle of the econ windows (--ic-type-lg). Scoped under the
    intro slot and as specific as the upstream `[data-slot=aui_intro] p:last-child`
    rule (styles.css, --ui-text-tertiary) so OUR white wins; E3h removes that rule. */
@@ -7,5 +7,5 @@
   font-size: var(--ic-type-lg);
   line-height: 1.5;
   letter-spacing: 0.01em;
-  color: var(--ic-white);
+  color: var(--ic-text-intro);
 }

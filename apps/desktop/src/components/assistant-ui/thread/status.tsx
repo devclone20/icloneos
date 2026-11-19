@@ -8,7 +8,6 @@ import { activitySignature, toolNarratesWait, TURN_QUIET_S } from '@/components/
 import { toolPresentVerb } from '@/components/assistant-ui/tool/run-summary'
 import { useElapsedSeconds } from '@/components/chat/activity-timer'
 import { ActivityTimerText } from '@/components/chat/activity-timer-text'
-import { SCAFFOLD_LABEL_CLASS } from '@/components/chat/scaffold-row'
 import { Codicon } from '@/components/ui/codicon'
 import { Loader } from '@/components/ui/loader'
 import { StatusPulse } from '@/components/ui/status-pulse'
@@ -23,9 +22,18 @@ import { type DraftingTool, sessionDraftingTool } from '@/store/tool-drafting'
 // A status line is scaffolding like any other — "Editing" while the model
 // drafts a call is the same kind of line as "Explored 3 files" once it has run,
 // and reads as one continuous column only if it shares their type and colour.
-const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentPropsWithoutRef<'div'>> = ({
+/**
+ * The live status line. v0.0.9 G GF-7 (owner decision): the turn timer is read by the owner ("how long has it been
+ * working?"), so it sits OUTSIDE the scaffold fade, in AA secondary ink; the pulse and the hint stay faded scaffolding.
+ * Opacity cannot be undone by a child, so the fade mark is on the inner group, never on the row.
+ */
+const StatusRow: FC<
+  { children: ReactNode; hint?: ReactNode; label: string; timer?: ReactNode } & React.ComponentPropsWithoutRef<'div'>
+> = ({
   children,
+  hint,
   label,
+  timer,
   className,
   ...rest
 }) => (
@@ -37,19 +45,37 @@ const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentProp
       'text-(--ic-chat-1-64)',
       className
     )}
-    data-conversation-scaffold=""
     role="status"
     {...rest}
   >
-    {children}
+    <span className="flex shrink-0 items-center gap-1.5" data-conversation-scaffold="">
+      {children}
+    </span>
+    {hint}
+    {timer && (
+      <span className="shrink-0 text-(--ic-text-1)" data-slot="status-timer">
+        {timer}
+      </span>
+    )}
   </div>
 )
+
+/** The live turn timer, lifted to AA (GF-7): full ink, which holds over any backdrop behind the chat glass. */
+const STATUS_TIMER_CLASS = 'text-[color:var(--ic-text-1)]'
 
 // Fixed label while auto-compaction runs — decoupled from backend status text.
 const COMPACTION_LABEL = 'Summarizing thread'
 
+// v0.0.9 G UI lens: the hint ("Summarizing thread", ...) is words the owner reads, so it sits outside the scaffold fade
+// in full ink, like the timer (AA over whatever the glass shows behind it, e2e/contrast.ts); only the pulse stays faded.
 const HintText: FC<{ children: ReactNode }> = ({ children }) => (
-  <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate')}>{children}</span>
+  <span
+    // The scaffold label's size and leading, never its faded ink (twMerge keeps both colour forms, and the faded one won).
+    className="shimmer min-w-0 flex-1 truncate text-[length:var(--conversation-tool-font-size)] leading-(--conversation-line-height) text-(--ic-text-1)"
+    data-slot="status-hint"
+  >
+    {children}
+  </span>
 )
 
 /** These indicators render inside whichever transcript mounted them, so every
@@ -200,14 +226,17 @@ export const ResponseLoadingIndicator: FC = () => {
   const hint = useStatusHint(compacting, drafting, providerWait)
 
   return (
-    <StatusRow data-slot="aui_response-loading" label={hint || t.assistant.thread.loadingResponse}>
+    <StatusRow
+      data-slot="aui_response-loading"
+      hint={hint ? <HintText>{hint}</HintText> : undefined}
+      label={hint || t.assistant.thread.loadingResponse}
+      timer={<ActivityTimerText className={STATUS_TIMER_CLASS} seconds={elapsed} />}
+    >
       <StatusPulse
         aria-hidden="true"
         className="dither inline-block size-3 rounded-[2px] text-[color:var(--ic-chat-accent-80)]"
         kind="opacity"
       />
-      {hint && <HintText>{hint}</HintText>}
-      <ActivityTimerText seconds={elapsed} />
     </StatusRow>
   )
 }
@@ -258,6 +287,7 @@ export const BackgroundResumeNotice: FC = () => {
 // so that per-token updates re-render only this leaf, not the whole
 // AssistantMessage subtree.
 export const TurnActivityIndicator: FC = () => {
+  const { t } = useI18n()
   const activity = useAuiState(s => activitySignature(s.message.content))
 
   // Timestamp of the last visible progress, held from the moment the quiet
@@ -310,14 +340,17 @@ export const TurnActivityIndicator: FC = () => {
   }
 
   return (
-    <StatusRow data-slot="aui_turn-activity" label={hint || 'Hermes is working'}>
+    <StatusRow
+      data-slot="aui_turn-activity"
+      hint={hint ? <HintText>{hint}</HintText> : undefined}
+      label={hint || t.assistant.thread.agentWorking}
+      timer={<ActivityTimerText className={STATUS_TIMER_CLASS} seconds={elapsed} />}
+    >
       <StatusPulse
         aria-hidden="true"
         className="dither inline-block size-3 rounded-[2px] text-[color:var(--ic-chat-accent-80)]"
         kind="opacity"
       />
-      {hint && <HintText>{hint}</HintText>}
-      <ActivityTimerText seconds={elapsed} />
     </StatusRow>
   )
 }

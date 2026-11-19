@@ -4,7 +4,7 @@
  * height without needing a manual scroll to repair the position.
  */
 
-import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
+import { type MockBackendFixture, newConversation, openConversationList, setupMockBackend, waitForAppReady } from './fixtures'
 import { TASK_PANEL_RESUME_TRIGGER } from './mock-server'
 import { expect, type Page, test } from './test'
 
@@ -24,14 +24,17 @@ async function send(page: Page, text: string): Promise<void> {
   await page.keyboard.press('Enter')
 }
 
+// Reviewed port (v0.0.9): upstream's sidebar is, in icloneOS, the Message pane's conversation list (the same
+// SidebarSessionRow, src/app/home/msg-sidebar.tsx:642): "New conversation" there, and the working row there.
 async function openFreshDraft(page: Page): Promise<void> {
-  await page.locator('[data-slot="sidebar"] button[aria-label="New session"]').first().click()
+  await newConversation(page)
   await expect(activeSurface(page).locator('[data-slot="aui_thread-viewport"]')).not.toContainText(PROMPT)
   await page.waitForTimeout(1_000)
 }
 
 async function reopenWorkingSession(page: Page): Promise<void> {
-  const sidebar = page.locator('[data-slot="sidebar"]')
+  await openConversationList(page)
+  const sidebar = page.getByRole('navigation', { name: 'Conversations' }).locator('.imsg-side__panel')
   const row = sidebar.getByRole('button', { name: /^(?:Session running|Needs your input|Working)\b/ }).first()
 
   await row.waitFor({ state: 'visible', timeout: 30_000 })
@@ -141,5 +144,82 @@ test.describe('working-session task-panel clearance', () => {
     expect(metrics.composerHeight, JSON.stringify(metrics)).toBeGreaterThanOrEqual(190)
     expect(metrics.distanceFromBottom, JSON.stringify(metrics)).toBeLessThan(staleState.distance / 2)
     expect(metrics.latestMessageBottom, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.statusPanelTop)
+
+    // v0.0.9 G GF-M1 (MAJOR): the pinned prompt is the F1c shot of this very state. Its sticky slab must be opaque
+    // in both skins, so the scrolled reply never shows inside it: the computed background alpha is 1.
+    const slabAlpha = await activeSurface(page)
+      .locator('[data-slot="aui_user-message-root"]')
+      .first()
+      .evaluate(row => {
+        const root = document.documentElement
+        const before = root.dataset.hermesTheme
+
+        // rgb()/rgba() from a plain colour, color(srgb r g b / a) from a color-mix().
+        const alphaOf = (color: string) => {
+          const slash = /\/\s*([\d.]+)\s*\)$/.exec(color)
+
+          if (slash) {
+            return Number(slash[1])
+          }
+
+          const m = /rgba?\(([^)]+)\)/.exec(color)
+          const parts = m ? m[1].split(/[,\s]+/).filter(Boolean) : []
+
+          return parts.length === 4 ? Number(parts[3]) : parts.length === 3 ? 1 : /^color\(/.test(color) ? 1 : -1
+        }
+
+        const read = (skin: string) => {
+          root.dataset.hermesTheme = skin
+
+          return { skin, position: getComputedStyle(row).position, alpha: alphaOf(getComputedStyle(row).backgroundColor) }
+        }
+
+        const out = [read('iclone-dark'), read('iclone-light')]
+
+        if (before === undefined) {
+          delete root.dataset.hermesTheme
+        } else {
+          root.dataset.hermesTheme = before
+        }
+
+        return out
+      })
+
+    // v0.0.9 G design delta GF-6: no half-cut reply line shows in the strip between the viewport's top and the stuck
+    // slab (the sticky offset), and a fade sits under the slab so the next line never butts against it.
+    const edge = await activeSurface(page)
+      .locator('[data-slot="aui_thread-viewport"]')
+      .evaluate(viewport => {
+        const top = viewport.getBoundingClientRect().top
+        const row = viewport.querySelector('[data-slot="aui_user-message-root"]') as HTMLElement
+        const box = row.getBoundingClientRect()
+        const mask = row.querySelector('[data-slot="sticky-human-mask"]') as HTMLElement | null
+        const fade = row.querySelector('[data-slot="sticky-human-fade"]')
+        const m = mask?.getBoundingClientRect()
+        const maskStyle = mask ? getComputedStyle(mask) : null
+
+        return {
+          fadeShown: fade ? getComputedStyle(fade).display !== 'none' && fade.getBoundingClientRect().height >= 8 : false,
+          strip: box.top - top,
+          // The mask spans the whole strip (from at or above the viewport's top down to the row), opaque, inside the
+          // stuck row's own stacking (z-40), so the reply text under it never shows.
+          stripIsMask: Boolean(
+            m &&
+              maskStyle!.display !== 'none' &&
+              m.top <= top + 0.5 &&
+              m.bottom >= box.top - 0.5 &&
+              !/\/\s*0?\.\d+\)|rgba\([^)]*,\s*0?\.\d+\)/.test(maskStyle!.backgroundColor)
+          )
+        }
+      })
+
+    expect(edge.strip, JSON.stringify(edge)).toBeGreaterThan(0)
+    expect(edge.stripIsMask, JSON.stringify(edge)).toBe(true)
+    expect(edge.fadeShown, JSON.stringify(edge)).toBe(true)
+
+    for (const { alpha, position, skin } of slabAlpha) {
+      expect(position, skin).toBe('sticky')
+      expect(alpha, `the sticky prompt's slab is opaque in ${skin}`).toBe(1)
+    }
   })
 })

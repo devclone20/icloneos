@@ -77,13 +77,14 @@ export const SystemMessage: FC = () => {
     return (
       <MessagePrimitive.Root
         className={cn(
-          'w-[60%] max-w-[44rem] self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-[color:var(--ic-chat-2-60)]',
+          // v0.0.9 G GF-7: a slash command's answer is read by the owner: AA secondary ink.
+          'w-[60%] max-w-[44rem] self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-[color:var(--ic-text-2-aa)]',
           multiline ? 'text-left' : 'text-center'
         )}
         data-role="system"
         data-slot="aui_system-message-root"
       >
-        <span className="font-mono text-[color:var(--ic-chat-2-55)]">{slashStatus.groups.command}</span>
+        <span className="font-mono text-[color:var(--ic-text-2-aa)]">{slashStatus.groups.command}</span>
         {multiline ? (
           <LinkifiedText className="mt-0.5 block whitespace-pre-wrap" explicitOnly pretty={false} text={output} />
         ) : (
@@ -102,7 +103,8 @@ export const SystemMessage: FC = () => {
   return (
     <MessagePrimitive.Root
       className={cn(
-        'w-[60%] max-w-[44rem] self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-[color:var(--ic-chat-2-55)]',
+        // v0.0.9 G GF-7: AA secondary ink (the faint chat ink read under 4.5:1 for an answer the owner needs).
+        'w-[60%] max-w-[44rem] self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-[color:var(--ic-text-2-aa)]',
         multiline ? 'text-left' : 'text-center'
       )}
       data-role="system"

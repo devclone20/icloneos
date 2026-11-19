@@ -2,6 +2,7 @@ import { useState } from 'react'
 
 import { Pill } from '@/app/settings/primitives'
 import { SettingRow } from '@/app/settings/setting-row'
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import {
@@ -99,9 +100,9 @@ export function ModePicker({
         )
       })}
       {error ? (
-        <p className="pt-2 text-xs leading-4 text-(--ic-danger)" role="alert">
+        <IcAlert className="mt-2" tone="error">
           {error}
-        </p>
+        </IcAlert>
       ) : null}
     </div>
   )

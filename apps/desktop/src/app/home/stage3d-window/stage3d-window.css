@@ -1,0 +1,52 @@
+/* v0.0.9 F6 — the 3D iNFT in its own window (stage3d-window-root.tsx): the iNFT's field edge to edge, the live stage,
+   its name, and a drag band where the hidden titlebar was (the traffic lights sit in it). Tokens only. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--istage-window-field, var(--ic-stage-fill));
+}
+
+.istage-window {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: var(--istage-window-field, var(--ic-stage-fill));
+  color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
+}
+
+.istage-window__drag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--ic-z-local-raised);
+  height: 34px;
+  -webkit-app-region: drag;
+}
+
+.istage-window__name {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  translate: -50% 0;
+  margin: 0;
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.14em;
+  color: var(--ic-inft-name-ink);
+  pointer-events: none;
+}
+
+.istage-window__note {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: 0 48px;
+  text-align: center;
+  font-size: var(--ic-type-lg);
+  color: var(--ic-text-2);
+}

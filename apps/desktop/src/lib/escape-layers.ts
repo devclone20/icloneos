@@ -32,6 +32,9 @@ export const ESCAPE_PRIORITY = {
   layoutEdit: 20,
   zoneEditor: 30,
   overlay: 40,
+  // v0.0.9 r2 (m-r2-5): the boot failure card owns the whole window while it is up — its Esc ("close, open the app
+  // without the agent") outranks the stage and every overlay under it.
+  bootFailure: 45,
   // An in-flight pane drag: Esc means "abort the drag", never ALSO exit edit
   // mode / close the overlay the drag started over. Registered only for the
   // drag's few-hundred-ms lifetime (drag-session.ts).

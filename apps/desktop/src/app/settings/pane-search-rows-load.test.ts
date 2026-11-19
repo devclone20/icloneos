@@ -2,7 +2,7 @@
  * K124 (critic r2 m3, second half): the palette's lazy pane-registry load. One import is shared by every open; a failed
  * chunk import is not cached forever (the next open retries) and never escapes as an unhandled rejection.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import type { settingsPaneSearchRows } from './panes'
 import { loadPaneSearchRows, resetPaneSearchRowsForTests } from './use-settings-search'
@@ -10,6 +10,13 @@ import { loadPaneSearchRows, resetPaneSearchRowsForTests } from './use-settings-
 type Rows = typeof settingsPaneSearchRows
 
 const rows = (() => []) as unknown as Rows
+
+// r5: the real registry is every Settings pane; its first import transforms them all (4.1 s alone, past the 15 s test
+// timeout under full-suite load in the r5 run). That transform is warmed here with its own budget, so the case below
+// times only what it tests — the palette's default import resolving the registry — with its assertion unchanged.
+beforeAll(async () => {
+  await import('./panes')
+}, 120_000)
 
 afterEach(() => {
   resetPaneSearchRowsForTests()

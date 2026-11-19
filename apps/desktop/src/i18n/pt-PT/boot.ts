@@ -15,7 +15,7 @@ export const boot: TranslationOverrides['boot'] = {
   errors: {
     backgroundExited: 'O processo do agente em segundo plano terminou.',
     backgroundExitedDuringStartup: 'O processo do agente em segundo plano terminou durante o arranque.',
-    backendStopped: 'Backend parado',
+    backendStopped: 'O agente parou',
     desktopBootFailed: 'O arranque do ambiente de trabalho falhou',
     gatewayConnectionLost: 'Perdeu-se a ligação ao gateway',
     gatewayConnectionLostDetail:

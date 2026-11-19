@@ -19,6 +19,7 @@ import { buildPathExtCandidates, getVenvSitePackagesEntries, resolveVenvHermesCo
 
 import { directoryExists, fileExists, HERMES_HOME, IS_WINDOWS, IS_WSL } from './env'
 import { rememberLog } from './log'
+import { managedRuntimeEnv } from './runtime-install-state'
 
 export function findOnPath(command: string) {
   if (!command) {
@@ -143,6 +144,8 @@ function backendSupportsServe(backend: ServeProbeBackend | null | undefined) {
         cwd: backend.root || undefined,
         env: {
           ...isolatePythonEnv({ ...process.env, HERMES_HOME, ...(backend.env || {}) }, backend.root || path.sep),
+          // v0.0.9 point A: `serve --help` boots the runtime (hermes_bootstrap activates its dependencies).
+          ...managedRuntimeEnv(backend.root),
           ...pycacheEnv(NO_BYTECODE_PREFIX)
         },
         timeout: PROBE_TIMEOUT_MS,

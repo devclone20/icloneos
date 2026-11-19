@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { getGlobalModelOptions } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { enProviderKeyPaths } from '@/i18n/en'
+import { f3Card, f3CauseCopy } from '@/i18n/en/v009-f3'
 import { ChevronDown, ChevronLeft, KeyRound, Loader2, X } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
@@ -25,6 +26,8 @@ import {
   startProviderOAuth
 } from '@/store/onboarding'
 import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
+
+import { causeOf } from '../../../electron/repair-kit/classify'
 
 import { DocsLink, FlowPanel, Status } from './flow'
 import { IcButton, IcInput, IcProgress } from './ic-system'
@@ -363,6 +366,14 @@ export function DesktopOnboardingOverlay({
   // the surface — same bare, cinematic treatment as the connecting overlay.
   const bare = ready && !showPicker && flow.status === 'confirming_model'
 
+  // v0.0.9 critic M2: a boot that FAILED while this card was still "Starting the agent…" belongs to the closable
+  // failure surface F3 built (BootFailureOverlay: the cause sentence, ✕ and Esc into "agent stopped" mode, then the
+  // stopped banner). This card steps aside instead of painting the raw error under its progress bar — and stays aside
+  // in stopped mode, so the app really opens with the agent stopped. A later start (no error) brings it back.
+  if (!ready && boot.error && !boot.running) {
+    return null
+  }
+
   // ic-sys-void: on a fresh install this is the first screen the owner sees, and
   // entry pages are flat pure black with no gradient (owner rule) — the same
   // void as the boot screen it replaces, never the bloom backdrop.
@@ -395,7 +406,7 @@ export function DesktopOnboardingOverlay({
         {onboarding.manual ? (
           <IcButton
             aria-label={t.common.close}
-            className="absolute right-3 top-3 z-10 text-(--ic-text-3) hover:bg-(--ic-fill-hover) hover:text-(--ic-text-1)"
+            className="absolute right-3 top-3 z-10 text-(--ic-text-2-aa) hover:bg-(--ic-fill-hover) hover:text-(--ic-text-1)"
             onClick={() => closeManualOnboarding()}
             size="icon-sm"
             variant="ghost"
@@ -450,7 +461,13 @@ function Preparing({ boot }: { boot: DesktopBootState }) {
         <span className="truncate">{boot.message}</span>
         <span>{progress}%</span>
       </div>
-      {hasError ? <p className="text-xs text-(--ic-danger)">{boot.error}</p> : null}
+      {/* An error while main is still running the boot: its cause sentence (main's bootCause, else the error's own
+          text through the same classifier as the failure card), never the raw error with its appended log. */}
+      {hasError ? (
+        <p className="text-xs text-(--ic-danger)" data-testid="onboarding-boot-cause">
+          {f3CauseCopy(causeOf(boot))?.cause ?? f3Card.unknownCause}
+        </p>
+      ) : null}
     </div>
   )
 }

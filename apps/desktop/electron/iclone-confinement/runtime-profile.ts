@@ -16,6 +16,7 @@ import path from 'node:path'
 import { protectedPaths, secretPaths } from '../iclone-permissions/classify-policy'
 import { DEV_PLUGIN_OVERLAY_DIR, MANAGED_RUNTIME_DIR } from '../iclone-runtime-location'
 
+import { type SocketName, socketPath } from './launcher-socket'
 import {
   acceptableProjectRoot,
   BASE_MACH,
@@ -84,10 +85,12 @@ export interface RuntimeFacts {
   tmpDir: string
   /** The per-user cache dir (`DARWIN_USER_CACHE_DIR`) or a runtime-only one. */
   cacheDir: string | null
-  /** Main's permission socket folder (`<userData>/run`): the socket and the spawn's own tokens live there. */
+  /** Main's permission folder (`<userData>/run`): the agent socket's token and the spawn's own tokens live there. */
   permDir?: string | null
+  /** Main's agent socket (perm and acp verbs): v0.0.9, exactly socketPath(userData, 'acp'), never under userData. */
   permSocket?: string | null
-  /** Main's pay socket in the same folder (the window's backend only: a pool backend carries no pay env). */
+  /** Main's pay socket (the window's backend only: a pool backend carries no pay env): v0.0.9, exactly
+   *  socketPath(userData, 'pay'), never under userData. */
   paySocket?: string | null
   policyFile?: string | null
   /** The spawn's bytecode prefix, when the runtime runs without shipped bytecode. */
@@ -128,7 +131,9 @@ export const HERMES_HOME_NEVER_WRITTEN = ['plugins', 'installs', 'tools'] as con
 
 export const runtimeRunDir = (userDataDir: string) => path.join(userDataDir, 'confinement', 'run')
 export const runtimeMarkFile = (membersDir: string) => path.join(membersDir, '.runtime')
-export const launcherSocketFile = (userDataDir: string) => path.join(runtimeRunDir(userDataDir), 'launcher.sock')
+// v0.0.9 (owner decision): never under userData, where a long enough userData overflowed sun_path and the terminal
+// tool went missing in silence; the short, checked private socket folder of this userData (launcher-socket.ts).
+export const launcherSocketFile = (userDataDir: string) => socketPath(userDataDir, 'launcher')
 /** The launcher's ledger (`runs.jsonl` for starts and ends, `refused.jsonl` for the requests it refused): a folder of
  *  its own under userData, outside every hole this profile opens, so the runtime can neither read nor rewrite the
  *  record of what ran (the run dir, which it may write, holds only the socket, its temp files and the plugin's own
@@ -189,7 +194,7 @@ export const USERDATA_HOLES = {
   code: ['RUNTIME_ROOT', 'VENV_ROOT', 'PYTHON_HOME', 'PLUGINS_DIR'],
   /** The runtime's own state, read and write: a fresh-install run puts HERMES_HOME at `<userData>/hermes-home`. */
   ownState: ['HERMES_HOME'],
-  /** The layer's own folders the runtime reads: run, ready, profiles, main's permission socket, bytecode, refusals. */
+  /** The layer's own folders the runtime reads: run, ready, profiles, main's permission tokens, bytecode, refusals. */
   layerReads: ['RUN_DIR', 'READY_DIR', 'PROFILES_DIR', 'PERM_DIR', 'PYCACHE', 'REFUSALS_DIR'],
   layerFiles: ['POLICY_FILE', 'HARDLINK_ACKS'],
   /** Of those, the ones it writes. */
@@ -508,8 +513,12 @@ export function renderRuntimeSbpl(never: RuntimeNever, extra: RuntimeProfileExtr
     // launcher, the project's context files, the web build it serves.
     allowAny('file-read*', subs(READ_PARAMS)),
     allowAny('file-read* file-write*', subs(WRITE_PARAMS)),
-    // Main's permission socket folder: the socket, its token and the spawn's pay token (the gate plugin reads them).
+    // Main's permission folder: the agent socket's token and the spawn's pay token (the gate plugin reads them); the
+    // sockets themselves live in their short private folder (v0.0.9, launcher-socket.ts) and are reached below.
     allowAny('file-read*', `(append ${subs(['PERM_DIR'])} ${lits(['POLICY_FILE', 'HARDLINK_ACKS'])})`),
+    // v0.0.9: the launcher socket lives in its own private folder (launcher-socket.ts); the runtime may look up that
+    // one node's metadata to connect (the plugin lstat()s it), nothing else of the folder.
+    allowAny('file-read-metadata', lits(['LAUNCHER_SOCKET'])),
     // Run tokens: the plugin creates them and never reads one (a reader would pass for a member of that run), and never
     // removes one: the token is the run's identity with the kernel, so main's sweepTokens is the only remover. Making a
     // file needs file-write-create alone (measured, fx28): an open for writing of one already there is refused.
@@ -581,6 +590,14 @@ export function runtimeParamValues(paths: ConfinementPaths, facts: RuntimeFacts)
   const inUserData = (value: string | null | undefined) =>
     value && insideFolder(value, userDataDir) ? realOrSelf(value) : null
 
+  // v0.0.9 (owner decision): main's sockets live in the short private socket folder of this userData
+  // (launcher-socket.ts), never under it. Only that exact path is main's socket; anything else is left out.
+  const ownSocket = (value: string | null | undefined, name: SocketName) => {
+    const own = socketPath(paths.userDataDir, name)
+
+    return value && path.resolve(value) === own ? realOrSelf(own) : null
+  }
+
   const project =
     facts.project &&
     acceptableProjectRoot(facts.project, { denied: [...never.denied, userDataDir] }, paths.home)
@@ -608,8 +625,8 @@ export function runtimeParamValues(paths: ConfinementPaths, facts: RuntimeFacts)
     PROJECT: project,
     WEB_DIST: facts.webDist ? realOrSelf(facts.webDist) : null,
     PERM_DIR: inUserData(facts.permDir),
-    PERM_SOCKET: inUserData(facts.permSocket),
-    PAY_SOCKET: inUserData(facts.paySocket),
+    PERM_SOCKET: ownSocket(facts.permSocket, 'acp'),
+    PAY_SOCKET: ownSocket(facts.paySocket, 'pay'),
     POLICY_FILE: inUserData(facts.policyFile),
     PYCACHE: inUserData(facts.pycacheDir),
     REFUSALS_DIR: realOrSelf(path.join(paths.userDataDir, 'confinement', 'refusals')),

@@ -5,6 +5,7 @@ import atexit
 import base64
 from collections.abc import Callable
 from contextlib import contextmanager, suppress
+import errno
 import hashlib
 import json
 import logging
@@ -14,7 +15,7 @@ import shutil
 import time
 import uuid
 
-from pm.environments import dependency_home_root, install_state_dir, runtime_facts_path
+from pm.environments import data_home_root, install_state_dir, runtime_facts_path
 # Private aliases: this module calls them through its globals (tests patch ``_atomic_bytes``
 # here) and updaters shipped before PM import them by these names mid-swap
 # (tests/compat/old_updater_surface.json). New code imports the pm.filesystem names.
@@ -74,7 +75,7 @@ def _recover_plugin_publication(project: Path, row: dict, journal: Path) -> None
     from hermes_cli.fs_utils import rmtree_force
 
     target, backup, metadata = (Path(row[key]) for key in ("target", "backup", "metadata"))
-    home = dependency_home_root().resolve()
+    home = data_home_root().resolve()
     if (not target.resolve().is_relative_to(home) or target.parent.name != "plugins"
             or backup.parent != target.parent or not backup.name.startswith(".previous-")
             or metadata != target.parent / ".install-metadata.json"):
@@ -118,7 +119,7 @@ def recover_publication(project: Path) -> None:
         configs = []
         for entry in entries:
             config = Path(entry["config"])
-            if config.name != "config.yaml" or not config.resolve().is_relative_to(dependency_home_root().resolve()):
+            if config.name != "config.yaml" or not config.resolve().is_relative_to(data_home_root().resolve()):
                 raise ValueError("config path is outside Hermes state")
             previous = base64.b64decode(entry["previous"], validate=True) if entry["previous"] is not None else None
             configs.append((config, previous, entry.get("config_after")))
@@ -157,13 +158,43 @@ def lease_generation(environment: Path) -> Callable[[], None]:
     return lease_directory(environment.parent)
 
 
+def _read_only_pinned_generation(generation: Path, exc: OSError) -> bool:
+    """icloneOS (v0.0.9 point A): may this generation be used without a lease?
+
+    Only when the dependency root is pinned (``HERMES_DEPENDENCY_HOME``), the generation sits under it, this
+    process runs under the confinement profile, and the denial is a permission / read-only one. Only the app's
+    unconfined installer writes that root, and it never collects the generation a running backend selected.
+    Anywhere else a denied lease stays an error."""
+    if not isinstance(exc, PermissionError) and exc.errno not in (errno.EACCES, errno.EPERM, errno.EROFS):
+        return False
+    from hermes_cli.iclone_policy_env import confined_at_exec
+    from pm.environments import dependency_home_pin
+
+    pinned = dependency_home_pin()
+    if pinned is None or not confined_at_exec():
+        return False
+    try:
+        return generation.resolve().is_relative_to(pinned.resolve())
+    except OSError:
+        return False
+
+
 def lease_directory(generation: Path) -> Callable[[], None]:
     """Pin a lease-managed generation directory for this process's lifetime."""
     if not (generation / ".lease-managed").is_file():
         return lambda: None  # Generations produced before leases stay conservatively retained.
     leases = generation / ".leases"
-    leases.mkdir(exist_ok=True)
-    _prune_unlocked_leases(leases)
+    try:
+        leases.mkdir(exist_ok=True)
+        _prune_unlocked_leases(leases)
+        probe = leases / f".probe-{uuid.uuid4().hex}"
+        os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600))
+        probe.unlink()
+    except OSError as exc:
+        if not _read_only_pinned_generation(generation, exc):
+            raise
+        LOG.debug("dependency generation %s is read-only under the confinement profile; no lease taken", generation)
+        return lambda: None
     while True:
         lease = leases / uuid.uuid4().hex
         fd = os.open(lease, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)

@@ -17,6 +17,7 @@ import {
   useState
 } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Tip } from '@/components/ui/tooltip'
 
 import { openExternal } from '../lib/external'
@@ -399,11 +400,17 @@ export function Empty({
   )
 }
 
+const NOTE_TONE = { error: 'error', info: 'info', warn: 'warning' } as const
+
+/**
+ * v0.0.9 F4b — a note in an EconomyOS app is the one inline alert (type 3, IcAlert): the same plate, icon and words
+ * that wrap as everywhere else. `e-note` stays on it only for the apps' layout hooks (margins, the notice's entrance).
+ */
 export function Note({ children, kind = 'info' }: { children: ReactNode; kind?: 'error' | 'info' | 'warn' }) {
   return (
-    <p className={`e-note e-note--${kind}`} role={kind === 'error' ? 'alert' : undefined}>
+    <IcAlert className="e-note" tone={NOTE_TONE[kind]}>
       {children}
-    </p>
+    </IcAlert>
   )
 }
 

@@ -1,11 +1,12 @@
-import { mkdtempSync, rmSync, statSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
 import { afterAll, describe, expect, it } from 'vitest'
 
-import { agentPolicy, lineRedactor, parseAgentRequest, redactSecrets, startAcpSocketServer } from './iclone-acp-ipc'
+import { acpSocketFile, acpTokenFile, agentPolicy, lineRedactor, parseAgentRequest, redactSecrets, startAcpSocketServer } from './iclone-acp-ipc'
+import { MAX_SOCKET_PATH_BYTES, SocketFolderError, socketPath } from './iclone-confinement/launcher-socket'
 
 describe('agentPolicy — what the agent may run', () => {
   it('admits the commands the skills teach, as given', () => {
@@ -256,6 +257,7 @@ describe('startAcpSocketServer', () => {
     const server = await startAcpSocketServer({
       admitStreaming: () => true,
       dir,
+      socket: acpSocketFile(home),
       resolveInft: () => ({ ok: true, slug: 'inft-6' }),
       run: (_slug, argv, _streaming, sink) => {
         runs.push(argv)
@@ -293,6 +295,96 @@ describe('startAcpSocketServer', () => {
     }
   })
 
+  it('v0.0.9: the socket lives in the short private folder of this userData, never under it; the token stays in userData/run', async () => {
+    // A userData long enough that `<userData>/run/acp.sock` overflows sun_path (the old place fails by construction).
+    const home = path.join(
+      mkdtempSync(path.join(os.tmpdir(), 'iclone-ipc-long-')),
+      'a-deliberately-long-userData-folder-name-0123456789abcdef',
+      'Application Support',
+      'icloneOS'
+    )
+
+    dirs.push(path.dirname(path.dirname(path.dirname(home))))
+    expect(Buffer.byteLength(path.join(home, 'run', 'acp.sock'))).toBeGreaterThan(MAX_SOCKET_PATH_BYTES)
+
+    const dir = path.join(home, 'run')
+    const runs: string[][] = []
+
+    const server = await startAcpSocketServer({
+      admitStreaming: () => true,
+      dir,
+      socket: acpSocketFile(home),
+      resolveInft: () => ({ ok: true, slug: 'inft-6' }),
+      run: (_slug, argv) => {
+        runs.push(argv)
+
+        return Promise.resolve({ code: 0 })
+      },
+      log: () => undefined
+    })
+
+    try {
+      const tmp = realpathSync(os.tmpdir())
+
+      expect(acpSocketFile(home)).toBe(socketPath(home, 'acp'))
+      expect(server.socketPath).toBe(socketPath(home, 'acp'))
+      expect(path.basename(server.socketPath)).toBe('acp.sock')
+      expect(server.socketPath.startsWith(`${home}${path.sep}`)).toBe(false)
+      expect(Buffer.byteLength(server.socketPath)).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+      const folderName = path.dirname(server.socketPath)
+
+      expect(
+        (path.dirname(folderName) === tmp && /^ic-[0-9a-f]{10}$/.test(path.basename(folderName))) ||
+          /^\/tmp\/\d+-[0-9a-f]{10}$/.test(folderName)
+      ).toBe(true)
+      // The folder was checked before the listen: ours, exactly 0700, a real folder; the socket 0600.
+      const folder = lstatSync(path.dirname(server.socketPath))
+
+      expect(folder.isDirectory()).toBe(true)
+      expect(folder.mode & 0o777).toBe(0o700)
+      expect(statSync(server.socketPath).mode & 0o777).toBe(0o600)
+      // The token is not a socket: it stays in the run folder the confined runtime may read, 0600.
+      expect(acpTokenFile(home)).toBe(path.join(home, 'run', 'acp.token'))
+      expect(statSync(acpTokenFile(home)).mode & 0o777).toBe(0o600)
+
+      // A client connects to that same path.
+      const token = readFileSync(acpTokenFile(home), 'utf8').trim()
+      const ok = await ask(acpSocketFile(home), { v: 1, token, inft: '6', argv: ['job', 'list'] })
+
+      expect(ok.frames.at(-1)).toEqual({ t: 'x', c: 0 })
+      expect(runs).toEqual([['job', 'list']])
+    } finally {
+      server.close()
+    }
+  })
+
+  it('v0.0.9: a socket folder that is not exactly ours and 0700 is refused before any listen', async () => {
+    const home = mkdtempSync(path.join(os.tmpdir(), 'iclone-ipc-bad-'))
+
+    dirs.push(home)
+
+    const socket = acpSocketFile(home)
+
+    mkdirSync(path.dirname(socket), { mode: 0o755 })
+
+    try {
+      await expect(
+        startAcpSocketServer({
+          admitStreaming: () => true,
+          dir: path.join(home, 'run'),
+          socket,
+          resolveInft: () => ({ ok: true, slug: 'inft-6' }),
+          run: () => Promise.resolve({ code: 0 }),
+          log: () => undefined
+        })
+      ).rejects.toThrow(SocketFolderError)
+      expect(() => lstatSync(socket)).toThrow()
+      expect(() => lstatSync(acpTokenFile(home))).toThrow()
+    } finally {
+      rmSync(path.dirname(socket), { recursive: true, force: true })
+    }
+  })
+
   it('K29: a streaming reader starts only when WORK admits it; a one-shot read is not gated', async () => {
     const home = mkdtempSync(path.join(os.tmpdir(), 'iclone-ipc-k29-'))
 
@@ -305,6 +397,7 @@ describe('startAcpSocketServer', () => {
 
     const server = await startAcpSocketServer({
       dir,
+      socket: acpSocketFile(home),
       resolveInft: () => ({ ok: true, slug: 'inft-6' }),
       admitStreaming: slug => {
         asked.push(slug)

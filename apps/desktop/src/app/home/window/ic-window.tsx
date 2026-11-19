@@ -16,25 +16,43 @@
  *   MEASURED box as the shells' clip (`--iwin-*`). The root draws only the
  *   frame decor; tabs and controls keep their own registry
  *   rungs (ihome.chrome / ihome.controls) above the frame (ihome.frame).
+ *
+ * v0.0.9 F6: every IcWindow is a PANE (pane-layout.ts). Two of them stand
+ * side by side, each on its part of the frame; a pane folded into a tab stays
+ * mounted and is not drawn. The control column's expand/retract button became
+ * the window menu (window-menu.tsx): Move left · Move right · Fill (the old
+ * expand) · Arrange side by side.
  */
-import { Maximize2, Minimize2, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import { type CSSProperties, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+
+import { f6Menu, f6PaneNames, f6Split } from '@/i18n/en/v009-f6'
 
 import { releaseDockFocus } from '../dock'
 
 import { useEdgeAutoHide } from './edge-autohide'
 import { setWindowExpanded } from './expanded'
-import { PlateOpacity, ShellOpacity } from './opacity'
-import { outerInset, publishBodyRect, publishShellRect, readInsets, windowRectStyle } from './rect'
+import { PaneOpacity, usePlateOpacity, useShellOpacity } from './opacity'
+import { outerInset, type PaneGeometry, publishBodyRect, publishShellRect, readInsets, windowRectStyle } from './rect'
+import { usePaneMenu, usePanePlacement, usePaneRegistration } from './use-pane'
+import { WindowMenu } from './window-menu'
 
 export type IcWindowId =
   'acp-market' | 'bank-card' | 'containers' | 'email' | 'hyperliquid' | 'message' | 'settings' | 'wallet'
 
 interface IcWindowLabels {
   close: string
+  /** Kept for the consumers' catalogue; since F6 the window menu's Fill carries the expand (window-menu-model.ts). */
   expand: string
   retract: string
   opacity: string
+}
+
+/** A pane's slot as one string, so an effect re-runs only when the rect really moves. */
+function geometryKey({ area, slot }: PaneGeometry): string {
+  return slot.place === 'left' || slot.place === 'right'
+    ? `${slot.place}:${slot.left}:${slot.width}:${Math.round(area)}`
+    : slot.place
 }
 
 interface IcWindowBase {
@@ -68,15 +86,20 @@ type IcWindowProps = SelfWindowProps | UnderShellWindowProps
 function WindowControls({
   className,
   expanded,
+  id,
   labels,
   onClose,
   onToggleExpanded,
-  opacity
-}: Pick<IcWindowBase, 'expanded' | 'labels' | 'onClose' | 'onToggleExpanded'> & {
+  opacity,
+  style
+}: Pick<IcWindowBase, 'expanded' | 'id' | 'labels' | 'onClose' | 'onToggleExpanded'> & {
   className: string
   opacity: ReactNode
+  style?: CSSProperties
 }) {
   const columnRef = useRef<HTMLDivElement>(null)
+  const menuGroups = usePaneMenu(id, expanded, onToggleExpanded)
+  const paneName = f6PaneNames[id]
   // Expanded, the column tucks off the right edge like the Dock off the left (ic-window.css).
   const revealed = useEdgeAutoHide({ active: expanded, band: true, edge: 'right', targetRef: columnRef })
 
@@ -127,25 +150,35 @@ function WindowControls({
     <div
       className={`ic-win__controls ${className}`}
       data-autohide={expanded ? 'true' : undefined}
+      data-ic-pane={id}
       data-revealed={revealed ? 'true' : undefined}
       dir="ltr"
       onPointerDown={onPointerDown}
       ref={columnRef}
+      style={style}
     >
       <button aria-label={labels.close} className="iwin-btn" onClick={onClose} type="button">
         <X size={14} strokeWidth={2} />
       </button>
-      <button
-        aria-label={expanded ? labels.retract : labels.expand}
-        className="iwin-btn"
-        onClick={onToggleExpanded}
-        type="button"
-      >
-        {expanded ? <Minimize2 size={13} strokeWidth={2} /> : <Maximize2 size={13} strokeWidth={2} />}
-      </button>
+      <WindowMenu groups={menuGroups} menuLabel={f6Menu.label(paneName)} triggerLabel={f6Menu.trigger(paneName)} />
       {opacity}
     </div>
   )
+}
+
+/**
+ * v0.0.9 F6 (owner addition): ONE opacity control for two panes side by side — on the right pane's column, where a
+ * lone window has it; the left pane's column carries close and the menu only. The value is shared (opacity.tsx), so
+ * the control fades both.
+ */
+function paneOpacityControl(split: boolean, geometry: PaneGeometry, label: string): ReactNode {
+  // One opacity for every window (owner rule): a lone window's control says so, so a new window opening faint is
+  // never a surprise (chrome r1).
+  if (!split) {
+    return <PaneOpacity label={f6Split.opacityAll(label)} />
+  }
+
+  return geometry.slot.place === 'right' ? <PaneOpacity label={f6Split.opacityBoth} /> : null
 }
 
 // Only the pointer gate is inline; ic-window.css positions the header and the
@@ -156,11 +189,14 @@ function contentStyle(interactive: boolean): CSSProperties {
 
 function SelfWindow(props: SelfWindowProps) {
   const { children, expanded, head, id, kind, label } = props
+  const { folded, geometry, split } = usePanePlacement(id)
   const plateRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLElement>(null)
   // The root is hit-transparent (home.css), so the content takes its hits
   // from the plate's pointer gate: a window faded below it passes every drag.
   const [interactive, setInteractive] = useState(true)
+
+  usePlateOpacity(plateRef, setInteractive)
 
   // Opening (or switching kind in the same chassis) moves focus into the
   // window — unless the app already claimed it (a search field, the mail
@@ -176,13 +212,16 @@ function SelfWindow(props: SelfWindowProps) {
 
   return (
     <aside
+      aria-hidden={folded ? true : undefined}
       aria-label={label}
       className="ic-win iecon"
       data-expanded={expanded ? 'true' : undefined}
       data-ic-window={id}
       data-kind={kind}
+      data-pane={geometry.slot.place}
+      inert={folded ? true : undefined}
       ref={rootRef}
-      style={windowRectStyle(expanded)}
+      style={windowRectStyle(expanded, geometry)}
       tabIndex={-1}
     >
       <div className="ic-win__plate iecon__surface" ref={plateRef} />
@@ -190,7 +229,7 @@ function SelfWindow(props: SelfWindowProps) {
       <WindowControls
         {...props}
         className="iecon-controls"
-        opacity={<PlateOpacity label={props.labels.opacity} onInteractiveChange={setInteractive} plateRef={plateRef} />}
+        opacity={paneOpacityControl(split, geometry, props.labels.opacity)}
       />
       <header className="ic-win__head iecon__head" style={contentStyle(interactive)}>
         {head}
@@ -217,7 +256,17 @@ function underShellBodyStyle(headBand: string, bodyInsetLeft: string): CSSProper
 
 function UnderShellWindow(props: UnderShellWindowProps) {
   const { bodyInsetLeft = '0px', children, expanded, head, headBand, id } = props
+  const { folded, geometry, split } = usePanePlacement(id)
+  const placeKey = geometryKey(geometry)
+  const geometryRef = useRef(geometry)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  geometryRef.current = geometry
+  useShellOpacity()
+
+  // Folded behind the focused pane, the shells (not ours to hide) stay on the plain frame: the shown pane covers at
+  // least the frame, so nothing of them shows around it (pane-layout.ts). Expanded, the same: the pane on top fills.
+  const drawExpanded = expanded && !folded
 
   // Opening filled (the Dock's default), this window takes the focus off the Dock tile that opened it, as a self
   // window does by focusing its root: this one has no root of its own (its content, the chat, is portaled), and a
@@ -232,14 +281,14 @@ function UnderShellWindow(props: UnderShellWindowProps) {
 
   // Before paint: the shells never show a frame without their clip.
   useLayoutEffect(() => {
-    publishShellRect(expanded)
+    publishShellRect(drawExpanded, folded ? undefined : geometryRef.current)
 
     const body = bodyRef.current
 
     if (body) {
       publishBodyRect(readInsets(body))
     }
-  }, [bodyInsetLeft, expanded, headBand])
+  }, [bodyInsetLeft, drawExpanded, folded, headBand, placeKey])
 
   // A viewport resize (the frame tokens may be responsive) and a header-band
   // change both resize the body; its observer republishes the clip
@@ -263,9 +312,16 @@ function UnderShellWindow(props: UnderShellWindowProps) {
     }
   }, [])
 
+  // The column hugs the window's top-right corner from outside the frame (ic-window.css). On the LEFT of two panes
+  // that corner is the divider, so the column steps inside the window instead of onto the other pane.
+  const columnStyle: CSSProperties | undefined =
+    !drawExpanded && geometry.slot.place === 'left' ? { right: `calc(${outerInset('right')} + 14px)` } : undefined
+
   return (
     <>
-      {!expanded && <div aria-hidden className="ic-win ic-win--under-shell iwin-frame" data-ic-window={id} />}
+      {!drawExpanded && !folded && (
+        <div aria-hidden className="ic-win ic-win--under-shell iwin-frame" data-ic-window={id} />
+      )}
 
       <div
         aria-hidden
@@ -275,17 +331,29 @@ function UnderShellWindow(props: UnderShellWindowProps) {
         style={underShellBodyStyle(headBand, bodyInsetLeft)}
       />
 
-      <WindowControls {...props} className="iwin-controls" opacity={<ShellOpacity label={props.labels.opacity} />} />
+      {/* Folded: the column, the head and the window's own pieces are kept mounted but not drawn (display: contents
+          otherwise, so nothing moves in the tree the shells and their CSS expect). */}
+      <div className="ic-win__fold" data-folded={folded ? 'true' : undefined} inert={folded ? true : undefined}>
+        <WindowControls
+          {...props}
+          className="iwin-controls"
+          opacity={paneOpacityControl(split, geometry, props.labels.opacity)}
+          style={columnStyle}
+        />
 
-      {head}
+        {head}
 
-      {children}
+        {children}
+      </div>
     </>
   )
 }
 
 export function IcWindow(props: IcWindowProps) {
-  const { expanded, id, onToggleExpanded } = props
+  const { expanded, id, onClose, onToggleExpanded } = props
+
+  // F6: a pane while mounted; a 3rd one closes the pane without focus through this close.
+  usePaneRegistration(id, onClose)
 
   // Published for the Dock, which tucks away while any window fills the app — with the retract (the toggle, while
   // expanded) for the Escape routers (expanded.ts).

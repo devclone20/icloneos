@@ -524,6 +524,54 @@ describe('interleaved reasoning/text boundaries', () => {
 })
 
 describe('preserveLocalAssistantErrors', () => {
+  // v0.0.9 (G 914237d39d side finding, coordinator decision): a /compress refused as busy wrote its answer as a
+  // system line in the chat, and the next transcript refresh (about 7.5 s later) replaced the messages with the
+  // stored ones, which never hold a line the desktop wrote itself. The answer vanished. A local notice stays where
+  // it was, once, and a stored row with the same text is never doubled.
+  it('keeps a local system notice the stored transcript never has, in place, through a refresh', () => {
+    const user: ChatMessage = { id: 'stored-user', parts: [{ text: 'E2E_THIRD', type: 'text' }], role: 'user' }
+    const reply: ChatMessage = { id: 'stored-reply', parts: [{ text: 'Hello.', type: 'text' }], role: 'assistant' }
+
+    const notice: ChatMessage = {
+      id: 'system-1-abc',
+      localNotice: true,
+      parts: [{ text: '/compress · error: session busy', type: 'text' }],
+      role: 'system'
+    }
+
+    const later: ChatMessage = { id: 'stored-user-2', parts: [{ text: 'next', type: 'text' }], role: 'user' }
+
+    expect(preserveLocalAssistantErrors([user, reply], [user, reply, notice]).map(m => m.id)).toEqual([
+      'stored-user',
+      'stored-reply',
+      'system-1-abc'
+    ])
+
+    // In place: a stored row that came after it stays after it.
+    expect(preserveLocalAssistantErrors([user, reply, later], [user, reply, notice, later]).map(m => m.id)).toEqual(
+      ['stored-user', 'stored-reply', 'system-1-abc', 'stored-user-2']
+    )
+
+    // Kept across a second refresh too, and never twice.
+    const once = preserveLocalAssistantErrors([user, reply], [user, reply, notice])
+    expect(preserveLocalAssistantErrors([user, reply], once).filter(m => m.id === notice.id)).toHaveLength(1)
+
+    // A stored system row with the same text wins: no double line.
+    const stored: ChatMessage = { ...notice, id: 'stored-system', localNotice: undefined }
+    expect(preserveLocalAssistantErrors([user, reply, stored], [user, reply, notice]).map(m => m.id)).toEqual([
+      'stored-user',
+      'stored-reply',
+      'stored-system'
+    ])
+
+    // A system line that is not the desktop's own (no localNotice) follows the stored transcript, as before.
+    const foreign: ChatMessage = { ...notice, id: 'old-system', localNotice: undefined }
+    expect(preserveLocalAssistantErrors([user, reply], [user, reply, foreign]).map(m => m.id)).toEqual([
+      'stored-user',
+      'stored-reply'
+    ])
+  })
+
   it('preserves richer live boundaries when the durable row has only its completion time', () => {
     const durable = toChatMessages([{ role: 'assistant', content: 'Done.', timestamp: 3 }])
 

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { type CSSProperties, Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Tip } from '@/components/ui/tooltip'
 
 import type { AcpFailure } from '../cli'
@@ -364,9 +365,9 @@ function ReplyBox({
         value={body}
       />
       {error ? (
-        <p className="em-reply__error" role="alert">
+        <IcAlert className="em-reply__error" tone="error">
           {error}
-        </p>
+        </IcAlert>
       ) : null}
       <div className="em-reply__foot">
         <span className="em-hint">{MOD_KEY}↩ to send</span>

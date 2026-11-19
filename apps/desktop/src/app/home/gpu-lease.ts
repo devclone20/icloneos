@@ -557,6 +557,36 @@ export function reserveGpuContext(owner: string): () => void {
   return pool.reserve(owner)
 }
 
+/**
+ * v0.0.9 F6 — the 3D iNFT stage's own context, counted. The stage can leave for its own window and come back
+ * (stage3d-window/handover.ts): the hand-over waits for this count to reach 0 before the other window builds its
+ * stage, so at most ONE live 3D context exists across the app. A release is idempotent (a StrictMode double cleanup
+ * or a context-loss path that releases twice never drives the count negative).
+ */
+let liveStage = 0
+
+export function reserveStageContext(reserve: (owner: string) => () => void = reserveGpuContext): () => void {
+  const release = reserve('stage3d')
+  let released = false
+
+  liveStage += 1
+
+  return () => {
+    if (released) {
+      return
+    }
+
+    released = true
+    liveStage -= 1
+    release()
+  }
+}
+
+/** How many 3D stage contexts this renderer holds right now (0 or 1 when the hand-over works). */
+export function liveStageContexts(): number {
+  return liveStage
+}
+
 function setGpuAcceleration(value: GpuAcceleration): void {
   pool.setPreference(value)
 }

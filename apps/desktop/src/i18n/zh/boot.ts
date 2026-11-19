@@ -15,7 +15,7 @@ export const boot: Translations['boot'] = {
   errors: {
     backgroundExited: '智能体后台进程已退出。',
     backgroundExitedDuringStartup: '智能体后台进程在启动期间退出。',
-    backendStopped: '后端已停止',
+    backendStopped: '智能体已停止',
     desktopBootFailed: '桌面启动失败',
     gatewayConnectionLost: '与网关的连接已断开',
     gatewayConnectionLostDetail: '仍在后台重试。你可以继续阅读和起草；如果问题持续，请打开网关设置。',

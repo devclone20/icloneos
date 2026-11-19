@@ -67,7 +67,7 @@ export async function revealFile(path: string): Promise<void> {
 export async function copyFilePath(path: string): Promise<void> {
   try {
     await copyTextToClipboard(path)
-    notify({ durationMs: 1500, kind: 'info', message: translateNow('fileMenu.pathCopied') })
+    notify({ kind: 'info', message: translateNow('fileMenu.pathCopied') })
   } catch (error) {
     notifyError(error, translateNow('common.copyFailed'))
   }
@@ -88,7 +88,7 @@ export async function downloadRemoteFile(path: string): Promise<void> {
       return
     }
 
-    notify({ durationMs: 1500, kind: 'info', message: translateNow('fileMenu.downloadSaved') })
+    notify({ kind: 'info', message: translateNow('fileMenu.downloadSaved') })
   } catch (error) {
     notifyError(error, translateNow('fileMenu.downloadFailed'))
   }

@@ -137,7 +137,7 @@ describe('IcDialog', () => {
 })
 
 describe('IcConfirmDialog', () => {
-  it('confirms from Enter anywhere inside and closes after the done beat', async () => {
+  it('never confirms from Enter on the dialog body; the focused action confirms and closes after the done beat', async () => {
     vi.useFakeTimers()
 
     try {
@@ -146,7 +146,18 @@ describe('IcConfirmDialog', () => {
 
       render(<IcConfirmDialog {...CONFIRM_COPY} onClose={onClose} onConfirm={onConfirm} open title="Delete profile?" />)
 
+      // Q renderer 5 (P0 F4 type 4): Enter outside the focused button does nothing.
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' })
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(onConfirm).not.toHaveBeenCalled()
+
+      // The dialog opens focused on the action; Enter or Space there is the button's own activation (a click).
+      const action = globalThis.document.activeElement as HTMLElement
+
+      expect(action.tagName).toBe('BUTTON')
+      fireEvent.click(action)
 
       await act(async () => {
         await Promise.resolve()

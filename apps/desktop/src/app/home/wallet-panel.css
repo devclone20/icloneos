@@ -1,9 +1,8 @@
-/* iCLONE OS — wallet balances popover, opened from the top-right wallet chip
-   after Privy sign-in. Same glass-chrome family as home.css/collections.css
-   (champagne rgba(215,201,166,*) hairlines, --dt-midground/--dt-foreground
-   tokens, blur(var(--ic-blur-glass)) saturate(1.3), display face) — deliberately
-   more opaque than the side panel's rgba(13,12,18,.45) because this sits
-   directly over the wordmark/mosaic rather than at the screen edge. */
+/* iCLONE OS — the personal wallet popover (v0.0.9 F5), opened from the titlebar wallet icon after Privy sign-in.
+   An OPAQUE plate (ink-800 on the night skin, paper on the light one — no glass under running text), raised on
+   e3, one hairline, radius lg. Flat inside: whitespace and two quiet rules, never a box in a box. Every value is
+   a token (ic-tokens.css: the --ic-wallet-* knobs); the plate carries no transform, filter or backdrop at rest,
+   so the sign-out dialog it hosts still spans the viewport. */
 
 .iwbal-scrim {
   position: fixed;
@@ -13,11 +12,15 @@
 }
 
 .iwbal {
+  /* v0.0.9 r4 (design r3 N6): the one row inset every block starts on. */
+  --iwbal-inset: 16px;
   position: fixed;
+  /* The resting place under the right button cluster; wallet-panel.tsx re-anchors it on the icon itself. */
   top: 46px;
   right: 14px;
   z-index: var(--ic-z-ihome-wallet-panel);
-  width: min(300px, 92vw);
+  width: min(var(--ic-wallet-panel-w), calc(100vw - 24px));
+  max-height: calc(100vh - 64px);
 
   display: flex;
   flex-direction: column;
@@ -25,10 +28,9 @@
   border: 1px solid var(--ic-wallet-panel-line);
   border-radius: var(--ic-radius-lg);
   background: var(--ic-wallet-panel-fill);
-  backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
-  -webkit-backdrop-filter: blur(var(--ic-blur-glass)) saturate(1.3);
   box-shadow: var(--ic-wallet-panel-shadow);
   color: var(--ic-text-1);
+  font-family: var(--ic-font-sans);
 
   animation: iwbal-in var(--ic-dur-base) var(--ic-ease-spring);
 }
@@ -41,84 +43,161 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .iwbal {
-    animation: none;
+    animation: iwbal-fade var(--ic-dur-fast) var(--ic-ease-std);
+  }
+
+  @keyframes iwbal-fade {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
   }
 }
 
-/* ── Header: lowercase display-face wordmark + click-to-copy address chip ── */
+/* ── Identity ─────────────────────────────────────────────────────────── */
 
-.iwbal__head {
-  display: flex;
+.iwbal__id {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 12px;
   flex-shrink: 0;
-  gap: 10px;
-  padding: 14px 14px 10px;
+  padding: 16px var(--iwbal-inset) 14px;
   border-bottom: 1px solid var(--ic-wallet-panel-rule);
 }
 
+.iwbal__mark {
+  width: 28px;
+  height: 28px;
+  color: var(--ic-accent);
+}
+
+.iwbal__who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .iwbal__title {
-  font-family: 'Noto Serif Display ExtraCondensed', serif;
-  font-size: var(--ic-type-xl);
+  font-family: var(--ic-inft-font-display);
+  font-size: var(--ic-type-2xl);
   font-weight: 700;
-  letter-spacing: 0.05em;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
   color: var(--ic-text-1);
-  opacity: 0.92;
 }
 
 .iwbal__addr {
+  width: fit-content;
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-lg);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  color: var(--ic-text-1);
+}
+
+.iwbal__kind {
+  font-size: var(--ic-type-sm);
+  color: var(--ic-text-2);
+}
+
+.iwbal__copy {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 10px;
+  height: 26px;
+  padding: 0 10px;
   border: 1px solid var(--ic-wallet-addr-line);
   border-radius: var(--ic-radius-pill);
   background: var(--ic-wallet-addr-fill);
-  color: var(--ic-accent);
-  font-family: var(--ic-font-mono);
+  color: var(--ic-text-1);
   font-size: var(--ic-type-sm);
-  letter-spacing: 0.02em;
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
   transition:
-    background var(--ic-dur-fast) var(--ic-ease-std),
+    background-color var(--ic-dur-fast) var(--ic-ease-std),
     border-color var(--ic-dur-fast) var(--ic-ease-std),
     color var(--ic-dur-fast) var(--ic-ease-std);
 }
 
-.iwbal__addr:hover,
-.iwbal__addr:focus-visible {
-  background: var(--ic-accent-soft);
-  border-color: var(--ic-home-accent-30);
-  color: var(--ic-text-1);
+.iwbal__copy:hover {
+  background: var(--ic-wallet-row-hover);
+  border-color: var(--ic-border-strong);
 }
 
-.iwbal__addr:focus-visible {
+.iwbal__copy:focus-visible {
   outline: 2px solid var(--ic-accent);
   outline-offset: 2px;
 }
 
-/* ── Chain rows ───────────────────────────────────────────────────────── */
+.iwbal__copy[data-state='copied'] {
+  color: var(--ic-success);
+}
+
+.iwbal__copy[data-state='failed'] {
+  color: var(--ic-danger);
+}
+
+/* Read by assistive tech only. */
+.iwbal__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ── Total / refresh error ────────────────────────────────────────────── */
+
+/* v0.0.9 r4 (design r3 N6): one left edge. The id block, the alert, the network dots (rows 8 + row 8), the footer and
+   the sign-out pill all start on the same 16px row inset; the alert holds its own Retry (one column, no stray
+   button beside it). */
+.iwbal__alert {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 12px var(--iwbal-inset) 0;
+}
+
+.iwbal__alert .icpg__alert {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Networks ─────────────────────────────────────────────────────────── */
 
 .iwbal__rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 8px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  margin: 0;
+  /* Rows pad 8 inside, so the dots land on the inset. */
+  padding: 8px calc(var(--iwbal-inset) - 8px);
+  list-style: none;
 }
 
 .iwbal__row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
-  padding: 8px;
-  border-radius: var(--ic-radius-md);
-  transition: background var(--ic-dur-fast) var(--ic-ease-std);
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: var(--ic-radius-sm);
+  transition: background-color var(--ic-dur-fast) var(--ic-ease-std);
 }
 
 .iwbal__row:hover {
@@ -126,81 +205,112 @@
 }
 
 .iwbal__dot {
-  flex-shrink: 0;
   width: 6px;
   height: 6px;
   border-radius: var(--ic-radius-round);
   background: var(--ic-success);
-  box-shadow: var(--ic-ring-ok);
 }
 
 .iwbal__dot--err {
-  background: var(--ic-home-danger-88);
-  box-shadow: var(--ic-ring-alert);
+  background: var(--ic-text-3);
 }
 
 .iwbal__chain {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--ic-type-md);
+  overflow-wrap: anywhere;
+  font-size: var(--ic-type-lg);
   font-weight: 500;
   color: var(--ic-text-1);
 }
 
 .iwbal__balance {
-  flex-shrink: 0;
   font-family: var(--ic-font-mono);
   font-size: var(--ic-type-md);
-  color: var(--ic-accent);
+  font-variant-numeric: tabular-nums;
+  color: var(--ic-text-1);
+  text-align: right;
   white-space: nowrap;
 }
 
 .iwbal__symbol {
-  font-weight: 600;
-  color: var(--ic-home-accent-85);
+  color: var(--ic-text-2);
 }
 
-.iwbal__row-error {
-  flex-shrink: 0;
-  font-size: var(--ic-type-sm);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ic-home-danger-80);
-}
-
-.iwbal__empty {
-  margin: 6px 6px 10px;
-  padding: 10px 8px;
+.iwbal__unavailable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--ic-type-md);
   color: var(--ic-text-2);
 }
 
-/* ── Footer ───────────────────────────────────────────────────────────── */
-
-.iwbal__foot {
-  margin: 0;
-  flex-shrink: 0;
-  padding: 10px 14px 12px;
-  border-top: 1px solid var(--ic-wallet-panel-rule);
-  font-size: var(--ic-type-xs);
-  letter-spacing: 0.04em;
-  color: var(--ic-home-accent-67);
+.iwbal__cause {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--ic-radius-round);
+  color: var(--ic-text-2);
+  cursor: help;
 }
 
-/* ── Skeleton shimmer (loading state) ─────────────────────────────────── */
+.iwbal__cause:hover,
+.iwbal__cause:focus-visible {
+  color: var(--ic-text-1);
+}
+
+.iwbal__cause:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 1px;
+}
+
+.iwbal__fold-row {
+  display: block;
+}
+
+.iwbal__fold {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 8px 0 24px;
+  border: 0;
+  border-radius: var(--ic-radius-sm);
+  background: transparent;
+  color: var(--ic-text-2);
+  font-size: var(--ic-type-md);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--ic-dur-fast) var(--ic-ease-std),
+    color var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.iwbal__fold:hover {
+  background: var(--ic-wallet-row-hover);
+  color: var(--ic-text-1);
+}
+
+.iwbal__fold:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: -2px;
+}
+
+.iwbal__chevron {
+  transition: transform var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+.iwbal__fold[aria-expanded='true'] .iwbal__chevron {
+  transform: rotate(90deg);
+}
+
+/* ── Loading ──────────────────────────────────────────────────────────── */
 
 .iwbal__skeleton {
-  height: 30px;
-  margin: 2px 0;
+  height: 34px;
+  margin: 1px 0;
   border-radius: var(--ic-radius-sm);
-  background: var(
-    --ic-wallet-skeleton,
-    linear-gradient(100deg, var(--ic-fill-hover) 30%, var(--ic-border-subtle) 50%, var(--ic-fill-hover) 70%)
-  );
+  background: var(--ic-wallet-skeleton);
   background-size: 200% 100%;
   animation: iwbal-shimmer 1.3s ease-in-out infinite;
 }
@@ -215,27 +325,75 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .iwbal__skeleton {
-    animation: none;
-    background: var(--ic-wallet-skeleton);
-  }
+/* ── Footer: freshness · Refresh, then the one exit ───────────────────── */
+
+.iwbal__foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 10px var(--iwbal-inset);
+  border-top: 1px solid var(--ic-wallet-panel-rule);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--ic-text-2);
 }
 
-/* ── Light skin — mirrors collections.css's iclone-light override ───────── */
+.iwbal__sep {
+  color: var(--ic-text-3);
+}
 
-.iwbal__signout {
-  margin: 4px 16px 14px;
-  padding: 6px 0;
+.iwbal__refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 4px;
   border: 0;
-  background: none;
-  color: var(--ic-home-danger-80);
-  font-size: var(--ic-type-md);
-  letter-spacing: 0.12em;
-  text-align: left;
+  border-radius: var(--ic-radius-xs);
+  background: transparent;
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-sm);
+  font-weight: 500;
   cursor: pointer;
 }
 
-.iwbal__signout:hover {
-  color: var(--ic-danger);
+.iwbal__refresh:hover {
+  color: var(--ic-accent);
+}
+
+.iwbal__refresh:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 1px;
+}
+
+.iwbal__refresh:disabled {
+  color: var(--ic-text-3);
+  cursor: default;
+}
+
+.iwbal__refresh[data-busy] svg {
+  animation: iwbal-spin 900ms linear infinite;
+}
+
+@keyframes iwbal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.iwbal__signout {
+  display: flex;
+  flex-shrink: 0;
+  padding: 0 var(--iwbal-inset) 14px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iwbal__skeleton,
+  .iwbal__refresh[data-busy] svg {
+    animation: none;
+  }
+
+  .iwbal__chevron {
+    transition: none;
+  }
 }

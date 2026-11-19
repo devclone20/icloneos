@@ -49,7 +49,14 @@ export function presentCompactionOutcome(
     return
   }
 
-  if (outcome.kind === 'busy' || outcome.kind === 'error') {
+  if (outcome.kind === 'busy') {
+    dismissNotification(noticeId)
+    render(compactCopy.busyLine)
+
+    return
+  }
+
+  if (outcome.kind === 'error') {
     dismissNotification(noticeId)
     render(compactCopy.errorLine(outcome.message ?? compactCopy.error))
 

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
+import { f4bPrompts } from '@/i18n/en/v009-f4b'
 import { isMissingPendingPromptRequest } from '@/lib/gateway-rpc'
 import { triggerHaptic } from '@/lib/haptics'
 import { KeyRound, Loader2, Lock } from '@/lib/icons'
@@ -34,12 +35,14 @@ import {
 // is mounted (remote gateway sessions can raise the request before the matching
 // tool call is visible). Each Python-side caller blocks the agent thread until
 // the server request is answered; without a renderer the agent stalls until
-// its timeout and the tool is BLOCKED. Any close path (Esc, backdrop
-// click) funnels through Radix's single `onOpenChange(false)` and maps to a
-// refusal, so silence is never mistaken for consent, matching the TUI. We
-// deliberately do NOT add onEscapeKeyDown / onInteractOutside handlers — they'd
-// fire a second answer alongside onOpenChange (double-send) or block the
-// backdrop-dismiss path.
+// its timeout and the tool is BLOCKED.
+//
+// v0.0.9 F4 (X7): an answer is only ever an explicit act. Esc is the keyboard
+// form of the "Not now" button: it sends the same refusal through the same
+// `onCancel` path (never the typed value), and only once. A click or focus move
+// outside the dialog is NOT an answer — the blocking prompt stays up. Radix's
+// `onOpenChange(false)` therefore never answers; both close paths are
+// intercepted (preventDefault) so there is exactly one send per request.
 
 function SudoDialog({ sessionId }: { sessionId: string | null }) {
   const { t } = useI18n()
@@ -82,17 +85,8 @@ function SudoDialog({ sessionId }: { sessionId: string | null }) {
     [copy.sudoSendFailed, request]
   )
 
-  // Cancel → empty password. The backend treats an empty sudo response as a
-  // failed sudo (no command runs), so closing the dialog is a safe refusal.
-  const onOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && !submitting && request) {
-        void send('')
-      }
-    },
-    [request, send, submitting]
-  )
-
+  // "Not now" / Esc → empty password. The backend treats an empty sudo response
+  // as a failed sudo (no command runs), so the explicit refusal is safe.
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
@@ -111,7 +105,6 @@ function SudoDialog({ sessionId }: { sessionId: string | null }) {
       description={copy.sudoDesc}
       icon={Lock}
       onCancel={() => void send('')}
-      onOpenChange={onOpenChange}
       onSubmit={onSubmit}
       onValueChange={setPassword}
       placeholder={copy.sudoPlaceholder}
@@ -163,15 +156,6 @@ function SecretDialog({ sessionId }: { sessionId: string | null }) {
     [copy.secretSendFailed, request]
   )
 
-  const onOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && !submitting && request) {
-        void send('')
-      }
-    },
-    [request, send, submitting]
-  )
-
   const onSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault()
@@ -190,7 +174,6 @@ function SecretDialog({ sessionId }: { sessionId: string | null }) {
       description={request.prompt || copy.secretDesc}
       icon={KeyRound}
       onCancel={() => void send('')}
-      onOpenChange={onOpenChange}
       onSubmit={onSubmit}
       onValueChange={setValue}
       placeholder={request.envVar || copy.secretPlaceholder}
@@ -206,7 +189,6 @@ interface MaskedPromptDialogProps {
   description: string
   icon: ComponentProps<typeof DialogTitle>['icon']
   onCancel: () => void
-  onOpenChange: (open: boolean) => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
   onValueChange: (value: string) => void
   placeholder: string
@@ -221,7 +203,6 @@ function MaskedPromptDialog({
   description,
   icon,
   onCancel,
-  onOpenChange,
   onSubmit,
   onValueChange,
   placeholder,
@@ -231,9 +212,31 @@ function MaskedPromptDialog({
 }: MaskedPromptDialogProps) {
   const { t } = useI18n()
 
+  // Esc = the "Not now" button (explicit refusal, one send). Ignored while a
+  // send is in flight and while an IME composition owns the key.
+  const onEscapeKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      event.preventDefault()
+
+      if (submitting || event.isComposing) {
+        return
+      }
+
+      onCancel()
+    },
+    [onCancel, submitting]
+  )
+
+  // A click or focus move outside is never an answer to a blocking prompt.
+  const keepOpen = useCallback((event: Event) => event.preventDefault(), [])
+
   return (
-    <Dialog onOpenChange={onOpenChange} open>
-      <DialogContent showCloseButton={false}>
+    <Dialog open>
+      <DialogContent
+        onEscapeKeyDown={onEscapeKeyDown}
+        onInteractOutside={keepOpen}
+        showCloseButton={false}
+      >
         <DialogHeader>
           <DialogTitle icon={icon}>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
@@ -250,7 +253,7 @@ function MaskedPromptDialog({
           />
           <DialogFooter>
             <Button disabled={submitting} onClick={onCancel} type="button" variant="ghost">
-              {t.common.cancel}
+              {f4bPrompts.notNow}
             </Button>
             <Button disabled={submitting || !canSubmit} type="submit">
               {submitting ? <Loader2 className="size-3.5 animate-spin" /> : t.common.send}

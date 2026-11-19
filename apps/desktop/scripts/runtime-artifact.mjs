@@ -460,6 +460,14 @@ export const ICLONE_RUNTIME_PATHS = Object.freeze({
   'tools/bot_desktop/placement.py': 'core',
   'tools/code_kernel_remote.py': 'core',
   'tools/process_registry_termination.py': 'core',
+  // v0.0.9 R-f1s-5: under icloneOS a Buy credits charge needs main's owner confirm for exactly this amount and key,
+  // checked before the portal is called; the served contract declares the owner_confirm param it reads.
+  'tui_gateway/methods_session.py': 'core',
+  'tui_gateway/contracts/billing_delegation_pets.py': 'core',
+  // v0.0.9 dependency home pin: plugin selection and publication recovery read the data home (data_home_root()), not
+  // the pinned dependency root, so HERMES_DEPENDENCY_HOME moves only the dependency state.
+  'pm/plugins_state.py': 'core',
+  'pm/publication.py': 'core',
   // Licence and notices of the fork.
   LICENSE: 'legal',
   NOTICE: 'legal',

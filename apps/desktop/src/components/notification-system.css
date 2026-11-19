@@ -1,0 +1,771 @@
+/* Mounted app-wide (wiring.tsx): the tokens and the z ladder come with it, not from home.css. */
+@import '../app/home/ic-tokens.css';
+@import '../app/home/ic-layers.css';
+
+/* v0.0.9 F4 — the one notification system: toast (1), status banner (2), notification centre (5).
+   The inline alert (3) is IcAlert (components/ic/ic-page.css) and the decision dialog (4) is IcConfirmDialog /
+   ConfirmDialog. Tokens only (ic-tokens.css, "L2 component: notifications"); no raw colour, radius, shadow or z.
+
+   Contract (P0_DESIGN_SPECS §F4): opaque plates, never translucent glass; colour only on the 16px icon and a 2px side
+   bar; words never cut — `white-space: normal` and `overflow-wrap: anywhere` everywhere, a toast shows three lines and
+   "More" opens the whole entry in the centre, where nothing is clamped; enter 180 ms spring + 8px rise, nothing under
+   reduced motion. Unlayered on purpose: Tailwind's preflight cannot undo these. */
+
+/* ── 1 · toast stack: bottom right, at most three, newest nearest the corner ─────────────────────────── */
+/* The stack is a scroll box, so it clips: the padding is room for what a toast draws outside its own box (the
+   focus ring, 2px + 2px offset, and the elevation shadow's sides and top). The toasts sit where they always did
+   (16px from the right, 28px from the bottom, 56px clear of the top); right/bottom/width/max-height pay the padding
+   back. The padding area is pointer-events: none like the rest of the stack. */
+.icn-stack {
+  position: fixed;
+  right: 0;
+  bottom: 4px;
+  z-index: var(--z-over-modal);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  box-sizing: border-box;
+  width: calc(var(--ic-note-w) + 40px);
+  padding: 24px 16px 24px 24px;
+  /* Never past the window: the stack scrolls before a toast leaves the viewport (gate N3). */
+  max-height: calc(100vh - 36px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: none;
+}
+
+/* Critic m4 / design 3: lifted above a composer it would cover (notifications.tsx stackLiftPx measures the lift). */
+.icn-stack[data-composer-lift] {
+  bottom: calc(4px + var(--icn-stack-lift, 0px));
+  max-height: calc(100vh - 36px - var(--icn-stack-lift, 0px));
+}
+
+/* The centre owns the right edge while it is open: the stack steps left of it instead of covering it. */
+:root[data-iclone-island] .icn-stack {
+  right: calc(var(--iclone-island-w, 0px) + 8px);
+}
+
+.icn-stack > * {
+  pointer-events: auto;
+}
+
+.icn-overflow {
+  align-self: flex-end;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--ic-radius-pill);
+  background: var(--ic-note-plate);
+  box-shadow: var(--ic-note-shadow);
+  color: var(--ic-note-ink);
+  font: inherit;
+  font-family: var(--ic-font-sans);
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.icn-overflow:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+.icn-toast {
+  --icn-tone: var(--ic-note-info);
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 32px;
+  column-gap: 10px;
+  align-items: start;
+  padding: 12px 6px 12px 14px;
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-note-plate);
+  box-shadow: var(--ic-note-shadow);
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-sans);
+  font-size: var(--ic-type-lg);
+  line-height: 19px;
+  text-align: start;
+  cursor: pointer;
+  animation: icn-enter var(--ic-dur-base) var(--ic-ease-spring) both;
+}
+
+.icn-toast:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+/* The one place the severity colour lives, with the icon. */
+.icn-toast::before,
+.icn-banner::before,
+.icn-entry::before {
+  content: '';
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 2px;
+  border-radius: var(--ic-radius-pill);
+  background: var(--icn-tone);
+}
+
+:is(.icn-toast, .icn-banner, .icn-entry)[data-kind='success'] {
+  --icn-tone: var(--ic-note-success);
+}
+
+:is(.icn-toast, .icn-banner, .icn-entry)[data-kind='warning'] {
+  --icn-tone: var(--ic-note-warning);
+}
+
+:is(.icn-toast, .icn-banner, .icn-entry)[data-kind='error'] {
+  --icn-tone: var(--ic-note-error);
+}
+
+/* A caller's severity ramp (agent usage bands) tints the icon and the bar, never the words. */
+:is(.icn-toast, .icn-entry)[data-accent] {
+  --icn-tone: var(--icn-accent);
+}
+
+.icn-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 19px;
+  color: var(--icn-tone);
+}
+
+.icn-icon > svg,
+.icn-icon > i {
+  width: 16px;
+  height: 16px;
+}
+
+.icn-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+/* r4d (design r4 F4-1): in the centre the weight says the severity — info and success titles at body weight,
+   warnings and errors stay semibold. */
+.icn-entry:is([data-kind='info'], [data-kind='success']) .icn-title {
+  font-weight: 400;
+}
+
+.icn-entry__count {
+  margin-inline-start: 6px;
+  color: var(--ic-note-ink-2);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.icn-title {
+  margin: 0;
+  color: var(--ic-note-ink);
+  font-size: var(--ic-type-lg);
+  font-weight: 600;
+  line-height: 18px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.icn-body {
+  margin: 0;
+  color: var(--ic-note-ink-2);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* Three lines at most in a toast — only ever paired with "More", which opens the whole text in the centre. */
+.icn-toast .icn-body[data-clamp] {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.icn-meta {
+  margin: 0;
+  color: var(--ic-note-ink-2);
+  font-size: var(--ic-type-md);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.icn-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* v0.0.9 r3 (design N2): a plate's actions read the plate's inks, never the faint --ic-text-3 of a quiet button
+   (40 % ink, under 3:1 here). The leading action (Retry, Restart agent, a toast's own action) is IcPageButton
+   tone="note": full ink, weight 500, a hairline; its quiet siblings (Show details, More) take --ic-note-ink-2.
+   notification-contrast.test.ts measures both on both plates in every skin. */
+.icn-actions .icpg__btn--quiet,
+.icn-banner__actions .icpg__btn--quiet {
+  color: var(--ic-note-ink-2);
+}
+
+.icpg__btn--note {
+  border-color: var(--ic-note-line);
+  background: transparent;
+  color: var(--ic-note-ink);
+  font-weight: 500;
+}
+
+.icpg__btn--note:hover:not(:disabled),
+.icn-actions .icpg__btn--quiet:hover:not(:disabled),
+.icn-banner__actions .icpg__btn--quiet:hover:not(:disabled) {
+  background: var(--ic-fill-hover);
+  color: var(--ic-note-ink);
+}
+
+.icn-close {
+  display: grid;
+  justify-items: end;
+}
+
+/* IcIconAction is 24px; the hit target is 32px. Its resting ink (text-3) fails AA here, so it reads the plate's. */
+.icn-close .icui-icon,
+.icn-entry__remove .icui-icon,
+.icn-centre__close .icui-icon,
+.icn-banner__toggle .icui-icon {
+  position: relative;
+  color: var(--ic-note-ink-2);
+}
+
+.icn-close .icui-icon::after,
+.icn-entry__remove .icui-icon::after,
+.icn-centre__close .icui-icon::after,
+.icn-banner__toggle .icui-icon::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+}
+
+.icn-close .icui-icon:hover,
+.icn-entry__remove .icui-icon:hover,
+.icn-centre__close .icui-icon:hover,
+.icn-banner__toggle .icui-icon:hover {
+  color: var(--ic-note-ink);
+}
+
+.icn-close .icui-icon:focus-visible,
+.icn-entry__remove .icui-icon:focus-visible,
+.icn-centre__close .icui-icon:focus-visible,
+.icn-banner__toggle .icui-icon:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 1px;
+}
+
+/* ── 2 · status banner: one band under the titlebar, one at a time ───────────────────────────────────── */
+.icn-banner-wrap {
+  /* v0.0.9 G re-shoot: the narrowest the banner may get beside an open island and still read as one band. */
+  --icn-banner-min-w: 32rem;
+
+  position: fixed;
+  top: calc(var(--ic-titlebar-band-h) + 8px);
+  right: 16px;
+  left: 16px;
+  z-index: var(--z-over-modal);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* v0.0.9 G-3 (design G, 04-light): with two panes folded into tabs, the banner hangs from the Message/Email tab group,
+   and those tabs centre on the FRAME (ic-window.css `.ic-pane-tabs`: --ic-frame-left … --ic-frame-right, 96px/72px),
+   not on the window. The banner takes the same insets, so its centre is the tabs' centre (it sat 12px off), clamped
+   to the base 16px. An open island (below) still wins: it comes later. */
+:root[data-ic-panes='folded'] .icn-banner-wrap {
+  right: max(16px, var(--ic-frame-right));
+  left: max(16px, var(--ic-frame-left));
+}
+
+/* v0.0.9 r4b (critic-r4 04x): a right-edge island (the notification centre, Files, the iNFT collection) hangs from
+   56px at the right edge, so the centred banner covered its title. While one is open (right-edge.ts writes
+   data-iclone-island and its width), the banner centres in the space LEFT of it: the island's width, its 12px edge
+   gap and 12px of air. Neither covers the other. (In a split the banner sits in the titlebar band, above both.) */
+:root[data-iclone-island] .icn-banner-wrap {
+  right: calc(var(--iclone-island-w, 400px) + 24px);
+  /* r4d (design r4 F2-2): and clear of the window buttons on the left, by the same measured value the split uses.
+     v0.0.9 UI lens: the banner hangs under the band, so that clearance yields (down to 16px) where the banner's
+     minimum width needs the room: 32rem holds from 952px beside a 400px island, not only from 1100px. */
+  left: max(
+    16px,
+    min(
+      calc(var(--titlebar-controls-left, 78px) + 12px),
+      calc(100vw - var(--iclone-island-w, 400px) - 24px - var(--icn-banner-min-w))
+    )
+  );
+}
+
+/* r5 (design R5-6): where the window is wide enough, the banner hangs centred under the pane tabs (they centre on the
+   window), with the same inset on both sides, so it stays clear of the island too. Narrower, the rule above keeps it
+   in the space left of the island. */
+/* G re-shoot (G-banner-centred-island-open, light): the equal insets left ~390px between them, and the banner wrapped
+   into a narrow column. The left inset now gives way so the banner keeps --icn-banner-min-w: centred where that fits,
+   otherwise as close to centred as the minimum allows, never left of the window-button clearance. */
+@media (min-width: 1100px) {
+  :root[data-iclone-island] .icn-banner-wrap {
+    left: max(
+      16px,
+      min(
+        max(calc(var(--titlebar-controls-left, 78px) + 12px), calc(var(--iclone-island-w, 400px) + 24px)),
+        calc(100vw - var(--iclone-island-w, 400px) - 24px - var(--icn-banner-min-w))
+      )
+    );
+  }
+
+  /* G-3: beside an island, folded tabs still centre on the frame, which sits (frame-left − frame-right) / 2 right of
+     the window's centre; the left inset grows by twice that, so the banner's centre moves onto theirs while its right
+     edge keeps the island's clearance. */
+  :root[data-ic-panes='folded'][data-iclone-island] .icn-banner-wrap {
+    left: max(
+      16px,
+      min(
+        max(
+          calc(var(--titlebar-controls-left, 78px) + 12px),
+          calc(var(--iclone-island-w, 400px) + 24px + var(--ic-frame-left) - var(--ic-frame-right))
+        ),
+        calc(100vw - var(--iclone-island-w, 400px) - 24px - var(--icn-banner-min-w))
+      )
+    );
+  }
+}
+
+/* v0.0.9 r3 (design d-r2-2): two panes side by side put their heads — and the left pane's ×/menu column, mid-screen —
+   right under the band where the banner hangs; a centred banner covered both. In a split the banner docks INTO the
+   titlebar band instead: the title and its actions (the cause is one Show details away), clear of the window controls
+   at either end of the band. The title is never cut (gate N2): a title too long for one line wraps, and only then does
+   the plate reach below the band. */
+/* v0.0.9 r4 (design r3 N8): the insets are MEASURED, not magic. --titlebar-controls-left is where the window buttons
+   end (contrib/wiring.tsx) and --titlebar-tools-span how far the frame tools reach in from the right edge
+   (shell/frame-tools.tsx, ResizeObserver); the larger of the two, plus 12px of air, is used on both sides so the plate
+   stays centred on the band and never touches a tool. Below 900px the band is too short for a one-line title: the
+   banner stays the centred plate under the band (the rule below applies only from 900px up). */
+@media (min-width: 900px) {
+  :root[data-ic-panes='split'] .icn-banner-wrap {
+    --icn-dock-inset: max(
+      calc(var(--titlebar-controls-left, 78px) + 12px),
+      calc(var(--titlebar-tools-span, 188px) + 12px)
+    );
+    top: 2px;
+    right: var(--icn-dock-inset);
+    left: var(--icn-dock-inset);
+  }
+
+  :root[data-ic-panes='split'] .icn-banner {
+    min-height: 0;
+    padding: 2px 4px 2px 12px;
+    line-height: 18px;
+  }
+
+  :root[data-ic-panes='split'] .icn-banner .icn-body {
+    display: none;
+  }
+
+  :root[data-ic-panes='split'] .icn-banner .icpg__btn {
+    height: 24px;
+  }
+
+  /* G re-shoot (G-banner-centred-island-open, dark): with an island open the split docking above put the banner,
+     collapsed, over the titlebar. Beside an island the banner hangs under the band in the space left of it, at full
+     plate, like every other layout; it never covers the titlebar. */
+  :root[data-ic-panes='split'][data-iclone-island] .icn-banner-wrap {
+    /* Design delta GF-8: below the panes' own header strips (the frame's top plus one window head), never over them. */
+    top: calc(max(var(--ic-frame-top), var(--ic-titlebar-band-h)) + var(--ic-win-head-h) + 8px);
+    right: calc(var(--iclone-island-w, 400px) + 24px);
+    left: max(
+      16px,
+      min(
+        calc(var(--titlebar-controls-left, 78px) + 12px),
+        calc(100vw - var(--iclone-island-w, 400px) - 24px - var(--icn-banner-min-w))
+      )
+    );
+  }
+
+  :root[data-ic-panes='split'][data-iclone-island] .icn-banner {
+    padding: 8px 6px 8px 14px;
+    line-height: 19px;
+  }
+
+  :root[data-ic-panes='split'][data-iclone-island] .icn-banner .icn-body {
+    display: revert;
+  }
+}
+
+/* r4d (design r4 F2-1): the banner's cause never leaves a one-word widow ("again."). */
+.icn-banner .icn-body {
+  text-wrap: pretty;
+}
+
+.icn-banner {
+  --icn-tone: var(--ic-note-info);
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto auto;
+  column-gap: 10px;
+  align-items: center;
+  width: min(44rem, 100%);
+  padding: 8px 6px 8px 14px;
+  border-radius: var(--ic-radius-md);
+  background: var(--ic-note-plate);
+  box-shadow: var(--ic-note-shadow);
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-sans);
+  font-size: var(--ic-type-lg);
+  line-height: 19px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  animation: icn-enter var(--ic-dur-base) var(--ic-ease-spring) both;
+}
+
+.icn-banner[data-collapsed] {
+  width: auto;
+  max-width: 100%;
+}
+
+/* v0.0.9 F4b — the band's end: the collapse chevron and, for a reminder the owner may put away, its ✕. */
+.icn-banner__end {
+  display: flex;
+  align-items: center;
+}
+
+.icn-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.icn-banner__toggle {
+  display: grid;
+  place-items: center;
+}
+
+/* ── 5 · notification centre: the right-edge island the bell opens ───────────────────────────────────── */
+.icn-centre {
+  position: fixed;
+  top: 56px;
+  right: 12px;
+  bottom: 28px;
+  /* The Files island's rung: both are app-wide right-edge islands, and only one claims the edge at a time. */
+  z-index: var(--ic-z-global-files);
+  display: flex;
+  flex-direction: column;
+  width: var(--ic-note-centre-w);
+  border-radius: var(--ic-radius-lg);
+  background: var(--ic-note-plate);
+  box-shadow: var(--ic-note-shadow);
+  color: var(--ic-note-ink);
+  font-family: var(--ic-font-sans);
+  animation: icn-slide var(--ic-dur-slow) var(--ic-ease-spring) both;
+}
+
+.icn-centre__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 12px 12px 18px;
+  border-bottom: 1px solid var(--ic-note-line);
+}
+
+.icn-centre__title {
+  margin: 0;
+  color: var(--ic-note-ink);
+  font-size: var(--ic-type-2xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.icn-centre__title:focus {
+  outline: none;
+}
+
+.icn-centre__title:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
+}
+
+.icn-centre__count {
+  margin: 2px 0 0;
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+}
+
+/* v0.0.9 F4b — where the history lives: this device's memory, gone when the app quits. v0.0.9 r3 (r1 #8): a Tip on
+   the count line (the info glyph), so the list starts right under the header. */
+.icn-centre__count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.icn-centre__memory-tip {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--ic-radius-pill);
+  color: var(--ic-note-ink-2);
+  cursor: help;
+}
+
+/* 18px glyph, 32px target. */
+.icn-centre__memory-tip::after {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+
+.icn-centre__memory-tip:hover {
+  color: var(--ic-note-ink);
+}
+
+.icn-centre__memory-tip:focus-visible {
+  outline: 2px solid var(--ic-focus-ring);
+  outline-offset: 2px;
+}
+
+/* r1 #8: "Clear all" is a real 32px target with its own padding, in the plate's secondary ink. */
+.icn-centre__clear .icpg__btn {
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.icn-centre__clear .icpg__btn--quiet {
+  color: var(--ic-note-ink-2);
+}
+
+.icn-centre__clear .icpg__btn--quiet:hover:not(:disabled) {
+  background: var(--ic-fill-hover);
+  color: var(--ic-note-ink);
+}
+
+.icn-centre__close {
+  display: grid;
+  place-items: center;
+}
+
+.icn-centre__list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 8px 12px 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.icn-centre__group {
+  margin: 12px 6px 6px;
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.icn-centre__empty {
+  /* On the header's 18px inline axis (design N7: it sat at 6px, near the plate edge). */
+  margin: 0;
+  padding: 24px 18px;
+  color: var(--ic-note-ink-2);
+  font-size: var(--ic-type-lg);
+  line-height: 19px;
+}
+
+.icn-entry {
+  --icn-tone: var(--ic-note-info);
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 32px;
+  column-gap: 10px;
+  align-items: start;
+  margin: 0 0 6px;
+  padding: 12px 6px 12px 14px;
+  border-radius: var(--ic-radius-md);
+  color: var(--ic-note-ink-2);
+  font-size: var(--ic-type-lg);
+  line-height: 19px;
+}
+
+.icn-entry[data-focus] {
+  background: var(--ic-note-plate-sunken);
+}
+
+.icn-entry__time {
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.icn-entry__unread {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-inline-end: 6px;
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-note-unread);
+  vertical-align: middle;
+}
+
+.icn-entry__label {
+  margin: 6px 0 0;
+  color: var(--ic-note-ink);
+  font-size: var(--ic-type-md);
+  font-weight: 600;
+}
+
+.icn-entry__remove {
+  display: grid;
+  justify-items: end;
+}
+
+/* The raw detail: whole, scrollable, never painted past its box (C3). */
+.icn-detail {
+  max-height: 16rem;
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  overflow: auto;
+  border-radius: var(--ic-radius-sm);
+  background: var(--ic-note-plate-sunken);
+  color: var(--ic-note-ink-2);
+  font-family: var(--ic-font-mono);
+  font-size: var(--ic-type-sm);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+/* The bell's unread mark on the titlebar glyph. */
+.icn-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.icn-bell__dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--ic-radius-round);
+  background: var(--ic-accent);
+}
+
+@keyframes icn-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes icn-slide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* v0.0.9 F4b — the exit and the swipe. A leaving toast (data-leaving, painted 120 ms by notifications.tsx) sinks 8px
+   and fades on --ic-dur-fast; a swiped one keeps going the way the finger went. A toast being dragged follows the
+   pointer (--icn-swipe-x) with no animation fighting it; vertical panning still scrolls the stack. */
+.icn-toast {
+  touch-action: pan-y;
+}
+
+.icn-toast[data-swiping] {
+  animation: none;
+  transform: translateX(var(--icn-swipe-x, 0px));
+  cursor: grabbing;
+}
+
+.icn-toast[data-leaving] {
+  animation: icn-exit var(--ic-dur-fast) var(--ic-ease-std) forwards;
+  pointer-events: none;
+}
+
+.icn-toast[data-leaving][data-swiped] {
+  animation-name: icn-exit-swipe;
+}
+
+@keyframes icn-exit {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+
+  to {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes icn-exit-swipe {
+  from {
+    opacity: 1;
+    transform: translateX(var(--icn-swipe-x, 0px));
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--icn-swipe-x, 0px) + 48px));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icn-toast,
+  .icn-banner,
+  .icn-centre {
+    animation: none;
+  }
+
+  /* 0 ms exit (notifications.tsx does not paint a leaving toast under reduced motion; this is the floor). */
+  .icn-toast[data-leaving],
+  .icn-toast[data-leaving][data-swiped] {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+/* The banner's collapse chevron points up while the banner is open. */
+.icn-banner__toggle[data-open] svg {
+  transform: rotate(180deg);
+}
+
+/* ── 4 · v0.0.9 F4b — the main process's decision, asked in the window (native-decision-host.tsx) ───────────────
+   The words are the detail: wrapped, never cut; a long one scrolls inside the dialog. */
+.icn-decision__detail {
+  max-height: 50vh;
+  margin: 0;
+  overflow: auto;
+  color: var(--ic-text-2-aa);
+  font-size: var(--ic-type-md);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

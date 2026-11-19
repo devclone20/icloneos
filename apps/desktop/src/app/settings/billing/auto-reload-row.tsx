@@ -174,7 +174,10 @@ export function AutoReloadRow({
             {row.pill && <Pill tone={row.pill.tone}>{row.pill.label}</Pill>}
             {editing ? (
               <>
-                <Button disabled={busy || !validation.values} onClick={() => void save()} size="sm" type="button">
+                <Button
+                  data-billing-charge-confirm=""
+                  disabled={busy || !validation.values}
+                  onClick={() => void save()} size="sm" type="button">
                   {busy ? copy.actions.saving : copy.actions.save}
                 </Button>
                 <Button disabled={busy} onClick={cancelEdit} size="sm" type="button" variant="outline">

@@ -27,6 +27,7 @@ import { deselectInft, switchInft } from './inft-switch'
 import { ICLONE_STORAGE } from './lib/storage-keys'
 import { $ownership, observeOwnership, startOwnershipSync, withDeactivatedCards } from './ownership'
 import { $activeInft, HERMES_CHOICE, recallInftChoice } from './stage-store'
+import { resetWalletBalances } from './wallet-balances'
 
 interface IclonePrivySessionPayload {
   status: 'in' | 'out'
@@ -65,6 +66,9 @@ export const $privySession = atom<PrivySessionState>(SIGNED_OUT)
 export const $inftRoster = atom<INftCardData[]>([])
 export const $inftRosterStatus = atom<InftRosterStatus>('idle')
 export const $inftRosterError = atom<string | null>(null)
+/** v0.0.9 W1b (F5 partial): the chains the last whole-wallet scan could not read to the end — the Collection names
+ *  them in its partial alert. Empty after a complete scan, after a failed one (the error speaks), signed out. */
+export const $inftScanMissing = atom<readonly string[]>([])
 /** True while the boot restore re-scans the remembered wallet: the home says
  *  "restoring your wallet…" instead of offering the connect button. */
 export const $privyRestoring = atom<boolean>(false)
@@ -145,6 +149,17 @@ function resetRoster(): void {
   $inftRoster.set([])
   $inftRosterStatus.set('idle')
   $inftRosterError.set(null)
+  $inftScanMissing.set([])
+}
+
+/** Main's list of unread chains, kept to what one sentence can carry: short strings only, at most 8. */
+export function scanMissingFrom(result: { incomplete?: unknown } | null | undefined): readonly string[] {
+  const raw: unknown = result?.incomplete
+  const list: unknown[] = Array.isArray(raw) ? raw : []
+
+  return list
+    .filter((name): name is string => typeof name === 'string' && name.length > 0 && name.length <= 40)
+    .slice(0, 8)
 }
 
 export interface PrivyOpenAnswer {
@@ -196,13 +211,35 @@ export function openPrivyLogin(): void {
     .catch(() => refused(null))
 }
 
-/** Sign out: clears the main process's Privy session partition and this
- *  store's state immediately (optimistic — matches `$zoomPercent`'s pattern
- *  of trusting the local write and letting the next push reconcile it). */
-export function logoutPrivy(): void {
+export interface PrivyLogoutResult {
+  ok: boolean
+  error?: string
+}
+
+/** Asks main to erase the saved Privy session (partition storage) and reports what main answered. */
+export async function clearPrivyPartition(): Promise<PrivyLogoutResult> {
+  const bridge = iclonePrivyBridge()
+
+  if (!bridge) {
+    return { ok: true }
+  }
+
+  try {
+    const answer = await bridge.logout()
+
+    return answer && answer.ok === true ? { ok: true } : { ok: false, error: answer?.error }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/** Sign out: this store forgets the wallet at once (the safe side: nothing keeps acting for it), and main is asked
+ *  to erase the saved session. The promise is main's answer — v0.0.9 critic m1: the caller says "Signed out" only on
+ *  `ok`, and a failed erase is reported (the next launch could restore the session), never toasted as success. */
+export function logoutPrivy(): Promise<PrivyLogoutResult> {
   scanEpoch += 1
   sessionEpoch += 1
-  void iclonePrivyBridge()?.logout()
+  const answer = clearPrivyPartition()
   $privySession.set(SIGNED_OUT)
   $privyRestoring.set(false)
   $privySignedOutByUpdate.set(false)
@@ -213,6 +250,10 @@ export function logoutPrivy(): void {
   void deselectInft('sign-out')
   forgetPrefetch()
   clearEconBadges()
+  // The signed-out wallet's balances (and a fetch still in flight for it) never reach the next sign-in.
+  resetWalletBalances()
+
+  return answer
 }
 
 // A scan that finishes after a logout, or after a newer scan started, must
@@ -365,6 +406,7 @@ export async function rescan(options: { present?: boolean } = {}): Promise<void>
     // K21: a sender main refuses gets null, not a result — an error the panel can show, never a TypeError.
     if (!result?.ok) {
       $inftRosterStatus.set('error')
+      $inftScanMissing.set([])
       $inftRosterError.set(
         result ? (result.error ?? translateNow('inftBook.scanFailed')) : translateNow('inftBook.scanRefused')
       )
@@ -393,6 +435,7 @@ export async function rescan(options: { present?: boolean } = {}): Promise<void>
       retrySeedUnlessSettled(address)
     }
 
+    $inftScanMissing.set(scanMissingFrom(result))
     startOwnershipSync()
     publishRoster(address, cards, ticket)
     $inftRosterStatus.set('ready')
@@ -405,6 +448,7 @@ export async function rescan(options: { present?: boolean } = {}): Promise<void>
     }
 
     $inftRosterStatus.set('error')
+    $inftScanMissing.set([])
     $inftRosterError.set(e instanceof Error ? e.message : translateNow('inftBook.scanFailed'))
 
     if ($privySession.get().address === address) {
@@ -415,6 +459,35 @@ export async function rescan(options: { present?: boolean } = {}): Promise<void>
       fullScanTicket = null
     }
   }
+}
+
+/**
+ * v0.0.9 (for F5, the Collection's Retry): scan the signed-in wallet NOW. A pending seed retry is folded into it (its
+ * backoff starts again from the first step if this one falls short), and a scan already running is superseded by
+ * this one (latest wins, as for every full scan). It presents the remembered iNFT only when no scan of this wallet
+ * has landed yet in this session (the sign-in scan failed): a Retry never re-summons over the owner's own choice, and
+ * never after a scan that already decided the stage.
+ *
+ * @public — F5 (collections.tsx) calls it.
+ */
+export function retryInftScan(): Promise<void> {
+  const { address, status } = $privySession.get()
+
+  if (status !== 'in' || !address) {
+    return Promise.resolve()
+  }
+
+  if (seedRetry?.address === address) {
+    if (seedRetry.timer) {
+      clearTimeout(seedRetry.timer)
+    }
+
+    seedRetry = { address, attempt: 0, timer: null }
+  }
+
+  const neverLanded = lastCards?.address !== address
+
+  return rescan({ present: neverLanded })
 }
 
 /** Sets the roster from scanned cards; profiles are built for the checked (+ the active) only. */
@@ -487,7 +560,9 @@ function autoSummon(cards: INftCardData[], present = false): void {
   const pick = cards.find(c => c.id === remembered && c.modelUrl) ?? cards.find(c => c.modelUrl)
 
   if (pick?.modelUrl) {
-    // Through the one door: stage AND persona, never the model alone.
+    // Through the one door: stage AND persona, never the model alone. v0.0.9 F2: the scan lands whenever it lands;
+    // the 'restore' switch puts the model on stage at once and connects the persona when the AGENT is ready (it
+    // waits for the gateway, retries a passing failure by itself, and re-runs when the gateway comes back).
     void switchInft(pick, { origin: 'restore' })
   }
 }

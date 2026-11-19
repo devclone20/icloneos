@@ -112,6 +112,31 @@ def _current_session_key() -> str:
     return get_session_env("HERMES_SESSION_KEY", "")
 
 
+def _owner_session_key(task_id: Optional[str]) -> str:
+    """The session a tool call acts for: the key its background processes are stamped with, which
+    ``process.list`` / ``process.kill`` match exactly (tui_gateway ``_session_processes``).
+
+    Order: the turn's approval ContextVar, then a BOUND ``HERMES_SESSION_KEY`` ContextVar, then the
+    call's own ``task_id`` (a TUI turn passes its session key; the contextvar does not cross a
+    tool-worker thread that was not started with ``propagate_context_to_thread``). Where no gateway
+    ever bound a session in this process (CLI, cron children, the slash worker) the legacy order
+    stands: the process environment, then the task id. On a gateway host ``os.environ`` is nobody's session: reading it before the
+    task id filed a process under another session's key, so its own sidebar showed no background
+    dot and the other session listed (and could stop) it."""
+    from gateway.session_context import _UNSET, _VAR_MAP, session_context_engaged
+    from tools.approval_context import _approval_session_key
+
+    if key := _approval_session_key.get():
+        return key
+    bound = _VAR_MAP["HERMES_SESSION_KEY"].get()
+    if bound is not _UNSET and bound:
+        return str(bound)
+    if bound is _UNSET and not session_context_engaged():
+        # No gateway in this process: the legacy order, environment before the task id.
+        return os.getenv("HERMES_SESSION_KEY", "") or (task_id or "")
+    return task_id or ""
+
+
 def _current_session_profile() -> str:
     """Active session's Hermes profile name, or "" (same lookup discipline as
     :func:`_current_session_key`)."""
@@ -1418,12 +1443,9 @@ def terminal_tool(
         env = _acquire_env(plan, task_id)
         env_type, cwd, effective_task_id = plan.env_type, plan.cwd, plan.effective_task_id
 
-        # Session key for cwd records: the contextvar doesn't cross tool-worker
-        # threads, so fall back to the raw task_id (the top-level agent's
-        # session_key) as a stable anchor.
-        from tools.approval import get_current_session_key
-
-        session_key = get_current_session_key(default="") or (task_id or "")
+        # The session this call's background processes, cwd records and approvals belong to
+        # (one resolution: see _owner_session_key).
+        session_key = _owner_session_key(task_id)
 
         # The supervised-gateway identity probe ends in a kernel process query
         # (psutil create_time) that has wedged for the better part of an hour on

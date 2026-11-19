@@ -54,6 +54,7 @@ import {
 } from './env'
 import { findSystemPython, getVenvPython } from './executables'
 import { rememberLog, updatePolicy } from './log'
+import { managedRuntimeEnv } from './runtime-install-state'
 import type { quitState } from './state'
 import { applyUpdates } from './update-apply'
 import { checkUpdates, compareWithUpstream } from './updates'
@@ -147,7 +148,8 @@ async function probeUninstallSummary(): Promise<UninstallSummary> {
         ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary'],
         hiddenWindowsChildOptions({
           cwd: agentRoot,
-          env: { ...process.env, HERMES_HOME, NO_COLOR: '1' },
+          // v0.0.9 point A: the CLI boots the runtime (dependency activation): the app runtime's own pin.
+          env: { ...process.env, HERMES_HOME, ...managedRuntimeEnv(agentRoot), NO_COLOR: '1' },
           stdio: ['ignore', 'pipe', 'ignore']
         })
         // hiddenWindowsChildOptions erases the stdio tuple; the literal pins stdout as the only pipe.

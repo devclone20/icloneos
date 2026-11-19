@@ -4,8 +4,36 @@
  */
 export const ICLONE_GATE_MARK = '[iclone-gate]'
 
+/** Where main appends the app log to a boot error (`… Log: <path>\n<last 20 log lines>`, start-hermes.ts). */
+const APPENDED_LOG = ' Log: '
+
+/**
+ * The error's own sentence: its first line, before the app log main appends. Everything after that is evidence (the
+ * child's output tail, the last lines of desktop.log) and is never classified: those lines carry the gate's own
+ * SUCCESS line (`[iclone-gate] loaded by Hermes at …`) on every boot.
+ */
+export function ownErrorHead(error: string): string {
+  const firstLine = error.split('\n', 1)[0] ?? ''
+  const cut = firstLine.indexOf(APPENDED_LOG)
+
+  return (cut === -1 ? firstLine : firstLine.slice(0, cut)).replace(/^(?:Error: )+/, '').trimStart()
+}
+
+/**
+ * v0.0.9 F3 (14 Nov 2026): a refusal of the permission gate, and nothing else. A gate refusal is an `IcloneGateError`
+ * (structured flag `isIcloneGateFailure`) whose message STARTS with the mark; a string that only contains the mark
+ * somewhere in its appended log (a backend that crashed for another reason right after the gate passed) is not one.
+ */
 export function isIcloneGateFailure(error: unknown): boolean {
-  return typeof error === 'string' && error.includes(ICLONE_GATE_MARK)
+  if (error && typeof error === 'object') {
+    if ((error as { isIcloneGateFailure?: unknown }).isIcloneGateFailure === true) {
+      return true
+    }
+
+    return error instanceof Error ? isIcloneGateFailure(error.message) : false
+  }
+
+  return typeof error === 'string' && ownErrorHead(error).startsWith(ICLONE_GATE_MARK)
 }
 
 /**
@@ -16,7 +44,9 @@ export function isIcloneGateFailure(error: unknown): boolean {
 export const ICLONE_GATE_UNMANAGED_MARK = '[iclone-gate:unmanaged-runtime]'
 
 export function isIcloneGateUnmanaged(error: unknown): boolean {
-  return isIcloneGateFailure(error) && (error as string).includes(ICLONE_GATE_UNMANAGED_MARK)
+  const text = typeof error === 'string' ? error : error instanceof Error ? error.message : ''
+
+  return isIcloneGateFailure(error) && ownErrorHead(text).includes(ICLONE_GATE_UNMANAGED_MARK)
 }
 
 /**

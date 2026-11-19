@@ -1,4 +1,7 @@
-// Secondary windows: session, browser and instance windows, and the About panel.
+// Secondary windows: session, browser, instance and 3D iNFT windows, and the About panel.
+
+import fs from 'node:fs'
+import path from 'node:path'
 
 import { app, BrowserWindow, dialog, Menu, screen } from 'electron'
 
@@ -9,10 +12,12 @@ import {
   BROWSER_WINDOW_MIN_HEIGHT,
   BROWSER_WINDOW_MIN_WIDTH,
   BROWSER_WINDOW_WIDTH,
-  buildBrowserWindowUrl
+  buildBrowserWindowUrl,
+  buildStage3dWindowUrl
 } from '../browser-windows'
 import { installFindShortcut } from '../find-in-page'
 import { APP_COPYRIGHT, checkForUpdatesMenuItem } from '../iclone-app-update'
+import { writeFileAtomicSync } from '../lib/atomic-write'
 import { attachRendererConsoleCapture } from '../renderer-log'
 import {
   buildInstanceWindowUrl,
@@ -27,7 +32,18 @@ import type { ThrottleWindowLike } from '../stream-throttle'
 import { createWakeIndicatorWindowController } from '../wake-indicator-window'
 import { installWindowRendererLifecycle } from '../window-renderer-lifecycle'
 import { createWindowRevealController } from '../window-reveal'
-import { computeWindowOptions, MIN_HEIGHT as WINDOW_MIN_HEIGHT, MIN_WIDTH as WINDOW_MIN_WIDTH } from '../window-state'
+import {
+  bindGeometryPersistence,
+  bindStage3dOpener,
+  computeWindowOptions,
+  debounce,
+  installDisplayAwareMinimumOn,
+  MIN_SIZE_MOVE_DEBOUNCE_MS,
+  sanitizeWindowState,
+  stage3dWindowBounds,
+  MIN_HEIGHT as WINDOW_MIN_HEIGHT,
+  MIN_WIDTH as WINDOW_MIN_WIDTH
+} from '../window-state'
 import {
   DEFAULT_ZOOM_LEVEL,
   installZoomReassertOnNavigation,
@@ -337,6 +353,18 @@ export function focusWindow(win: BrowserWindow) {
   win.focus()
 }
 
+// v0.0.9 F6 — the minimum follows the display (window-state.ts minWindowSize): ⅓ of the usable width (never under
+// one 375-pt pane) and ½ of the usable height of the display that holds the window's centre. Re-measured when the
+// window moves (debounced 150 ms: a drag across displays settles once) and whenever the displays change
+// (display-metrics-changed, -added, -removed). A window left below its new minimum grows into its own work area —
+// never onto another display. Maximized, fullscreen and minimized windows keep their bounds; the minimum still
+// updates so the next restore honours it.
+export { MIN_SIZE_MOVE_DEBOUNCE_MS }
+
+export function installDisplayAwareMinimum(win: BrowserWindow): () => void {
+  return installDisplayAwareMinimumOn(win, screen)
+}
+
 // Wiring shared by every chat-surface window: glass backing, traffic lights, reveal, fullscreen state, stream
 // throttling and the common handlers. Chat-surface registration lets applyWindowTranslucency swap the window's
 // backing between opaque-themed and alpha-0 when glass toggles.
@@ -362,8 +390,9 @@ function spawnSecondaryWindow({ sessionId, watch }: { sessionId: string; watch?:
   const win = new BrowserWindow({
     width: SESSION_WINDOW_MIN_WIDTH,
     height: SESSION_WINDOW_MIN_HEIGHT,
-    minWidth: SESSION_WINDOW_MIN_WIDTH,
-    minHeight: SESSION_WINDOW_MIN_HEIGHT,
+    // F6: the live minimum is the display rule (installDisplayAwareMinimum below); these are the absolute floors.
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
     title: 'iclone os',
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
@@ -381,6 +410,7 @@ function spawnSecondaryWindow({ sessionId, watch }: { sessionId: string; watch?:
   })
 
   wireChatSurfaceWindow(win)
+  installDisplayAwareMinimum(win)
   attachRendererConsoleCapture(win, 'session-window', rememberLog)
 
   // Renderer lifecycle diagnostics + recovery (#81290): a dead session-window
@@ -534,6 +564,8 @@ export function createInstanceWindow() {
   })
 
   instanceWindows.add(win)
+  // F6: ⅓ × ½ of its display, re-measured on move and display changes.
+  installDisplayAwareMinimum(win)
 
   // Chat-surface registration: see applyWindowTranslucency.
   translucencyBackedWindows.add(win)
@@ -580,6 +612,150 @@ export function createInstanceWindow() {
       rendererIndexPath: DEV_SERVER ? undefined : resolveRendererIndex()
     }),
     'Instance window'
+  )
+
+  return win
+}
+
+// ─── v0.0.9 F6: the 3D iNFT in its own window ─────────────────────────────
+//
+// One at a time. The renderer that asks (the main window) has already released its stage's WebGL context
+// (src/app/home/stage3d-window/handover.ts), so this window's stage is the only live 3D context. It opens at ⅔ of the
+// work area on the side opposite its opener, with the same ⅓ × ½ display minimum as every app window, no extra
+// system frame (hidden titlebar, like the main window), and its position persisted as window-state with the suffix
+// `stage3d`. Closing it — its traffic light, Bring back in the main window, the app quitting (the main window closes
+// it first), the opener navigating or crashing — tells every window, so the opener mounts its stage again.
+const STAGE3D_STATE_PATH = path.join(app.getPath('userData'), 'window-state-stage3d.json')
+
+let stage3dWindow: BrowserWindow | null = null
+
+function readStage3dState() {
+  try {
+    return sanitizeWindowState(JSON.parse(fs.readFileSync(STAGE3D_STATE_PATH, 'utf8')))
+  } catch {
+    return null
+  }
+}
+
+function persistStage3dState(win: BrowserWindow) {
+  if (win.isDestroyed() || win.isMinimized()) {
+    return
+  }
+
+  try {
+    const { x, y, width, height } = win.getNormalBounds()
+
+    fs.mkdirSync(path.dirname(STAGE3D_STATE_PATH), { recursive: true })
+    writeFileAtomicSync(
+      STAGE3D_STATE_PATH,
+      JSON.stringify({ x, y, width, height, isMaximized: win.isMaximized() }, null, 2),
+      { durable: false }
+    )
+  } catch (error) {
+    rememberLog(`[window-state:stage3d] persist failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
+
+function notifyStage3dClosed() {
+  for (const other of BrowserWindow.getAllWindows()) {
+    if (!other.isDestroyed()) {
+      other.webContents.send('hermes:stage3d-window:closed')
+    }
+  }
+}
+
+export function isStage3dWindowOpen(): boolean {
+  return stage3dWindow !== null && !stage3dWindow.isDestroyed()
+}
+
+export function closeStage3dWindow(): void {
+  if (stage3dWindow && !stage3dWindow.isDestroyed()) {
+    stage3dWindow.close()
+  }
+}
+
+export function createStage3dWindow(opener: BrowserWindow | null): BrowserWindow {
+  if (stage3dWindow && !stage3dWindow.isDestroyed()) {
+    focusWindow(stage3dWindow)
+
+    return stage3dWindow
+  }
+
+  const openerBounds = opener && !opener.isDestroyed() ? opener.getBounds() : null
+  const display = openerBounds ? screen.getDisplayMatching(openerBounds) : screen.getPrimaryDisplay()
+  const bounds = stage3dWindowBounds(openerBounds, display.workArea, readStage3dState(), screen.getAllDisplays())
+
+  const win = new BrowserWindow({
+    ...bounds,
+    minWidth: WINDOW_MIN_WIDTH,
+    minHeight: WINDOW_MIN_HEIGHT,
+    title: 'iclone os',
+    titleBarStyle: 'hidden',
+    trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
+    ...chatWindowSurfaceOptions(),
+    icon: getAppIconPath(),
+    show: false,
+    // Least privilege: the stage needs the preload (model bytes, this window's door) and nothing else — no <webview>,
+    // no Node, sandboxed and context-isolated like every app window.
+    webPreferences: {
+      preload: PRELOAD_PATH,
+      contextIsolation: true,
+      sandbox: true,
+      nodeIntegration: false,
+      webviewTag: false,
+      devTools: true,
+      focusOnNavigation: false
+    }
+  })
+
+  stage3dWindow = win
+
+  if (IS_MAC) {
+    win.setWindowButtonPosition?.(WINDOW_BUTTON_POSITION)
+  }
+
+  wireWindowReveal(win)
+  installDisplayAwareMinimum(win)
+  // The navigation guard, the window-open policy and the context-menu bridge every app window has; no zoom keys.
+  wireCommonWindowHandlers(win, { zoom: false })
+  attachRendererConsoleCapture(win, 'stage3d-window', rememberLog)
+
+  installWindowRendererLifecycle(win, {
+    kind: 'stage3d',
+    callbacks: {
+      log: rememberLog,
+      reload: () => {
+        win.webContents.reload()
+      }
+    },
+    reloadWindowMs: RENDERER_RELOAD_WINDOW_MS,
+    reloadMax: RENDERER_RELOAD_MAX,
+    recentReloadTimesRef: rendererReloadTimesRef
+  })
+
+  const persist = debounce(() => persistStage3dState(win), 250)
+
+  bindGeometryPersistence(win, persist)
+  win.on('close', () => persist.flush())
+
+  // The opener reloading or dying would mount a second stage beside this one: the window goes first.
+  bindStage3dOpener(win, opener, closeStage3dWindow)
+
+  win.on('closed', () => {
+    if (stage3dWindow === win) {
+      stage3dWindow = null
+    }
+
+    notifyStage3dClosed()
+  })
+
+  loadWindowUrl(
+    win,
+    buildStage3dWindowUrl({
+      devServer: DEV_SERVER,
+      rendererIndexPath: DEV_SERVER ? undefined : resolveRendererIndex()
+    }),
+    '3D iNFT window'
   )
 
   return win

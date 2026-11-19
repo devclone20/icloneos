@@ -6,6 +6,7 @@ import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import { $expandedWindows, useWindowExpanded } from './expanded'
 import { IcWindow, type IcWindowId } from './ic-window'
+import { resetPanesForTests } from './pane-layout'
 import { windowRectStyle } from './rect'
 
 const LABELS = { close: 'Close', expand: 'Expand', retract: 'Retract', opacity: 'Opacity' }
@@ -39,7 +40,24 @@ const paints = (expanded: boolean) => {
   return root().style.top === String(rect.top) && root().style.left === String(rect.left)
 }
 
-const toggleButton = () => screen.getByRole('button', { name: maximized() ? LABELS.retract : LABELS.expand })
+// v0.0.9 F6: the size switch is the window menu's Fill (the old expand/retract button).
+const menuIcon = () => screen.getByRole('button', { name: /^Window options for / })
+
+function toggleSize() {
+  fireEvent.click(menuIcon(), { detail: 1 })
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Fill' }), { detail: 1 })
+}
+
+/** Whether the menu marks Fill active (it is closed again before returning). */
+function fillActive(): boolean {
+  fireEvent.click(menuIcon(), { detail: 1 })
+
+  const active = screen.getByRole('menuitem', { name: 'Fill' }).dataset.active === 'true'
+
+  fireEvent.click(menuIcon(), { detail: 1 })
+
+  return active
+}
 
 describe('how a Dock window opens (window/expanded.ts, Settings › Machine › Appearance)', () => {
   beforeAll(() => {
@@ -49,6 +67,7 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
 
   afterEach(() => {
     cleanup()
+    resetPanesForTests()
     setDockWindowSize('maximized')
     window.localStorage.removeItem(STORAGE_KEY)
   })
@@ -61,7 +80,7 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
     expect(maximized()).toBe(true)
     expect(paints(true)).toBe(true)
     expect($expandedWindows.get()).toEqual(['wallet'])
-    expect(screen.getByRole('button', { name: LABELS.retract })).toBeTruthy()
+    expect(fillActive()).toBe(true)
   })
 
   it('the choice "normal size" opens it on its frame, as before', () => {
@@ -72,7 +91,7 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
     expect(maximized()).toBe(false)
     expect(paints(false)).toBe(true)
     expect($expandedWindows.get()).toEqual([])
-    expect(screen.getByRole('button', { name: LABELS.expand })).toBeTruthy()
+    expect(fillActive()).toBe(false)
   })
 
   it.each(['maximized', 'normal'] as const)('the window button still switches it both ways (choice %s)', size => {
@@ -81,17 +100,17 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
 
     const opened = maximized()
 
-    fireEvent.click(toggleButton())
+    toggleSize()
     expect(maximized()).toBe(!opened)
 
-    fireEvent.click(toggleButton())
+    toggleSize()
     expect(maximized()).toBe(opened)
   })
 
   it('bringing the open window to the front keeps the size the user chose in it', () => {
     const { rerender } = render(<DockWindow id="wallet" />)
 
-    fireEvent.click(toggleButton())
+    toggleSize()
     expect(maximized()).toBe(false)
 
     // The Dock tile of an open window re-renders the same window (same id, same mount).
@@ -113,7 +132,7 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
   it('reduced, closed and opened again, it follows the choice (a new opening)', () => {
     const { unmount } = render(<DockWindow id="wallet" />)
 
-    fireEvent.click(toggleButton())
+    toggleSize()
     expect(maximized()).toBe(false)
 
     unmount()
@@ -124,7 +143,7 @@ describe('how a Dock window opens (window/expanded.ts, Settings › Machine › 
   it('another window in the same chassis (the econ windows share one) is a new opening', () => {
     const { rerender } = render(<DockWindow id="wallet" />)
 
-    fireEvent.click(toggleButton())
+    toggleSize()
     expect(maximized()).toBe(false)
 
     rerender(<DockWindow id="bank-card" />)

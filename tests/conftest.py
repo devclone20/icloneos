@@ -250,6 +250,7 @@ from tests._fixtures.live_system_guard import (  # noqa: F401 — _live_system_g
     _LIVE_SYSTEM_GUARD_BYPASS_MARK,
     _live_system_guard,
 )
+from tests._fixtures.mock_path_guard import _no_mock_paths_on_disk  # noqa: F401 — autouse guard registers here
 from tests._fixtures.platform_gating import _platforms_gate_reason, _reject_contradictory_platform_marks
 
 
@@ -1155,6 +1156,11 @@ def pytest_configure(config):  # noqa: D401 — pytest hook
         "require_symlinks: skip the test if symbolic links cannot be "
         "created in the current environment (needs admin/developer mode "
         "on Windows).",
+    )
+    config.addinivalue_line(
+        "markers",
+        "allow_mock_paths: opt out of the guard that refuses a mock-derived path reaching os.mkdir "
+        "(only the guard's own tests).",
     )
     config.addinivalue_line(
         "markers",

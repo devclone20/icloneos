@@ -6,6 +6,7 @@ import { app } from 'electron'
 import { stopBackendTreesForUpdate } from '../backend-child'
 import { createBackendShutdownCoordinator } from '../backend-ownership'
 import { isPidAliveWindows, waitForBackendRelease } from '../backend-release-gate'
+import { boundedCauseLine, withBootCause } from '../boot-cause'
 import { runBootstrap } from '../bootstrap-runner'
 import {
   backendScopePrefix,
@@ -47,7 +48,7 @@ import {
   POOL_MAX_BACKENDS,
   remoteLiveness
 } from './backend-state'
-import { advanceBootProgress, broadcastBootstrapEvent, updateBootProgress } from './boot-progress'
+import { broadcastBootstrapEvent } from './boot-progress'
 import {
   readDesktopConnectionsRegistry,
   sanitizeRegistryConnection,
@@ -77,6 +78,7 @@ import { findGitBash, getVenvPython } from './executables'
 import { rememberLog, updatePolicy } from './log'
 import { managedConnectionUpdateGate, sshBootstrapCoordinator, teardownSshConnection } from './managed-ssh'
 import { type HermesBackendSpec, type RunnableBackendSpec, writeBootstrapMarker } from './runtime'
+import { runtimeProgress } from './runtime-progress'
 import { decryptDesktopSecret, encryptDesktopSecret, encryptIncomingRemoteHeaders } from './secrets'
 import { bootState, lateBound, quitState } from './state'
 import {
@@ -311,9 +313,19 @@ async function handOffWindowsBootstrapRecovery(reason: string) {
   return true
 }
 
-export async function ensureRuntime(backend: HermesBackendSpec): Promise<RunnableBackendSpec> {
+export interface EnsureRuntimeOptions {
+  /** Only the primary's boot reports into the global boot progress; a pool backend passes false (runtime-progress.ts). */
+  reportBootProgress?: boolean
+}
+
+export async function ensureRuntime(
+  backend: HermesBackendSpec,
+  options: EnsureRuntimeOptions = {}
+): Promise<RunnableBackendSpec> {
+  const progress = runtimeProgress(options.reportBootProgress !== false)
+
   if (backend.bootstrap === false) {
-    await advanceBootProgress('runtime.external', `Using ${backend.label}`, 32)
+    await progress.advance('runtime.external', `Using ${backend.label}`, 32)
 
     return backend
   }
@@ -329,6 +341,16 @@ export async function ensureRuntime(backend: HermesBackendSpec): Promise<Runnabl
   // to a renderer-side install overlay.
   if (backend.kind === 'bootstrap-needed') {
     assertAgentInstallAllowed() // iclone-seam: rtb6-skip — the user skipped the install: open without the agent
+
+    // m-r2-2: a broken install of the app's own runtime is a boot failure with its cause (deterministic: no automatic
+    // restart), shown on the failure card whose Repair runs the kit's runtime-venv class and the installer.
+    if (backend.brokenInstall) {
+      throw withBootCause(new Error(`The agent's environment is broken: ${backend.brokenInstall}.`), {
+        code: 'runtime-env-broken',
+        line: boundedCauseLine(backend.brokenInstall)
+      })
+    }
+
     rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
 
     if (await handOffWindowsBootstrapRecovery('bootstrap-needed')) {
@@ -450,7 +472,7 @@ export async function ensureRuntime(backend: HermesBackendSpec): Promise<Runnabl
 
     // Re-resolve now that the install exists. The new resolution lands in
     // step 3 (bootstrap-complete marker) and we recurse to wire venvPython.
-    return ensureRuntime(resolveHermesBackend(backend.args))
+    return ensureRuntime(resolveHermesBackend(backend.args), options)
   }
 
   // bootstrap=true with a real backend (createActiveBackend path) means we
@@ -502,7 +524,7 @@ export async function ensureRuntime(backend: HermesBackendSpec): Promise<Runnabl
     label: `Hermes at ${ACTIVE_HERMES_ROOT} (venv: ${venvRoot})`
   })
 
-  updateBootProgress({
+  progress.update({
     phase: 'runtime.ready',
     message: 'Hermes runtime is ready',
     progress: 82,

@@ -13,6 +13,7 @@ interface FakeWindow {
 }
 
 const st = vi.hoisted(() => ({
+  webRequest: { onBeforeRequest: (..._args: unknown[]) => undefined },
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
   listeners: new Map<string, Set<(...args: unknown[]) => void>>(),
   windows: [] as FakeWindow[],
@@ -92,6 +93,8 @@ vi.mock('electron', () => {
     session: {
       fromPartition: () => ({
         setPermissionRequestHandler: () => undefined,
+        // The analytics blocker installs on every app session; one shared inert webRequest per fake partition.
+        webRequest: st.webRequest,
         clearStorageData: () => {
           // Records whether any probe window was still alive when the partition was cleared.
           st.cleared.push(st.windows.some(w => !w.destroyed))

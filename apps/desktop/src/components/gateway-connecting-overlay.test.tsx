@@ -83,8 +83,9 @@ function bootWordText(): string | null {
 
 const isConnectingShown = () => BOOT_WORD_NODE.test(bootWordText() ?? '')
 
+// Any of the recovery words anywhere (the *All* query: v0.0.9 F3's hint repeats "Retry" beside its button).
 const isRecoveryShown = () =>
-  Boolean(screen.queryByText(/use local gateway/i) || screen.queryByText(/retry/i) || screen.queryByText(/sign in/i))
+  [/use local gateway/i, /retry/i, /sign in/i].some(word => screen.queryAllByText(word).length > 0)
 
 describe('connecting overlay vs recovery surface', () => {
   it('hard initial-boot failure surfaces the recovery overlay (the working path)', async () => {
@@ -219,7 +220,8 @@ describe('connecting overlay vs recovery surface', () => {
 
     // Escape hatch is reachable; the connecting overlay bows out.
     expect(isRecoveryShown()).toBe(true)
-    expect(screen.getByRole('button', { name: /gateway settings/i })).toBeTruthy()
+    // v0.0.9 r4 (design r3 N3): this is the local card (no remote config here), whose settings button is the agent's.
+    expect(screen.getByRole('button', { name: /agent settings/i })).toBeTruthy()
     expect(isConnectingShown()).toBe(false)
   })
 })

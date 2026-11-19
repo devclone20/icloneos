@@ -3,6 +3,7 @@ import type { spawn } from 'node:child_process'
 
 import { createBackendConnectionState } from '../backend-connection-state'
 import { BackendDialClaims } from '../backend-dial-claim'
+import type { BootCause } from '../boot-cause'
 import { ProfileDeletionGate } from '../profile-delete-routing'
 import { type ActiveWork, mergeActiveWork } from '../quit-guard'
 import { RemoteLivenessTracker, RemoteRevalidationCoordinator } from '../remote-liveness'
@@ -10,6 +11,7 @@ import { createRemoteWsHeaderStore } from '../remote-ws-headers'
 import { createStreamThrottle } from '../stream-throttle'
 import { WindowConnectionRouteRegistry } from '../window-connection-route'
 
+import type { BackendRestartStatus } from './backend-auto-restart'
 import { BOOT_FAKE_MODE } from './boot-fake'
 
 export const backendConnectionState = createBackendConnectionState<ReturnType<typeof spawn>, any>()
@@ -115,12 +117,19 @@ export const rendererReloadTimesRef: { current: number[] } = { current: [] }
 export const MAX_BOOTSTRAP_REPAIR_SOFT_ATTEMPTS = 3
 export const remoteWsHeaderStore = createRemoteWsHeaderStore()
 interface BootProgressState {
+  /**
+   * v0.0.9 F2: why the last local boot failed, classified by main (boot-cause.ts). Meaningful only while `error` is
+   * set; null on a ready boot. Consumers read this, never the text of `error`.
+   */
+  bootCause: BootCause | null
   error: string | null
   fakeMode: boolean
   isCloudBackendDown: boolean
   message: string
   phase: string
   progress: number
+  /** v0.0.9 F2: main's automatic restart of the local backend (backend-auto-restart.ts); null before any. */
+  restart: BackendRestartStatus | null
   retryable: boolean
   running: boolean
   statusCode: number | null
@@ -129,6 +138,8 @@ interface BootProgressState {
 
 export const progressState: { bootProgressState: BootProgressState } = {
   bootProgressState: {
+    bootCause: null,
+    restart: null,
     error: null,
     fakeMode: BOOT_FAKE_MODE,
     isCloudBackendDown: false,

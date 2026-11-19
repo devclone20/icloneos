@@ -1,23 +1,17 @@
 /**
- * iclone os — the wizard's CLI step: whether the `acp` CLI is present, the
- * ship-with-app install/update, and the agent skills the app teaches it.
+ * iclone os — the wizard's CLI step (step 1). v0.0.9 (owner decision 17 Nov, replaces ruling 26): the Virtuals ACP CLI
+ * ships inside the app, so this step only reports it ("Virtuals ACP CLI 1.0.38 · included · verified", from main's
+ * ACP tools state), re-runs the CLI's self-test whenever that state settles, and keeps the agent skills the app teaches
+ * it. Install, Check for updates and Update now are gone (P0_ECONOMYOS_CONTROLS S1a/S1b/S1e/S1f); the one control left
+ * is Repair (econ/acp-tools-panel.tsx `AcpToolsControl`), whose outcome lands here.
  */
 import { useCallback, useEffect, useState } from 'react'
 
-import { useI18n } from '@/i18n'
+import { f1bAcpBundled } from '@/i18n/en/v009-f1b'
 import { errorMessage } from '@/iclone-shared/errors'
 import { useAcpTools } from '@/store/acp-tools'
 
-import {
-  acpCheck,
-  acpInstall,
-  type AcpInstallResult,
-  acpUpdateCheck,
-  lastSkillSync,
-  type SkillSyncReport,
-  syncAgentSkills
-} from '../home/acp-setup'
-import { installErrorText } from '../home/econ/acp-tools-panel'
+import { acpCheck, lastSkillSync, type SkillSyncReport, syncAgentSkills } from '../home/acp-setup'
 
 import type { StepState } from './inft-setup-runner'
 
@@ -29,25 +23,24 @@ interface CliPresence {
 
 interface AcpCliStep {
   cli: CliPresence | null
-  cliInstall: StepState
-  cliUpdate: AcpInstallResult | null
+  /** The step's own line under the row: the last Repair's outcome. */
+  cliState: StepState
+  /** Repair's answer (null: it worked), from `AcpToolsControl`'s `onResult`. */
+  onRepairResult: (error: string | null) => void
   skills: SkillSyncReport | null
   skillsBusy: boolean
-  installCli: () => Promise<void>
-  checkCliUpdate: () => Promise<void>
   teachAgent: () => Promise<void>
 }
 
 export function useAcpCliStep(): AcpCliStep {
   const [cli, setCli] = useState<CliPresence | null>(null)
-  const [cliInstall, setCliInstall] = useState<StepState>({ running: false })
-  const [cliUpdate, setCliUpdate] = useState<AcpInstallResult | null>(null)
+  const [cliState, setCliState] = useState<StepState>({ running: false })
   const [skills, setSkills] = useState<SkillSyncReport | null>(null)
   const [skillsBusy, setSkillsBusy] = useState(false)
 
-  // REL-6: the CLI is installed by the ACP tools installer; its check re-runs whenever that state settles.
-  const toolsState = useAcpTools()?.state
-  const toolsCopy = useI18n().t.acpTools
+  // The CLI's self-test re-runs whenever main's tools state settles (placed, verified, repaired, changed under us).
+  const tools = useAcpTools()
+  const toolsState = tools?.state
 
   useEffect(() => {
     acpCheck()
@@ -61,30 +54,16 @@ export function useAcpCliStep(): AcpCliStep {
       .catch(() => undefined)
   }, [])
 
-  /** REL-6: the owner's click installs the pinned CLI from npm into the app's own folder (main checks the click and
-   *  records it) — no terminal, no `npm install -g`. Call it synchronously from the button's handler. */
-  const installCli = useCallback(async () => {
-    setCliInstall({ running: true })
-
-    const result = await acpInstall().catch((error: unknown): AcpInstallResult => ({
-      ok: false,
-      error: errorMessage(error)
-    }))
-
-    if (result.ok) {
-      setCli({ ok: true, version: result.version })
-      setCliInstall({ running: false, note: result.version ? `acp ${result.version} installed` : 'acp CLI installed' })
-    } else {
-      // REL-6 (critic m4): a refused or failed install comes back as a code; this locale says it.
-      const coded = result.tools ? installErrorText(toolsCopy, result.tools) : null
-
-      setCliInstall({ running: false, error: coded ?? result.error ?? 'install failed' })
-    }
-  }, [toolsCopy])
-
-  const checkCliUpdate = useCallback(async () => {
-    setCliUpdate(await acpUpdateCheck())
-  }, [])
+  const onRepairResult = useCallback(
+    (error: string | null) => {
+      setCliState(
+        error
+          ? { running: false, error }
+          : { running: false, note: f1bAcpBundled.repaired(tools?.cliVersion ?? '') }
+      )
+    },
+    [tools?.cliVersion]
+  )
 
   /** The app teaches the agent on every launch; this re-runs it now. */
   const teachAgent = useCallback(async () => {
@@ -93,5 +72,5 @@ export function useAcpCliStep(): AcpCliStep {
     setSkillsBusy(false)
   }, [])
 
-  return { cli, cliInstall, cliUpdate, skills, skillsBusy, installCli, checkCliUpdate, teachAgent }
+  return { cli, cliState, onRepairResult, skills, skillsBusy, teachAgent }
 }

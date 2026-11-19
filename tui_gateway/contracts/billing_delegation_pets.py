@@ -254,10 +254,22 @@ method("subscription.preview", params=SubscriptionPreviewParams, result=Subscrip
 
 
 class SubscriptionChangeParams(ProfileParams):
-    """Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation)."""
+    """Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation). Under icloneOS
+    (policy lock) a change to a tier needs ``owner_confirm``: main's single-use token for the owner's click, bound to
+    action ``subscription-change``, this ``subscription_type_id`` and ``idempotency_key``. A cancellation needs none."""
 
     subscription_type_id: str | None = None
     cancel: bool = False
+    idempotency_key: str | None = None
+    owner_confirm: str | None = None
+
+
+class SubscriptionResumeParams(ProfileParams):
+    """Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Resume
+    (it re-enables the recurring spend), bound to action ``subscription-resume`` and ``idempotency_key``."""
+
+    idempotency_key: str | None = None
+    owner_confirm: str | None = None
 
 
 class BillingPendingChangeResult(BillingEnvelope):
@@ -266,13 +278,18 @@ class BillingPendingChangeResult(BillingEnvelope):
 
 method("subscription.change", params=SubscriptionChangeParams, result=BillingPendingChangeResult,
        doc="Schedule a downgrade / same-price change or a period-end cancellation.")
-method("subscription.resume", params=ProfileParams, result=BillingPendingChangeResult,
+method("subscription.resume", params=SubscriptionResumeParams, result=BillingPendingChangeResult,
        doc="Clear a scheduled downgrade / cancellation (re-enables recurring spend).")
 
 
 class SubscriptionUpgradeParams(ProfileParams):
+    """Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Upgrade,
+    bound to action ``subscription-upgrade``, this ``subscription_type_id`` and ``idempotency_key``: checked over the
+    permission channel before the portal charges. A plain Hermes process ignores it."""
+
     subscription_type_id: str | None = None
     idempotency_key: str | None = None
+    owner_confirm: str | None = None
 
 
 class SubscriptionUpgradeResult(BillingEnvelope):
@@ -295,8 +312,13 @@ method("subscription.upgrade", params=SubscriptionUpgradeParams, result=Subscrip
 
 
 class BillingChargeParams(ProfileParams):
+    """Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Buy
+    for exactly this ``amount_usd`` (a string) and ``idempotency_key``: 64 lowercase hex, checked over the
+    permission channel before the portal is called. A plain Hermes process ignores it."""
+
     amount_usd: float | str | None = None
     idempotency_key: str | None = None
+    owner_confirm: str | None = None
 
 
 class BillingChargeResult(BillingEnvelope):
@@ -328,9 +350,15 @@ method("billing.charge_status", params=BillingChargeStatusParams, result=Billing
 
 
 class BillingAutoReloadParams(ProfileParams):
+    """Under icloneOS (policy lock) switching auto-reload ON needs ``owner_confirm``: main's single-use token for the
+    owner's click, bound to action ``auto-reload``, subject ``on|<threshold>|<top_up_amount>`` (both decimal strings,
+    at most 2 places) and ``idempotency_key``. Switching it off needs none."""
+
     enabled: bool = False
     threshold: float | str | None = None
     top_up_amount: float | str | None = None
+    idempotency_key: str | None = None
+    owner_confirm: str | None = None
 
 
 class BillingMutationResult(BillingEnvelope):

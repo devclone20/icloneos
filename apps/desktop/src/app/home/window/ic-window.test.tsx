@@ -5,9 +5,12 @@ import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import { retractWindow } from './expanded'
 import { IcWindow } from './ic-window'
+import { resetPanesForTests } from './pane-layout'
 
 const LABELS = { close: 'Close', expand: 'Expand', retract: 'Retract', opacity: 'Opacity' }
 
+// v0.0.9 F6: the column's expand/retract button became the window menu; its Fill option is the old expand. `toggle`
+// is now the menu's icon — the control a press lands on — and `fill` chooses Fill the way the case says.
 function renderWindow(placement: 'self' | 'under-shell', expanded: boolean) {
   const onToggleExpanded = vi.fn()
   const base = { head: null, labels: LABELS, onClose: vi.fn(), onToggleExpanded }
@@ -20,10 +23,27 @@ function renderWindow(placement: 'self' | 'under-shell', expanded: boolean) {
     )
 
   const { rerender } = render(view(expanded))
-  const toggle = screen.getByRole('button', { name: expanded ? LABELS.retract : LABELS.expand })
+  const toggle = screen.getByRole('button', { name: /^Window options for / })
+
+  const fill = (by: 'keyboard' | 'pointer') => {
+    if (by === 'keyboard') {
+      fireEvent.keyDown(toggle, { key: 'Enter' })
+      fireEvent.keyDown(screen.getAllByRole('menuitem')[0], { key: 'ArrowDown' })
+      fireEvent.keyDown(screen.getAllByRole('menuitem')[1], { key: 'ArrowDown' })
+      fireEvent.keyDown(screen.getByRole('menuitem', { name: 'Fill' }), { key: 'Enter' })
+    } else {
+      fireEvent.click(toggle, { detail: 1 })
+
+      const item = screen.getByRole('menuitem', { name: 'Fill' })
+
+      press(item)
+      fireEvent.pointerUp(item)
+      fireEvent.click(item, { detail: 1 })
+    }
+  }
 
   // The owner flips `expanded` on toggle; the mock does not, so the test does.
-  return { onToggleExpanded, setExpanded: (open: boolean) => rerender(view(open)), toggle }
+  return { fill, onToggleExpanded, setExpanded: (open: boolean) => rerender(view(open)), toggle }
 }
 
 /** Chrome matches :focus-visible on a keyboard-focused control and not on a mouse-focused one; jsdom guesses, so
@@ -55,7 +75,10 @@ describe('the control column', () => {
     stubResizeObserver()
     stubMenuDomApis()
   })
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    resetPanesForTests()
+  })
 
   describe.each(['self', 'under-shell'] as const)('placement %s', placement => {
     it('retracted: a pointer press + release on the opacity slider keeps its focus, so the arrow keys fine-tune it', () => {
@@ -85,52 +108,61 @@ describe('the control column', () => {
       expect(close.ownerDocument.activeElement).toBe(close)
     })
 
-    it('a pointer click on Expand lets go of focus once expanded, so a later key press cannot pin the hidden column', () => {
-      const { onToggleExpanded, setExpanded, toggle } = renderWindow(placement, false)
+    it('the column has no expand/retract button any more: the window menu replaced it (F6)', () => {
+      renderWindow(placement, false)
+
+      expect(screen.queryByRole('button', { name: LABELS.expand })).toBeNull()
+      expect(screen.queryByRole('button', { name: LABELS.retract })).toBeNull()
+      expect(screen.getByRole('button', { name: /^Window options for / }).getAttribute('aria-haspopup')).toBe('menu')
+    })
+
+    it('a pointer choice of Fill expands and lets go of focus, so a later key press cannot pin the hidden column', () => {
+      const { fill, onToggleExpanded, setExpanded, toggle } = renderWindow(placement, false)
       const doc = toggle.ownerDocument
+      const column = toggle.closest('.ic-win__controls')!
 
       press(toggle)
       fireEvent.pointerUp(toggle)
-      fireEvent.click(toggle, { detail: 1 })
+      fill('pointer')
 
       expect(onToggleExpanded).toHaveBeenCalledTimes(1)
-      expect(doc.activeElement).toBe(toggle)
 
-      focusVisible(toggle, false)
       setExpanded(true)
 
-      expect(doc.activeElement).toBe(doc.body)
+      expect(column.contains(doc.activeElement)).toBe(false)
     })
 
-    it('Enter / Space on Expand keeps focus through the expansion for Tab users', () => {
-      const { onToggleExpanded, setExpanded, toggle } = renderWindow(placement, false)
+    it('Fill chosen from the keyboard keeps focus on the menu icon through the expansion, for Tab users', () => {
+      const { fill, onToggleExpanded, setExpanded, toggle } = renderWindow(placement, false)
 
       toggle.focus()
       focusVisible(toggle, true)
-      fireEvent.click(toggle, { detail: 0 })
+      fill('keyboard')
       setExpanded(true)
 
       expect(onToggleExpanded).toHaveBeenCalledTimes(1)
       expect(toggle.ownerDocument.activeElement).toBe(toggle)
-      expect(toggle.getAttribute('aria-label')).toBe(LABELS.retract)
+
+      // Filled, the menu says so: Fill is the active option.
+      fireEvent.keyDown(toggle, { key: 'Enter' })
+      expect(screen.getByRole('menuitem', { name: 'Fill' }).dataset.active).toBe('true')
     })
 
-    it('expanded: a pointer click on Retract toggles and lets go of focus', () => {
-      const { onToggleExpanded, toggle } = renderWindow(placement, true)
+    it('expanded: a pointer choice of Fill brings it back and lets go of focus', () => {
+      const { fill, onToggleExpanded, toggle } = renderWindow(placement, true)
 
-      press(toggle)
-      fireEvent.pointerUp(toggle)
-      fireEvent.click(toggle, { detail: 1 })
+      fill('pointer')
 
       expect(onToggleExpanded).toHaveBeenCalledTimes(1)
       expect(toggle.ownerDocument.activeElement).toBe(toggle.ownerDocument.body)
     })
 
-    it('expanded: Enter / Space (a click without a pointer) toggles and keeps focus for Tab users', () => {
-      const { onToggleExpanded, toggle } = renderWindow(placement, true)
+    it('expanded: Fill from the keyboard brings it back and keeps focus for Tab users', () => {
+      const { fill, onToggleExpanded, toggle } = renderWindow(placement, true)
 
       toggle.focus()
-      fireEvent.click(toggle, { detail: 0 })
+      focusVisible(toggle, true)
+      fill('keyboard')
 
       expect(onToggleExpanded).toHaveBeenCalledTimes(1)
       expect(toggle.ownerDocument.activeElement).toBe(toggle)
@@ -200,12 +232,12 @@ describe('the control column', () => {
   it('only an expanded window marks its control column for auto-hide', () => {
     const { toggle } = renderWindow('self', true)
 
-    expect(toggle.parentElement?.dataset.autohide).toBe('true')
+    expect(toggle.closest<HTMLElement>('.ic-win__controls')?.dataset.autohide).toBe('true')
     cleanup()
 
     const collapsed = renderWindow('self', false)
 
-    expect(collapsed.toggle.parentElement?.dataset.autohide).toBeUndefined()
+    expect(collapsed.toggle.closest<HTMLElement>('.ic-win__controls')?.dataset.autohide).toBeUndefined()
   })
 })
 
@@ -214,7 +246,10 @@ describe('opening filled takes the focus off the Dock (Dock windows open maximiz
     stubResizeObserver()
     stubMenuDomApis()
   })
-  afterEach(cleanup)
+  afterEach(() => {
+    cleanup()
+    resetPanesForTests()
+  })
 
   function dockTile() {
     const nav = window.document.createElement('nav')

@@ -95,7 +95,7 @@ beforeAll(async () => {
   cpSync(pin.pinDir, path.join(lab.app, 'acp-cli-lock'), { recursive: true })
   cpSync(pin.launcher, path.join(lab.app, 'scripts', 'acp-launch.cjs'))
   // A sealer (the OS can seal), but no gestureOk and no audit: the safe defaults (no gesture, no audit ⇒ no install).
-  initIcloneAcp({ isTrustedSender: () => true, sealer: memorySealer })
+  initIcloneAcp({ isTrustedSender: () => true, sealer: memorySealer, isKnownInft: id => id === 'inft-1' })
 
   for (let i = 0; i < 100 && !lab.door; i++) {
     await new Promise(resolve => setTimeout(resolve, 10))

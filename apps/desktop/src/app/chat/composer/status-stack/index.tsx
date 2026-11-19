@@ -152,12 +152,11 @@ export function ComposerStatusStack({ queue, sessionId }: ComposerStatusStackPro
 
   const sections: { key: string; node: ReactNode }[] = []
 
-  // Billing wall sits at the very top of the stack — it's the most important
-  // thing above the composer when the account is out of credits. Rendered here
-  // (not as a composer-disable) so slash commands stay usable.
-  if (billing && sessionId && billing.sessionId === sessionId) {
-    sections.push({ key: 'billing', node: <BillingBanner sessionId={sessionId} /> })
-  }
+  // v0.0.9 F4b — the billing wall is a status banner (type 2): one band under the titlebar, portalled to the body,
+  // so it is no longer a section of this card. Mounted from here because only this stack knows the session; it never
+  // disables the composer, so slash commands stay usable.
+  const billingBanner =
+    billing && sessionId && billing.sessionId === sessionId ? <BillingBanner sessionId={sessionId} /> : null
 
   for (const group of groups) {
     sections.push({
@@ -236,40 +235,43 @@ export function ComposerStatusStack({ queue, sessionId }: ComposerStatusStackPro
   // it and the thread clears both with one number.
 
   if (!visible) {
-    return null
+    return billingBanner
   }
 
   return (
-    <div
-      // In flow in the dock column, directly above the composer. The dock is
-      // bottom-anchored, so this grows upward over the thread without needing
-      // to be positioned — and it shares the dock's left edge for free.
-      className="flex max-h-[40vh] min-h-0 flex-col overflow-y-auto"
-      data-slot="composer-status-stack"
-      onPointerDownCapture={() => blurComposerInput()}
-    >
-      {/* The card paints the shared --ic-chat-composer-fill (rest / scrolled / focused
-          all match the composer surface by construction); on scroll we only
-          ghost the CONTENT — element opacity on the card would kill the blur.
-          Rounded top, square bottom; the bottom border is TRANSPARENT — the
-          composer surface's visible top border (which sits at a higher z) is the
-          single shared seam, so the two read as one fused capsule. */}
-      {sections.length > 0 && (
-        <div
-          className={cn(
-            composerDockCard('top'),
-            // Inset (mx-2) so the stack reads slightly narrower than the composer
-            // surface below it — the original look.
-            'mx-2 overflow-hidden rounded-b-none border-b border-b-transparent pt-0.5',
-            'transition-opacity duration-200 ease-out',
-            scrolledUp ? 'opacity-30 group-hover/composer:opacity-100' : 'opacity-100'
-          )}
-        >
-          {sections.map(section => (
-            <div key={section.key}>{section.node}</div>
-          ))}
-        </div>
-      )}
-    </div>
+    <>
+      {billingBanner}
+      <div
+        // In flow in the dock column, directly above the composer. The dock is
+        // bottom-anchored, so this grows upward over the thread without needing
+        // to be positioned — and it shares the dock's left edge for free.
+        className="flex max-h-[40vh] min-h-0 flex-col overflow-y-auto"
+        data-slot="composer-status-stack"
+        onPointerDownCapture={() => blurComposerInput()}
+      >
+        {/* The card paints the shared --ic-chat-composer-fill (rest / scrolled / focused
+            all match the composer surface by construction); on scroll we only
+            ghost the CONTENT — element opacity on the card would kill the blur.
+            Rounded top, square bottom; the bottom border is TRANSPARENT — the
+            composer surface's visible top border (which sits at a higher z) is the
+            single shared seam, so the two read as one fused capsule. */}
+        {sections.length > 0 && (
+          <div
+            className={cn(
+              composerDockCard('top'),
+              // Inset (mx-2) so the stack reads slightly narrower than the composer
+              // surface below it — the original look.
+              'mx-2 overflow-hidden rounded-b-none border-b border-b-transparent pt-0.5',
+              'transition-opacity duration-200 ease-out',
+              scrolledUp ? 'opacity-30 group-hover/composer:opacity-100' : 'opacity-100'
+            )}
+          >
+            {sections.map(section => (
+              <div key={section.key}>{section.node}</div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
   )
 }

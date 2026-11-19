@@ -321,6 +321,11 @@ interface BootstrapNeededBackendSpec extends BackendSpecBase {
   installStamp: InstallStamp | null
   isPackaged: boolean
   platform: NodeJS.Platform
+  /**
+   * v0.0.9 r2 (m-r2-2): set when the app installed its runtime here and that install's environment is broken. Then this
+   * is a boot failure (`runtime-env-broken`, repaired by the kit), never the first-run choice.
+   */
+  brokenInstall?: string
 }
 
 /** How to launch the Hermes backend, or (kind 'bootstrap-needed') the marker that the runtime must be installed first. */

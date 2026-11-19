@@ -20,7 +20,8 @@ import { $privySession, openPrivyLogin, rescan as rescanHome } from '@/app/home/
 import { IcSearchInput, IcSegmented } from '@/components/ic/controls'
 import { IcNote, IcSkeleton } from '@/components/ic/feedback'
 import { IcSelect } from '@/components/ic/field'
-import { IcConfirmDialog, IcPage, IcPageButton, IcPageState } from '@/components/ic/ic-page'
+import { IcAlert, IcConfirmDialog, IcPage, IcPageButton, IcPageState } from '@/components/ic/ic-page'
+import { IcErrorGlyph } from '@/components/ic/ic-system'
 import { useI18n } from '@/i18n'
 import { slugForInft } from '@/iclone-shared/inft-slug'
 
@@ -136,7 +137,8 @@ export function InftBookView(): JSX.Element {
   ]
 
   return (
-    <IcPage actions={rescan} frame="bare" subtitle={copy.rule} title={copy.navLabel}>
+    // r5 (design R5-4): while the partial state shows, its alert owns the one Rescan; the header's steps aside.
+    <IcPage actions={scan.status === 'partial' ? undefined : rescan} frame="bare" subtitle={copy.rule} title={copy.navLabel}>
       {!address ? (
         <IcPageState
           action={
@@ -158,11 +160,14 @@ export function InftBookView(): JSX.Element {
               {copy.retry}
             </IcPageButton>
           }
+          // v0.0.9 r4 (design r3 N5): the error names what failed and who, under the house error glyph.
+          description={copy.scanFailedCause}
+          icon={<IcErrorGlyph size="1.25rem" />}
           kind="error"
           title={copy.scanFailed}
         />
       ) : items.size === 0 ? (
-        <IcPageState kind="empty" title={copy.none} />
+        <IcPageState description={copy.noneHint} kind="empty" title={copy.none} />
       ) : (
         <div className="inft-book" data-inft-book="">
           <div className="inft-book__bar">
@@ -210,7 +215,8 @@ export function InftBookView(): JSX.Element {
               value={filter.state}
             />
           </div>
-          {selection?.kept !== null && selection?.kept !== undefined ? (
+          {/* v0.0.9 r4 (design r3 N5): "We kept 0 on Home" is no news; the note shows only for a real count. */}
+          {selection?.kept ? (
             <div className="inft-book__status">
               <IcNote>{copy.kept(selection.kept)}</IcNote>
               <IcPageButton onClick={() => dismissKept(address)} tone="quiet">
@@ -228,10 +234,12 @@ export function InftBookView(): JSX.Element {
             </div>
           ) : scan.status === 'partial' ? (
             <div className="inft-book__status">
-              <IcNote tone="danger">{copy.partial(items.size)}</IcNote>
-              <IcPageButton onClick={() => void retryBookScan()} tone="accent">
-                {copy.retry}
-              </IcPageButton>
+              {/* v0.0.9 r4b: the count follows the filtered list; with a filter on it says what is shown of what loaded. */}
+              {/* r4d (eng r4 F5): ONE Retry, inside the alert it answers; a partial read is a warning (the cards that loaded
+                  stay), as on the Home Collection. */}
+              <IcAlert action={{ label: copy.retry, onClick: () => void retryBookScan() }} tone="warning">
+                {shown.length === items.size ? copy.partial(items.size) : copy.partialFiltered(shown.length, items.size)}
+              </IcAlert>
             </div>
           ) : null}
           {shown.length === 0 ? (

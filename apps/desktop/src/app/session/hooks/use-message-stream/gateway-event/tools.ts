@@ -1,16 +1,21 @@
 import { invalidateSlashCompletions } from '@/lib/slash-completion-cache'
+import { parseTodos } from '@/lib/todos'
 import { refreshBackgroundProcesses } from '@/store/composer-status'
 import { flashPetActivity, setPetActivity } from '@/store/pet'
 import { pruneDelegateFallbackSubagents, upsertSubagent } from '@/store/subagents'
 import { reportMcpToolResult } from '@/store/suggestion-providers/repair'
 import { invalidateSkillSuggestionIndex } from '@/store/suggestion-providers/skill'
+import { applySessionTodoSnapshot } from '@/store/todos'
 import { recordToolDiff } from '@/store/tool-diffs'
 import { setSessionDraftingTool } from '@/store/tool-drafting'
 import { notifyWorkspaceChanged, toolChangedPath, toolMayMutateFiles } from '@/store/workspace-events'
 
-import { SUBAGENT_EVENT_TYPES, toTodoPayload } from '../utils'
+import { SUBAGENT_EVENT_TYPES, todoRevision, toTodoPayload } from '../utils'
 
 import type { GatewayEventContext } from './types'
+
+/** The tools that spawn or reap background processes: terminal, process_manage and its legacy alias process. */
+const PROCESS_TOOL_NAMES = new Set(['process', 'process_manage', 'terminal'])
 
 /** tool.generating / tool.start / tool.complete / subagent.*. */
 export function handleToolEvent(ctx: GatewayEventContext): boolean {
@@ -35,6 +40,18 @@ export function handleToolEvent(ctx: GatewayEventContext): boolean {
 
     if (isActiveEvent) {
       setPetActivity({ reasoning: false, toolRunning: true })
+    }
+
+    return true
+  }
+
+  // The runtime's full todo snapshot (tui_gateway/tool_progress.py:367): the same state as the Todo tool's events,
+  // applied idempotently and never older than what is shown (store/todos.ts applySessionTodoSnapshot).
+  if (event.type === 'todo.updated') {
+    const todos = sessionId ? parseTodos(payload?.todos) : null
+
+    if (sessionId && todos) {
+      applySessionTodoSnapshot(sessionId, todos, todoRevision(payload))
     }
 
     return true
@@ -89,8 +106,9 @@ export function handleToolEvent(ctx: GatewayEventContext): boolean {
       }
 
       // terminal/process tool calls are the only things that spawn or reap
-      // background processes — sync the composer status stack right after.
-      if (!sessionInterrupted(sessionId) && (payload?.name === 'terminal' || payload?.name === 'process')) {
+      // background processes — sync the composer status stack right after. The process tool is process_manage in
+      // this runtime ('process' is its legacy alias, model_tools.py _LEGACY_TOOL_ALIASES).
+      if (!sessionInterrupted(sessionId) && typeof payload?.name === 'string' && PROCESS_TOOL_NAMES.has(payload.name)) {
         void refreshBackgroundProcesses(sessionId)
       }
     }

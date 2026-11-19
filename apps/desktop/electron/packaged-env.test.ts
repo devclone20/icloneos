@@ -46,11 +46,13 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-test('the list is exactly the contract 17 code-path variables', () => {
+// v0.0.9 r3: + HERMES_DESKTOP_FIXTURE_WALLET (the offline fixture wallet for captures, fixture-wallet.ts).
+test('the list is exactly the contract code-path variables', () => {
   assert.deepEqual([...CODE_PATH_ENV].sort(), [
     'HERMES_DESKTOP_BOOT_FAKE',
     'HERMES_DESKTOP_BOOT_FAKE_ERROR',
     'HERMES_DESKTOP_DEV_SERVER',
+    'HERMES_DESKTOP_FIXTURE_WALLET',
     'HERMES_DESKTOP_HERMES',
     'HERMES_DESKTOP_HERMES_ROOT',
     'HERMES_DESKTOP_IGNORE_EXISTING',

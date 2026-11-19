@@ -56,7 +56,15 @@ describe('parsePin — the committed pin', () => {
     const pin = parsePin(PKG, LOCK)
 
     expect(pin.cliVersion).toBe('1.0.38')
-    expect(pin.rows.size).toBeGreaterThan(400)
+    expect(pin.rows.size).toBeGreaterThan(350)
+  })
+
+  it('carries no tsup subtree (v0.0.9, scripts/acp-lock-prune.mjs): no tsup, sucrase, tinyglobby, fdir or picomatch row', () => {
+    const names = new Set([...parsePin(PKG, LOCK).rows.values()].map(r => r.name))
+
+    for (const name of ['tsup', 'sucrase', 'tinyglobby', 'fdir', 'picomatch', 'rollup', 'esbuild', 'chokidar']) {
+      expect(names.has(name), name).toBe(false)
+    }
   })
 
   it('on darwin-arm64 the closure is exactly the 343 package dirs staged with npm ci + prune', () => {

@@ -14,6 +14,7 @@ test.afterAll(async () => {
 })
 
 test('persistent terminal overlay follows the pane after split dragging', async () => {
+    test.skip(true, 'N/A in v0.0.9: upstream persistent terminal overlay docked in a workbench split; icloneOS has no data-terminal-slot / data-persistent-terminal element and Ctrl+` toggles the separate iT surface (src/app/hooks/use-keybinds.ts:100)')
   const page = fixture!.page
 
   await page.keyboard.press('Control+`')

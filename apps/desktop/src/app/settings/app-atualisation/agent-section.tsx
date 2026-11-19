@@ -7,6 +7,7 @@
 import { useStore } from '@nanostores/react'
 import { type KeyboardEvent, type ReactNode, useEffect, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { useI18n } from '@/i18n'
 import type { AgentUpdateCopy } from '@/i18n/en'
@@ -207,9 +208,7 @@ function LatestRow({
   return (
     <Row label={copy.latest}>
       {problem ? (
-        <span className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-secondary)" role="alert">
-          {problem}
-        </span>
+        <IcAlert tone="warning">{problem}</IcAlert>
       ) : !latest ? (
         <span className={CAPTION} data-agent-not-checked>
           {copy.notChecked}
@@ -447,12 +446,9 @@ export function AgentUpdateSection() {
       <p className={cn(CAPTION, 'mt-1 max-w-prose')}>{copy.intro}</p>
 
       {compatFlag?.red && verdict !== 'unknown' && (
-        <p
-          className="mt-4 rounded-lg border border-red-400/30 px-3 py-2 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-secondary)"
-          role="alert"
-        >
+        <IcAlert className="mt-4" tone="error">
           {verdict === 'verified-but-flagged' ? copy.compatFlagged : copy.compatRed}
-        </p>
+        </IcAlert>
       )}
 
       <dl className="mt-4 divide-y divide-(--ui-stroke-tertiary) border-y border-(--ui-stroke-tertiary)">

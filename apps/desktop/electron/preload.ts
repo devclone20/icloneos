@@ -13,8 +13,10 @@ import type {
   HermesTitleBarTheme
 } from '../src/iclone-shared/bridge-contract'
 
-import { createConfirmTracker, isPermModeShortcutTarget } from './agent-update-confirm'
+import { isPermModeShortcutTarget } from './agent-update-confirm'
 import { installExternalLinkRouter } from './external-link-router'
+import { type ConfirmTracker, type ConfirmTrackerOptions, createGestureLocks } from './gesture-locks'
+import { type AcpOwnerLock, ownerLockOf } from './iclone-acp-argv'
 import { createPaymentsBridge } from './iclone-x402/preload-api'
 
 type IpcEvent = Electron.IpcRendererEvent
@@ -30,48 +32,124 @@ const translucencySupport = ipcRenderer.sendSync('hermes:translucency:support')
 const hudWindowing = ipcRenderer.sendSync('hermes:hud:windowing')
 const hudNativeDrag = hudWindowing?.nativeDrag === true
 
+// F1-S: every owner-click lock is created by the ONE registry below (`createGestureLocks`), and creating it is what
+// registers it with the capture-phase listener (`gestureLocks.observe`): a lock that is never observed — REL-6's
+// `acpToolsConfirm`, which left the ACP tools' Install refusing every real click — cannot exist by construction. The
+// specs below are plain options; never call createConfirmTracker here directly (gesture-locks.test.ts fails on it).
+// Each lock counts only a trusted click/Enter on its own marked control (agent-update-confirm.ts); main also checks
+// activation and real input to this window (V3-F gesture.ts).
+
 // U1 second lock: capture-phase listeners in this isolated world see `isTrusted` before any page handler runs.
-const agentUpdateConfirm = createConfirmTracker({
+const agentUpdateLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-agent-update-confirm]') !== null
-})
+} satisfies ConfirmTrackerOptions
 
 // V3-F: the same lock for the permission mode controls and the consent door's answer buttons.
-const permModeConfirm = createConfirmTracker({
+const permModeLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-perm-mode-confirm]') !== null,
   isShortcutTarget: target => isPermModeShortcutTarget(target, document.hasFocus())
-})
+} satisfies ConfirmTrackerOptions
 
-const doorAnswerConfirm = createConfirmTracker({
+const doorAnswerLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-consent-door-answer]') !== null
-})
+} satisfies ConfirmTrackerOptions
 
 // V3-I: the same lock for the WORK tab's owner decisions (level, go online, approve, decline).
-const acpWorkConfirm = createConfirmTracker({
+const acpWorkLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-acp-work-confirm]') !== null
-})
+} satisfies ConfirmTrackerOptions
 
-// REL-6: the same lock for installing the ACP tools (an `I` action under V3-F: the owner's own click only).
-const acpToolsConfirm = createConfirmTracker({
+// REL-6: the same lock for installing / repairing the ACP tools (an `I` action under V3-F: the owner's own click).
+const acpToolsLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-acp-tools-confirm]') !== null
-})
+} satisfies ConfirmTrackerOptions
 
 // V3-G: the same lock for acknowledging a hard link in the Containers pane.
-const confinementConfirm = createConfirmTracker({
+const confinementLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-confinement-confirm]') !== null
-})
+} satisfies ConfirmTrackerOptions
 
 // fx17 (lens4-pass H2): a folder the user opened (picker, sidebar, resumed session) is listed for the confinement
 // launcher only on the user's own click or key, anywhere in the window: the folder is on screen, the gesture is real.
-const folderConfirm = createConfirmTracker({
+const folderLock = {
   isConfirmTarget: target => target instanceof Element
-})
+} satisfies ConfirmTrackerOptions
 
 // V3-J: the same lock for Settings › Economy › Payments (a settings change, a revoke, clearing the stop).
-const paymentsConfirm = createConfirmTracker({
+const paymentsLock = {
   isConfirmTarget: target => target instanceof Element && target.closest('[data-payments-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+// F1-S: the ERC-8004 registration (EconomyOS step 5: signs an on-chain transaction).
+const acpRegisterLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-acp-register-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+// F1-S: the ACP Market catalogue writes (offering create / save / delete, resource publish).
+const acpMarketLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-acp-market-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+// F1-S: Settings › Billing › Buy credits (and its Retry): a charge on the owner's card.
+const billingChargeLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-billing-charge-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+// v0.0.9 F3: the same lock for the repair kit (a repair or an undo moves the app's and the agent's folders).
+const repairKitLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-repair-kit-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+// v0.0.9 W1b: the same lock for installing the voice extra (local speech recognition): the app downloads and installs
+// packages into its private dependency home, so only the owner's own click on that control may start it.
+const voiceExtraLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-voice-extra-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+// end v0.0.9 W1b
+
+// v0.0.9 Q (lead decision 2): main's renderer-routed decisions ("Quit Anyway", "Restart now"): only a trusted click (or
+// Enter/Space) on that dialog's own non-cancel button counts; activation alone answers nothing.
+const nativeDecisionLock = {
+  isConfirmTarget: target => target instanceof Element && target.closest('[data-native-decision-confirm]') !== null
+} satisfies ConfirmTrackerOptions
+
+const gestureLocks = createGestureLocks({
+  agentUpdate: agentUpdateLock,
+  permMode: permModeLock,
+  doorAnswer: doorAnswerLock,
+  acpWork: acpWorkLock,
+  acpTools: acpToolsLock,
+  confinement: confinementLock,
+  folder: folderLock,
+  payments: paymentsLock,
+  acpRegister: acpRegisterLock,
+  acpMarket: acpMarketLock,
+  billingCharge: billingChargeLock,
+  repairKit: repairKitLock,
+  voiceExtra: voiceExtraLock, // v0.0.9 W1b
+  nativeDecision: nativeDecisionLock
 })
 
-const userGesture = (tracker: ReturnType<typeof createConfirmTracker>) => ({
+const agentUpdateConfirm = gestureLocks.locks.agentUpdate
+const permModeConfirm = gestureLocks.locks.permMode
+const doorAnswerConfirm = gestureLocks.locks.doorAnswer
+const acpWorkConfirm = gestureLocks.locks.acpWork
+const acpToolsConfirm = gestureLocks.locks.acpTools
+const confinementConfirm = gestureLocks.locks.confinement
+const folderConfirm = gestureLocks.locks.folder
+const paymentsConfirm = gestureLocks.locks.payments
+const billingChargeConfirm = gestureLocks.locks.billingCharge
+const repairKitConfirm = gestureLocks.locks.repairKit
+const voiceExtraConfirm = gestureLocks.locks.voiceExtra // v0.0.9 W1b
+const nativeDecisionConfirm = gestureLocks.locks.nativeDecision
+
+// F1-S: the lock an owner-locked ACP argv takes its confirm from (the same answer main checks, ownerLockOf).
+const acpOwnerLocks: Record<AcpOwnerLock, ConfirmTracker> = {
+  'acp-market': gestureLocks.locks.acpMarket,
+  'acp-register': gestureLocks.locks.acpRegister
+}
+
+const userGesture = (tracker: ConfirmTracker) => ({
   activation: navigator.userActivation?.isActive === true,
   confirm: tracker.take()
 })
@@ -93,13 +171,8 @@ for (const type of ['click', 'keydown']) {
         type: event.type
       }
 
-      agentUpdateConfirm.observe(observed)
-      permModeConfirm.observe(observed)
-      doorAnswerConfirm.observe(observed)
-      acpWorkConfirm.observe(observed)
-      confinementConfirm.observe(observed)
-      folderConfirm.observe(observed)
-      paymentsConfirm.observe(observed)
+      // Every registered lock, by construction (F1-S): there is no per-lock list here to forget one in.
+      gestureLocks.observe(observed)
     },
     { capture: true }
   )
@@ -170,6 +243,18 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     ipcRenderer.on('hermes:browser-popout:closed', listener)
 
     return () => ipcRenderer.removeListener('hermes:browser-popout:closed', listener)
+  },
+  // v0.0.9 F6 — the 3D iNFT in its own window (electron/main/windows.ts createStage3dWindow). No argument: the window
+  // reads which iNFT from the app's own storage (src/app/home/stage3d-window/handoff.ts).
+  stage3dWindow: {
+    open: () => ipcRenderer.invoke('hermes:stage3d-window:open'),
+    close: () => ipcRenderer.invoke('hermes:stage3d-window:close'),
+    onClosed: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('hermes:stage3d-window:closed', listener)
+
+      return () => ipcRenderer.removeListener('hermes:stage3d-window:closed', listener)
+    }
   },
   claimAmbientCue: (key: string) => ipcRenderer.invoke('hermes:ambient:claim', key),
   wakeIndicator: {
@@ -328,6 +413,27 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('iclone:doctor:progress', listener)
     }
   },
+  // v0.0.9 F3 — the repair kit (electron/repair-kit/ipc.ts; shape = RepairKitBridge in electron/repair-kit/types.ts).
+  // A real repair and an undo move files: each carries the owner's own click on its `data-repair-kit-confirm` control.
+  icloneRepairKit: {
+    scan: () => ipcRenderer.invoke('iclone:repair-kit:scan'),
+    history: () => ipcRenderer.invoke('iclone:repair-kit:history'),
+    apply: (input: { classId: string; dryRun?: boolean }) =>
+      ipcRenderer.invoke('iclone:repair-kit:apply', {
+        classId: input?.classId,
+        dryRun: input?.dryRun !== false,
+        ...(input?.dryRun === false ? { gesture: userGesture(repairKitConfirm) } : {})
+      }),
+    undo: (manifestId: string) =>
+      ipcRenderer.invoke('iclone:repair-kit:undo', { manifestId, gesture: userGesture(repairKitConfirm) })
+  },
+  // v0.0.9 W1b — the voice extra (electron/voice-extra.ts; shape = VoiceExtraBridge in electron/voice-extra-types.ts).
+  // The install downloads and installs packages: it carries the owner’s own click on its data-voice-extra-confirm.
+  icloneVoiceExtra: {
+    status: () => ipcRenderer.invoke('iclone:voice-extra:status'),
+    install: () => ipcRenderer.invoke('iclone:voice-extra:install', { gesture: userGesture(voiceExtraConfirm) })
+  },
+  // end v0.0.9 W1b
   // iCLONE OS — App Atualisation: Track B (fork vs upstream) and Track A
   // (the Hermes runtime beneath the app). See electron/iclone-updates.ts.
   icloneUpdates: {
@@ -403,6 +509,22 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     agentcardStatus: () => ipcRenderer.invoke('iclone:agentcard-status'),
     run: (inftId: string, argv: string[], timeoutMs?: number) =>
       ipcRenderer.invoke('iclone:acp-run', inftId, argv, timeoutMs),
+    // F1-S: an owner-locked write (register-erc8004; offering create/update/delete, resource create) runs only after
+    // this, called synchronously inside the click handler of its control (data-acp-register-confirm /
+    // data-acp-market-confirm), for that exact argv; `run` with the same argv then consumes the one admission main
+    // keeps. Any other argv is answered without a confirm being taken.
+    ownerConfirm: (inftId: string, argv: string[]) => {
+      const lock = ownerLockOf(argv)
+
+      return lock
+        ? ipcRenderer.invoke('iclone:acp-owner-confirm', {
+            inftId,
+            argv,
+            lock,
+            gesture: userGesture(acpOwnerLocks[lock])
+          })
+        : Promise.resolve({ ok: false, error: '[acp-write:invalid] not a write that takes an owner confirm' })
+    },
     status: (inftId: string, opts?: unknown) => ipcRenderer.invoke('iclone:acp-status', inftId, opts),
     // Per-iNFT notes + card-signup state (main validates the key and redacts on write).
     kvGet: (inftId: string, key: unknown) => ipcRenderer.invoke('iclone:inft-kv-get', inftId, key),
@@ -432,6 +554,27 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
         ipcRenderer.removeListener('iclone:acp-event', listener)
       }
     }
+  },
+  // F1-S — Settings › Billing › Buy credits (electron/gesture-locks-billing.ts). `authorize` counts only when called
+  // synchronously inside the handler of a control carrying data-billing-charge-confirm; main answers a single-use
+  // owner confirm bound to this amount and idempotency key, which the charge request then carries.
+  // Web decision: ABSENT in the web shim (no main process to authorize a charge, so the web app charges nothing).
+  billingCharge: {
+    authorize: (amountUsd: string, idempotencyKey: string) =>
+      ipcRenderer.invoke('iclone:billing:authorize-charge', {
+        amountUsd,
+        idempotencyKey,
+        gesture: userGesture(billingChargeConfirm)
+      }),
+    // v0.0.9 Q: Upgrade / Change plan / Resume / Turn on auto-reload — the same lock and marker, bound to the action
+    // and its subject (gesture-locks-billing.ts BILLING_ACTIONS). Call synchronously inside that control's click.
+    authorizeAction: (action: string, subject: string, idempotencyKey: string) =>
+      ipcRenderer.invoke('iclone:billing:authorize-action', {
+        action,
+        subject,
+        idempotencyKey,
+        gesture: userGesture(billingChargeConfirm)
+      })
   },
   // REL-6 — the ACP tools installer (electron/iclone-acp-tools/). `install` counts only when called synchronously inside
   // the handler of a control carrying data-acp-tools-confirm; cancel and the reads never need a gesture.
@@ -1002,16 +1145,21 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   // current snapshot via getBootstrapState() to recover after a devtools
   // reload mid-bootstrap.
   getBootstrapState: () => ipcRenderer.invoke('hermes:bootstrap:get'),
-  continueBootstrapLocal: () => ipcRenderer.invoke('hermes:bootstrap:continue-local'),
+  // v0.0.9 critic m6: starts the network install — the owner's own click on its data-repair-kit-confirm control.
+  continueBootstrapLocal: () =>
+    ipcRenderer.invoke('hermes:bootstrap:continue-local', { gesture: userGesture(repairKitConfirm) }),
   resetBootstrap: () => ipcRenderer.invoke('hermes:bootstrap:reset'),
-  repairBootstrap: () => ipcRenderer.invoke('hermes:bootstrap:repair'),
+  // v0.0.9 F3: main routes Repair install by the boot cause and only MOVES files on the owner's own click.
+  repairBootstrap: () => ipcRenderer.invoke('hermes:bootstrap:repair', { gesture: userGesture(repairKitConfirm) }),
   cancelBootstrap: () => ipcRenderer.invoke('hermes:bootstrap:cancel'),
   // RTB-6/7 + V3-ON: the agent runtime's install status (per-package lines, diagnosis), "Skip for now",
   // "Install again", and the fixes that open a macOS Settings pane or the app's folder.
   agentRuntime: {
     status: () => ipcRenderer.invoke('hermes:agent-runtime:get'),
     skip: () => ipcRenderer.invoke('hermes:agent-runtime:skip'),
-    installAgain: () => ipcRenderer.invoke('hermes:agent-runtime:install-again'),
+    // v0.0.9 Q: reinstalls the runtime — the owner's own click on a control marked data-repair-kit-confirm.
+    installAgain: () =>
+      ipcRenderer.invoke('hermes:agent-runtime:install-again', { gesture: userGesture(repairKitConfirm) }),
     openFix: (fix: 'open-network-settings' | 'open-storage-settings' | 'reveal-folder') =>
       ipcRenderer.invoke('hermes:agent-runtime:open-fix', fix),
     onChange: (callback: (status: unknown) => void) => {
@@ -1096,6 +1244,35 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
       return () => ipcRenderer.removeListener('iclone:app-update:notice', listener)
     }
   },
+  // ── v0.0.9 F4b — native dialogs to renderer (electron/main/renderer-dialogs.ts) ─────────────────────────────────
+  // Main asks a decision it used to ask with a native box; the page shows it only after `shown` returns true, and
+  // `answer` carries the click's user activation (read here, where the page cannot fake it). Notices main could not
+  // show itself (a failed detached update) are drained into the notification centre.
+  nativeDecisions: {
+    onAsk: (callback: (ask: unknown) => void) => {
+      const listener = (_event: IpcEvent, ask: unknown) => callback(ask)
+      ipcRenderer.on('iclone:native-decision:ask', listener)
+
+      return () => ipcRenderer.removeListener('iclone:native-decision:ask', listener)
+    },
+    shown: (id: string) => ipcRenderer.invoke('iclone:native-decision:shown', id),
+    // Call synchronously inside the button's click. A non-cancel answer counts only with the confirm of a trusted click
+    // on a control marked data-native-decision-confirm (main checks it with the gesture rule; renderer-dialogs.ts).
+    answer: (id: string, response: number) =>
+      ipcRenderer.invoke('iclone:native-decision:answer', {
+        gesture: userGesture(nativeDecisionConfirm),
+        id,
+        response
+      }),
+    onNoticesReady: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('iclone:native-notice:ready', listener)
+
+      return () => ipcRenderer.removeListener('iclone:native-notice:ready', listener)
+    },
+    drainNotices: () => ipcRenderer.invoke('iclone:native-notice:drain')
+  },
+  // ── end v0.0.9 F4b ──────────────────────────────────────────────────────────────────────────────────────────────
   themes: {
     fetchMarketplace: (id: string) => ipcRenderer.invoke('hermes:vscode-theme:fetch', id),
     searchMarketplace: (query: string) => ipcRenderer.invoke('hermes:vscode-theme:search', query)

@@ -22,12 +22,89 @@ def install_key(project_root: Path) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
 
 
-def dependency_home_root() -> Path:
-    """Scope dependency state like a process launched in the active home."""
+def data_home_root() -> Path:
+    """The active home's data root: configs, profiles and installed plugins. Never pinned.
+
+    Plugin discovery, plugin publication and the config journal read and write here.
+    """
     from hermes_constants import get_default_hermes_root, get_hermes_home_override
 
     override = get_hermes_home_override()
     return get_default_hermes_root(home=override) if override else get_default_hermes_root()
+
+
+def dependency_home_root() -> Path:
+    """Scope dependency state like a process launched in the active home.
+
+    ``HERMES_DEPENDENCY_HOME`` (an absolute path) pins it: an app that ships this runtime with
+    its dependencies installed privately names that root, so a process run with the user's
+    HERMES_HOME never reads or writes ``<HERMES_HOME>/installs/<install_key>``. Every dependency
+    generation, extra included (an extra installed by the app into the pinned root is what this
+    process selects), resolves from there. The home's own data (``data_home_root``) is unaffected.
+    """
+    pinned = dependency_home_pin()
+    return pinned if pinned is not None else data_home_root()
+
+
+_PIN_UNREAD = object()
+_pin_snapshot: object = _PIN_UNREAD
+
+
+def _parse_dependency_home_pin(value: str | None) -> Path | None:
+    pinned = (value or "").strip()
+    if not pinned or not os.path.isabs(pinned):
+        return None
+    path = Path(pinned)
+    return path if _pin_owned_safely(path) else None
+
+
+def _pin_owned_safely(path: Path) -> bool:
+    """v0.0.9 Q (security m4) — a pin that already exists must be a real folder of this user that nobody else can
+    write: anything else (another user's folder, a group/world-writable one, a link) could hand this process foreign
+    site-packages, so it is refused and the dependency root falls back to the home's own. A pin not created yet is
+    accepted (the app creates its private root before it installs into it)."""
+    try:
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+    import stat as _stat
+
+    if _stat.S_ISLNK(st.st_mode) or not _stat.S_ISDIR(st.st_mode):
+        return False
+    if st.st_mode & 0o022:
+        return False
+    geteuid = getattr(os, "geteuid", None)
+    return geteuid is None or st.st_uid == geteuid()
+
+
+def snapshot_dependency_home_pin() -> Path | None:
+    """Freeze ``HERMES_DEPENDENCY_HOME`` as this process received it, once.
+
+    ``activate_dependencies`` calls it first thing, at process boot -- before any ``.env`` loader,
+    ``config.yaml`` bridge or plugin can write ``os.environ`` -- so the pin is the launcher's (the
+    app's spawn env), never a value a hand-edited ``.env`` sets later in the same process. A process
+    that never activates freezes it on its first read instead.
+    """
+    global _pin_snapshot
+    if _pin_snapshot is _PIN_UNREAD:
+        _pin_snapshot = _parse_dependency_home_pin(os.environ.get("HERMES_DEPENDENCY_HOME"))
+    return _pin_snapshot  # type: ignore[return-value]
+
+
+def dependency_home_pin() -> Path | None:
+    """The absolute ``HERMES_DEPENDENCY_HOME`` frozen at activation, or ``None`` (unset, blank or relative = no pin).
+
+    Never the live ``os.environ``: see ``snapshot_dependency_home_pin``.
+    """
+    return snapshot_dependency_home_pin()
+
+
+def _reset_dependency_home_pin_snapshot() -> None:
+    """Tests only: forget the frozen pin so the next read takes it again."""
+    global _pin_snapshot
+    _pin_snapshot = _PIN_UNREAD
 
 
 def installs_root() -> Path:
@@ -56,6 +133,9 @@ def owning_home_root(project_root: Path) -> Path | None:
     sits in outranks the platform default.
     """
     from hermes_constants import _get_platform_default_hermes_home
+
+    if dependency_home_pin() is not None:
+        return None  # A pinned dependency root is its own owner: never borrow another root's state.
 
     root = Path(project_root).resolve()
     key = install_key(root)
@@ -423,6 +503,7 @@ def activate_dependencies(project_root: Path) -> None:
     """
     import sys
 
+    snapshot_dependency_home_pin()  # before any .env can touch os.environ (v0.0.9 point A)
     state = install_state_dir(project_root)
     if state.is_dir():
         from hermes_cli.runtime_state import runtime_lock, recover_publication, lease_generation

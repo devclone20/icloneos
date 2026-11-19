@@ -1,19 +1,37 @@
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, lazy, type ReactNode, Suspense, useEffect, useState } from 'react'
+import { type ComponentProps, lazy, type ReactNode, Suspense, useEffect, useId, useState } from 'react'
 
 import { IcButton, IcErrorGlyph, IcLog, IcSpinner } from '@/components/onboarding/ic-system'
 import type { DesktopConnectionConfig } from '@/global'
 import { useI18n } from '@/i18n'
-import { isIcloneGateFailure, isIcloneGateUnmanaged } from '@/iclone-shared/iclone-gate'
+import { f3BannerCause, f3Card, f3CauseCopy } from '@/i18n/en/v009-f3'
+import { isIcloneGateUnmanaged } from '@/iclone-shared/iclone-gate'
 import { diagnoseInstallFailure } from '@/iclone-shared/install-diagnosis'
+import { ESCAPE_PRIORITY, isTopEscapeLayer, pushEscapeLayer } from '@/lib/escape-layers'
 import { openExternalLink } from '@/lib/external-link'
-import { ChevronLeft, ExternalLink, FileText, Loader2, LogIn, RefreshCw, SlidersHorizontal, Wrench } from '@/lib/icons'
+import {
+  ChevronDown,
+  ChevronLeft,
+  ExternalLink,
+  FileText,
+  Loader2,
+  LogIn,
+  RefreshCw,
+  SlidersHorizontal,
+  Wrench,
+  X
+} from '@/lib/icons'
 import { $installOverlayOwnsFailure } from '@/store/agent-runtime'
+import { $agentStopped, reopenAgentFailure, stopAgentForNow } from '@/store/agent-stopped'
+import { $backendRestart, backendRestartLabel, honestRestartText } from '@/store/backend-restart'
 import { $desktopBoot } from '@/store/boot'
 import { activeGatewayProfileKey } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding } from '@/store/onboarding'
 
+import { causeOf } from '../../electron/repair-kit/classify'
+
+import { AgentStoppedBanner, stoppedBannerOffersRepair } from './agent-stopped-banner'
 import type { RemoteReauth } from './boot-failure-reauth'
 import {
   deriveProviderShape,
@@ -51,7 +69,9 @@ export function BootFailureOverlay() {
   const { t } = useI18n()
   const [busy, setBusy] = useState<BusyAction>(null)
   const [logs, setLogs] = useState<string[]>([])
-  const [showLogs, setShowLogs] = useState(false)
+  // v0.0.9 r3 (design N6): the raw engine text, the recent log and the log folder live behind ONE "Details" disclosure.
+  const [detailsOpen, setDetailsOpen] = useState<boolean | null>(null)
+  const detailsId = useId()
   const [remoteReauth, setRemoteReauth] = useState<RemoteReauth | null>(null)
   const [connectionConfig, setConnectionConfig] = useState<DesktopConnectionConfig | null>(null)
   // A remote/cloud backend that failed to boot is fixable from gateway settings,
@@ -63,11 +83,18 @@ export function BootFailureOverlay() {
   const [view, setView] = useState<RecoveryView>('recovery')
 
   const installOwnsFailure = useStore($installOverlayOwnsFailure)
+  // v0.0.9 Q (correctness 2/3, renderer side): main's automatic restart, said in its own words on the card — "restarting
+  // (attempt n of 5)" only while an attempt is pending or running, "did not come back after several tries" once the
+  // breaker tripped — and the error text never promises a restart main is not making.
+  const restart = useStore($backendRestart)
+  const restartLine = backendRestartLabel(restart)
   // From the error alone: the recent desktop log carries unrelated lines that would misclassify it.
   const diagnosis = diagnoseInstallFailure({ error: boot.error })
   // RTB-6: a failed INSTALL is shown by the install overlay with its diagnosis, one fix and "Skip for now"; this card
   // is for a backend that really died after the install.
   const visible = Boolean(boot.error) && !boot.running && !installOwnsFailure
+  // v0.0.9 F3 (point B): the owner closed the card — the app runs in "agent stopped" mode under a banner.
+  const stopped = useStore($agentStopped)
   // While first-run onboarding owns the picker/flow we let it surface its own
   // progress; the recovery overlay is for hard failures, which it covers via a
   // higher z-index regardless of onboarding state.
@@ -151,16 +178,101 @@ export function BootFailureOverlay() {
     }
   }, [boot.error, visible])
 
-  // Main answers in a moment; until then no card, or Repair would flash on a failure it cannot fix.
-  if (!visible || suppressed || homeSettings === undefined) {
-    return null
-  }
+  // The failure is gone (a later start came up, e.g. after Isolation was switched off in Settings): so is the banner.
+  useEffect(() => {
+    if (stopped && !boot.error) {
+      reopenAgentFailure()
+    }
+  }, [boot.error, stopped])
+
+  const cardOpen = visible && !stopped && !suppressed && homeSettings !== undefined
+
+  // Point B: Esc closes the card (the connect view's Esc goes back to the card first). One cancel gesture, one effect.
+  useEffect(() => {
+    if (!cardOpen) {
+      return
+    }
+
+    // m-r2-5: an escape-layer citizen. The home stage's router listens on the window too and used to take this Esc
+    // (preventDefault) first; with the card's rung above it, the stage yields and the card closes.
+    const releaseLayer = pushEscapeLayer(ESCAPE_PRIORITY.bootFailure)
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key !== 'Escape' ||
+        event.defaultPrevented ||
+        event.isComposing ||
+        !isTopEscapeLayer(ESCAPE_PRIORITY.bootFailure)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+
+      if (view === 'connect') {
+        setView('recovery')
+      } else {
+        stopAgentForNow(boot.error ?? '')
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      releaseLayer()
+    }
+  }, [boot.error, cardOpen, view])
 
   const retry = async () => {
     setBusy('retry')
     await window.hermesDesktop?.resetBootstrap().catch(() => undefined)
     window.location.reload()
   }
+
+  // The cause the card names: main's structured `bootCause` when the failure carries one, else the error's own text —
+  // never the app log appended to it (v0.0.9 F3, the 14 Nov "gate not in place" misreading).
+  const cause = causeOf(boot)
+
+  if (!visible) {
+    return null
+  }
+
+  // Closed by the owner: nothing was started; the banner offers the way back. Retry goes through the gate like any start.
+  if (stopped) {
+    // G-1 (design G): a local failure whose fix is Repair install gets it on the banner too, as its primary — the same
+    // owner-click-locked call as the card's (main moves files only on that click). A remote or cloud agent, or a
+    // refusal of the owner's own settings file, keeps the restart alone: Repair is local and would not touch either.
+    const bannerRepairs =
+      !remoteReauth && !boot.isCloudBackendDown && !remoteFailure && !homeSettings && stoppedBannerOffersRepair(cause)
+
+    return (
+      <AgentStoppedBanner
+        cause={f3BannerCause(cause)}
+        onRepair={
+          bannerRepairs
+            ? async () => {
+                await window.hermesDesktop?.repairBootstrap().catch(() => undefined)
+                window.location.reload()
+              }
+            : undefined
+        }
+        onRetry={async () => {
+          await window.hermesDesktop?.resetBootstrap().catch(() => undefined)
+          window.location.reload()
+        }}
+        onShowDetails={reopenAgentFailure}
+        repairLabel={t.boot.failure.repairInstall}
+      />
+    )
+  }
+
+  // Main answers in a moment; until then no card, or Repair would flash on a failure it cannot fix.
+  if (suppressed || homeSettings === undefined) {
+    return null
+  }
+
+  const closeCard = () => stopAgentForNow(boot.error ?? '')
 
   const repair = async () => {
     setBusy('repair')
@@ -260,6 +372,8 @@ export function BootFailureOverlay() {
     icon?: ReactNode
     variant?: RecoveryVariant
     busy?: Exclude<BusyAction, null>
+    /** v0.0.9 F3: the control is an owner decision that may move files (preload lock `data-repair-kit-confirm`). */
+    ownerConfirm?: boolean
   }
 
   const settingsAction: RecoveryAction = {
@@ -294,7 +408,16 @@ export function BootFailureOverlay() {
   const cloudDown = Boolean(boot.isCloudBackendDown)
   // V3-S: main refused to spawn the local agent because its permission gate is not installed/loaded. Retry re-checks,
   // Repair reinstalls the runtime (the gate follows it); gateway settings cannot fix it, so they are not offered.
-  const gateMissing = !remoteReauth && !cloudDown && !remoteFailure && isIcloneGateFailure(boot.error)
+  // v0.0.9 F3: a gate refusal by its CAUSE, never by the gate mark somewhere in the appended app log.
+  const local = !remoteReauth && !cloudDown && !remoteFailure
+  const gateMissing = local && cause.code === 'gate-not-loaded'
+  // The concrete cause and remedy, for a local failure the app recognises (the gate keeps its own title and hints).
+  const causeCopy = local && !gateMissing ? f3CauseCopy(cause) : null
+
+  // A generic cause (it exited, it timed out) gives way to a more specific install diagnosis (network, disk…).
+  const causeLeads =
+    causeCopy !== null &&
+    !((cause.code === 'exit-nonzero' || cause.code === 'timeout') && diagnosis.class !== 'unknown')
 
   if (remoteReauth) {
     actions = [
@@ -346,7 +469,8 @@ export function BootFailureOverlay() {
         onClick: () => void repair(),
         icon: <Wrench />,
         variant: 'secondary',
-        busy: 'repair'
+        busy: 'repair',
+        ownerConfirm: true
       }
     ]
     // V3-S r4 (m-g): a runtime the app does not manage (a user's git checkout) gets its cause and its way out.
@@ -359,20 +483,46 @@ export function BootFailureOverlay() {
   } else {
     // Local failure: Use-local is redundant with Retry (both re-target local), so
     // it's dropped here; keep it for remote failures where it's the fall-back.
+    // v0.0.9 r3 (design N6): ONE primary — Repair, the step that fixes a local start; Retry stays beside it.
     actions = [
-      retryAction,
       {
         key: 'repair',
         label: copy.repairInstall,
         onClick: () => void repair(),
         icon: <Wrench />,
-        variant: 'secondary',
-        busy: 'repair'
+        busy: 'repair',
+        ownerConfirm: true
       },
-      { ...settingsAction, variant: 'ghost' }
+      { ...retryAction, variant: 'secondary' },
+      // v0.0.9 r4 (design r3 N3): on the local card it is the agent's settings, in the owner's words.
+      { ...settingsAction, label: f3Card.agentSettings, variant: 'ghost' }
     ]
-    hint = copy.repairHint
+    hint = causeCopy?.remedy ?? copy.repairHint
   }
+
+  // The local start the app can explain: its recognised cause, else the install diagnosis. Remote, cloud and gate cards
+  // keep their own descriptions, which are already the human sentence.
+  const localCard = local && !gateMissing
+  const diagnosisLine = diagnosis.class !== 'unknown' ? t.install.recovery.diagnosis[diagnosis.class] : null
+  const humanCause = localCard ? (causeCopy && causeLeads ? causeCopy.cause : diagnosisLine) : null
+  const explained = localCard ? humanCause !== null : !remoteFailure || Boolean(remoteReauth) || cloudDown
+
+  // v0.0.9 r4 (design r3 N3): "The agent cannot start until the problem shown is fixed." only repeats the local card's
+  // title; the card keeps the restart line while main is restarting, and the "several tries" line (it says what next).
+  const cardRestartLine =
+    localCard && restart.phase === 'stopped' && restart.stoppedBecause !== 'limit' ? null : restartLine
+
+  // The engine's words, honest about the restart; the stopped sentence the restart line already says is not repeated.
+  const errorText = errorHead(
+    dropSentence(
+      sshFailureMessage(connectionConfig, honestRestartText(boot.error, restart), t.settings.gateway),
+      restartLine
+    )
+  )
+
+  // Open by the owner's choice; closed by default when a human sentence explains the failure, open when nothing does
+  // (the raw text is then the only explanation there is).
+  const showDetails = detailsOpen ?? !explained
 
   if (view === 'connect') {
     return (
@@ -410,11 +560,27 @@ export function BootFailureOverlay() {
       // glass. Contract: `[data-glass-opaque]` in styles.css.
       data-glass-opaque=""
     >
-      <div className="w-full max-w-[40rem] overflow-hidden ic-sys-card">
-        <div className="flex items-start gap-3.5 px-6 pt-6 pb-5">
+      <div
+        aria-labelledby="boot-failure-title"
+        aria-modal="true"
+        className="relative w-full max-w-[40rem] overflow-hidden ic-sys-card"
+        role="dialog"
+      >
+        {/* v0.0.9 F3 (point B): the card closes (X, Esc) into "agent stopped" mode. Closing starts nothing. */}
+        <IcButton
+          aria-label={f3Card.close}
+          className="absolute top-3 right-3"
+          data-testid="boot-failure-close"
+          onClick={closeCard}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <X />
+        </IcButton>
+        <div className="flex items-start gap-3.5 pt-6 pr-14 pb-5 pl-6">
           <IcErrorGlyph className="mt-0.5" size="1.25rem" />
           <div className="min-w-0">
-            <h2 className="ic-sys-title">
+            <h2 className="ic-sys-title" id="boot-failure-title">
               {remoteReauth
                 ? copy.remoteTitle
                 : cloudDown
@@ -423,77 +589,134 @@ export function BootFailureOverlay() {
                     ? copy.gateTitle
                     : copy.title}
             </h2>
-            <p className="ic-sys-body mt-1">
+            {/* v0.0.9 r3 (design N6): the card LEADS with one human sentence — the recognised cause, else the install
+                diagnosis, else what the card is for. Engineer text never leads; it is under Details. */}
+            <p className="ic-sys-body mt-1" data-testid={humanCause ? 'boot-failure-cause' : undefined}>
               {remoteReauth
                 ? copy.remoteDescription
                 : cloudDown
                   ? copy.cloudDownDescription
                   : gateMissing
                     ? copy.gateDescription
-                    : copy.description}
+                    : (humanCause ?? f3Card.description)}
             </p>
           </div>
         </div>
 
         {/* V3-RT critic r2 m5: one column that never grows past the card — a long unbroken error (a path, a list of
             files) wraps inside its callout instead of widening the column under the buttons. */}
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 px-6 pb-6">
-          {/* RTB-6 diagnosis first: what failed in plain words; the first line of the error below it, the rest (a
-              traceback, the log path) only under "Show recent logs". */}
-          {diagnosis.class !== 'unknown' ? (
-            <p className="ic-sys-body">{t.install.recovery.diagnosis[diagnosis.class]}</p>
+        {/* r4d (design r4 F3-1): one text axis — the body (actions, hint, Details) starts under the cause sentence, past
+            the glyph (24px inset + 20px glyph + 14px gap = 58px), not at the card edge. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 pr-6 pb-6 pl-[3.625rem]" data-testid="boot-failure-body">
+          {!localCard && diagnosisLine ? <p className="ic-sys-body">{diagnosisLine}</p> : null}
+          {cardRestartLine ? (
+            <p className="ic-sys-body" data-restart-phase={restart.phase} data-testid="boot-failure-restart">
+              {cardRestartLine}
+            </p>
           ) : null}
           {!remoteFailure && homeSettings ? (
             <HomeSettingsRefusalPanel onChange={setHomeSettings} profile={homeSettingsProfile} refusal={homeSettings} />
-          ) : (
-            <div
-              className="ic-sys-callout max-h-40 min-w-0 select-text overflow-y-auto px-3 py-2.5 [overflow-wrap:anywhere]"
-              data-testid="boot-failure-error"
-              data-tone="danger"
-            >
-              {firstLine(sshFailureMessage(connectionConfig, boot.error, t.settings.gateway))}
-            </div>
-          )}
+          ) : null}
 
           <div className="grid gap-2">
             <div className="flex flex-wrap gap-2">
               {actions.map(action => (
-                <IcButton disabled={Boolean(busy)} key={action.key} onClick={action.onClick} variant={action.variant}>
+                <IcButton
+                  data-repair-kit-confirm={action.ownerConfirm ? '' : undefined}
+                  data-variant={action.variant ?? 'default'}
+                  disabled={Boolean(busy)}
+                  key={action.key}
+                  onClick={action.onClick}
+                  variant={action.variant}
+                >
                   {action.busy && busy === action.busy ? <Loader2 className="animate-spin" /> : action.icon}
                   {action.label}
                 </IcButton>
               ))}
-              <IcButton onClick={openLogs} variant="ghost">
-                <FileText />
-                {copy.openLogs}
-              </IcButton>
             </div>
             {hint ? <p className="ic-sys-hint">{hint}</p> : null}
           </div>
 
-          {logs.length > 0 ? (
-            <div className="grid gap-2">
+          {/* One disclosure for everything an engineer reads: the error as main reported it, the recent log, and the
+              log folder (it replaced "Open logs" + "Show recent logs", which did the same job twice). A button with
+              aria-expanded / aria-controls: Enter and Space toggle it, and the region stays in the tree when closed. */}
+          {!remoteFailure && homeSettings ? null : (
+            <div className="grid grid-cols-[minmax(0,1fr)] gap-2">
               <IcButton
-                className="-ml-2 self-start font-medium"
-                onClick={() => setShowLogs(v => !v)}
+                aria-controls={detailsId}
+                aria-expanded={showDetails}
+                className="-ml-2 justify-self-start font-medium"
+                data-testid="boot-failure-details"
+                onClick={() => setDetailsOpen(!showDetails)}
                 size="xs"
                 type="button"
                 variant="text"
               >
-                {showLogs ? copy.hideRecentLogs : copy.showRecentLogs}
+                <ChevronDown aria-hidden="true" className={showDetails ? 'rotate-180' : undefined} />
+                {showDetails ? f3Card.hideDetails : f3Card.details}
               </IcButton>
-              {showLogs ? (
-                <IcLog className="max-h-48">{[`${boot.error ?? ''}\n\n`, ...logs.slice(-40)].join('')}</IcLog>
-              ) : null}
+              {/* `hidden` alone loses to the grid utility's display, so the class carries the closed state too. */}
+              <div
+                className={showDetails ? 'grid grid-cols-[minmax(0,1fr)] gap-2' : 'hidden'}
+                hidden={!showDetails}
+                id={detailsId}
+              >
+                <div
+                  className="ic-sys-callout max-h-40 min-w-0 select-text overflow-y-auto whitespace-pre-wrap px-3 py-2.5 [overflow-wrap:anywhere]"
+                  data-testid="boot-failure-error"
+                  data-tone="danger"
+                >
+                  {errorText}
+                </div>
+                {logs.length > 0 ? (
+                  // v0.0.9 r4 (design r3 N3): the error is said once, in the callout above; the log starts at its tail.
+                  <IcLog className="max-h-48" data-testid="boot-failure-log">
+                    {logs.slice(-40).join('')}
+                  </IcLog>
+                ) : null}
+                <IcButton className="-ml-2 justify-self-start" onClick={openLogs} size="xs" type="button" variant="text">
+                  <FileText aria-hidden="true" />
+                  {f3Card.openLogFolder}
+                </IcButton>
+              </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
   )
 }
 
-/** The first line of a failure message: a traceback or log path never sits above the fold (RTB-6). */
-function firstLine(message: ReactNode): ReactNode {
-  return typeof message === 'string' ? (message.split('\n')[0] ?? message) : message
+/**
+ * v0.0.9 F4 (C6/D-6): the whole first paragraph of a failure message — every line of the error the owner needs, not
+ * only its first — up to a blank line or the start of a traceback, which stays under "Show recent logs" (RTB-6). The
+ * callout keeps the line breaks and scrolls past its cap.
+ */
+function dropSentence(message: ReactNode, sentence: null | string): ReactNode {
+  if (typeof message !== 'string' || !sentence || !message.includes(sentence)) {
+    return message
+  }
+
+  return message.replace(sentence, '').trim() || message
+}
+
+function errorHead(message: ReactNode): ReactNode {
+  if (typeof message !== 'string') {
+    return message
+  }
+
+  const lines = message.split('\n')
+  const head: string[] = []
+
+  for (const line of lines) {
+    if ((line.trim() === '' && head.length > 0) || /^\s*Traceback \(most recent call last\)/.test(line)) {
+      break
+    }
+
+    if (line.trim() !== '') {
+      head.push(line)
+    }
+  }
+
+  return head.length > 0 ? head.join('\n') : message
 }

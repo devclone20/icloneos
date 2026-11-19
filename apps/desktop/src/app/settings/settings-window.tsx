@@ -17,6 +17,8 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router'
 
 import { IcWindow, useWindowExpanded } from '@/app/home/window'
+import { focusPane } from '@/app/home/window/pane-focus'
+import { $panes } from '@/app/home/window/pane-layout'
 import { HOME_ROUTE, SETTINGS_ROUTE } from '@/app/routes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
@@ -158,10 +160,24 @@ function SettingsWindow({ children, closeLabel, host, onClose, search, title }: 
   const navigate = useNavigate()
 
   const leave = useCallback(() => {
+    // v0.0.9 F6: beside another pane, closing Settings hands the keyboard to that pane (it fills the window now).
+    const { focused, open } = $panes.get()
+
+    const survivor =
+      focused !== null && focused !== 'settings' && open.includes(focused)
+        ? focused
+        : (open.find(id => id !== 'settings') ?? null)
+
     if ($settingsOpenedInApp.get()) {
       onClose()
     } else {
       navigate(HOME_ROUTE, { replace: true })
+    }
+
+    if (survivor !== null) {
+      focusPane(survivor)
+
+      return
     }
 
     // Settings is a route: by the time the surface's focus restore runs, the
@@ -173,7 +189,11 @@ function SettingsWindow({ children, closeLabel, host, onClose, search, title }: 
 
   // Escape retracts an expanded window before it would close it (doc 07 #7; STAGE tester 1 W-1): the first
   // Escape brings the frame back, the next one leaves.
-  const scopeRef = useOverlaySurface<HTMLDivElement>(expanded ? retract : leave, { focusRef })
+  // v0.0.9 F6: beside another pane that has the focus, Settings is not the keyboard's: no Tab trap, no Esc layer (Esc
+  // then reaches the home, which closes the FOCUSED pane).
+  const panes = useStore($panes)
+  const ownsKeyboard = panes.open.length < 2 || panes.focused === null || panes.focused === 'settings'
+  const scopeRef = useOverlaySurface<HTMLDivElement>(expanded ? retract : leave, { active: ownsKeyboard, focusRef })
 
   const close = useCallback(() => {
     triggerHaptic('close')

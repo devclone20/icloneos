@@ -1,5 +1,7 @@
 interface FirstRunSetupBackend {
   activeRoot?: string
+  /** A broken install of the app's own runtime (m-r2-2): a boot failure, never the first-run choice. */
+  brokenInstall?: string
   kind?: string
   platform?: string
 }
@@ -58,7 +60,7 @@ export function createFirstRunSetupGate({
   }
 
   const shouldGate = (backend?: FirstRunSetupBackend | null) =>
-    Boolean(backend && backend.kind === 'bootstrap-needed' && !localBootstrapConfirmed)
+    Boolean(backend && backend.kind === 'bootstrap-needed' && !backend.brokenInstall && !localBootstrapConfirmed)
 
   const wait = async (backend?: FirstRunSetupBackend | null) => {
     if (!backend || !shouldGate(backend)) {
@@ -114,6 +116,16 @@ export function createFirstRunSetupGate({
     localBootstrapConfirmed = false
   }
 
+  /**
+   * v0.0.9 r2 (m-r2-2): the owner's own click on Repair (or a repair-kit Repair) asked to reinstall the app's runtime
+   * that was installed here before. That click is the choice: the reinstall runs on the next start without asking how to
+   * set up again (the chooser covered the kit and cost a second click). Only main's gesture-checked repair paths call it.
+   */
+  const resetForOwnerReinstall = () => {
+    resetForRetry()
+    localBootstrapConfirmed = true
+  }
+
   const abandonForRemoteApply = () => {
     // Resume the gated startHermes() with an explicit remote decision. The
     // caller re-resolves the newly-persisted remote config instead of falling
@@ -138,6 +150,7 @@ export function createFirstRunSetupGate({
     continueLocal,
     hasWaiter,
     isLocalBootstrapConfirmed,
+    resetForOwnerReinstall,
     resetForRepair,
     resetForRetry,
     shouldGate,

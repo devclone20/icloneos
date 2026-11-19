@@ -1,11 +1,15 @@
 #!/usr/bin/env node
-// verify-packaged-acp.mjs — REL-6 (ruling 26): the bundle carries NO ACP CLI. Two proofs, in order:
-//   1. static, never launching the app (scripts/acp-pack-absent.mjs): no acp-cli tree, no Go signer, no package
-//      of the CLI's closure anywhere in the bundle, and Resources/acp-pin byte-equal to the committed pin;
+// verify-packaged-acp.mjs — v0.0.9 (owner decision 17 Nov, replaces ruling 26): the bundle SHIPS the ACP CLI, exactly
+// as built. Two proofs, in order:
+//   1. static, never launching the app (scripts/acp-pack-bundled.mjs): Resources/acp-pin byte-equal to the committed
+//      pin (with the lock's NOTICES.md); Resources/acp-tools exactly its build manifest (every file, sha256, mode), for
+//      that lockfile, the pinned version and this target, the Go signer 0755, the add-ons the listed copies; with
+//      `--signed --team <TEAMID>`, the signer, every add-on and any Mach-O of the tree Developer-ID signed; and no
+//      other copy of the CLI anywhere in the bundle;
 //   2. the SHIPPED app's own self-test, headless (`<app> --iclone-selftest=all` → one JSON line, exit 0/1): its
-//      acp check reports `bundled: false` and the pin's CLI version, and node-pty spawns.
+//      acp check passes for the pin's CLI version, and node-pty spawns.
 //
-//   node scripts/verify-packaged-acp.mjs [--static] [<app.app>]   # default: the app under release/
+//   node scripts/verify-packaged-acp.mjs [--static] [--signed --team <TEAMID>] [<app.app>]   # default: the app under release/
 //
 // `--static` runs proof 1 only (a locally signed build cannot launch on this Mac: the macOS 26 packaged-launch hang investigation).
 //
@@ -24,22 +28,29 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { ACP_CLI_VERSION } from './acp-cli-version.mjs'
-import { checkAcpAbsent } from './acp-pack-absent.mjs'
+import { checkAcpBundled } from './acp-pack-bundled.mjs'
 import { judgePackagedSelftest } from './acp-selftest.mjs'
 import { findBuiltApp } from './built-app.mjs'
 import { isMain } from './utils.mjs'
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-export function verifyPackagedAcp(appPath, { staticOnly = false } = {}) {
-  const absent = checkAcpAbsent(appPath)
+export function verifyPackagedAcp(
+  appPath,
+  { staticOnly = false, signed = false, team = null, check = checkAcpBundled } = {}
+) {
+  const bundled = check(appPath, { signed, team })
 
-  if (!absent.ok) {
-    return { ok: false, error: `the bundle is not ACP-free: ${absent.problems.join('; ')}`, absent }
+  if (!bundled.ok) {
+    return {
+      ok: false,
+      error: `the bundled ACP CLI is not the one this build made: ${bundled.problems.join('; ')}`,
+      bundled
+    }
   }
 
   if (staticOnly) {
-    return { ok: true, static: true, absent }
+    return { ok: true, static: true, bundled }
   }
 
   if (process.platform !== 'darwin') {
@@ -83,13 +94,16 @@ export function verifyPackagedAcp(appPath, { staticOnly = false } = {}) {
     }
   }
 
-  return { ...judgePackagedSelftest(result, ACP_CLI_VERSION), absent }
+  return { ...judgePackagedSelftest(result, ACP_CLI_VERSION), bundled }
 }
 
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2)
   const staticOnly = args.includes('--static')
-  const target = args.find(arg => !arg.startsWith('--'))
+  const signed = args.includes('--signed')
+  const teamAt = args.indexOf('--team')
+  const team = teamAt >= 0 ? (args[teamAt + 1] ?? null) : null
+  const target = args.find((arg, index) => !arg.startsWith('--') && !(teamAt >= 0 && index === teamAt + 1))
   const appPath = target ? resolve(target) : findBuiltApp(projectRoot)
 
   if (!appPath) {
@@ -102,17 +116,17 @@ if (isMain(import.meta.url)) {
     process.exit(1)
   }
 
-  const result = verifyPackagedAcp(appPath, { staticOnly })
+  const result = verifyPackagedAcp(appPath, { staticOnly, signed, team })
 
   if (result.skipped) {
     console.log(`[verify-packaged-acp] ${result.skipped}`)
   } else if (result.ok) {
-    const { counts } = result.absent
+    const { bundled } = result
 
     console.log(
-      `[verify-packaged-acp] ok — ${appPath}: no ACP CLI in the bundle (${counts.files} files scanned: ` +
-        `${counts.acpCliDirs} acp-cli dirs, ${counts.alchemyPaths} @alchemy, ${counts.rpcWebsocketsPaths} rpc-websockets, ` +
-        `${counts.signerBinaries} Go signer)` +
+      `[verify-packaged-acp] ok — ${appPath}: the bundle ships acp ${bundled.version} for ${bundled.target} ` +
+        `(${bundled.files} files = its manifest, tree ${String(bundled.treeSha256).slice(0, 12)}` +
+        `${signed ? `, ${bundled.signedFiles} Developer-ID signed` : ''}; no other copy in ${bundled.counts.files} files)` +
         (result.static ? '; static proof only' : `; the app's self-test reports pin ${result.version} and node-pty`)
     )
   } else {

@@ -46,7 +46,7 @@ import type { KeySealer } from '../iclone-permissions/keys'
 
 import { createX402Client, type PaymentAuditEntry, type SpendDoor, type X402Client } from './client'
 import { createFacilitator, FACILITATOR_URLS } from './facilitator'
-import { type PaySocketServer, setActivePaySocket, setSpawnSeed, startPaySocketServer } from './ipc'
+import { paySocketFile, type PaySocketServer, setActivePaySocket, setSpawnSeed, startPaySocketServer } from './ipc'
 import { loadAgentKey, loadOwnerMandateKey, NO_SEALING } from './keys'
 import { createLedger, limitsViewOf, type PaymentLedger } from './ledger'
 import {
@@ -671,7 +671,7 @@ function createPayments(deps: PaymentsDeps): Payments {
 interface RegisterPaymentsDeps extends PaymentsDeps {
   ipcMain: IpcMainLike
   isTrustedSender: ConsentSenderGuard
-  /** `<userData>/run`, shared with the acp socket. */
+  /** `<userData>/run`: the pay token files (the socket itself is paySocketFile(userData), its short private folder). */
   socketDir: string
   /** Main's gesture verdict for this IPC sender and payload (V3-F `permissionGestureOk`). */
   gestureOk: (event: unknown, input: unknown) => boolean
@@ -794,6 +794,7 @@ export function registerPayments(deps: RegisterPaymentsDeps): RegisteredPayments
 
   const socket = startPaySocketServer({
     dir: deps.socketDir,
+    socket: paySocketFile(deps.userDataDir),
     verb: () => payments.verbDeps(),
     audit: { record: entry => deps.audit(entry) },
     log: deps.log,

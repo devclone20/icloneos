@@ -509,7 +509,7 @@
   "hermes_cli/config.py::edit_config::subprocess.run#1": {
    "verdict": "b",
    "why": "refused by the spawn guard in a confined process (the default outcome)",
-   "line": 3211
+   "line": 3213
   },
   "hermes_cli/copilot_auth.py::_probe_gh_cli_token::subprocess.run#1": {
    "verdict": "b",
@@ -1789,22 +1789,22 @@
   "plugins/iclone-confinement/driver_door.py::signature_problem::subprocess.run#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 66
+   "line": 67
   },
   "plugins/iclone-confinement/driver_door.py::sit::subprocess.run#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 243
+   "line": 298
   },
   "plugins/iclone-confinement/driver_door.py::start_sitter::subprocess.Popen#1": {
    "verdict": "a",
    "why": "the environment backend's own process control (decided at runtime: a method of a non-host environment)",
-   "line": 207
+   "line": 250
   },
   "plugins/iclone-confinement/launcher.py::Launcher._spawn::subprocess.Popen#1": {
    "verdict": "b",
    "why": "never in a confined process: the launcher runs as its own process that main starts outside any sandbox, and starts only the sandbox-exec argv it validated; were this code reached inside a confined process, the spawn guard would refuse it (no environment on the stack, not a listed site)",
-   "line": 2158
+   "line": 2159
   },
   "plugins/iclone-confinement/providers.py::_run_version::subprocess.Popen#1": {
    "verdict": "c",

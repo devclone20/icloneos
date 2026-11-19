@@ -80,7 +80,12 @@ export const ICLONE_STORAGE = {
     perInft: false,
     owner: 'store/background-tasks.ts'
   },
-  msgOpacity: { key: 'iclone.msgOpacity', shape: 'number', perInft: false, owner: 'home/opacity-slider.tsx' },
+  msgOpacity: {
+    key: 'iclone.msgOpacity',
+    shape: 'number — since v0.0.9 F6 the one opacity of every open pane',
+    perInft: false,
+    owner: 'home/window/opacity.tsx'
+  },
   inftLastSession: {
     // v2 (2026-10-17): v1 pointers could name a chat born under ANOTHER persona
     // (a switch adopted the chat on screen); they are ignored, never deleted.
@@ -106,6 +111,13 @@ export const ICLONE_STORAGE = {
     shape: 'EconKind — sessionStorage: survives a renderer reload, dies with the window',
     perInft: false,
     owner: 'settings/settings-window.tsx'
+  },
+  billingOpenPurchase: {
+    key: 'iclone.billing.openPurchase.v1',
+    shape:
+      'JSON {amountUsd, idempotencyKey, openedAt} — sessionStorage: the Buy whose answer was lost survives a renderer reload, dies with the window',
+    perInft: false,
+    owner: 'settings/billing/open-purchase.ts'
   },
   econSnapshot: { key: 'iclone.econ.snap.', shape: 'JSON snapshot', perInft: true, owner: 'home/econ/snapshot.ts' },
   econWalletView: {
@@ -171,5 +183,25 @@ export const ICLONE_STORAGE = {
     shape: 'JSON {profile: {at, base, text}} of unsaved soul-editor text',
     perInft: false,
     owner: 'profiles/soul-draft.ts'
+  },
+  // v0.0.9 F6 — the 3D iNFT in its own window: which iNFT it shows, and one hand-over of the owner's camera.
+  stage3dHandoff: {
+    key: 'iclone.stage3d.handoff',
+    shape: 'JSON { id, name, modelUrl, field: string | null } — the iNFT the 3D window shows',
+    perInft: false,
+    owner: 'home/stage3d-window/handoff.ts'
+  },
+  // v0.0.9 F6 (owner addition, 18 Nov) — the pane divider's place, remembered per pair of panes.
+  paneRatios: {
+    key: 'iclone.panes.ratios',
+    shape: 'JSON { "<pane id>+<pane id>" (sorted): the first pane\'s share of the pair, 0..1 }',
+    perInft: false,
+    owner: 'home/window/pane-layout.ts'
+  },
+  stage3dCamera: {
+    key: 'iclone.stage3d.camera',
+    shape: 'JSON { modelUrl, pose: { azimuth, elevation, dolly } } — one hand-over of the owner camera',
+    perInft: false,
+    owner: 'home/stage3d-window/handoff.ts'
   }
 } as const satisfies Record<string, StorageKeySpec>

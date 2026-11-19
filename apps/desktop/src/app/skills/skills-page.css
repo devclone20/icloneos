@@ -41,7 +41,7 @@
   border: 0;
   border-radius: var(--ic-radius-pill);
   background: transparent;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-size: var(--ic-type-xs);
   transition:
     color var(--ic-dur-fast) var(--ic-ease-std),
@@ -341,7 +341,7 @@
   padding: 0 0.25rem;
   font-size: var(--ic-type-2xs);
   line-height: 1rem;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 /* The MCP server toggle's shell: IcSwitch itself takes no class, so "off is
@@ -470,7 +470,7 @@
   border: 0;
   border-radius: var(--ic-radius-sm);
   background: transparent;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   transition:
     color var(--ic-dur-fast) var(--ic-ease-std),
     background var(--ic-dur-fast) var(--ic-ease-std);
@@ -496,7 +496,7 @@
   border: 0;
   border-radius: var(--ic-radius-sm);
   background: transparent;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-family: var(--ic-font-mono);
   font-size: var(--ic-type-2xs);
 }
@@ -588,7 +588,7 @@
   border: 0;
   border-radius: var(--ic-radius-md);
   background: transparent;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   transition:
     color var(--ic-dur-fast) var(--ic-ease-std),
     background var(--ic-dur-fast) var(--ic-ease-std);
@@ -629,7 +629,7 @@
 
 /* The status line under a server name. */
 .icsk__srv-status {
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-size: var(--ic-type-xs);
 }
 
@@ -662,7 +662,7 @@
  * grows 1.08 px to join it. One role, one size — the r4 handoff's "+-0.5 px for
  * every move" did not cover that second site, and the r5 handoff says so. */
 .icsk__hint {
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-size: var(--ic-type-sm);
   line-height: 1.45;
 }

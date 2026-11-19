@@ -32,9 +32,12 @@
 
 import {
   buildAppEnv,
+  conversationRow,
   createSandbox,
   launchDesktop,
   type MockBackendFixture,
+  newConversation,
+  openConversationList,
   waitForAppReady,
   writeEnvFile,
   writeMockProviderConfig
@@ -273,6 +276,172 @@ async function installRenderCounter(page: Page, transcriptText?: string): Promis
   )
 }
 
+/**
+ * Reviewed port (v0.0.9): a paint ledger for the icloneOS transcript, installed with `installRenderCounter`.
+ *
+ * icloneOS mounts a long transcript in designed steps: a small first commit (FIRST_PAINT_BUDGET), then a stepped
+ * transition backfill that PREPENDS older turns one frame at a time (src/components/assistant-ui/thread/list.tsx:89-100,
+ * 476-512). So one resume is one additive burst per step, measured [7,11] for this 32-message session, and the
+ * upstream "exactly one burst" proxy cannot hold even with no repaint at all. What the burst count stood for is that
+ * nothing already painted is painted again. The ledger asserts exactly that, directly and more strictly:
+ *   - no message node leaves the transcript during the resume (a remount repaint removes before it re-adds);
+ *   - no turn is added twice (the same turn painted a second time);
+ *   - after the first commit, every addition is a prepend before an already-painted turn (the backfill), never a
+ *     replacement or an append.
+ *   - no painted message changes its text in place afterwards (a re-render of the painted list). Upstream's reconcile
+ *     poll watches only the DOM's first message, which the backfill legitimately replaces by prepending an older
+ *     turn, so here every painted message is held to its own first text (a 2 ms poll, as upstream's).
+ */
+async function installPaintLedger(page: Page): Promise<void> {
+  await page.evaluate((visibleSelector: string) => {
+    const viewport = [...document.querySelectorAll(visibleSelector)]
+      .at(-1)
+      ?.querySelector('[data-slot="aui_thread-viewport"]')
+
+    if (!viewport) {
+      throw new Error('Thread viewport not found before warm resume')
+    }
+
+    const MESSAGE = '[data-role="message"], [data-message-id]'
+
+    const ledger = {
+      addedTurns: 0,
+      duplicateTurns: [] as string[],
+      laterNonPrepends: [] as string[],
+      removedMessages: 0,
+      changedInPlace: [] as string[],
+      stopped: false
+    }
+
+    const paintedText = new Map<Element, string>()
+
+    const poll = setInterval(() => {
+      if (ledger.stopped) {
+        clearInterval(poll)
+
+        return
+      }
+
+      for (const [el, text] of paintedText) {
+        if (el.isConnected && (el.textContent ?? '') !== text) {
+          ledger.changedInPlace.push(text.slice(0, 40))
+          paintedText.set(el, el.textContent ?? '')
+        }
+      }
+    }, 2)
+
+    const painted = new Set<string>()
+    const keyOf = (node: Node): string => (node.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 120)
+    let firstCommitSeen = false
+
+    const observer = new MutationObserver(records => {
+      if (ledger.stopped) {
+        return
+      }
+
+      let addedHere = 0
+
+      for (const record of records) {
+        for (const node of record.removedNodes) {
+          if (node instanceof Element && (node.matches(MESSAGE) || node.querySelector(MESSAGE))) {
+            ledger.removedMessages += 1
+          }
+        }
+
+        const content = record.target instanceof Element && record.target.matches('[data-slot="aui_thread-content"]')
+
+        if (!content) {
+          continue
+        }
+
+        for (const node of record.addedNodes) {
+          const key = keyOf(node)
+
+          if (!(node instanceof Element) || !key || !(node.matches(MESSAGE) || node.querySelector(MESSAGE))) {
+            continue
+          }
+
+          addedHere += 1
+          ledger.addedTurns += 1
+
+          for (const message of [node, ...node.querySelectorAll(MESSAGE)]) {
+            if (message.matches(MESSAGE)) {
+              paintedText.set(message, message.textContent ?? '')
+            }
+          }
+
+          if (painted.has(key)) {
+            ledger.duplicateTurns.push(key.slice(0, 40))
+          }
+
+          if (firstCommitSeen) {
+            const next = record.nextSibling
+
+            if (!next || !painted.has(keyOf(next))) {
+              ledger.laterNonPrepends.push(key.slice(0, 40))
+            }
+          }
+        }
+      }
+
+      // Keys join the painted set after the whole callback, so turns of one commit may precede each other.
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          const key = keyOf(node)
+
+          if (key) {
+            painted.add(key)
+          }
+        }
+      }
+
+      if (addedHere > 0) {
+        firstCommitSeen = true
+      }
+    })
+
+    observer.observe(viewport, { childList: true, subtree: true })
+    ;(window as unknown as { __PAINT_LEDGER__: typeof ledger }).__PAINT_LEDGER__ = ledger
+  }, SURFACE)
+}
+
+async function readPaintLedger(page: Page): Promise<{
+  addedTurns: number
+  changedInPlace: string[]
+  duplicateTurns: string[]
+  laterNonPrepends: string[]
+  removedMessages: number
+} | null> {
+  return page.evaluate(() => {
+    const w = window as unknown as {
+      __PAINT_LEDGER__?: {
+        addedTurns: number
+        changedInPlace: string[]
+        duplicateTurns: string[]
+        laterNonPrepends: string[]
+        removedMessages: number
+        stopped: boolean
+      }
+    }
+
+    const ledger = w.__PAINT_LEDGER__
+
+    if (!ledger) {
+      return null
+    }
+
+    ledger.stopped = true
+
+    return {
+      addedTurns: ledger.addedTurns,
+      changedInPlace: ledger.changedInPlace,
+      duplicateTurns: ledger.duplicateTurns,
+      laterNonPrepends: ledger.laterNonPrepends,
+      removedMessages: ledger.removedMessages
+    }
+  })
+}
+
 /** Wait until the ACTIVE chat surface's transcript contains `text`. */
 async function waitForActiveTranscriptText(page: Page, text: string, timeout = 30_000): Promise<void> {
   await page.waitForFunction(
@@ -308,7 +477,7 @@ async function openFreshDraft(page: Page, priorText: string): Promise<void> {
 
 /** Stack an empty tab while leaving the current transcript mounted and warm. */
 async function openNewSessionTab(page: Page, priorText: string): Promise<void> {
-  await page.locator('[data-slot="sidebar"] button[aria-label="New session"]').first().click()
+  await newConversation(page)
   await waitForActiveTranscriptWithoutText(page, priorText)
 }
 
@@ -342,22 +511,6 @@ async function observedViewportIsActive(page: Page): Promise<boolean> {
   }, SURFACE)
 }
 
-/** A kept-alive tab must become visible without rebuilding its transcript. */
-function assertNoRepaint(
-  result: { bursts: number; mutations: number; timeline: number[]; reconciles: number } | null
-): void {
-  expect(result, 'MutationObserver should have recorded render data').toBeTruthy()
-  expect(
-    result!.bursts,
-    `Expected no additive render bursts for a kept-alive tab, but got ${result!.bursts}. ` +
-      `Mutation timeline: ${JSON.stringify(result!.timeline)}.`
-  ).toBe(0)
-  expect(
-    result!.reconciles,
-    `Expected no transcript reconciles for a kept-alive tab, but got ${result!.reconciles}.`
-  ).toBe(0)
-}
-
 /** Assert the render counter shows exactly one paint with no re-renders. */
 function assertNoJitter(
   result: { bursts: number; mutations: number; timeline: number[]; reconciles: number } | null
@@ -377,10 +530,20 @@ function assertNoJitter(
 }
 
 test('tab reactivation preserves the mounted transcript without repainting', async ({}, testInfo) => {
+  // Reviewed port (v0.0.9): icloneOS renders no session tabs in this version ($sessionTilesRender is false,
+  // src/store/tile-render.ts:3-10), so there is no kept-alive hidden tab to reveal: the Message pane's "New
+  // conversation" replaces the main chat (src/app/home/msg-sidebar.tsx:165-174, navigate(NEW_CHAT_ROUTE)) and the
+  // seeded transcript leaves the screen. Going back to the session from the list is the warm in-place resume
+  // (the runtime-id cache filled by the cold open). The user-visible behaviour this file guards is the same: going
+  // back to a session must not flicker: every message is painted once, and nothing painted is re-rendered. The
+  // "zero bursts" form applies only to a tab that never unmounted, which this app cannot have, and the "one burst"
+  // form does not fit the app's designed stepped mount, so the paint ledger asserts the property itself (see
+  // installPaintLedger), with the reconcile poll unchanged. The test title is upstream's.
   const page = fixture!.page
 
-  // Wait for the sidebar to populate with our seeded session.
-  const sessionRow = page.locator('[data-slot="sidebar"] button').filter({ hasText: SESSION_TITLE }).first()
+  // The icloneOS Message pane's own conversation list (the upstream `[data-slot="sidebar"]` is not in this app).
+  await openConversationList(page)
+  const sessionRow = conversationRow(page, SESSION_TITLE)
 
   await sessionRow.waitFor({ state: 'visible', timeout: 60_000 })
 
@@ -395,24 +558,35 @@ test('tab reactivation preserves the mounted transcript without repainting', asy
   // Wait for the session to fully settle (cold-path RPC + reconciliation).
   await page.waitForTimeout(2_000)
 
-  // Stack a new tab, then observe the seeded transcript while it is hidden.
-  // Installing after the switch isolates reactivation from mutations caused
-  // while the new tab was being created.
+  // Step 2: leave for a new conversation; the seeded transcript leaves the active surface.
   await openNewSessionTab(page, FIRST_USER_MSG)
   await page.waitForTimeout(500)
-  await installRenderCounter(page, FIRST_USER_MSG)
+  // Observe the active surface's viewport, which the warm resume repaints.
+  await installRenderCounter(page)
+  await installPaintLedger(page)
 
-  // Step 3: Click back and verify the same kept-alive viewport becomes active
-  // without rebuilding or reconciling its transcript.
+  // Step 3: back to the session (warm resume): one paint, no re-render after it.
   await sessionRow.click()
 
   await waitForActiveTranscriptText(page, FIRST_USER_MSG)
   await page.waitForTimeout(2_000)
-  expect(await observedViewportIsActive(page), 'Reactivation should reveal the observed kept-alive viewport').toBe(true)
+  expect(await observedViewportIsActive(page), 'the observed viewport is the one showing the resumed session').toBe(true)
 
   const result = await readRenderCount(page)
+  const ledger = await readPaintLedger(page)
   await page.screenshot({ path: testInfo.outputPath('warm-resume-idle.png') })
-  assertNoRepaint(result)
+
+  // One resume painted (at least one additive burst).
+  expect(result, 'MutationObserver should have recorded render data').toBeTruthy()
+  expect(result!.bursts, `the warm resume painted nothing (timeline ${JSON.stringify(result!.timeline)})`).toBeGreaterThan(0)
+  // Every message painted once: nothing removed, nothing twice, later steps only prepend (see installPaintLedger).
+  expect(ledger, 'paint ledger should have recorded data').toBeTruthy()
+  expect(ledger!.addedTurns, 'the warm resume added the seeded turns').toBeGreaterThan(0)
+  expect(ledger!.removedMessages, 'a painted message left the transcript during the warm resume (repaint)').toBe(0)
+  expect(ledger!.duplicateTurns, 'a turn was painted twice during the warm resume').toEqual([])
+  expect(ledger!.laterNonPrepends, 'after the first commit, an addition was not a backfill prepend').toEqual([])
+  // No reconcile: no painted message re-rendered with other content after its first paint.
+  expect(ledger!.changedInPlace, 'a painted message changed in place after its first paint (reconcile)').toEqual([])
 })
 
 test('warm-route resume after background inference completes (no jitter)', async ({}, testInfo) => {
@@ -422,7 +596,9 @@ test('warm-route resume after background inference completes (no jitter)', async
   const { mock } = fixture!
 
   // Wait for the sidebar to populate with our seeded session.
-  const sessionRow = page.locator('[data-slot="sidebar"] button').filter({ hasText: SESSION_TITLE }).first()
+  // The icloneOS Message pane's own conversation list (the upstream `[data-slot="sidebar"]` is not in this app).
+  await openConversationList(page)
+  const sessionRow = conversationRow(page, SESSION_TITLE)
 
   await sessionRow.waitFor({ state: 'visible', timeout: 60_000 })
 
@@ -446,7 +622,10 @@ test('warm-route resume after background inference completes (no jitter)', async
   await page.waitForTimeout(2_000)
 
   // Verify the prompt was received by the mock server.
-  expect(mock.receivedPrompts).toContain(PROMPT)
+  // Reviewed (v0.0.9, G 1c2bbb9423, same fix as submit-drift): a turn request must carry the prompt. The first message
+  // of a fresh chat reaches the model with the runtime's first-message note appended, so an exact match was only
+  // ever met by the session-title request, which the mock no longer counts as a prompt.
+  expect(mock.receivedPrompts.some(prompt => prompt.startsWith(PROMPT))).toBe(true)
 
   // Step 3: Replace the primary chat; the warm cache retains the updated messages.
   await openFreshDraft(page, PROMPT)

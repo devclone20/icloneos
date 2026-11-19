@@ -51,6 +51,7 @@ import { freshPycachePrefix, pycacheEnv, releasePycachePrefix } from './iclone-p
 import { classifyRuntime, prepareDevPluginOverlay, type RuntimeMode } from './iclone-runtime-location'
 import { isolatePythonEnv, PYTHON_ISOLATION_FLAGS } from './iclone-spawn-env'
 import { replaceDirAtomicSync } from './lib/atomic-write'
+import { managedRuntimeEnv } from './main/runtime-install-state'
 
 export const PERMISSIONS_PLUGIN = 'iclone-permissions'
 export const CONFINEMENT_PLUGIN = 'iclone-confinement'
@@ -717,7 +718,9 @@ export async function ensureIcloneHermesPlugins(deps: GateDeps): Promise<GateRep
   try {
     stdout = await deps.probe(deps.backend.command, [...PYTHON_ISOLATION_FLAGS, '-c', PROBE_SCRIPT], {
       cwd: deps.cwd,
-      env
+      // v0.0.9 point A: the app runtime's own dependency pin and no lazy installs, like every launch of it (two
+      // HERMES_* names no arming or gate env sets).
+      env: { ...env, ...managedRuntimeEnv(root) }
     })
   } catch (error) {
     throw new IcloneGateError(`the plugin load check could not run (${(error as Error).message.split('\n')[0]})`)

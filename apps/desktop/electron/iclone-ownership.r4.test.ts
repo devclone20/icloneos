@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { startAcpSocketServer } from './iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from './iclone-acp-ipc'
 import {
   type CommandRunner,
   createDeactivationDoor,
@@ -281,6 +281,7 @@ describe('R9 r4 — the agent socket door runs the economy gate', () => {
     const server = await startAcpSocketServer({
       admitStreaming: () => true,
       dir: path.join(root, 'run'),
+      socket: acpSocketFile(root),
       resolveInft: key => ({ ok: true, slug: key === '6' ? held : SLUG }),
       run: (slug, argv) => {
         runs.push({ slug, argv })

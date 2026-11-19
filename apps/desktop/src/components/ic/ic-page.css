@@ -81,7 +81,7 @@
 .icpg__subtitle {
   margin: 4px 0 0;
   font-size: var(--ic-type-xs);
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icpg__actions {
@@ -400,16 +400,70 @@
   white-space: nowrap;
 }
 
+/* v0.0.9 F4 — type 3, the inline alert (IcAlert). The words wrap and are never cut; colour sits in the icon (and the
+   error's own soft field, read in --ic-danger-ink, which holds 4.5:1 there — callout-contrast.test.tsx). */
+/* r5 (design R5-4): an alert's own action sits on the body's centre line, not ~8px under a one-line body. The icon
+   keeps the first line (flex-start), so a long body still reads from its glyph. */
+.icpg__alert > .icpg__btn {
+  flex-shrink: 0;
+  align-self: center;
+  margin-block: -4px;
+}
+
 .icpg__alert {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   padding: 8px 10px;
-  border: 1px solid var(--ic-danger-soft);
+  border: 1px solid var(--ic-border-subtle);
   border-radius: var(--ic-radius-sm);
+  background: var(--ic-surface-raised);
+  color: var(--ic-text-1);
+  font-size: var(--ic-type-md);
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.icpg__alert[data-tone='error'],
+.icpg__alert:not([data-tone]) {
+  border-color: var(--ic-danger-soft);
   background: var(--ic-danger-soft);
+  color: var(--ic-danger-ink);
+}
+
+.icpg__alert > svg,
+.icpg__alert-icon {
+  flex: none;
+  margin-top: 2px;
+}
+
+.icpg__alert[data-tone='error'] .icpg__alert-icon,
+.icpg__alert:not([data-tone]) > svg {
   color: var(--ic-danger);
-  font-size: var(--ic-type-xs);
+}
+
+.icpg__alert[data-tone='warning'] .icpg__alert-icon {
+  color: var(--ic-note-warning);
+}
+
+.icpg__alert[data-tone='success'] .icpg__alert-icon {
+  color: var(--ic-note-success);
+}
+
+.icpg__alert[data-tone='info'] .icpg__alert-icon {
+  color: var(--ic-text-2-aa);
+}
+
+.icpg__alert-text {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 2px;
+  min-width: 0;
+}
+
+.icpg__alert-title {
+  font-weight: 600;
 }
 
 /* Our own button: the pages never reach for the upstream <Button>. */
@@ -469,7 +523,7 @@
 .icpg__btn--quiet {
   border-color: transparent;
   background: transparent;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icpg__btn--quiet:hover:not(:disabled) {
@@ -494,7 +548,7 @@
   width: 22px;
   height: 22px;
   border-radius: var(--ic-radius-xs);
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   transition:
     background var(--ic-dur-fast) var(--ic-ease-std),
     color var(--ic-dur-fast) var(--ic-ease-std);
@@ -593,7 +647,7 @@
 }
 
 .icpg__dim {
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icpg__rail-note {
@@ -707,7 +761,7 @@
   margin: 0;
   font-size: var(--ic-type-2xs);
   line-height: 1.45;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icpg__hint--error {
@@ -890,7 +944,7 @@
   margin: 2px 0 0;
   font-size: var(--ic-type-2xs);
   line-height: 1.45;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icpg__listrow-action {
@@ -909,7 +963,7 @@
   padding: 4px 0;
   background: none;
   border: 0;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-size: var(--ic-type-2xs);
   font-weight: 600;
   letter-spacing: 0.12em;

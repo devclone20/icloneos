@@ -386,6 +386,8 @@ export function useComposerDraft({
   // ship A's attachments into B's turn (#59305). useLayoutEffect closes the
   // window by running before paint.
 
+  const prevScopeKeyRef = useRef<null | string>(activeQueueSessionKey)
+
   useLayoutEffect(() => {
     // A pending debounce timer from the outgoing session is now stale — its
     // scope was correct when scheduled, but the authoritative stash below
@@ -395,7 +397,20 @@ export function useComposerDraft({
     pendingDraftPersistRef.current = null
     draftScopeRef.current = activeQueueSessionKey
 
-    const { attachments, text } = takeSessionDraft(activeQueueSessionKey)
+    // v0.0.9 (#8): the first send of a fresh chat moves the key null → the created session id. It is the SAME chat,
+    // so what was typed since Enter (stashed under null by the cleanup just before) is carried into the new key
+    // instead of loading the new key's empty draft over the focused editor. A switch between two real sessions is
+    // untouched.
+    const adopted = prevScopeKeyRef.current === null && activeQueueSessionKey !== null
+    prevScopeKeyRef.current = activeQueueSessionKey
+
+    let draft = takeSessionDraft(activeQueueSessionKey)
+
+    if (adopted && !draft.text && !draft.attachments.length) {
+      draft = takeSessionDraft(null)
+    }
+
+    const { attachments, text } = draft
     loadIntoComposer(text, attachments)
 
     return () => {

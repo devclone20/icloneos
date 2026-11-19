@@ -104,7 +104,7 @@ function DowngradeConfirm({ flow, tier }: { flow: DowngradeFlow; tier: BillingPl
             {copy.actions.tryAgain}
           </Button>
         ) : canConfirm ? (
-          <Button disabled={busy} onClick={() => void flow.confirm()} size="sm" type="button">
+          <Button data-billing-charge-confirm="" disabled={busy} onClick={() => void flow.confirm()} size="sm" type="button">
             {confirmLabel(phase, copy)}
           </Button>
         ) : null}

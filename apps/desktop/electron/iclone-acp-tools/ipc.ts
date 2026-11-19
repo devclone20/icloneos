@@ -1,9 +1,10 @@
 /**
- * REL-6 — the window's door to the ACP tools installer. Every channel passes the app sender guard (P7, required: no
- * guard refuses everything). Installing is an `I` (install) action under V3-F: it needs main's own gesture verdict for
- * THAT sender (the preload's `data-acp-tools-confirm` lock + real input), it is written to the permission audit before
- * anything is fetched, and no agent path reaches it — the agent's socket has no install verb, and every ACP path the
- * agent can reach only refuses while the tools are absent.
+ * REL-6 / v0.0.9 — the window's door to the ACP tools. Every channel passes the app sender guard (P7, required: no guard
+ * refuses everything). v0.0.9: the app ships the CLI, so the one write is **Repair** (`iclone:acp-tools:install`, name
+ * kept): restore the working copy from the copy included in the signed app, offline. It stays an `I` (install) action
+ * under V3-F: it needs main's own gesture verdict for THAT sender (the preload's `data-acp-tools-confirm` lock + real
+ * input), it is written to the permission audit before anything is copied, and no agent path reaches it — the agent's
+ * socket has no repair verb.
  */
 import type { AcpToolsInstallResult, AcpToolsView } from '../../src/iclone-shared/acp-tools'
 import { guardedHandler } from '../iclone-consent'
@@ -38,7 +39,7 @@ export async function requestInstall(
   const pinned = deps.tools.cliVersion() ?? 'unknown'
 
   if (!gesture) {
-    deps.audit({ kind: 'refuse', reason: `acp tools: install ${pinned} without the owner's own click`, gesture: false })
+    deps.audit({ kind: 'refuse', reason: `acp tools: repair ${pinned} without the owner's own click`, gesture: false })
 
     return { ok: false, error: 'gesture' }
   }
@@ -47,10 +48,9 @@ export async function requestInstall(
     return { ok: false, error: 'busy' }
   }
 
-  if (
-    deps.audit({ kind: 'use', reason: `acp tools: the owner asked to install ${pinned} from npm`, gesture: true }) ===
-    null
-  ) {
+  const asked = `acp tools: the owner asked to repair ${pinned} from the copy included in the app`
+
+  if (deps.audit({ kind: 'use', reason: asked, gesture: true }) === null) {
     return { ok: false, error: 'audit' }
   }
 

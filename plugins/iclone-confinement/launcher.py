@@ -1920,6 +1920,7 @@ class Launcher:
         try:
             self._private_dir(directory)
             self._private_dir(self.journal.directory)
+            self.driver_door.sweep()  # lens MINOR 1: the door's sockets a crashed run left in this folder
             try:
                 st = os.lstat(self.socket_path)
             except FileNotFoundError:

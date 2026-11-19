@@ -98,12 +98,12 @@ vi.mock('./iclone-acp-ipc', async importOriginal => {
 })
 
 import { initIcloneAcp } from './iclone-acp'
-import { memorySealer, writeFixturePin } from './iclone-acp-tools/fixture'
+import { memorySealer, writeFixtureBundle, writeFixturePin } from './iclone-acp-tools/fixture'
 
 const savedBin = process.env.ICLONE_ACP_BIN
 const call = (channel: string, ...args: unknown[]) => lab.handlers.get(channel)!({ sender: {} }, ...args)
 
-beforeAll(() => {
+beforeAll(async () => {
   delete process.env.ICLONE_ACP_BIN
 
   const pin = writeFixturePin(`${lab.home}/pin`)
@@ -115,9 +115,13 @@ beforeAll(() => {
   mkdirSync(path.join(lab.app, 'scripts'), { recursive: true })
   cpSync(pin.pinDir, path.join(lab.app, 'acp-cli-lock'), { recursive: true })
   cpSync(pin.launcher, path.join(lab.app, 'scripts', 'acp-launch.cjs'))
+  // v0.0.9 F1-B: the tools no longer download; they place the bundle a build ships (dev: <app>/build/acp-tools).
+  await writeFixtureBundle(pin, path.join(lab.app, 'build', 'acp-tools'))
   initIcloneAcp({
     isTrustedSender: () => true,
     sealer: memorySealer,
+    // critic m5: the window runs the CLI only for an iNFT main's scans returned (main.ts: isScannedInftId).
+    isKnownInft: id => id === 'inft-1',
     gestureOk: () => true,
     audit: entry => {
       lab.audit.push(entry)
@@ -133,7 +137,16 @@ afterAll(() => {
 })
 
 describe('REL-6 round 2: the tools installed, every spawn re-checks and confines', () => {
-  it('installs on the owner’s click, then a run starts the CLI with the verified tree and no NODE_PATH', async () => {
+  it('placed on its own, Repaired on the owner’s click, then a run starts the CLI with the verified tree and no NODE_PATH', async () => {
+    // v0.0.9 F1-B: init places the included copy by itself (no click); a click meanwhile is `busy`, never a 2nd copy.
+    let view = (await call('iclone:acp-tools:state')) as { state: string }
+
+    for (let i = 0; i < 200 && (view.state === 'installing' || view.state === 'checking'); i++) {
+      await new Promise(resolve => setTimeout(resolve, 10))
+      view = (await call('iclone:acp-tools:state')) as { state: string }
+    }
+
+    expect(view).toMatchObject({ state: 'installed' })
     expect(await call('iclone:acp-tools:install', {})).toMatchObject({ ok: true, view: { state: 'installed' } })
 
     const result = (await call('iclone:acp-run', 'inft-1', ['chain', 'list', '--json'])) as { ok: boolean }

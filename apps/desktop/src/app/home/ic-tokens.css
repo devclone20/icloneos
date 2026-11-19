@@ -120,7 +120,14 @@
   --ic-text-1: var(--ic-ink);
   --ic-text-2: color-mix(in srgb, var(--ic-ink) var(--ic-a60), transparent);
   --ic-text-3: color-mix(in srgb, var(--ic-ink) var(--ic-a40), transparent);
+  /* v0.0.9 F4: secondary text that must hold AA (4.5:1) on an opaque plate in both skins. --ic-text-2 measures
+     5.5:1 on the dark plate but 4.1:1 on paper, so secondary words on a notification plate use this step
+     (notification-contrast.test.ts computes both from these declarations). */
+  --ic-text-2-aa: color-mix(in srgb, var(--ic-ink) var(--ic-a72), transparent);
   --ic-text-on-accent: var(--ic-ink-900);
+  /* v0.0.9 r2 (d-r2-1): the Message window's empty-chat line (chat/intro.css). White in the dark skins, as designed;
+     the light skin restates it as --ic-text-1 (white on paper was ~1.1:1). intro-contrast.test.ts measures both. */
+  --ic-text-intro: var(--ic-white);
   /* A window without ic-bridge.css (the wake indicator) has no skin accent. */
   --ic-accent: var(--ic-skin-accent, var(--ic-gold-500));
   --ic-accent-soft: color-mix(in srgb, var(--ic-gold-500) var(--ic-a14), transparent);
@@ -167,6 +174,11 @@
   --ic-border-strong: color-mix(in srgb, var(--ic-ink-900) var(--ic-a14), transparent);
   --ic-hairline-accent: color-mix(in srgb, var(--ic-gold-600) var(--ic-a14), transparent);
   --ic-text-on-accent: var(--ic-white);
+  --ic-text-intro: var(--ic-text-1);
+  /* v0.0.9 design 1 (critic r1): ink at 60 % measured 4.0–4.2:1 on paper, the wallet plate, the Collection cards and
+     the window chrome; the light skin's secondary words take the AA step (≥ 4.5:1 on every one of those,
+     notification-contrast.test.ts). The dark skins keep 60 % (5.5:1 and up). */
+  --ic-text-2: var(--ic-text-2-aa);
   --ic-accent-soft: color-mix(in srgb, var(--ic-gold-700) var(--ic-a14), transparent);
   --ic-accent-strong: var(--ic-gold-700);
   --ic-focus-ring: color-mix(in srgb, var(--ic-gold-600) var(--ic-a25), transparent);
@@ -320,6 +332,12 @@
   --ic-connect-fill-end: color-mix(in srgb, var(--ic-gilt) var(--ic-a10), transparent);
   --ic-connect-hover-top: color-mix(in srgb, var(--ic-glyph) var(--ic-a25), transparent);
   --ic-connect-hover-end: color-mix(in srgb, var(--ic-gilt) var(--ic-a10), transparent);
+  /* v0.0.9 r3 (design N5): a primary call to action as a solid plate — the light skin's "Connect wallet" (the econ gate,
+     the home hero). Pale accent ink on a pale accent fill read as disabled there (cta-contrast.test.ts). */
+  /* White on gold-700 alone measures 3.9:1; an eighth of night ink brings the plate past AA. */
+  --ic-cta-fill: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a88), var(--ic-ink-900));
+  --ic-cta-fill-hover: color-mix(in srgb, var(--ic-accent-strong) var(--ic-a75), var(--ic-ink-900));
+  --ic-cta-ink: var(--ic-text-on-accent);
   --ic-titlebar-glyph: var(--ic-ink-700);
   --ic-ctl-line: var(--ic-chrome-line);
   --ic-ctl-fill: var(--ic-chrome-fill);
@@ -352,18 +370,56 @@
   /* Panels over the stage (iNFT collections, wallet): night glass with gilt
      lines; the paper skin re-points them. */
   --ic-inft-panel-shadow: var(--ic-shadow-panel);
-  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a45), transparent);
-  --ic-inft-panel-line: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  /* v0.0.9 F5: near-opaque night so running text holds AA over any stage. */
+  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-ink-900) var(--ic-a88), transparent);
+  --ic-inft-panel-line: var(--ic-border-subtle);
+  /* v0.0.9 F5 · the iNFT Collection grid (collections.css). */
+  --ic-inft-panel-w: clamp(384px, 34vw, 560px);
+  --ic-inft-panel-pad: 20px;
+  --ic-inft-grid-gap: 14px;
+  --ic-inft-card-tilt: 4deg;
+  --ic-inft-font-display: 'Noto Serif Display ExtraCondensed', serif;
+  --ic-inft-title-size: 1.375rem;
+  --ic-inft-name-size: 1.0625rem;
+  --ic-inft-meta-size: var(--ic-type-sm);
+  --ic-inft-card-fill: var(--ic-ink-800);
+  --ic-inft-card-line: var(--ic-border-subtle);
+  --ic-inft-card-line-hover: color-mix(in srgb, var(--ic-gilt) var(--ic-a40), transparent);
+  --ic-inft-card-shadow: var(--ic-shadow-card);
+  --ic-inft-art-fill: var(--ic-ink-700);
+  --ic-inft-art-mark: color-mix(in srgb, var(--ic-paper) var(--ic-a14), transparent);
+  --ic-inft-art-veil: color-mix(in srgb, var(--ic-ink-900) var(--ic-a75), transparent);
+  --ic-inft-edge-hi: color-mix(in srgb, var(--ic-gold-300) var(--ic-a54), transparent);
+  --ic-inft-edge-lo: color-mix(in srgb, var(--ic-paper) var(--ic-a10), transparent);
+  --ic-inft-plate-fill: color-mix(in srgb, var(--ic-ink-900) var(--ic-a88), transparent);
+  --ic-inft-plate-line: var(--ic-border-subtle);
+  --ic-inft-plate-ink: var(--ic-paper);
+  --ic-inft-plate-ink-2: color-mix(in srgb, var(--ic-paper) var(--ic-a67), transparent);
+  --ic-inft-badge-fill: color-mix(in srgb, var(--ic-ink-900) var(--ic-a75), transparent);
+  --ic-inft-badge-gold: var(--ic-gold-300);
+  --ic-inft-badge-gold-line: color-mix(in srgb, var(--ic-gold-500) var(--ic-a54), transparent);
+  --ic-inft-badge-dim: color-mix(in srgb, var(--ic-paper) var(--ic-a75), transparent);
+  --ic-inft-badge-dim-line: color-mix(in srgb, var(--ic-paper) var(--ic-a30), transparent);
+  --ic-inft-skeleton: linear-gradient(
+    100deg,
+    var(--ic-fill-hover) 30%,
+    color-mix(in srgb, var(--ic-paper) var(--ic-a10), transparent) 50%,
+    var(--ic-fill-hover) 70%
+  );
   --ic-econ-frame-shadow: var(--ic-shadow-window);
   --ic-econ-frame-line: var(--ic-hairline-accent);
+  /* v0.0.9 pass 4 (critic-G 11): the pane root's keyboard ring, drawn above the plate (ic-window.css). */
+  --ic-pane-focus-ring: var(--ic-accent-strong);
+  /* v0.0.9 F5 · the personal wallet popover: an opaque plate on e3 (wallet-panel.css). */
+  --ic-wallet-panel-w: 360px;
   --ic-wallet-panel-shadow: var(--ic-shadow-panel-sm);
-  --ic-wallet-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a72), transparent);
-  --ic-wallet-panel-line: color-mix(in srgb, var(--ic-accent) var(--ic-a25), transparent);
-  --ic-wallet-panel-rule: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
-  --ic-wallet-addr-line: color-mix(in srgb, var(--ic-accent) var(--ic-a14), transparent);
+  --ic-wallet-panel-fill: var(--ic-ink-800);
+  --ic-wallet-panel-line: var(--ic-border-subtle);
+  --ic-wallet-panel-rule: var(--ic-border-subtle);
+  --ic-wallet-addr-line: var(--ic-border-subtle);
   --ic-wallet-addr-fill: var(--ic-surface-raised);
   --ic-wallet-row-hover: var(--ic-fill-hover);
-  --ic-wallet-skeleton: var(--ic-surface-raised);
+  --ic-wallet-skeleton: var(--ic-inft-skeleton);
   /* The QR sits on an ink plate so it scans on the night glass. */
   --ic-wallet-qr-fill: var(--ic-text-1);
 }
@@ -383,12 +439,37 @@
   --ic-msg-tab-line: var(--ic-hairline-accent);
   --ic-msg-tab-fill: var(--ic-glint);
   --ic-tab-hover-fill: color-mix(in srgb, var(--ic-text-1) var(--ic-a05), transparent);
+  /* v0.0.9 G-2 (design G): the vertical "INFT" label is a primary control (the Email empty state points at it); the
+     pale gold the dark skins wear read faint on paper (and the CTA gold measured 4.1:1), so the light skin takes the
+     night ink the pale field already gives it, at full opacity (collections.css): ≥ 4.5:1, inft-tab-label-contrast.g2. */
+  --ic-tab-label-ink: var(--ic-titlebar-glyph);
+  /* v0.0.9 F6 path (design G): the whole-frame split preview's veil. Paper at 88 % over a paper pane was the pane
+     itself (no veil read in 02-light); paper toned 10 % toward night drops it ≥ 8 % in luminance and still ghosts the
+     rows under it (split-veil.g.test.ts). */
+  --ic-split-veil-tone: color-mix(in srgb, var(--ic-ink-900) var(--ic-a10), var(--ic-paper));
+  --ic-split-veil: color-mix(in srgb, var(--ic-split-veil-tone) var(--ic-a88), transparent);
   --ic-econ-frame-shadow: var(--ic-shadow-window-paper);
   --ic-econ-frame-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
-  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a60), transparent);
+  /* The darker CTA gold: the strong accent reads as the pane's resting gilt hairline in light (design R5-5). */
+  --ic-pane-focus-ring: var(--ic-cta-fill);
+  --ic-inft-panel-fill: color-mix(in srgb, var(--ic-paper) var(--ic-a88), transparent);
   --ic-inft-panel-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
   --ic-inft-panel-shadow: var(--ic-shadow-window-paper);
-  --ic-wallet-panel-fill: color-mix(in srgb, var(--ic-surface) var(--ic-a80), transparent);
+  --ic-inft-card-fill: var(--ic-white);
+  --ic-inft-card-line: color-mix(in srgb, var(--ic-ink-900) var(--ic-a10), transparent);
+  --ic-inft-card-line-hover: color-mix(in srgb, var(--ic-gold-600) var(--ic-a54), transparent);
+  --ic-inft-card-shadow: var(--ic-shadow-panel-sm-paper);
+  --ic-inft-art-fill: color-mix(in srgb, var(--ic-ink-700) var(--ic-a10), var(--ic-paper));
+  --ic-inft-art-mark: color-mix(in srgb, var(--ic-ink-900) var(--ic-a14), transparent);
+  --ic-inft-edge-hi: color-mix(in srgb, var(--ic-gold-600) var(--ic-a60), transparent);
+  --ic-inft-edge-lo: color-mix(in srgb, var(--ic-ink-900) var(--ic-a10), transparent);
+  --ic-inft-skeleton: linear-gradient(
+    100deg,
+    var(--ic-fill-hover) 30%,
+    color-mix(in srgb, var(--ic-ink-900) var(--ic-a10), transparent) 50%,
+    var(--ic-fill-hover) 70%
+  );
+  --ic-wallet-panel-fill: var(--ic-paper);
   --ic-wallet-panel-line: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
   --ic-wallet-panel-shadow: var(--ic-shadow-panel-sm-paper);
   --ic-wallet-panel-rule: color-mix(in srgb, var(--ic-text-1) var(--ic-a14), transparent);
@@ -637,6 +718,36 @@
   --ic-dock-tone-glow: var(--ic-shadow-stroke-haze) color-mix(in srgb, var(--ic-night) var(--ic-a10), transparent);
   --ic-dock-tone-glow-hover: var(--ic-shadow-stroke-haze) color-mix(in srgb, var(--ic-night) var(--ic-a05), transparent);
   --ic-dock-tone-blur: var(--ic-blur-deep);
+}
+
+/* ── L2 component: notifications (v0.0.9 F4, components/notification-system.css)
+   Toast, status banner and the notification centre sit on OPAQUE plates (no translucent glass), so the worst
+   background is the plate itself and contrast is a property of these tokens: text ≥ 4.5:1, severity icon and side
+   bar ≥ 3:1, in both skins (notification-contrast.test.ts). Colour lives only in the icon and a 2px side bar. */
+:root {
+  --ic-note-w: min(380px, calc(100vw - 32px));
+  --ic-note-centre-w: min(400px, calc(100vw - 24px));
+  --ic-note-plate: var(--ic-ink-800);
+  --ic-note-plate-sunken: color-mix(in srgb, var(--ic-black) var(--ic-a20), var(--ic-ink-800));
+  --ic-note-line: var(--ic-border-subtle);
+  --ic-note-ink: var(--ic-text-1);
+  --ic-note-ink-2: var(--ic-text-2-aa);
+  --ic-note-shadow: var(--ic-shadow-e3) var(--ic-shadow-tint), var(--ic-shadow-stroke-edge) var(--ic-note-line);
+  --ic-note-info: var(--ic-text-2-aa);
+  --ic-note-success: var(--ic-success);
+  --ic-note-warning: var(--ic-warning);
+  --ic-note-error: var(--ic-danger);
+  --ic-note-unread: var(--ic-accent);
+}
+:root[data-hermes-theme='iclone-light'] {
+  --ic-note-plate: var(--ic-paper);
+  --ic-note-plate-sunken: color-mix(in srgb, var(--ic-ink-800) var(--ic-a05), var(--ic-paper));
+  --ic-note-line: color-mix(in srgb, var(--ic-ink-900) var(--ic-a14), transparent);
+  /* Amber and green on paper measure ~3.0:1 / ~3.2:1 — a fifth of ink brings both clear of 3:1 (≈4.2 / ≈4.5). */
+  --ic-note-success: color-mix(in srgb, var(--ic-green-600) var(--ic-a80), var(--ic-ink-800));
+  --ic-note-warning: color-mix(in srgb, var(--ic-amber-600) var(--ic-a80), var(--ic-ink-800));
+  --ic-note-error: var(--ic-red-600);
+  --ic-note-unread: var(--ic-gold-700);
 }
 
 /* ── L2 component: shared controls (components/ui/button.tsx) ─────────────

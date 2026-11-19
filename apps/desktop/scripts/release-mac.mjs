@@ -591,6 +591,18 @@ export async function releaseMac(opts, deps = {}) {
         '--team',
         opts.team
       ])
+      // v0.0.9: the app SHIPS the ACP CLI (Resources/acp-tools). Its Go signer is Developer-ID signed HERE, the
+      // Team-signed add-ons above are swapped into the tree and its manifest is resealed over those bytes, before the
+      // pack (sign-hook.mjs leaves the tree alone); notarization then covers them with the app.
+      step('Developer-ID sign the bundled ACP CLI and reseal its manifest (v0.0.9)', 'node', [
+        'scripts/sign-acp-bundle.mjs',
+        '--identity',
+        sha1,
+        '--keychain',
+        keychain,
+        '--team',
+        opts.team
+      ])
       step(
         'electron-builder pack + sign + notarize',
         'node',
@@ -619,6 +631,13 @@ export async function releaseMac(opts, deps = {}) {
       ])
       step('the FSEvents addon in the signed app: Team-signed, pinned bytes under the signature (FSEV, L1-4)', 'node', [
         'scripts/iclone-fsevents-check.mjs',
+        appPath,
+        '--signed',
+        '--team',
+        opts.team
+      ])
+      step('the bundled ACP CLI in the signed app: its manifest, Team-signed (v0.0.9)', 'node', [
+        'scripts/acp-pack-bundled.mjs',
         appPath,
         '--signed',
         '--team',

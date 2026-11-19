@@ -513,6 +513,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
 
             <button
               className="rounded-(--ic-radius-md) border border-(--ic-border-subtle) bg-(--ic-surface-raised) p-4 text-left transition hover:bg-(--ic-fill-hover) disabled:cursor-wait disabled:opacity-60"
+              data-repair-kit-confirm=""
               disabled={localStarting}
               onClick={async () => {
                 setLocalStart({ root: activeRoot, starting: true, error: null })
@@ -524,7 +525,13 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                     throw new Error(copy.localStartUnavailable)
                   }
 
-                  await desktop.continueBootstrapLocal()
+                  // v0.0.9 critic m6: main starts the network install only on this click (data-repair-kit-confirm);
+                  // a refusal (or a sender main does not trust) starts nothing and is said, never a silent spinner.
+                  const started = await desktop.continueBootstrapLocal()
+
+                  if (!started?.ok) {
+                    throw new Error(copy.localStartUnavailable)
+                  }
                 } catch (err) {
                   setLocalStart({ root: activeRoot, starting: false, error: errorMessage(err, 'Unknown error') })
                 }
@@ -869,6 +876,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                 </IcButton>
                 <IcButton
                   data-action={fixOpened ? 'retry' : (diagnosis?.fix ?? 'retry')}
+                  data-repair-kit-confirm={!fixOpened && diagnosis?.fix === 'repair' ? '' : undefined}
                   onClick={async () => {
                     const fix: InstallFixAction = fixOpened ? 'retry' : (diagnosis?.fix ?? 'retry')
 

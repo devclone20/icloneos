@@ -92,7 +92,7 @@ export function AgentRuntimeSection() {
         <ListRow
           action={
             status && status.state !== 'installed' && status.state !== 'installing' ? (
-              <IcButton data-action="install-again" disabled={busy} onClick={installAgain} size="sm">
+              <IcButton data-action="install-again" data-repair-kit-confirm="" disabled={busy} onClick={installAgain} size="sm">
                 {copy.installAgain}
               </IcButton>
             ) : null

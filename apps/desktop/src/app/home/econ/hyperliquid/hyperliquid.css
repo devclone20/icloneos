@@ -89,7 +89,7 @@
   width: 22px;
   height: 22px;
   border-radius: var(--ic-radius-sm);
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   opacity: 0.45;
   cursor: pointer;
   transition:

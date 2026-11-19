@@ -41,8 +41,9 @@ describe('HomeView — Escape on an expanded Dock window', () => {
     fireEvent.click(screen.getByRole('button', { name: copy.tile.bank }))
     expect(bankWindow()).not.toBeNull()
 
-    const title = bankWindow()!.querySelector('h2')?.textContent ?? ''
-    fireEvent.click(screen.getByRole('button', { name: copy.expandWindow(title) }))
+    // v0.0.9 F6: the expand is the window menu's Fill.
+    fireEvent.click(screen.getByRole('button', { name: 'Window options for Bank Card' }), { detail: 1 })
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Fill' }), { detail: 1 })
     expect(bankWindow()!.dataset.expanded).toBe('true')
 
     fireEvent.keyDown(window, { key: 'Escape' })

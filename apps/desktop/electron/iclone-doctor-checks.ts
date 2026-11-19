@@ -86,6 +86,11 @@ export interface DoctorEnv {
   userData: string
   hermesHome: string
   venvDir: string
+  /**
+   * v0.0.9 point A: the env every run of the app's runtime carries (main/runtime-install-state.ts `managedRuntimeEnv`:
+   * its private HERMES_DEPENDENCY_HOME, no lazy installs). Empty / absent for any other runtime.
+   */
+  runtimeEnv?: Readonly<Record<string, string>>
   /** `~/.iclone-os` */
   icloneHome: string
   /** The installed `.app` to verify (packaged: the running bundle; dev: the /Applications copy if any). */
@@ -654,7 +659,7 @@ export const CHECKS: Record<string, CheckImpl> = {
     const out = await env.exec(venvPythonPath(env), ['-m', 'hermes_cli.main', 'doctor'], {
       timeoutMs: 45_000,
       signal: env.signal,
-      env: { ...process.env, HERMES_HOME: env.hermesHome, NO_COLOR: '1' }
+      env: { ...process.env, HERMES_HOME: env.hermesHome, ...env.runtimeEnv, NO_COLOR: '1' }
     })
 
     if (out.timedOut) {

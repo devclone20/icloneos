@@ -15,7 +15,7 @@ export const boot: TranslationOverrides['boot'] = {
   errors: {
     backgroundExited: '智慧代理背景程序已結束。',
     backgroundExitedDuringStartup: '智慧代理背景程序在啟動期間結束。',
-    backendStopped: '後端已停止',
+    backendStopped: '代理已停止',
     desktopBootFailed: '桌面啟動失敗',
     gatewayConnectionLost: '與閘道的連線已中斷',
     gatewayConnectionLostDetail:

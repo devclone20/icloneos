@@ -16,6 +16,14 @@ import {
   shouldLatchHostKeyChangedFailure,
   shouldLatchRemoteReauthFailure
 } from '../backend-start-failure'
+import {
+  type BootCause,
+  classifyBootError,
+  classifyBootExit,
+  isSupersededBootError,
+  readBootCause,
+  withBootCause
+} from '../boot-cause'
 import { removeOrphanedBootstrapCache } from '../bootstrap-runner'
 import { adoptServedDashboardToken } from '../dashboard-token'
 import { probeGatewayWebSocket } from '../gateway-ws-probe'
@@ -40,9 +48,11 @@ import {
   claimBackendChild,
   primaryBackendIsRemote,
   primaryProfileKey,
+  sendBackendRestarted,
   stopBackendChild,
   waitForBackendExit
 } from './backend'
+import { bindBackendAutoRestart } from './backend-auto-restart'
 import { BOOT_DEPENDENCIES_MESSAGE, BOOT_PHASE_DEPENDENCIES, watchBackendBoot } from './backend-boot-watch'
 import { desktopParentStartMarker, reapOrphanedBackendsOnce, releaseBackendChild } from './backend-ownership'
 import { ensureRuntime } from './backend-pool'
@@ -60,11 +70,19 @@ import { readActiveDesktopProfile } from './connection-config'
 import { HERMES_HOME } from './env'
 import { getBackendArgsForRuntime } from './executables'
 import { prepareHermesSpawn } from './iclone-gate'
-import { DESKTOP_LOG_PATH, hermesLog, recentHermesLog, rememberLog } from './log'
+import { DESKTOP_LOG_PATH, hermesLog, rememberLog } from './log'
 import { managedPrimaryRestoreOwners } from './managed-ssh'
 import { resolveRemoteBackend } from './managed-ssh-update'
 import { makeDashboardReadyFile, resolveHermesCwd, resolveWebDist } from './runtime'
-import { bootState, lateBound, QuitInProgressError, quitState, refuseWhileQuitting } from './state'
+import { detectForeignInstallState, foreignInstallStateLogLine, managedRuntimeEnv } from './runtime-install-state'
+import {
+  bootState,
+  connectionRuntimeState,
+  lateBound,
+  QuitInProgressError,
+  quitState,
+  refuseWhileQuitting
+} from './state'
 import {
   ensureRuntimeUpdateCheckOff,
   resolveHermesBackend,
@@ -80,6 +98,50 @@ function refuseBootWhileQuitting(): void {
     rememberLog('[boot] quitting: boot refused')
 
     throw error
+  }
+}
+
+// v0.0.9 F2 (bug C): main restarts the local backend after a crash or a failed boot, 1/2/4/8/16 s, at most 5 times in
+// 10 min, never for a cause a restart cannot cure (backend-auto-restart.ts). The latched error is the hold while an
+// attempt is pending; the attempt clears exactly that latch and calls startHermes().
+const autoRestart = bindBackendAutoRestart({
+  now: () => Date.now(),
+  setTimer: (run, ms) => {
+    const handle = setTimeout(run, ms)
+
+    handle.unref?.()
+
+    return handle
+  },
+  clearTimer: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+  mayRestart: () =>
+    lateBound.isPrimaryInstance &&
+    !quitState.quitting &&
+    !connectionRuntimeState.softRehomeInProgress &&
+    !bootState.bootstrapFailure &&
+    !bootState.remoteReauthFailure &&
+    managedPrimaryRestoreOwners.size === 0 &&
+    !primaryBackendIsRemote(),
+  releaseHold: held => {
+    if (bootState.backendStartFailure === held) {
+      bootState.backendStartFailure = null
+    }
+  },
+  restart: () => startHermes(),
+  announceRestarted: () => sendBackendRestarted(),
+  publish: restart => updateBootProgress({ restart }),
+  log: rememberLog
+})
+
+/** Latch a failure and hand it to the supervisor; the latch is kept only when a restart is scheduled or refused. */
+function latchForAutoRestart(error: Error, cause: BootCause, trigger: 'boot-failed' | 'crash'): void {
+  bootState.backendStartFailure = error
+  const status = autoRestart.noteFailure({ cause, held: error, trigger })
+
+  // Not allowed now (quitting, re-homing, remote): a crash leaves nothing latched, as before; a boot failure keeps the
+  // latch it always had (the failure screen and its Retry own it).
+  if (status.phase === 'idle' && trigger === 'crash' && bootState.backendStartFailure === error) {
+    bootState.backendStartFailure = null
   }
 }
 
@@ -246,6 +308,25 @@ export async function startHermes() {
     setWslBridgeProfileState(primaryProfile, true)
 
     const backend = setup.backend
+
+    // v0.0.9 F2 point A: DETECT (never move — lead decision 17 Nov; the user's own Hermes may own it) install state for
+    // the app's runtime under HERMES_HOME: with Isolation on it makes the backend exit 1 ("install state is not
+    // writable"). Logged as the hint behind that boot cause; the repair kit (F3) moves it, on the owner's click.
+    const foreignInstallState = detectForeignInstallState({
+      hermesHome: HERMES_HOME,
+      home: app.getPath('home'),
+      runtimeRoot: backend.root
+    })
+
+    if (foreignInstallState.records.length > 0) {
+      rememberLog(
+        foreignInstallStateLogLine(
+          foreignInstallState.records,
+          Object.keys(managedRuntimeEnv(backend.root)).length > 0
+        )
+      )
+    }
+
     removeOrphanedBootstrapCache(HERMES_HOME, rememberLog)
     await ensureRuntimeUpdateCheckOff(runsAs.slug ?? activeProfile) // iclone-seam: r1-config — updates.check off → spawn
     // Route old runtimes (no `serve`) through the legacy `dashboard --no-open`.
@@ -324,7 +405,10 @@ export async function startHermes() {
           ...parentIdentityEnv,
           HERMES_WEB_DIST: webDist,
           ...(readyFile ? { HERMES_DESKTOP_READY_FILE: readyFile } : {})
-        }),
+          // v0.0.9 F2 point A + Q decision 4: the app's runtime gets its dependencies from the app's own install
+          // (private, under the runtime): HERMES_DEPENDENCY_HOME pins that root (never adopt `<HERMES_HOME>/installs`)
+          // and HERMES_DISABLE_LAZY_INSTALLS stops any in-process sync. Set explicitly here, never inherited.
+        }, managedRuntimeEnv(backend.root)),
         shell: backend.shell,
         stdio: gated.stdio
       })
@@ -404,8 +488,11 @@ export async function startHermes() {
       }
 
       rememberLog(`Hermes backend failed to start: ${error.message}`)
+      const spawnCause = readBootCause(error) ?? classifyBootError(error)
+
       updateBootProgress(
         {
+          bootCause: spawnCause,
           error: error.message,
           message: `Hermes backend failed to start: ${error.message}`,
           phase: 'backend.error',
@@ -414,7 +501,7 @@ export async function startHermes() {
         { allowDecrease: true }
       )
       sendBackendExit({ code: null, signal: null, error: error.message })
-      rejectBackendStart?.(error)
+      rejectBackendStart?.(withBootCause(error, spawnCause))
     })
     hermesProcess.once('exit', (code, signal) => {
       releaseBackendChild(hermesProcess)
@@ -432,16 +519,21 @@ export async function startHermes() {
       rememberLog(`Hermes backend exited (${signal || code})`)
       sendBackendExit({ code, signal })
 
-      if (!backendReady) {
-        // A confined interpreter the kernel would not exec (sandbox-exec's 71 with its execvp line) says which path
-        // the profile could not reach, instead of a bare exit code.
-        const confinedExec = describeConfinedExecFailure(code, primaryOutputTail.text())
+      // v0.0.9 F2 (bug B): the cause is read from THIS child's own output, captured from the instant of spawn —
+      // never from the shared desktop log, whose tail always holds main's own `[iclone-gate] … loaded by Hermes`.
+      const childOutput = primaryOutputTail.text()
+      // A confined interpreter the kernel would not exec (sandbox-exec's 71 with its execvp line) says which path
+      // the profile could not reach, instead of a bare exit code.
+      const confinedExec = describeConfinedExecFailure(code, childOutput)
+      const exitCause = classifyBootExit({ afterReady: backendReady, code, confinedExec, output: childOutput, signal })
 
+      if (!backendReady) {
         const message =
           confinedExec ?? `Hermes backend exited before it became ready (${signal || code}).${primaryOutputTail.describe()}`
 
         updateBootProgress(
           {
+            bootCause: exitCause,
             error: message,
             message,
             phase: 'backend.error',
@@ -449,12 +541,31 @@ export async function startHermes() {
           },
           { allowDecrease: true }
         )
+        // The evidence after "Log:" is the child's own output tail (F3's repair kit reads it), not the app log.
         rejectBackendStart?.(
-          new Error(
-            `${confinedExec ?? `Hermes backend exited before it became ready (${signal || code}).`} Log: ${DESKTOP_LOG_PATH}\n${recentHermesLog()}`
+          withBootCause(
+            new Error(
+              `${confinedExec ?? `Hermes backend exited before it became ready (${signal || code}).`} Log: ${DESKTOP_LOG_PATH}${primaryOutputTail.describe()}`
+            ),
+            exitCause
           )
         )
+
+        return
       }
+
+      // A ready backend that stopped on its own (every intentional stop invalidates the process first and lands in
+      // the stale branch above): main restarts it with backoff instead of leaving the renderer to respawn it unbounded.
+      latchForAutoRestart(
+        withBootCause(
+          // Correctness 3: neutral words — this error stays latched after the breaker trips, so it must not promise a
+          // restart; `$backendRestart.phase` says whether one is coming.
+          new Error(`The agent stopped unexpectedly (${signal || code}).`),
+          exitCause
+        ),
+        exitCause,
+        'crash'
+      )
     })
 
     await advanceBootProgress('backend.port', 'Waiting for Hermes backend to launch', 86)
@@ -494,6 +605,7 @@ export async function startHermes() {
 
     backendReady = true
     bootState.backendStartFailure = null
+    autoRestart.noteReady()
     markAgentRuntimeRunning()
     endInstallBudget() // ruling 42 r2: the first-launch budget ends when the agent is up
     verifyCuratedHealthCommit(baseUrl)
@@ -514,6 +626,7 @@ export async function startHermes() {
     }
 
     updateBootProgress({
+      bootCause: null,
       phase: 'backend.ready',
       message: 'Hermes backend is ready. Finalizing desktop startup',
       progress: 94,
@@ -554,6 +667,14 @@ export async function startHermes() {
     }
 
     const message = error instanceof Error ? error.message : String(error)
+    // v0.0.9 F2 (bug B): one structured cause per failure, carried on the error and on the boot progress, so no
+    // consumer re-classifies the text (F3: backend-start-failure.ts, bootstrap-ipc.ts, the failure overlay).
+    const bootCause = classifyBootError(error)
+
+    if (error instanceof Error && !readBootCause(error)) {
+      withBootCause(error, bootCause)
+    }
+
     // A host-key change, or a running server whose ownership the host cannot prove: shown, latched, never auto-retried.
     const hostKeyChanged = isUserActionRemoteBootFailure(error)
 
@@ -582,7 +703,16 @@ export async function startHermes() {
     // on "session expired" until a full restart, defeating reconnect, the
     // "Sign out & sign in" reload, and the wake-recovery revalidate path.
     if (shouldLatchBackendStartFailure({ attemptedRemote })) {
-      bootState.backendStartFailure = error instanceof Error ? error : new Error(message)
+      const latched = error instanceof Error ? error : withBootCause(new Error(message), bootCause)
+
+      // v0.0.9 F2 (bug C): the latch is no longer for the life of the process. A cause a restart can cure is retried
+      // by main on a schedule (the latch is the hold until then); a deterministic one, a superseded attempt and an
+      // install verdict (the install overlay owns its Try again) keep the plain latch until the user acts.
+      if (isSupersededBootError(error) || message.includes(INSTALL_WATCHDOG_TAG)) {
+        bootState.backendStartFailure = latched
+      } else {
+        latchForAutoRestart(latched, bootCause, 'boot-failed')
+      }
     }
 
     // A host-key CHANGE is the terminal exception among remote failures: SSH
@@ -603,6 +733,7 @@ export async function startHermes() {
 
     updateBootProgress(
       {
+        bootCause,
         error: message,
         isCloudBackendDown: isCloudBackendDown || undefined,
         message: `Desktop boot failed: ${message}`,

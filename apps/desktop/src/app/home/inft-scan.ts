@@ -7,7 +7,7 @@ import type { InftBootstrap } from './inft-bootstrap'
  * `InftScanResult` by hand (main-process types can't be imported into the
  * renderer bundle) and adapts a scan result into the `INftCardData` shape
  * `collections.tsx` already renders — so `home-view.tsx` only ever has to
- * swap `SAMPLE_CARDS` for `$inftRoster` (see `privy-session.ts`), never learn
+ * read `$inftRoster` (see `privy-session.ts`; signed out it shows no cards), never learn
  * a second card shape.
  */
 import { shortAddress } from './lib/format'
@@ -32,6 +32,8 @@ export interface InftScanResult {
   complete?: boolean
   /** Not complete only because a chain hit the 5 000 ceiling: the most the app reads, so it may seed O1. */
   capped?: boolean
+  /** v0.0.9 W1b: the chains this scan could not read to the end (electron/iclone-privy.ts `incompleteChains`). */
+  incomplete?: string[]
   error?: string
 }
 

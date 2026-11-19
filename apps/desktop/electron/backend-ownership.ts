@@ -151,7 +151,66 @@ export function createBackendOwnership(deps: BackendOwnershipDeps) {
   const read = () => readDetailed().entries
   const write = (entries: BackendOwnershipEntry[]) => deps.store.write(serializeBackendOwnership(entries))
 
+  /**
+   * The one verdict reapOrphans acts on (and listOrphans reports): `stop` only for a record whose Electron parent is
+   * not running (or unknown, a legacy record) AND whose process identity is proven; `drop` for a proven PID reuse;
+   * `keep` for everything uncertain or still parented.
+   */
+  const orphanVerdict = async (entry: BackendOwnershipEntry): Promise<'drop' | 'keep' | 'stop'> => {
+    // A backend whose Electron parent is still running is NOT an orphan:
+    // reaping it would kill a live instance's session. This is what stops
+    // a second launch from SIGTERMing the running instance's backend even
+    // if it reaches reapOrphans (see main.ts startHermes + #87295).
+    let parentAlive: boolean | undefined
+
+    try {
+      parentAlive = await deps.matchesParent(entry)
+    } catch {
+      return 'keep'
+    }
+
+    if (parentAlive === true) {
+      return 'keep'
+    }
+
+    let matches: boolean | undefined
+
+    try {
+      matches = await deps.matchesIdentity(entry)
+    } catch {
+      return 'keep'
+    }
+
+    if (matches === false) {
+      return 'drop'
+    }
+
+    return matches === true ? 'stop' : 'keep'
+  }
+
   return {
+    /**
+     * v0.0.9 Q (correctness 7): exactly the records reapOrphans would stop, read-only (no write, no signal). The repair
+     * kit lists these, so another live instance's backend or a reused pid is never shown as "from an earlier run".
+     */
+    async listOrphans(): Promise<BackendOwnershipEntry[]> {
+      const { corrupt, entries } = readDetailed()
+
+      if (corrupt) {
+        return []
+      }
+
+      const out: BackendOwnershipEntry[] = []
+
+      for (const entry of entries) {
+        if ((await orphanVerdict(entry)) === 'stop') {
+          out.push(entry)
+        }
+      }
+
+      return out
+    },
+
     async claim(claim: BackendClaim): Promise<BackendOwnershipEntry> {
       if (!isCompleteIdentity(claim)) {
         throw new Error('Cannot own a backend without a complete process identity.')
@@ -226,41 +285,13 @@ export function createBackendOwnership(deps: BackendOwnershipDeps) {
       const reaped: number[] = []
 
       for (const entry of entries) {
-        // A backend whose Electron parent is still running is NOT an orphan:
-        // reaping it would kill a live instance's session. This is what stops
-        // a second launch from SIGTERMing the running instance's backend even
-        // if it reaches reapOrphans (see main.ts startHermes + #87295).
-        let parentAlive: boolean | undefined
+        const verdict = await orphanVerdict(entry)
 
-        try {
-          parentAlive = await deps.matchesParent(entry)
-        } catch {
-          survivors.push(entry)
-
+        if (verdict === 'drop') {
           continue
         }
 
-        if (parentAlive === true) {
-          survivors.push(entry)
-
-          continue
-        }
-
-        let matches: boolean | undefined
-
-        try {
-          matches = await deps.matchesIdentity(entry)
-        } catch {
-          survivors.push(entry)
-
-          continue
-        }
-
-        if (matches === false) {
-          continue
-        }
-
-        if (matches !== true) {
+        if (verdict === 'keep') {
           survivors.push(entry)
 
           continue

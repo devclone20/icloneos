@@ -33,7 +33,7 @@ beforeEach(async () => {
   vi.spyOn(os, 'homedir').mockReturnValue(home)
   vi.resetModules()
 
-  const { createBusServer, listenOnSocket } = await import('./ipc')
+  const { createBusServer, listenOnSocket, paneBusSocketFile } = await import('./ipc')
   const { initIcloneIt } = await import('../iclone-it')
 
   initIcloneIt({ getMainWindow: () => null })
@@ -43,7 +43,8 @@ beforeEach(async () => {
     tokens[name] = broker.register({ paneId: `pane-${name}`, name })
   }
 
-  socket = path.join(home, '.iclone-os', 'bus', 'bus.sock')
+  // v0.0.9: the bus socket as main names it, the private pane socket of a userData (here the test home).
+  socket = paneBusSocketFile(home)
   server = createBusServer(broker)
   await listenOnSocket(server, socket)
   await vi.waitFor(() => expect(statSync(path.join(home, '.iclone-os', 'bin', 'it')).isFile()).toBe(true))
@@ -53,6 +54,7 @@ afterEach(async () => {
   await new Promise(resolve => server?.close(resolve))
   vi.restoreAllMocks()
   rmSync(home, { force: true, recursive: true })
+  rmSync(path.dirname(socket), { force: true, recursive: true })
 })
 
 const cli = () => path.join(home, '.iclone-os', 'bin', 'it')

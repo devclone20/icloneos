@@ -75,6 +75,14 @@ class _Pending:
         self.answer: Optional[MainAnswer] = None
 
 
+def billing_request_text(action: str, subject: str, owner_confirm: str, idempotency_key: str, pid: int,
+                         key_id: str) -> str:
+    """The exact ``perm billing`` payload main reads (electron/iclone-permissions/socket-verb.ts ``billing``); the
+    cross-language fixture tests/fixtures/perm_billing_wire.json pins it on both sides."""
+    return json.dumps({"ownerConfirm": owner_confirm, "action": action, "subject": subject,
+                       "idempotencyKey": idempotency_key, "pid": pid, "keyId": key_id}, separators=(",", ":"))
+
+
 class Channel:
     def __init__(self, sock_path: Optional[str], token_file: Optional[str], key: Optional[bytes], key_id: str,
                  spool_dir: Optional[str], *, on_gen: Optional[Callable[[Any], None]] = None,
@@ -257,6 +265,25 @@ class Channel:
         """The owner's answer to a pending ask; no sequence number, its own connection, bounded by ``wait``."""
         text = json.dumps({"askId": ask_id, "pid": self._pid, "keyId": self._key_id}, separators=(",", ":"))
         return self._request("await", text, self.sign("await", text), max(0.1, wait))
+
+    def billing_confirm(self, owner_confirm: str, amount_usd: str, idempotency_key: str, wait: float = 5.0) -> bool:
+        """v0.0.9 R-f1s-5 — spend main's single-use owner confirm for one Buy credits charge (``action: charge``,
+        subject = the amount). See ``billing_action_confirm``."""
+        return self.billing_action_confirm("charge", amount_usd, owner_confirm, idempotency_key, wait)
+
+    def billing_action_confirm(self, action: str, subject: str, owner_confirm: str, idempotency_key: str,
+                               wait: float = 5.0) -> bool:
+        """v0.0.9 — spend main's single-use owner confirm for one billing write that charges or arms a charge
+        (``charge``, ``subscription-upgrade``, ``subscription-change``, ``subscription-resume``, ``auto-reload``),
+        bound to exactly this action, subject and idempotency key. No sequence number, its own connection (like
+        ``await``). True only when main signed ``code 0`` and ``confirmed: true`` for this very request; any other
+        answer (unsigned, timeout, transport error, refusal) is False. Main spends the confirm whatever it answers, so
+        a retry needs a new owner click."""
+        if not self.usable:
+            return False
+        text = billing_request_text(action, subject, owner_confirm, idempotency_key, self._pid, self._key_id)
+        answer = self._request("billing", text, self.sign("billing", text), max(0.1, wait))
+        return answer.ok and answer.code == 0 and answer.body.get("confirmed") is True
 
     def flush(self, timeout: float = 1.0) -> bool:
         """Wait (bounded) until every queued message was handled."""

@@ -38,6 +38,7 @@ import { appendAppUpdateLog, readAppUpdateLog, settleAppUpdateLog } from './app-
 import { isPinnedRuntimeUpdateRunning } from './bootstrap-runner'
 import { installEmbedReferer } from './embed-referer'
 import { registerFsIpc } from './fs-ipc'
+import { registerBillingChargeLock } from './gesture-locks-billing'
 import { registerGitIpc } from './git-ipc'
 import { enableBasicPasswordStoreEncryption, resolveRequestedPathForIpc } from './hardening'
 import { homeSettingsCopyGuard } from './home-settings-guard'
@@ -80,12 +81,22 @@ import {
 } from './iclone-permissions/ignore-dialog'
 import {
   activePermissions,
+  recordAcpWrite,
+  recordBillingCharge,
   recordInstall,
   recordPayment,
   registerPermissions,
   republishPermissions
 } from './iclone-permissions/ipc'
-import { INDEXER_CHAINS, initIclonePrivy, onPrivySession, privySignInState, readIndexerPage } from './iclone-privy'
+import { setBillingConfirmConsumer } from './iclone-permissions/socket-verb'
+import {
+  INDEXER_CHAINS,
+  initIclonePrivy,
+  isScannedInftId,
+  onPrivySession,
+  privySignInState,
+  readIndexerPage
+} from './iclone-privy'
 import { createRelaunchOnQuit } from './iclone-relaunch'
 import { initIcloneSkills } from './iclone-skills'
 import { initIcloneUpdates } from './iclone-updates'
@@ -164,7 +175,10 @@ import { sshBootstrapCoordinator, teardownSshConnection } from './main/managed-s
 import { registerMediaProtocol } from './main/media-protocol'
 import { closePreviewWatchers, expandUserPath } from './main/preview'
 import { applyQuickEntrySettings, closeQuickEntryWindow, readQuickEntrySettings } from './main/quick-entry'
+// v0.0.9 F4b — native dialogs to renderer
+import { askDecision, installRendererDialogs, postNotice } from './main/renderer-dialogs'
 import { resolveRendererIndex } from './main/runtime'
+import { managedRuntimeEnv } from './main/runtime-install-state'
 import { registerScreenRecordIpc } from './main/screen-record-ipc'
 import { migrateLegacyEncryptedSecretsOnce } from './main/secret-storage'
 import { onSecretStoragePolicyWrite, secretStoragePolicy } from './main/secrets'
@@ -200,6 +214,7 @@ import {
 } from './main/state'
 import { themeState, writePersistedTranslucency } from './main/theme'
 import { registerUpdatesIpc } from './main/updates-ipc'
+import { registerAppVoiceExtraIpc } from './main/voice-extra-ipc' // v0.0.9 W1b
 import { installDownloadHandling, installMediaPermissions } from './main/window-events'
 import { keepAwake, readPersistedDisableF12, readPersistedKeepAwake, registerWindowIpc } from './main/window-ipc'
 import { buildApplicationMenu, focusWindow, wakeIndicatorController } from './main/windows'
@@ -239,7 +254,11 @@ registerConnectionRoutingIpc({
   windowConnectionRoutes
 })
 registerWindowIpc({ connectionRuntimeState, windowsState })
-registerBootstrapIpc({ backendConnectionState, bootState, progressState })
+// v0.0.9 W1b — the repair kit reads the ACTIVE profile's HERMES_HOME (the profile the backend is spawned with).
+registerBootstrapIpc({ backendConnectionState, bootState, progressState, readDesktopProfile: readActiveDesktopProfile })
+// The voice extra (local speech recognition) installs app-side, only on the owner's click (voice-extra.ts).
+registerAppVoiceExtraIpc()
+// end v0.0.9 W1b
 registerHomeSettingsIpc({
   copyGuard: () =>
     homeSettingsCopyGuard(
@@ -513,7 +532,8 @@ app.whenReady().then(() => {
       rendererIndexPath: resolveRendererIndex,
       log: rememberLog
     }),
-    // REL-6: the ACP tools are installed at first use from npm, only on the owner's own click (V3-F's lock).
+    // REL-6 / v0.0.9 F1-B: the ACP tools ship in the app; Repair restores them only on the owner's own click (V3-F's
+    // lock). F1-S: the same verdict admits the owner-locked ACP writes from the window.
     gestureOk: (event, input) => {
       const sender = (event as { sender?: Electron.WebContents } | null)?.sender
 
@@ -531,9 +551,42 @@ app.whenReady().then(() => {
     noSealReason: () => acpToolsSealing.noSealReason(),
     // An `I` (install) action under V3-F, in its chained audit; no audit (the authority not up) = no install.
     audit: entry => recordInstall(entry),
+    // F1-S: register-erc8004 and the Market writes from the window — `use · gesture:true` / `refuse · gesture:false`
+    // in the same chained audit; no audit (the authority not up) = every owner-locked write refused.
+    writeAudit: entry => recordAcpWrite(entry),
     broadcastTools: view => broadcastToWindows(() => BrowserWindow.getAllWindows(), 'iclone:acp-tools:changed', view),
-    openFile: file => shell.openPath(file)
+    openFile: file => shell.openPath(file),
+    // v0.0.9 critic m5: the window runs the CLI only for an iNFT main's own scans returned (or one with a home).
+    isKnownInft: isScannedInftId
   })
+
+  // F1-S: Settings › Billing › Buy credits — a single-use owner confirm per charge, only on the owner's own click on
+  // Buy (same sender guard and gesture verdict as the ACP writes). The runtime asks `billingChargeLock.consume(...)`
+  // before it charges (runtime-patches/billing-owner-confirm.patch, R-f1s-5).
+  const billingChargeLock = registerBillingChargeLock({
+    ipcMain,
+    isTrustedSender: createAppSenderGuard({
+      devServer: DEV_SERVER,
+      rendererIndexPath: resolveRendererIndex,
+      log: rememberLog
+    }),
+    gestureOk: (event, input) => {
+      const sender = (event as { sender?: Electron.WebContents } | null)?.sender
+
+      return permissionGestureOk({
+        payload: gestureOf(input),
+        lastInputAt: sender ? lastTrustedInputAt(sender) : 0,
+        now: Date.now()
+      })
+    },
+    audit: entry => recordBillingCharge(entry)
+  })
+
+  // R-f1s-5: the runtime spends the confirm over the authenticated permissions socket (`perm billing`) before it charges.
+  // v0.0.9 Q: the same check for subscription.upgrade / change / resume and auto-reload (bound to the action).
+  setBillingConfirmConsumer((ownerConfirm, subject, idempotencyKey, action) =>
+    billingChargeLock.consumeAction(ownerConfirm, action, subject, idempotencyKey)
+  )
 
   // iCLONE OS — the app teaches its agent: bundled Hermes skills into the
   // root skills tree and every iNFT profile (see electron/iclone-skills.ts).
@@ -547,6 +600,22 @@ app.whenReady().then(() => {
     rendererIndexPath: resolveRendererIndex,
     log: rememberLog
   })
+
+  // ── v0.0.9 F4b — native dialogs to renderer ──────────────────────────────────────────────────────────────────────
+  // Decisions main used to ask with a native box (quit with active work, restart for Screen recording) and main-only
+  // notices (the detached update's result) go to the main window's in-app dialog / notification centre whenever that
+  // window can answer; the native box stays the fallback (no window, hidden window, no "shown" within 1.5 s). The F-17
+  // consents (Ignore permissions, function raise, isolation off) stay native on purpose: see main/renderer-dialogs.ts.
+  installRendererDialogs({
+    ipcMain,
+    isTrustedSender: (event, channel) => consentSenderGuard(event, channel),
+    lastTrustedInputAt,
+    log: rememberLog,
+    showErrorBox: (title, content) => dialog.showErrorBox(title, content),
+    showNativeBox: (window, options) => (window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options)),
+    window: () => windowsState.mainWindow
+  })
+  // ── end v0.0.9 F4b ──────────────────────────────────────────────────────────────────────────────────────────────
 
   // V3-FX M1: the Keychain setting now and as it was when this main started (the permission key is sealed at launch,
   // so a setting turned on since then needs a restart for the modes; payments and the ACP tools follow it live).
@@ -741,6 +810,7 @@ app.whenReady().then(() => {
   initIcloneDoctor({
     hermesHome: HERMES_HOME,
     venvDir: activeVenvRoot(),
+    runtimeEnv: () => managedRuntimeEnv(ACTIVE_HERMES_ROOT),
     recentLogs: () => hermesLog,
     gateway: () => {
       const child = backendConnectionState.getProcess()
@@ -862,7 +932,15 @@ function revealAppUpdates(): boolean {
 
 const appUpdateNotifier = createAppUpdateNotifier({
   allowed: () => Notification.isSupported() && consentAllows('notifications'),
-  create: options => new Notification(options),
+  // v0.0.9 F4b — native dialogs to renderer: the OS banner is mirrored into the notification centre (history only).
+  create: options => {
+    postNotice(
+      { historyOnly: true, kind: 'info', message: options.body, title: options.title },
+      () => {}
+    )
+
+    return new Notification(options)
+  },
   log: rememberLog,
   reveal: () => void revealAppUpdates()
 })
@@ -980,15 +1058,19 @@ function heldQuitForActiveWork(event: Electron.Event): boolean {
   quitPromptOpen = true
   holdQuitForChoice()
 
-  void dialog
-    .showMessageBox(parent, {
+  // v0.0.9 F4b — native dialogs to renderer: the in-app decision dialog when the window can answer, else this native box.
+  void askDecision(
+    {
       buttons: ['Keep Running', 'Quit Anyway'],
       cancelId: 0,
       defaultId: 0,
       detail: prompt.detail,
-      message: prompt.message,
-      type: 'question'
-    })
+      nativeType: 'question',
+      title: prompt.message,
+      tone: 'warning'
+    },
+    options => dialog.showMessageBox(parent, options)
+  )
     .then(({ response }) => {
       quitPromptOpen = false
 

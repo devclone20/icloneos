@@ -52,6 +52,14 @@ interface ActState {
   b: number
 }
 
+/** The owner's hand on the camera, as offsets over the director's own framing (v0.0.9 F6 hand-over). */
+export interface StageCameraPose {
+  azimuth: number
+  elevation: number
+  /** userDolly / model radius. */
+  dolly: number
+}
+
 export class StageDirector {
   private rig: DirectorRig
   private clipIndex = 0
@@ -153,6 +161,33 @@ export class StageDirector {
 
     this.userDolly = Math.max(-radius * 0.8, Math.min(radius * 0.5, this.userDolly + delta))
     this.lastUserAt = this.time
+  }
+
+  /** v0.0.9 F6: the owner's own camera (drag + wheel), so the stage can leave for its own window and come back on the
+   *  same view. Dolly travels as a share of the model's radius: the same iNFT measures the same in both windows. */
+  userCamera(): StageCameraPose {
+    return {
+      azimuth: this.userAzimuth,
+      elevation: this.userElevation,
+      dolly: this.userDolly / Math.max(this.rig.radius, 1e-4)
+    }
+  }
+
+  /** Put a camera from userCamera() back, inside the same limits as orbitBy / dollyBy. Garbage is ignored. */
+  restoreUserCamera(pose: StageCameraPose) {
+    const { radius } = this.rig
+    const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+
+    if (!finite(pose.azimuth) || !finite(pose.elevation) || !finite(pose.dolly)) {
+      return
+    }
+
+    this.userAzimuth = pose.azimuth
+    this.userElevation = Math.max(-1.5, Math.min(1.5, pose.elevation))
+    this.userDolly = Math.max(-radius * 0.8, Math.min(radius * 0.5, pose.dolly * radius))
+    // The view was the owner's choice: no camera act takes it away the moment it is back.
+    this.lastUserAt = this.time
+    this.applyCamera()
   }
 
   private userIsDriving(): boolean {

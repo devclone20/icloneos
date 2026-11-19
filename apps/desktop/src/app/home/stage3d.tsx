@@ -28,10 +28,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js'
 
 import { $aura } from './aura-prefs'
-import { reserveGpuContext, runContextSafeLoop } from './gpu-lease'
+import { reserveStageContext, runContextSafeLoop } from './gpu-lease'
 import { StageDeactivatedLabel } from './ownership-dialog'
+import { noteStageCamera, takeQueuedStageCamera } from './stage3d-window/handoff'
 import { StageDirector } from './stage-director'
 import { $motion, $quality } from './stage-prefs'
+
+/** The owner's camera is reported this long after the last wheel tick (a drag reports on release). */
+const CAMERA_NOTE_MS = 250
 
 // Scenery baked into collection GLBs — the artist's field, not the agent. It
 // ships in several families and they are NOT interchangeable:
@@ -555,7 +559,8 @@ export function Stage3D({
 
       // The stage's context counts against the terminals' WebGL budget, so a
       // busy iT session can never push Chromium into evicting it.
-      releaseGpu = reserveGpuContext('stage3d')
+      // v0.0.9 F6: counted as THE stage context, so the hand-over to the iNFT's own window can wait for it to go.
+      releaseGpu = reserveStageContext()
       renderer = new WebGLRenderer({ alpha: true, antialias: true })
       renderer.toneMapping = ACESFilmicToneMapping
       host.appendChild(renderer.domElement)
@@ -567,6 +572,31 @@ export function Stage3D({
       const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
       const rig = { mixer, actions, root, camera, focus, radius, reducedMotion, frozen: !$motion.get() }
       const director = new StageDirector(rig)
+      // F6 hand-over: the camera the other window handed over, once (stage3d-window/handover.ts).
+      const handedCamera = takeQueuedStageCamera(modelUrl)
+
+      if (handedCamera) {
+        director.restoreUserCamera(handedCamera)
+      }
+
+      let cameraTimer: null | ReturnType<typeof setTimeout> = null
+
+      const noteCamera = () => {
+        if (cameraTimer !== null) {
+          clearTimeout(cameraTimer)
+          cameraTimer = null
+        }
+
+        noteStageCamera(modelUrl, director.userCamera())
+      }
+
+      const noteCameraSoon = () => {
+        if (cameraTimer !== null) {
+          clearTimeout(cameraTimer)
+        }
+
+        cameraTimer = setTimeout(noteCamera, CAMERA_NOTE_MS)
+      }
 
       appliers.motion = (on: boolean) => {
         rig.frozen = !on
@@ -608,6 +638,7 @@ export function Stage3D({
         if (dragPointer === event.pointerId) {
           dragPointer = null
           host.classList.remove('istage--dragging')
+          noteCamera()
         }
       }
 
@@ -615,6 +646,7 @@ export function Stage3D({
         event.preventDefault()
         wake()
         director.dollyBy(-event.deltaY * radius * 0.0011)
+        noteCameraSoon()
       }
 
       host.addEventListener('pointerdown', onPointerDown)
@@ -624,6 +656,11 @@ export function Stage3D({
       host.addEventListener('wheel', onWheel, { passive: false })
 
       cleanupInput = () => {
+        // A wheel still settling reports now: an unmount (the detach) must not lose the last zoom.
+        if (cameraTimer !== null) {
+          noteCamera()
+        }
+
         host.removeEventListener('pointerdown', onPointerDown)
         host.removeEventListener('pointermove', onPointerMove)
         host.removeEventListener('pointerup', endDrag)

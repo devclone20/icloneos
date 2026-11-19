@@ -192,6 +192,10 @@ export const zhBillingSettings: BillingSettingsCopy = {
     failedGeneric: '请重试，或在门户中使用其他卡。',
     unconfirmedTitle: '你上一笔付款尚未确认',
     unconfirmed: '重试前请先在门户中查看余额。',
+    openPurchase: (amount: string) =>
+      `你的 ${amount} 购买没有得到明确答复。重试会完成同一笔购买，绝不会重复扣款；购买其他金额前请先查看门户。`,
+    lapsedPurchase: (amount: string) =>
+      `你之前的 ${amount} 购买一直没有明确答复，且已过久，无法安全完成。请在门户中查看余额；下一次购买将是一笔新的购买。`,
     checkFailedTitle: '无法检查这笔付款',
     untrackedTitle: '无法跟踪这笔付款',
     untrackedMessage: '付款已被接受，但无法跟踪。请在门户中查看余额。',

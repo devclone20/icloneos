@@ -23,7 +23,7 @@ def _restore_stdout():
 
 
 @pytest.fixture()
-def server():
+def server(tmp_path_factory):
     # The sys.modules mocks only need to cover the *initial* import — once
     # tui_gateway.server is cached, they are inert. Keeping them active for
     # the whole test poisons any module first imported inside a test body:
@@ -40,7 +40,7 @@ def server():
     import tui_gateway.server_requests  # noqa: F401
     import tui_gateway.transport  # noqa: F401
     with patch.dict("sys.modules", {
-        "hermes_constants": MagicMock(get_hermes_home=MagicMock(return_value="/tmp/hermes_test")),
+        "hermes_constants": MagicMock(get_hermes_home=MagicMock(return_value="/tmp/hermes_test"), get_process_hermes_home=MagicMock(return_value=tmp_path_factory.mktemp("launch-home"))),
         "hermes_cli.env_loader": MagicMock(),
         "hermes_cli.banner": MagicMock(),
         "hermes_state": MagicMock(),

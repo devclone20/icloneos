@@ -108,6 +108,14 @@ test.describe('queued prompt turn boundary', () => {
       { timeout: 60_000 }
     )
     await expect.poll(() => mock.receivedPrompts.filter(prompt => prompt === QUEUED_PROMPT)).toHaveLength(1)
+
+    // Reviewed (v0.0.9, G 1c2bbb9423 :89 flaky): after every turn the runtime asks the model for a session title
+    // (agent/title_generator.py), and that request carries the turn's user text as its last user message. The mock
+    // logged it as a prompt, so the poll above passed only when it sampled between the turn and its title request,
+    // and under load it saw two. The queue itself submitted once. The mock now keeps title requests apart; the
+    // assertion holds once the queued turn's title request has really arrived, so no sampling window decides it.
+    await expect.poll(() => mock.receivedTitleRequests.filter(text => text === QUEUED_PROMPT).length, { timeout: 30_000 }).toBeGreaterThan(0)
+    expect(mock.receivedPrompts.filter(prompt => prompt === QUEUED_PROMPT)).toHaveLength(1)
   })
 
   test('places a steer prompt before the reply it redirects', async () => {

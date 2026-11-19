@@ -183,7 +183,10 @@ describe('every failure class: diagnosis, one fix, or skip (RTB-6)', () => {
   it('Retry resumes: main clears the latch, then the renderer reloads (no silent loop)', async () => {
     const { desktop, emit, reload } = await mount()
     await failWith(emit, 'python-deps', ['Could not resolve host: pypi.org'], 'exit code 1')
-    fireEvent.click(window.document.querySelector('[data-action="retry"]')!)
+    const retry = window.document.querySelector('[data-action="retry"]')!
+
+    expect(retry.hasAttribute('data-repair-kit-confirm')).toBe(false)
+    fireEvent.click(retry)
     await waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
     expect(desktop.resetBootstrap).toHaveBeenCalledTimes(1)
     expect(desktop.repairBootstrap).not.toHaveBeenCalled()
@@ -192,9 +195,14 @@ describe('every failure class: diagnosis, one fix, or skip (RTB-6)', () => {
   it('Repair forces a fresh install', async () => {
     const { desktop, emit, reload } = await mount()
     await failWith(emit, 'repository', [], 'sha256 mismatch')
-    fireEvent.click(window.document.querySelector('[data-action="repair"]')!)
-    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
+    const repair = window.document.querySelector('[data-action="repair"]')!
+
+    // v0.0.9 Q: the owner's click on Repair is the lock; Retry (a resume) is not a repair and carries no marker.
+    expect(repair.hasAttribute('data-repair-kit-confirm')).toBe(true)
+    fireEvent.click(repair)
+    // Synchronous: no await precedes the bridge call inside the click.
     expect(desktop.repairBootstrap).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
   })
 
   it('Free disk space opens Storage settings, names the amount, then becomes Retry now', async () => {

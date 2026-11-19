@@ -25,7 +25,8 @@ function markerStartedAt(home: string): number {
 }
 
 function runPosix(installRoot: string, startedAt?: string) {
-  const env = { ...process.env }
+  // The scripts honour an inherited HERMES_HOME first; pin it to this sandbox so the marker lands where the test reads it.
+  const env: NodeJS.ProcessEnv = { ...process.env, HERMES_HOME: path.dirname(installRoot) }
 
   if (startedAt === undefined) {
     delete env.HERMES_UPDATE_STARTED_AT
@@ -40,7 +41,8 @@ function runPosix(installRoot: string, startedAt?: string) {
 }
 
 function runWindows(installRoot: string, startedAt?: string) {
-  const env = { ...process.env }
+  // The scripts honour an inherited HERMES_HOME first; pin it to this sandbox so the marker lands where the test reads it.
+  const env: NodeJS.ProcessEnv = { ...process.env, HERMES_HOME: path.dirname(installRoot) }
 
   if (startedAt === undefined) {
     delete env.HERMES_UPDATE_STARTED_AT

@@ -890,7 +890,9 @@ describe('usePromptActions /compress', () => {
     )
   })
 
-  it('surfaces the RPC error verbatim (e.g. the busy guard) instead of a routing error', async () => {
+  // v0.0.9 G GF-7 (44c6e05312): a busy outcome renders the owner's busy line instead of the runtime's raw text, so the
+  // test now asserts that line; the routing-error assertion is unchanged.
+  it('surfaces the busy guard as the owner busy line instead of a routing error', async () => {
     const seeds: Record<string, unknown>[] = []
 
     const requestGateway = vi.fn(async (method: string) => {
@@ -914,7 +916,8 @@ describe('usePromptActions /compress', () => {
     await handle!.submitText('/compress')
 
     const texts = renderedSeedTexts(seeds)
-    expect(texts.some(text => text.includes('session busy'))).toBe(true)
+    expect(texts.some(text => text.includes('The agent is still replying. Stop it, then run /compress.'))).toBe(true)
+    expect(texts.some(text => text.includes('session busy'))).toBe(false)
     expect(texts.some(text => text.includes('not a quick/plugin/skill command'))).toBe(false)
   })
 

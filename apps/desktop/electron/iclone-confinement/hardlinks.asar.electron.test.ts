@@ -152,7 +152,9 @@ describe('FX-ASAR: the guard in Electron sees *.asar files as files', () => {
 
     const { stdout } = await promisify(execFile)(
       electronBinary(),
-      [path.join(bundleDir, 'entry.mjs'), root, home, top],
+      // --use-mock-keychain after the script: plain-Node argv the entry ignores (it reads argv[2..4]); kept so every
+      // Electron launch in the tests names the mock keychain (v0.0.9 owner decision 2), though RUN_AS_NODE starts no Chromium.
+      [path.join(bundleDir, 'entry.mjs'), root, home, top, '--use-mock-keychain'],
       {
         env: { ELECTRON_RUN_AS_NODE: '1', HOME: home, TMPDIR: path.join(top, 'userdata'), PATH: '/usr/bin:/bin' },
         timeout: 60_000,

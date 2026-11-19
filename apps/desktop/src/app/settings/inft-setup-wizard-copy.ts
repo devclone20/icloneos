@@ -46,20 +46,15 @@ const en = {
     done: 'Done'
   },
   cli: {
-    title: 'Install the Virtuals connector',
-    hint: 'It downloads from npm when you choose Install. Nothing installs without your click.',
-    ready: (version: string) => (version ? `Version ${version} is ready.` : 'The connector is ready.'),
-    taught: (count: number, trees: number) => `Your agent has learned it (${count} skills in ${trees} folders).`,
+    // v0.0.9 r4 (design r3 N9): plural rules, never "1 folders".
+    taught: (count: number, trees: number) =>
+      `Your agent has learned it (${count} ${count === 1 ? 'skill' : 'skills'} in ${trees} ${trees === 1 ? 'folder' : 'folders'}).`,
     notTaught: (reason: string) => `Your agent has not learned it yet: ${reason}`,
     unknownError: 'the reason is unknown.',
     checking: 'Checking what your agent knows…',
     reteach: 'Teach the agent again',
     keychain:
-      'After a reinstall of this build, your computer asks once per iNFT before the app may read its saved sign-in. Choose “Always Allow” when it asks.',
-    checkUpdate: 'Check for updates',
-    updateAvailable: (version: string) => `Version ${version} is available.`,
-    updateNow: 'Update now',
-    install: 'Install now'
+      'After a reinstall of this build, your computer asks once per iNFT before the app may read its saved sign-in. Choose “Always Allow” when it asks.'
   },
   profile: {
     title: 'Give this iNFT its own agent profile, if you want one',
@@ -266,9 +261,6 @@ const ja: InftWizardCopy = {
     done: '完了'
   },
   cli: {
-    title: 'Virtuals コネクタをインストールします',
-    hint: '「インストール」を選ぶと npm からダウンロードします。クリックしない限り何もインストールされません。',
-    ready: (version: string) => (version ? `バージョン ${version} を使用できます。` : 'コネクタを使用できます。'),
     taught: (count: number, trees: number) =>
       `エージェントは習得済みです（${trees} 個のフォルダーに ${count} 個のスキル）。`,
     notTaught: (reason: string) => `エージェントはまだ習得していません: ${reason}`,
@@ -276,11 +268,7 @@ const ja: InftWizardCopy = {
     checking: 'エージェントの知識を確認しています…',
     reteach: 'エージェントにもう一度教える',
     keychain:
-      'このビルドを再インストールした後、アプリが保存済みのサインインを読み取る前に、コンピューターが iNFT ごとに一度確認します。尋ねられたら「常に許可」を選んでください。',
-    checkUpdate: 'アップデートを確認',
-    updateAvailable: (version: string) => `バージョン ${version} が利用できます。`,
-    updateNow: '今すぐアップデート',
-    install: '今すぐインストール'
+      'このビルドを再インストールした後、アプリが保存済みのサインインを読み取る前に、コンピューターが iNFT ごとに一度確認します。尋ねられたら「常に許可」を選んでください。'
   },
   profile: {
     title: '必要なら、この iNFT 専用のエージェントプロフィールを作成します',
@@ -448,20 +436,13 @@ const zh: InftWizardCopy = {
     done: '已完成'
   },
   cli: {
-    title: '安装 Virtuals 连接器',
-    hint: '选择“安装”后才会从 npm 下载。没有你的点击，什么都不会安装。',
-    ready: (version: string) => (version ? `版本 ${version} 已就绪。` : '连接器已就绪。'),
     taught: (count: number, trees: number) => `你的智能体已掌握（${trees} 个文件夹中的 ${count} 个技能）。`,
     notTaught: (reason: string) => `你的智能体还没有学会：${reason}`,
     unknownError: '原因未知。',
     checking: '正在检查智能体掌握的内容…',
     reteach: '再次教给智能体',
     keychain:
-      '重新安装此版本后，应用读取已保存的登录信息之前，电脑会为每个 iNFT 询问一次。出现提示时请选择“始终允许”。',
-    checkUpdate: '检查更新',
-    updateAvailable: (version: string) => `版本 ${version} 可用。`,
-    updateNow: '立即更新',
-    install: '立即安装'
+      '重新安装此版本后，应用读取已保存的登录信息之前，电脑会为每个 iNFT 询问一次。出现提示时请选择“始终允许”。'
   },
   profile: {
     title: '如果需要，为这个 iNFT 建立专属的智能体档案',
@@ -621,20 +602,13 @@ const zhHant: InftWizardCopy = {
     done: '已完成'
   },
   cli: {
-    title: '安裝 Virtuals 連接器',
-    hint: '選擇「安裝」後才會從 npm 下載。沒有你的點擊，什麼都不會安裝。',
-    ready: (version: string) => (version ? `版本 ${version} 已就緒。` : '連接器已就緒。'),
     taught: (count: number, trees: number) => `你的智慧體已掌握（${trees} 個資料夾中的 ${count} 個技能）。`,
     notTaught: (reason: string) => `你的智慧體還沒有學會：${reason}`,
     unknownError: '原因不明。',
     checking: '正在檢查智慧體掌握的內容…',
     reteach: '再次教給智慧體',
     keychain:
-      '重新安裝此版本後，應用程式讀取已儲存的登入資訊之前，電腦會為每個 iNFT 詢問一次。出現提示時請選擇「永遠允許」。',
-    checkUpdate: '檢查更新',
-    updateAvailable: (version: string) => `版本 ${version} 可用。`,
-    updateNow: '立即更新',
-    install: '立即安裝'
+      '重新安裝此版本後，應用程式讀取已儲存的登入資訊之前，電腦會為每個 iNFT 詢問一次。出現提示時請選擇「永遠允許」。'
   },
   profile: {
     title: '如果需要，為這個 iNFT 建立專屬的智慧代理檔案',
@@ -794,20 +768,14 @@ const ar: InftWizardCopy = {
     done: 'تم'
   },
   cli: {
-    title: 'ثبّت موصّل Virtuals',
-    hint: 'تُنزَّل من npm عندما تختار «تثبيت». لا يُثبَّت شيء من دون نقرتك.',
-    ready: (version: string) => (version ? `الإصدار ${version} جاهز.` : 'الموصّل جاهز.'),
-    taught: (count: number, trees: number) => `تعلّمه وكيلك (${count} مهارة في ${trees} مجلدات).`,
+    taught: (count: number, trees: number) =>
+      `تعلّمه وكيلك (${count} مهارة في ${trees} ${trees === 1 ? 'مجلد' : 'مجلدات'}).`,
     notTaught: (reason: string) => `لم يتعلمها وكيلك بعد: ${reason}`,
     unknownError: 'السبب غير معروف.',
     checking: 'جارٍ التحقق مما يعرفه وكيلك…',
     reteach: 'علّم الوكيل مجددًا',
     keychain:
-      'بعد إعادة تثبيت هذا الإصدار، يسأل حاسوبك مرة لكل iNFT قبل أن يقرأ التطبيق تسجيل الدخول المحفوظ. اختر «السماح دائمًا» عند السؤال.',
-    checkUpdate: 'البحث عن تحديثات',
-    updateAvailable: (version: string) => `الإصدار ${version} متاح.`,
-    updateNow: 'التحديث الآن',
-    install: 'التثبيت الآن'
+      'بعد إعادة تثبيت هذا الإصدار، يسأل حاسوبك مرة لكل iNFT قبل أن يقرأ التطبيق تسجيل الدخول المحفوظ. اختر «السماح دائمًا» عند السؤال.'
   },
   profile: {
     title: 'امنح هذا iNFT ملف وكيل خاصًا به إن أردت',
@@ -971,20 +939,14 @@ const ptPt: InftWizardCopy = {
     done: 'Concluído'
   },
   cli: {
-    title: 'Instalar o conector da Virtuals',
-    hint: 'É transferido do npm quando escolher Instalar. Nada é instalado sem o seu clique.',
-    ready: (version: string) => (version ? `A versão ${version} está pronta.` : 'O conector está pronto.'),
-    taught: (count: number, trees: number) => `O seu agente já o aprendeu (${count} competências em ${trees} pastas).`,
+    taught: (count: number, trees: number) =>
+      `O seu agente já o aprendeu (${count} ${count === 1 ? 'competência' : 'competências'} em ${trees} ${trees === 1 ? 'pasta' : 'pastas'}).`,
     notTaught: (reason: string) => `O seu agente ainda não o aprendeu: ${reason}`,
     unknownError: 'o motivo é desconhecido.',
     checking: 'A verificar o que o seu agente sabe…',
     reteach: 'Ensinar o agente novamente',
     keychain:
-      'Após reinstalar esta compilação, o computador pergunta uma vez por iNFT antes de a aplicação poder ler a sessão guardada. Escolha “Permitir sempre” quando perguntar.',
-    checkUpdate: 'Procurar atualizações',
-    updateAvailable: (version: string) => `A versão ${version} está disponível.`,
-    updateNow: 'Atualizar agora',
-    install: 'Instalar agora'
+      'Após reinstalar esta compilação, o computador pergunta uma vez por iNFT antes de a aplicação poder ler a sessão guardada. Escolha “Permitir sempre” quando perguntar.'
   },
   profile: {
     title: 'Dar a este iNFT o seu próprio perfil de agente, se quiser',

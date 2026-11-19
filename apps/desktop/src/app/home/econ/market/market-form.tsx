@@ -82,7 +82,8 @@ export function EditorFrame({
           <Action kind="quiet" onClick={onCancel}>
             Cancel
           </Action>
-          <button className="e-btn e-btn--primary" disabled={submitDisabled} type="submit">
+          {/* F1-S: the owner-click lock — create / save / publish runs only on a real click or key here. */}
+          <button className="e-btn e-btn--primary" data-acp-market-confirm="" disabled={submitDisabled} type="submit">
             {submitLabel}
           </button>
         </div>

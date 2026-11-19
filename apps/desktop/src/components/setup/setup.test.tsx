@@ -476,6 +476,8 @@ describe('Packages after the first-launch install (owner override 11:0x)', () =>
     expect(root.querySelector('[data-setup-package="ripgrep"]')).toBeNull()
     expect(screen.getByText(copy.packages.state.failed)).toBeTruthy()
 
+    // v0.0.9 Q: the preload's repair-kit lock counts only a click on this marker.
+    expect(root.querySelector('[data-setup-retry="cua-driver"]')?.hasAttribute('data-repair-kit-confirm')).toBe(true)
     await act(async () => fireEvent.click(root.querySelector('[data-setup-retry="cua-driver"]') as HTMLElement))
     // RT-B's own "Install again" (the run resumes; what is installed is reused).
     expect(fake.runtime?.installAgain).toHaveBeenCalledTimes(1)

@@ -403,8 +403,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       notify({
         kind: 'info',
         title: copy.restartingTitle,
-        message: copy.restartingMessage,
-        durationMs: 4000
+        message: copy.restartingMessage
       })
     } catch (error) {
       appendConsoleEntry({
@@ -606,15 +605,15 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       notify({
         kind: 'success',
         title: copy.restartedTitle,
-        message: previewServerRestart.message?.slice(0, 160) || copy.reloadingNow,
-        durationMs: 3500
+        // v0.0.9 F4 (C2): the whole message, never cut mid-word; the toast shows three lines and "More" opens the
+        // rest. The store sets the reading time from the length.
+        message: previewServerRestart.message || copy.reloadingNow
       })
     } else if (previewServerRestart.status === 'error') {
       notify({
         kind: 'warning',
         title: copy.restartFailedTitle,
-        message: previewServerRestart.message?.slice(0, 200) || copy.restartFailedMessage,
-        durationMs: 6000
+        message: previewServerRestart.message || copy.restartFailedMessage
       })
     }
   }, [appendConsoleEntry, copy, currentUrl, previewServerRestart, reloadPreview, target.url])

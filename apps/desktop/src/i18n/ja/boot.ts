@@ -15,7 +15,7 @@ export const boot: TranslationOverrides['boot'] = {
   errors: {
     backgroundExited: 'エージェントのバックグラウンドプロセスが終了しました。',
     backgroundExitedDuringStartup: '起動中にエージェントのバックグラウンドプロセスが終了しました。',
-    backendStopped: 'バックエンドが停止しました',
+    backendStopped: 'エージェントが停止しました',
     desktopBootFailed: 'デスクトップの起動に失敗しました',
     gatewayConnectionLost: 'ゲートウェイへの接続が切断されました',
     gatewayConnectionLostDetail:

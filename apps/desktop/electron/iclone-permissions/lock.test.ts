@@ -94,8 +94,9 @@ describe('LOCK: one writer of the mode, reachable only from the gesture-checked 
   it('the agent socket verb has no way to set a mode or a grant', () => {
     const verb = readFileSync(path.join(DESKTOP, 'electron/iclone-permissions/socket-verb.ts'), 'utf8')
 
+    // v0.0.9 R-f1s-5: `billing` only SPENDS main's single-use owner confirm for one charge — it sets no mode or grant.
     expect(verb).toContain(
-      "const PERM_VERBS = ['ask', 'await', 'beat', 'bye', 'event', 'gapnote', 'hello', 'replay'] as const"
+      "const PERM_VERBS = ['ask', 'await', 'beat', 'billing', 'bye', 'event', 'gapnote', 'hello', 'replay'] as const"
     )
     expect(verb).not.toMatch(/\.(setMode|writeMode|addGrant|revokeGrant|revoke)\(/)
   })

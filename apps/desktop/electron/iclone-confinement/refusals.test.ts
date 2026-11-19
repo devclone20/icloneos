@@ -16,7 +16,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { PassThrough } from 'node:stream'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { RefusalView } from '../../src/iclone-shared/confinement'
 
@@ -829,6 +829,58 @@ describe('L4-02: the pane never reads a whole day file', () => {
     expect(log.day()).toMatchObject({ rows: 10_000 })
     expect(log.runCount(RUN)).toBe(RUN_REFUSALS_MAX)
   }, 60_000)
+
+  // r4d (eng r4-m5): the L4-02 burst failed at 248.9 ms — the timer woke before the sub-ms clock reached the interval.
+  // Red on 52cae17554: the early wake-up sent the notice.
+  it('a timer that wakes early never sends early: it waits out the rest of the interval', () => {
+    vi.useFakeTimers()
+
+    try {
+      let clock = 0
+      const sent: number[] = []
+      const throttle = createNoticeThrottle(() => sent.push(clock), 250, () => clock)
+
+      throttle.notify()
+      clock = 0.5
+      throttle.notify()
+      clock = 249.6 // the wake-up is 0.4 ms early by the fine clock
+      vi.advanceTimersByTime(250)
+      expect(sent).toEqual([0])
+
+      clock = 250.1
+      vi.advanceTimersByTime(1)
+      expect(sent).toEqual([0, 250.1])
+      throttle.stop()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // r4d (eng r4-m5): the 200 MB case stalled 16.2 ms under suite load — the whole 4 MB tail was parsed in one turn.
+  // Red on 52cae17554: no sliced parser.
+  it('the start tail is parsed in slices, with a loop turn between them, and keeps every row in order', async () => {
+    const { parseRowsInSlices, TAIL_PARSE_SLICE } = await import('./refusals')
+    const lines = Array.from({ length: 5 * TAIL_PARSE_SLICE + 7 }, (_, index) => JSON.stringify(row(index)))
+    let turns = 0
+    let counting = true
+
+    const tick = () => {
+      turns += 1
+
+      if (counting) {
+        setImmediate(tick)
+      }
+    }
+
+    setImmediate(tick)
+    const rows = await parseRowsInSlices([...lines, '{torn', ''])
+
+    counting = false
+    expect(rows.map(item => item.pid)).toEqual(lines.map((_, index) => 1_000 + index))
+    // 6 slices: the loop turned at least between each of them.
+    expect(turns).toBeGreaterThanOrEqual(5)
+    expect(TAIL_PARSE_SLICE).toBeLessThanOrEqual(1_000)
+  })
 
   it('the throttle always announces the last change, after the interval', async () => {
     let clock = 0

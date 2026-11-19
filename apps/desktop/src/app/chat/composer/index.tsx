@@ -9,6 +9,7 @@ import { IsolationComposerNote } from '@/components/permissions/isolation-contro
 import { Button } from '@/components/ui/button'
 import { Slot as ContribSlot } from '@/contrib/react/slot'
 import { useI18n } from '@/i18n'
+import { f3Banner } from '@/i18n/en/v009-f3'
 import { chatMessageText } from '@/lib/chat-messages'
 import { PR_COMMENT_URL_RE } from '@/lib/chat-runtime'
 import { sanitizeComposerInput } from '@/lib/composer-input-sanitize'
@@ -16,6 +17,8 @@ import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 import { interceptsTypedVoiceStop } from '@/lib/voice-stop-word'
+import { $agentStopped } from '@/store/agent-stopped'
+import { $backendRestart, isRestartStopped } from '@/store/backend-restart'
 import { sessionCompacting } from '@/store/compaction'
 import { browseBackward, browseForward, deriveUserHistory, isBrowsingHistory } from '@/store/composer-input-history'
 import { POPOUT_WIDTH_REM } from '@/store/composer-popout'
@@ -218,9 +221,15 @@ export function ChatBar({
   const { t } = useI18n()
   const gatewayState = useStore($gatewayState)
   const reconnecting = gatewayState === 'closed' || gatewayState === 'error'
-  const inputDisabled = disabled && !reconnecting
+  // v0.0.9 F3 (point B): while the agent is stopped (the error card closed into the banner) the box is disabled and
+  // says why; nothing is held for a backend that is not coming back by itself.
+  const restartStopped = isRestartStopped(useStore($backendRestart), gatewayState)
+  // v0.0.9 Q (proofs F2-b): main's automatic restart gave up — the same stopped mode: the box says the agent is not
+  // running and points at the banner's Retry, never "Reconnecting…" for a reconnect nobody is making.
+  const agentStopped = useStore($agentStopped) !== null || restartStopped
+  const inputDisabled = (disabled && !reconnecting) || agentStopped
   // The window also dials between closed and open. Enter there used to do nothing and say nothing.
-  const sendHolds = disabled && (reconnecting || gatewayState === 'connecting')
+  const sendHolds = !agentStopped && disabled && (reconnecting || gatewayState === 'connecting')
 
   // The draft engine — detached source of truth (DOM + draftRef + edge
   // selectors); typing never re-renders the chrome. ChatBar owns `queueEditRef`
@@ -390,7 +399,8 @@ export function ChatBar({
 
   // Resting / reconnecting / starting placeholder text, re-rolled only on a real
   // conversation change.
-  const placeholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+  const restingPlaceholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+  const placeholder = agentStopped ? f3Banner.composerReason : restingPlaceholder
 
   // Trigger / completion engine: @// detection, the adapter-driven item list,
   // popover selection, and chip insertion. The keydown nav block below consumes

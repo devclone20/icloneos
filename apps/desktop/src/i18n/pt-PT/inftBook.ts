@@ -31,10 +31,12 @@ export const inftBook: TranslationOverrides['inftBook'] = {
   confirmError: 'Não foi possível marcá-los. Tente novamente.',
   cancel: 'Cancelar',
   scanning: found => `A analisar a sua carteira… ${n(found)} encontrados até agora`,
-  partial: loaded => `Carregados ${n(loaded)} de ? — a análise parou antes do fim.`,
+  partial: loaded => `A mostrar ${n(loaded)} — o resto da carteira não carregou.`,
+  partialFiltered: (shown, loaded) => `A mostrar ${n(shown)} dos ${n(loaded)} carregados — o resto da carteira não carregou.`,
   capped: limit =>
     `A mostrar os primeiros ${n(limit)} iNFTs. Esta carteira tem mais; o iNFT Book lê no máximo ${n(limit)}.`,
-  retry: 'Tentar novamente',
+  // r4d (design r4 F5-3): one verb for the same action — the page's own Rescan.
+  retry: 'Analisar de novo',
   kept: count =>
     count === 1
       ? `Mantivemos no Início ${n(count)} iNFT que já lá estava antes do iNFT Book.`
@@ -43,8 +45,10 @@ export const inftBook: TranslationOverrides['inftBook'] = {
   noWallet: 'Inicie sessão com a sua carteira para ver os seus iNFTs.',
   signIn: 'Iniciar sessão',
   none: 'Ainda não há iNFTs nesta carteira.',
+  noneHint: 'Os iNFTs que cunhar ou comprar aparecem aqui. Depois de uma compra, use Analisar de novo.',
   noMatch: 'Nenhum iNFT corresponde a estes filtros.',
   scanFailed: 'A análise da carteira falhou.',
+  scanFailedCause: 'O indexador de iNFTs ou a rede não respondeu, por isso nada foi lido. A carteira não mudou; Tentar novamente volta a pedir.',
   scanRefused: 'A análise da carteira foi recusada.',
   showOnHome: name => `Mostrar ${name} no Início`,
   setUp: 'Configurado',

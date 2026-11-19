@@ -5,6 +5,7 @@ export const assistant: TranslationOverrides['assistant'] = {
     loadingSession: 'セッションを読み込み中',
     showEarlier: '以前のメッセージを表示',
     loadingResponse: 'エージェントが応答を読み込み中',
+    agentWorking: 'エージェントが作業中',
     resumeWhenBackgroundDone: count =>
       count === 1
         ? 'バックグラウンドタスクの完了後に再開します'
@@ -104,6 +105,13 @@ export const assistant: TranslationOverrides['assistant'] = {
     statusRecovered: '回復しました',
     statusDone: '完了',
     permissionAsked: '許可を求めました',
+    refused: '拒否されました',
+    refusedByMode: (tool, mode) => `${tool} は実行されませんでした: このチャットの権限モード（${mode}）では許可されていません。`,
+    refusedNoGateway: tool => `${tool} は実行されませんでした: icloneOS に接続できないため、読み取りのみ許可されています。`,
+    refusedGeneric: tool => `${tool} は実行されませんでした: icloneOS はこの操作を許可していません。`,
+    refusedChangeMode: '権限モードを変更',
+    refusedSentToAgent: 'エージェントに送信された内容',
+    statusRefused: '実行前に拒否',
     memoryWriteNoted: 'メモリへの書き込みを記録',
     actions: {
       read: '読み取り完了',

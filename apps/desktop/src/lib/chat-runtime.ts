@@ -53,6 +53,28 @@ export function sessionTitle(session: SessionInfo): string {
   return session.title?.trim() || session.preview?.trim() || 'Untitled session'
 }
 
+const oneLine = (value: null | string | undefined) => (value ?? '').replace(/\s+/g, ' ').trim()
+
+/**
+ * The thread header's label (v0.0.9 G GF-1). A session with no title of its own is labelled by its preview, which is
+ * the first prompt; when that only repeats the prompt the thread pins right under the header, the header names the
+ * session plainly instead of showing the same line twice. A real title, or a preview that differs, is kept.
+ */
+export function headerSessionTitle(session: SessionInfo, pinnedPrompt: null | string | undefined): string {
+  const pinned = oneLine(pinnedPrompt)
+  const title = oneLine(session.title)
+  const preview = oneLine(session.preview)
+  // The line the header would show: the session's own title, else its preview. A title repeats the prompt only when it
+  // IS the prompt (design delta: the title fallback copies it); a preview is a truncation, so its prefix counts.
+  const repeats = title ? pinned === title : Boolean(preview) && (pinned === preview || pinned.startsWith(preview))
+
+  if (!pinned || !repeats) {
+    return sessionTitle(session)
+  }
+
+  return sessionTitle({ ...session, preview: '', title: null })
+}
+
 /** What a session is called before it has been sent — and before its composer
  *  has been typed into, which is the only thing that can name it earlier. */
 export const NEW_SESSION_TITLE = 'New session'

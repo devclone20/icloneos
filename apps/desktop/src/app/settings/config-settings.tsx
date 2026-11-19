@@ -49,6 +49,7 @@ import { EmptyState, SettingsContent, SettingsSkeleton, ToggleRow } from './prim
 import { SettingsProfileScope } from './profile-scope'
 import { QuickEntrySettings } from './quick-entry-settings'
 import { SettingRow } from './setting-row'
+import { VoiceExtraRow } from './voice-extra-row'
 import { VoiceReadinessHint } from './voice-readiness-hint'
 
 export function ConfigSettings({
@@ -400,6 +401,8 @@ function ConfigSettingsInner({
           of the raw provider/model fields below — answers "is voice ready?"
           before the user goes hunting through two dozen per-provider rows. */}
       {activeSectionId === 'voice' ? <VoiceReadinessHint config={config} /> : null}
+      {/* v0.0.9 W1b: local speech recognition installs app-side, only on the owner's click. */}
+      {activeSectionId === 'voice' ? <VoiceExtraRow /> : null}
       {visibleFields.length === 0 && activeSectionId !== 'chat' ? (
         <EmptyState description={c.emptyDesc} title={c.emptyTitle} />
       ) : visibleFields.length === 0 ? null : (

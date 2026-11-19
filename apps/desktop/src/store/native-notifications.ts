@@ -3,12 +3,23 @@ import { atom } from 'nanostores'
 import { type HermesOpenTarget, resolveHermesOpenPath } from '@/lib/hermes-open-target'
 import { persistString, storedString } from '@/lib/storage'
 
+import { type NotificationKind, recordNotification } from './notifications'
 import { withinNativeNotifyBaseline } from './notify-baseline'
 import { $activeSessionId } from './session'
 
 // Native OS notifications (Electron `Notification`), separate from the in-app
 // toast feed in `notifications.ts`. Each kind toggles independently.
 type NativeNotificationKind = 'approval' | 'backgroundDone' | 'credits' | 'input' | 'plugin' | 'turnDone' | 'turnError'
+
+const NATIVE_KIND_TO_NOTE: Record<NativeNotificationKind, NotificationKind> = {
+  approval: 'warning',
+  backgroundDone: 'success',
+  credits: 'warning',
+  input: 'info',
+  plugin: 'info',
+  turnDone: 'success',
+  turnError: 'error'
+}
 
 export const NATIVE_NOTIFICATION_KINDS: readonly NativeNotificationKind[] = [
   'approval',
@@ -212,6 +223,15 @@ export function dispatchNativeNotification(input: NativeNotificationInput): bool
     silent: input.silent,
     tag: input.tag,
     title: input.title
+  })
+
+  // v0.0.9 F4 (gate N9): a native notification also lands in the notification centre, so what the OS showed while
+  // the app was away can be read again inside it.
+  recordNotification({
+    kind: NATIVE_KIND_TO_NOTE[input.kind],
+    message: input.body ? input.body : input.title,
+    source: 'native',
+    title: input.body ? input.title : undefined
   })
 
   return true

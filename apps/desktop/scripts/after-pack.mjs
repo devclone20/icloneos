@@ -24,6 +24,7 @@ import path from 'node:path'
 
 import { readFileSync } from 'node:fs'
 
+import { packedDevFixtureLeaks } from './dev-fixtures-check.mjs'
 import { packedElectronDist, verifyPackedChromiumLicenses } from './electron-licenses.mjs'
 import { PIN_PATH, readPin, verifyPackedRuntime } from './fetch-runtime-pin.mjs'
 import { checkIcloneFsevents } from './iclone-fsevents-check.mjs'
@@ -63,6 +64,15 @@ export default async function afterPack(context) {
 
   if (problems.length > 0) {
     throw new Error(`[after-pack] iclone Hermes plugins not packed correctly: ${problems.join('; ')}`)
+  }
+
+  // v0.0.9 r4d (eng r4-m2): the dev/test fixture art never ships — not in app.asar, not in Resources.
+  const fixtureLeaks = packedDevFixtureLeaks(
+    packedResourcesDir(context.appOutDir, context.electronPlatformName, productName)
+  )
+
+  if (fixtureLeaks.length > 0) {
+    throw new Error(`[after-pack] dev fixtures in the pack: ${fixtureLeaks.join('; ')}`)
   }
 
   // THIRD_PARTY_NOTICES.md promises Chromium's licence file in Resources; electron-builder only warns when the

@@ -150,7 +150,9 @@ describe('acp-cli-lock/NOTICES.md — generated from the lockfile', () => {
     const text = renderAcpNotices(packageJson, lock)
 
     expect(text).toMatch(/Declaring no licence \(\d+\): .*`@alchemy\/wallet-api-types@/)
-    expect(text).toMatch(/not shipped in the app/)
+    // v0.0.9: the tree ships in the app (owner decision 17 Nov, replaces ruling 26).
+    expect(text).toMatch(/what iclone os ships in Resources\/acp-tools/)
+    expect(text).not.toMatch(/not shipped in the app/)
     // Ruling 28: the Segment packages name a licence FILE; the install requires it (installer.test.ts).
     expect(text).toMatch(
       /Declaring `SEE LICENSE IN <file>` \(4\): `@segment\/facade@3\.4\.10`, `@segment\/isodate@1\.0\.3`/

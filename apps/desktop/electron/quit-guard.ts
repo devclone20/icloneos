@@ -103,6 +103,8 @@ export function quitPromptFor(work: ActiveWork, quittingForHandoff: boolean, lef
       .filter(line => line !== null)
       .join('\n')
       .trim(),
-    message: work.count === 1 ? 'Hermes is still working on 1 chat.' : `Hermes is still working on ${work.count} chats.`
+    // v0.0.9 r3 (eng n6 / design F3): the owner's words — "the agent", never the engine's name.
+    message:
+      work.count === 1 ? 'The agent is still working on 1 chat.' : `The agent is still working on ${work.count} chats.`
   }
 }

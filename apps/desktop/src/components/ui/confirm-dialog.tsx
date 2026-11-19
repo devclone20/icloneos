@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { ActionStatus } from '@/components/ui/action-status'
 import { Button } from '@/components/ui/button'
 import {
@@ -12,7 +13,6 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { useI18n } from '@/i18n'
-import { AlertTriangle } from '@/lib/icons'
 
 interface ConfirmDialogProps {
   open: boolean
@@ -38,8 +38,10 @@ interface ConfirmSecondaryAction {
   onClick: () => void
 }
 
-// Shared confirmation dialog: opens focused on Confirm, Enter confirms (from
-// anywhere in the dialog), Esc/Cancel/backdrop dismiss. Owns the pending → done
+// Shared confirmation dialog: opens focused on Confirm; Enter confirms only on the
+// focused Confirm (never from Cancel, the secondary action or the dialog body —
+// P0_DESIGN_SPECS F4 type 4), Space only presses the focused button,
+// Esc/Cancel/backdrop dismiss. Owns the pending → done
 // → close beat and inline error, so callers pass only an async onConfirm that
 // does the work.
 export function ConfirmDialog({
@@ -130,12 +132,16 @@ export function ConfirmDialog({
       <DialogContent
         className="max-w-md"
         onKeyDown={event => {
-          // Enter/Space confirm regardless of which button holds focus
-          // (preventDefault stops a focused Cancel from swallowing it).
-          if ((event.key === 'Enter' || event.key === ' ') && !busy) {
-            event.preventDefault()
-            void run()
+          // v0.0.9 F4 (X6, Q renderer 5): Space never confirms, and Enter confirms only with focus ON the confirm
+          // button. A focused Cancel (or the secondary action) answers its own Enter/Space, and Enter on the title,
+          // the description or the dialog itself (focus left there by a click on text) does nothing — a destructive
+          // confirm fires only from the key on the button that says so.
+          if (event.key !== 'Enter' || busy || event.target !== confirmRef.current) {
+            return
           }
+
+          event.preventDefault()
+          void run()
         }}
         onOpenAutoFocus={event => {
           // Focus must land inside the dialog or the handler above never sees
@@ -151,12 +157,8 @@ export function ConfirmDialog({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        {error && (
-          <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-            <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
+        {/* v0.0.9 F4: the inline error is the one inline alert (type 3). */}
+        {error && <IcAlert>{error}</IcAlert>}
 
         <DialogFooter>
           <Button disabled={busy} onClick={onClose} type="button" variant="ghost">

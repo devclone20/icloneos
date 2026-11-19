@@ -7,7 +7,8 @@
 
 import { type TestInfo } from '@playwright/test'
 
-import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
+import { contrastInBothModes } from './contrast'
+import { conversationRow, type MockBackendFixture, newConversation, openConversationList, setupMockBackend, waitForAppReady } from './fixtures'
 import { CORRECTION_SWITCH_TRIGGER, MOCK_REPLY } from './mock-server'
 import { expect, type Page, test } from './test'
 
@@ -17,6 +18,20 @@ const CORRECTION = 'E2E correction must stay after the original prompt.'
 const TOOL_STARTED = 'Checking the long-running task before I continue.'
 const CORRECTED_REPLY = 'The corrected task finished.'
 const INFERENCE_SWITCH_TRIGGER = 'E2E_INFERENCE_SWITCH_TRIGGER'
+const escapeRe = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+// Reviewed port (v0.0.9): the other session's row, by its generated title (upstream: the mock reply) or, before a
+// title lands, by its first prompt (icloneOS rows show sessionTitle(session), src/app/home/msg-sidebar.tsx:642).
+const OTHER_SESSION_ROW = new RegExp(`${escapeRe(MOCK_REPLY)}|${escapeRe(OTHER_SESSION_PROMPT)}`)
+
+// The row of a session names its latest turn as it goes (the screenshots of the first port run: "The corrected task
+// finished." for the original session, its correction for the inference one), so each session's row is matched by
+// any text that session alone carries.
+// A generated title drops the closing period ("The corrected task finished"), so match without it.
+const ORIGINAL_SESSION_ROW = new RegExp(
+  [ORIGINAL_PROMPT, CORRECTION, TOOL_STARTED, CORRECTED_REPLY].map(text => escapeRe(text.replace(/\.$/, ''))).join('|')
+)
+
+const INFERENCE_SESSION_ROW = new RegExp(escapeRe(INFERENCE_SWITCH_TRIGGER))
 const INFERENCE_PROMPT = `${INFERENCE_SWITCH_TRIGGER}: original inference prompt must remain singular.`
 const INFERENCE_CORRECTION = `${INFERENCE_SWITCH_TRIGGER}: correction sent while inference is live.`
 
@@ -34,18 +49,6 @@ async function send(page: Page, text: string): Promise<void> {
   await composer.click()
   await composer.type(text, { delay: 5 })
   await page.keyboard.press('Enter')
-}
-
-async function steer(page: Page, text: string): Promise<void> {
-  const surface = activeSurface(page)
-  const composer = surface.locator('[contenteditable="true"]').first()
-  const primary = surface.locator('[data-slot="composer-root"] button[type="submit"]')
-
-  await composer.waitFor({ state: 'visible', timeout: 15_000 })
-  await composer.click()
-  await composer.type(text, { delay: 5 })
-  await expect(primary).toHaveAttribute('aria-label', /Steer/)
-  await primary.click()
 }
 
 async function waitForTranscriptText(page: Page, text: string): Promise<void> {
@@ -75,7 +78,9 @@ async function textNodeOccurrences(page: Page, text: string): Promise<number> {
       let count = 0
 
       while (walker.nextNode()) {
-        if (walker.currentNode.textContent?.includes(expected)) {
+        // Reviewed port (v0.0.9): only transcript messages count. icloneOS's chat header names the session by its
+        // title, which can be this very prompt; that is chrome, not a duplicated turn.
+        if (walker.currentNode.parentElement?.closest('[data-role]') && walker.currentNode.textContent?.includes(expected)) {
           count += 1
         }
       }
@@ -119,13 +124,11 @@ async function transcriptMessageOrder(page: Page): Promise<string[]> {
 }
 
 /**
- * The sidebar "+" opens a NEW TAB beside the current chat rather than
- * replacing it, so the prior session stays mounted in its own surface. Wait
- * for the newly-mounted surface to show an empty transcript instead of waiting
- * for the old text to disappear from the page (it never will).
+ * Reviewed port (v0.0.9): upstream's sidebar "+" is the Message pane's conversation list "New conversation" in
+ * icloneOS (fixtures.newConversation). Wait for the active surface to show a transcript without the prior text.
  */
 async function openFreshDraft(page: Page, priorSessionText: string): Promise<void> {
-  await page.locator('[data-slot="sidebar"] button[aria-label="New session"]').first().click()
+  await newConversation(page)
   await page.waitForFunction(
     ([priorText, surfaceSelector]: [string, string]) => {
       const surfaces = document.querySelectorAll(surfaceSelector)
@@ -139,8 +142,10 @@ async function openFreshDraft(page: Page, priorSessionText: string): Promise<voi
   )
 }
 
-async function openSidebarSession(page: Page, sidebarText: string, expectedTranscriptText: string): Promise<void> {
-  const row = page.locator('[data-slot="sidebar"] button').filter({ hasText: sidebarText }).first()
+// Reviewed port (v0.0.9): upstream's sidebar rows are the Message pane's conversation list rows in icloneOS.
+async function openSidebarSession(page: Page, sidebarText: RegExp | string, expectedTranscriptText: string): Promise<void> {
+  await openConversationList(page)
+  const row = conversationRow(page, sidebarText)
   await row.waitFor({ state: 'visible', timeout: 30_000 })
   await row.click()
   await waitForTranscriptText(page, expectedTranscriptText)
@@ -149,11 +154,12 @@ async function openSidebarSession(page: Page, sidebarText: string, expectedTrans
 async function reopenOriginalSession(page: Page): Promise<void> {
   // A still-running tool has not generated a final title yet, so the sidebar
   // retains the source prompt as its provisional session title.
-  await openSidebarSession(page, ORIGINAL_PROMPT, ORIGINAL_PROMPT)
+  await openSidebarSession(page, ORIGINAL_SESSION_ROW, ORIGINAL_PROMPT)
 }
 
 async function reopenInferenceSession(page: Page): Promise<void> {
-  const row = page.locator('[data-slot="sidebar"] button').filter({ hasText: INFERENCE_PROMPT }).first()
+  await openConversationList(page)
+  const row = conversationRow(page, INFERENCE_SESSION_ROW)
   await row.waitFor({ state: 'visible', timeout: 30_000 })
   await row.click()
   await waitForTranscriptText(page, INFERENCE_PROMPT)
@@ -206,7 +212,14 @@ test.describe('correction session switch', () => {
     fixture = null
   })
 
-  test('keeps a live correction in place and does not duplicate its original prompt after switching sessions', async ({}, testInfo: TestInfo) => {
+  // Reviewed port (v0.0.9): in icloneOS the e2e sandbox's gate refuses the scripted foreground `sleep 5` before it
+  // runs, so there is no live tool to steer into. With rt's fix the refusal is a visible row (tool.complete
+  // refused: true, rendered by tool/fallback-model 'refused'), the turn ends, and the correction becomes its own
+  // turn. What a user relies on is asserted in full: the refusal is shown with its reason (never "Ran"), the correction
+  // lands and is answered, and a warm switch away and back keeps exactly that transcript, no row duplicated or moved.
+  // Steering into a live foreground tool is N/A in the e2e sandbox (the next test); steering into a live turn is
+  // covered by the inference-time correction test.
+  test('shows the refused tool and keeps the correction in place, unduplicated, after switching sessions', async ({}, testInfo: TestInfo) => {
     const { page } = fixture!
 
     // A blank draft does not exercise session hydration. Seed a real second
@@ -219,30 +232,69 @@ test.describe('correction session switch', () => {
     await waitForTranscriptText(page, TOOL_STARTED)
     await waitForTranscriptText(page, ORIGINAL_PROMPT)
 
-    // The historical session redirects while a foreground terminal task is
-    // running. Use the visible Steer action to cover the real composer path.
-    await steer(page, CORRECTION)
-    await waitForTranscriptText(page, CORRECTION)
+    // The refused command is a visible row: titled Refused, with the quiet refusal glyph, never a run.
+    const refusedRow = activeSurface(page).getByText(/^Refused\b/).first()
+    await expect(refusedRow).toBeVisible({ timeout: 30_000 })
+    await expect(activeSurface(page).locator('[aria-label="Refused before it ran"]').first()).toBeVisible()
+    // v0.0.9 G re-shoot: the row names the tool and says why it was refused, not only the command.
+    await expect(activeSurface(page).getByText('Refused · Terminal').first()).toBeVisible()
+    const reason = activeSurface(page).locator('[data-slot="tool-refusal-reason"]').first()
 
-    const orderBeforeSwitch = relevantOrder(await transcriptTextOrder(page))
-    expect(orderBeforeSwitch).toEqual([ORIGINAL_PROMPT, CORRECTION])
+    await expect(reason).not.toBeEmpty()
+    // v0.0.9 G GF-M2: the collapsed line speaks to the owner, never the agent-directed result, and it holds AA in
+    // both skins, computed in the live page: its ink with every ancestor's opacity, over the backgrounds under it.
+    await expect(reason).not.toContainText(/BLOCKED|tell the owner/)
+
+    const contrast = await contrastInBothModes(page, reason)
+
+    expect(new Set(contrast.map(row => row.mode))).toEqual(new Set(['dark', 'light']))
+
+    for (const row of contrast) {
+      expect(row.ratio, JSON.stringify(row)).toBeGreaterThanOrEqual(4.5)
+    }
+
+    await expect(activeSurface(page).getByText(/^Ran sleep/)).toHaveCount(0)
+    await waitForTranscriptText(page, CORRECTED_REPLY)
+
+    // The correction goes through the real composer (inserted, not typed key by key: typing dropped a space here once,
+    // 'E2Ecorrection', noted as a finding) and is answered.
+    const composer = activeSurface(page).locator('[contenteditable="true"]').first()
+    await composer.click()
+    await page.keyboard.insertText(CORRECTION)
+    await page.keyboard.press('Enter')
+    await waitForTranscriptText(page, CORRECTION)
+    await expect
+      .poll(async () => steerTurnOrder(await transcriptMessageOrder(page)), { timeout: 30_000 })
+      .toEqual([ORIGINAL_PROMPT, CORRECTED_REPLY, CORRECTION, CORRECTED_REPLY])
+
+    const orderBeforeSwitch = steerTurnOrder(await transcriptMessageOrder(page))
     expect(await textNodeOccurrences(page, ORIGINAL_PROMPT)).toBe(1)
     expect(await textNodeOccurrences(page, CORRECTION)).toBe(1)
     await page.screenshot({ path: testInfo.outputPath('correction-before-session-switch.png') })
 
-    // Reproduce the observed race: switch to another persisted session while
-    // the foreground tool is live, then return before its redirect settles.
-    await openSidebarSession(page, MOCK_REPLY, OTHER_SESSION_PROMPT)
+    await openSidebarSession(page, OTHER_SESSION_ROW, OTHER_SESSION_PROMPT)
     await reopenOriginalSession(page)
     await page.waitForTimeout(500)
     await page.screenshot({ path: testInfo.outputPath('correction-after-warm-resume.png') })
 
-    expect(relevantOrder(await transcriptTextOrder(page))).toEqual(orderBeforeSwitch)
+    expect(steerTurnOrder(await transcriptMessageOrder(page))).toEqual(orderBeforeSwitch)
     expect(await textNodeOccurrences(page, ORIGINAL_PROMPT)).toBe(1)
     expect(await textNodeOccurrences(page, CORRECTION)).toBe(1)
+    // The refusal is persisted (display_metadata.refused): it survives the switch...
+    await expect(activeSurface(page).getByText(/^Refused\b/).first()).toBeVisible()
+    await expect(activeSurface(page).getByText(/^Ran sleep/)).toHaveCount(0)
 
-    await waitForTranscriptText(page, CORRECTED_REPLY)
-    expect(steerTurnOrder(await transcriptMessageOrder(page))).toEqual([ORIGINAL_PROMPT, CORRECTION, CORRECTED_REPLY])
+    // ...and a reload, where the transcript comes back from the stored session alone.
+    await page.reload()
+    await waitForAppReady(fixture!, 120_000)
+    await reopenOriginalSession(page)
+    await expect(activeSurface(page).getByText(/^Refused\b/).first()).toBeVisible({ timeout: 30_000 })
+    await expect(activeSurface(page).getByText(/^Ran sleep/)).toHaveCount(0)
+    expect(steerTurnOrder(await transcriptMessageOrder(page))).toEqual(orderBeforeSwitch)
+  })
+
+  test('steers a correction into a live foreground terminal tool', async () => {
+    test.skip(true, 'N/A in v0.0.9: upstream steering into a live foreground tool; the foreground terminal is refused under e2e confinement plus Manual mode; steering into a live turn is covered by :266')
   })
 
   test('keeps an inference-time correction visible through a warm session switch', async ({}, testInfo: TestInfo) => {
@@ -259,7 +311,7 @@ test.describe('correction session switch', () => {
     await send(page, INFERENCE_CORRECTION)
     await waitForTranscriptText(page, INFERENCE_CORRECTION)
 
-    await openSidebarSession(page, MOCK_REPLY, OTHER_SESSION_PROMPT)
+    await openSidebarSession(page, OTHER_SESSION_ROW, OTHER_SESSION_PROMPT)
     await reopenInferenceSession(page)
 
     expect(await textNodeOccurrences(page, INFERENCE_PROMPT)).toBe(1)

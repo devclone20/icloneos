@@ -27,7 +27,8 @@
  * `acp-cli-lock/package.json` + `package-lock.json` are copied into the staging dir and installed with `npm ci`, so
  * every transitive version (and THIRD_PARTY_NOTICES' "ACP CLI" section, byte-checked below) is the same on every
  * build; a registry release can no longer change what ships. Bump: set ACP_CLI_VERSION and the dependency in
- * acp-cli-lock/package.json, run `npm install --package-lock-only --ignore-scripts` inside acp-cli-lock/, review the
+ * acp-cli-lock/package.json, run `npm install --package-lock-only --ignore-scripts` inside acp-cli-lock/, then
+ * `node scripts/acp-lock-prune.mjs` (v0.0.9: drops tsup's build-only subtree, picomatch included), review the
  * lockfile diff, stage, then `third-party-closure.mjs --write`. The staging dir is wiped first so a stale tree can
  * never survive a bump. Staging ends with the shared self-test
  * through the launcher, so a CLI that cannot answer a real command never

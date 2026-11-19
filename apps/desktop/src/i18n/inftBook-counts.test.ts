@@ -40,6 +40,7 @@ describe('iNFT Book counts are locale-formatted', () => {
         [copy.confirmTitle(part), [part]],
         [copy.scanning(total), [total]],
         [copy.partial(part), [part]],
+        [copy.partialFiltered(part, total), [part, total]],
         [copy.capped(total), [total]],
         [copy.kept(part), [part]]
       ]

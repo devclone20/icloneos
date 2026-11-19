@@ -45,7 +45,13 @@ beforeAll(() => {
   stub('offsetHeight', VIEWPORT.height)
 })
 
-afterAll(() => restore.forEach(undo => undo()))
+// @tanstack/virtual-core debounces its "scrolling stopped" reset (150 ms, isScrollingResetDelay) on the window timer and
+// does not cancel it on unmount. Under full-suite load the last scroll test's pending reset fired after this file's
+// jsdom was torn down ("window is not defined", an unhandled error, r4 e2e-pass suite). Let it fire here first.
+afterAll(async () => {
+  await new Promise(resolve => setTimeout(resolve, 300))
+  restore.forEach(undo => undo())
+})
 
 afterEach(() => {
   cleanup()

@@ -9,7 +9,7 @@ import { chmodSync, closeSync, existsSync, openSync, readdirSync, readFileSync, 
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { checkAcpAbsent } from './acp-pack-absent.mjs'
+import { checkAcpBundled } from './acp-pack-bundled.mjs'
 import { assertClean, compileMarkers, scanTree } from './artifact-hygiene.mjs'
 import { RELEASE_IDENTITY_FLAG } from './build-identity.mjs'
 import { runtimePin, sha256SumsText } from './release-mac.mjs'
@@ -337,12 +337,12 @@ export async function releaseLinux(opts, deps = {}) {
     throw new Error(`ELF binaries for another arch in the linux-${opts.arch} package: ${list.join(', ')}`)
   }
 
-  // REL-6 (ruling 26): the package carries no ACP CLI (no tree, no Go signer), only Resources/acp-pin; the app
-  // installs the CLI at first use from the npm registry.
-  const acp = (deps.acpAbsent ?? checkAcpAbsent)(join(releaseDir, names.unpacked))
+  // v0.0.9 (owner decision 17 Nov, replaces ruling 26): the package SHIPS the ACP CLI (Resources/acp-tools), exactly its
+  // build manifest, with Resources/acp-pin, and no other copy of it anywhere.
+  const acp = (deps.acpPack ?? (dir => checkAcpBundled(dir, { platform: 'linux' })))(join(releaseDir, names.unpacked))
 
   if (!acp.ok) {
-    throw new Error(`the linux-${opts.arch} package carries the ACP CLI or lacks its pin: ${acp.problems.join('; ')}`)
+    throw new Error(`the linux-${opts.arch} package does not ship the ACP CLI as built: ${acp.problems.join('; ')}`)
   }
 
   // PLANO_R §6 R7/R11: the tree the deb and the AppImage are made of carries no trace of the owner or his usage.

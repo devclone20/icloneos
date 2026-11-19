@@ -163,6 +163,75 @@ describe('BillingSettings', () => {
     expect(screen.getByRole('button', { name: /^Buy$/ }).hasAttribute('disabled')).toBe(false)
   })
 
+  it('F1-S: Buy carries the charge lock marker (the only control whose real click opens a charge)', async () => {
+    apiMocks.fetchBillingState.mockResolvedValue(okBilling(postTrainBillingState))
+    apiMocks.fetchSubscriptionState.mockResolvedValue(okSubscription(postTrainSubscriptionState))
+
+    renderBilling()
+
+    expect(await screen.findByText('$142.50')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Buy$/ }).hasAttribute('data-billing-charge-confirm')).toBe(true)
+    // A preset chip is not the Buy click: it only picks the amount.
+    expect(screen.getByRole('button', { name: '$25' }).hasAttribute('data-billing-charge-confirm')).toBe(false)
+  })
+
+  // Rendered DOM, not the source text (critic r1): the marker the preload lock reads must be on the button the owner
+  // really clicks, and on no sibling that only cancels or turns a charge off.
+  const MARK = 'data-billing-charge-confirm'
+  const marked = (name: RegExp | string) => screen.getByRole('button', { name }).hasAttribute(MARK)
+
+  it('v0.0.9 Q: auto-reload Save carries the charge lock marker; Cancel and Turn off do not', async () => {
+    renderBilling()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Manage' }))
+
+    expect(marked('Save')).toBe(true)
+    expect(marked(en.actions.cancel)).toBe(false)
+    expect(marked(en.actions.turnOff)).toBe(false)
+
+    fireEvent.click(screen.getByRole('button', { name: en.actions.turnOff }))
+    // The inline "Turn off" confirm switches a charge OFF: never the charge lock.
+    expect(screen.getAllByRole('button', { name: 'Turn off' }).every(button => !button.hasAttribute(MARK))).toBe(true)
+  })
+
+  it('v0.0.9 Q: the Change plan confirm carries the marker; its Cancel and the plan pick do not', async () => {
+    const fixture = billingDevFixtures['subscriber-personal']
+
+    apiMocks.fetchBillingState.mockResolvedValue(fixture.billing)
+    apiMocks.fetchSubscriptionState.mockResolvedValue(fixture.subscription)
+    apiMocks.previewSubscriptionChange.mockResolvedValue({
+      data: { effect: 'scheduled', effective_at: '2026-08-15T00:00:00Z', ok: true, target_tier_name: 'Free' },
+      ok: true
+    })
+
+    renderBilling(['/settings?tab=billing&bview=plans'])
+
+    const pick = await screen.findByRole('button', { name: 'Downgrade' })
+
+    expect(pick.hasAttribute(MARK)).toBe(false)
+    fireEvent.click(pick)
+
+    const confirm = await screen.findByRole('button', { name: 'Confirm downgrade' })
+
+    expect(confirm.hasAttribute(MARK)).toBe(true)
+    expect(marked(en.actions.cancel)).toBe(false)
+  })
+
+  it('v0.0.9 Q: Resume (Undo on the plan card) carries the marker; View plans does not', async () => {
+    const fixture = billingDevFixtures['pending-downgrade']
+
+    apiMocks.fetchBillingState.mockResolvedValue(fixture.billing)
+    apiMocks.fetchSubscriptionState.mockResolvedValue(fixture.subscription)
+
+    renderBilling()
+
+    expect(await screen.findByText(/Changes to Free on Aug 15\.$/)).toBeTruthy()
+    expect(marked('Undo')).toBe(true)
+    expect(screen.queryAllByRole('button', { name: 'View plans' }).every(button => !button.hasAttribute(MARK))).toBe(
+      true
+    )
+  })
+
   it('disables buy controls when no card is on file', async () => {
     const fixture = billingDevFixtures['no-card']
 

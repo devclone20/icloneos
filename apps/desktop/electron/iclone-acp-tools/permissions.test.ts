@@ -83,6 +83,8 @@ describe('the agent cannot trigger the install', () => {
     const callers = readdirSync(electronDir, { recursive: true, encoding: 'utf8' })
       .filter(rel => rel.endsWith('.ts') && !rel.endsWith('.test.ts') && !rel.includes('fixture'))
       .filter(rel => /requestInstall\(|tools\.install\(\)|\.install\(\)\s*$/m.test(source(rel)))
+      // voice-extra.ts is a different installer (the voice extra, its own owner-click lock): it never reaches the ACP tools.
+      .filter(rel => rel !== 'voice-extra.ts' || /iclone-acp-tools|requestInstall/.test(source(rel)))
       .sort()
 
     expect(callers).toEqual(['iclone-acp-tools/ipc.ts', 'iclone-acp.ts'])

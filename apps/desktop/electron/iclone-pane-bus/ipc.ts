@@ -18,6 +18,7 @@ import path from 'node:path'
 
 import { app, type BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 
+import { prepareSocket, socketPath as privateSocketPath } from '../iclone-confinement/launcher-socket'
 import { createPaneProbe, type ProbeInput } from '../iclone-pane-remote/probe'
 import { forgetRemoteSession, readRemoteRegistry, rememberRemoteSession } from '../iclone-pane-remote/registry'
 import {
@@ -29,6 +30,7 @@ import {
   tmuxListArgs,
   tmuxSessionFor
 } from '../iclone-pane-remote/tmux-cmd'
+import { assertSocketPathFits } from '../socket-path'
 import { registerTeardown } from '../teardown-registry'
 
 import { type BusLogEntry, createPaneBroker, type PaneBroker, type PaneSummary, type SignalSource } from './broker'
@@ -309,23 +311,21 @@ export function createBusServer(bus: PaneBroker, log: (entry: BusLogEntry) => vo
   return server
 }
 
-/** The socket's directory must be a real directory of ours: never a planted symlink or someone else's. */
-function privateDir(dir: string): void {
-  fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+/**
+ * v0.0.9 (owner decision): the bus socket is the `pane` socket of the short private socket folder of this userData
+ * (launcher-socket.ts), never `~/.iclone-os/bus/bus-<pid>.sock`. One app per userData (the single-instance lock), so
+ * one name; a crashed run's socket is ours and stale, and prepareSocket removes it.
+ */
+export const paneBusSocketFile = (userDataDir: string): string => privateSocketPath(userDataDir, 'pane')
 
-  const stat = fs.lstatSync(dir)
+/** Where bus sockets of versions before v0.0.9 were left (`bus-<pid>.sock`): swept of dead runs, never listened in. */
+const legacyBusDir = (): string => path.join(stateDir(), 'bus')
 
-  if (!stat.isDirectory() || stat.isSymbolicLink() || (process.getuid && stat.uid !== process.getuid())) {
-    throw new Error(`pane bus: ${dir} is not a private directory of this user`)
-  }
-
-  fs.chmodSync(dir, 0o700)
-}
-
-/** Listen on a Unix socket in a private directory; resolves once the socket is 0600. */
+/** Listen on a Unix socket in a private folder; resolves once the socket is 0600. The folder is checked before the
+ *  bind (ours, exactly 0700, never a link, never chmodded); only our own stale socket is removed (launcher-socket.ts). */
 export async function listenOnSocket(server: http.Server, file: string): Promise<void> {
-  privateDir(path.dirname(file))
-  fs.rmSync(file, { force: true })
+  assertSocketPathFits(file, 'The pane bus socket')
+  prepareSocket(file)
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
@@ -488,17 +488,16 @@ export function initPaneBus({ getMainWindow, isTrustedSender, findOnPath }: Init
     }
   }
 
-  const dir = path.join(stateDir(), 'bus')
-  const file = path.join(dir, `bus-${process.pid}.sock`)
+  const file = paneBusSocketFile(app.getPath('userData'))
   const server = createBusServer(broker, entry => logSink(entry))
 
   server.on('error', error => console.warn('[iclone] pane bus failed:', error))
-  // Every failure here (a planted symlink, a file where the dir should be) leaves
+  // Every failure here (a planted symlink, a folder not ours or not 0700, a file where the socket goes) leaves
   // the app running with no bus: panes open plain, `it bus` says so.
   listenOnSocket(server, file)
     .then(() => {
       socketPath = file
-      logSink({ verb: 'listen', swept: sweepStaleSockets(dir) })
+      logSink({ verb: 'listen', swept: sweepStaleSockets(legacyBusDir()) })
     })
     .catch(error => console.warn('[iclone] pane bus could not listen:', error))
 

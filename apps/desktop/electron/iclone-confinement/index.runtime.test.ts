@@ -3,12 +3,14 @@
  * the launcher it owns (an injected fake here) and what it reports for the state.
  */
 import { mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { realpathSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { createLauncher, type Launcher, type LauncherOptions, type LauncherState } from './launcher'
+import { MAX_SOCKET_PATH_BYTES, socketPath } from './launcher-socket'
 import { realOrSelf } from './profiles'
 import { generateRuntimeProfile, runtimeRoots } from './runtime-profile'
 
@@ -99,12 +101,24 @@ const FACTS: RuntimeSpawnFacts = {
   cacheDir: null
 }
 
+function expectPrivateLauncherSocket(file: string, userDataDir: string): void {
+  // v0.0.9 (owner decision): the launcher socket left userData for its own short private folder (launcher-socket.ts),
+  // asserted at least as strictly as the old exact path: exactly socketPath(userData, 'launcher'), outside userData,
+  // inside the canonical per-user temp dir (or the /tmp/<uid> fallback), and short enough to bind.
+  expect(file).toBe(socketPath(userDataDir, 'launcher'))
+  expect(file.startsWith(userDataDir)).toBe(false)
+  expect(file.startsWith(`${realpathSync(os.tmpdir())}/ic-`) || /^\/tmp\/\d+-/.test(file)).toBe(true)
+  expect(path.basename(path.dirname(file))).toMatch(/^(ic-|\d+-)[0-9a-f]{10}$/)
+  expect(path.basename(file)).toBe('launcher.sock')
+  expect(Buffer.byteLength(file)).toBeLessThanOrEqual(MAX_SOCKET_PATH_BYTES)
+}
+
 describe('spawnEnv — the runtime pair', () => {
-  it('on + darwin: the launcher socket under userData and the confined flag', () => {
+  it('on + darwin: the launcher socket in its private folder (never under userData) and the confined flag', () => {
     const { layer, root } = world()
     const env = layer.spawnEnv()
 
-    expect(env.ICLONE_CONFINEMENT_LAUNCHER).toBe(path.join(root, 'userData', 'confinement', 'run', 'launcher.sock'))
+    expectPrivateLauncherSocket(env.ICLONE_CONFINEMENT_LAUNCHER, path.join(root, 'userData'))
     expect(env.ICLONE_RUNTIME_CONFINED).toBe('1')
     expect(layer.runtimeConfined()).toBe(true)
   })
@@ -140,8 +154,8 @@ describe('runtimeSpawn', () => {
       ...FACTS,
       python,
       permDir: path.join(userData, 'run'),
-      permSocket: path.join(userData, 'run', 'acp.sock'),
-      paySocket: path.join(userData, 'run', 'pay.sock'),
+      permSocket: socketPath(userData, 'acp'),
+      paySocket: socketPath(userData, 'pay'),
       policyFile: path.join(userData, 'run', 'policy-1.json')
     }
 
@@ -166,7 +180,7 @@ describe('runtimeSpawn', () => {
       `PYTHON_EXE=${python}`,
       `RUN_DIR=${path.join(confinement, 'run')}`,
       `READY_DIR=${path.join(userData, 'backend-ready')}`,
-      `LAUNCHER_SOCKET=${path.join(confinement, 'run', 'launcher.sock')}`,
+      `LAUNCHER_SOCKET=${socketPath(path.join(root, 'userData'), 'launcher')}`,
       `PROFILES_DIR=${path.join(confinement, 'profiles')}`,
       `MEMBERS_DIR=${realOrSelf(layer.paths.membersDir)}`,
       `SCRATCH_ROOT=${realOrSelf(layer.paths.scratchRoot)}`,
@@ -174,8 +188,8 @@ describe('runtimeSpawn', () => {
       'PROJECT=/work',
       'WEB_DIST=/web',
       `PERM_DIR=${path.join(userData, 'run')}`,
-      `PERM_SOCKET=${path.join(userData, 'run', 'acp.sock')}`,
-      `PAY_SOCKET=${path.join(userData, 'run', 'pay.sock')}`,
+      `PERM_SOCKET=${socketPath(userData, 'acp')}`,
+      `PAY_SOCKET=${socketPath(userData, 'pay')}`,
       `POLICY_FILE=${path.join(userData, 'run', 'policy-1.json')}`,
       `REFUSALS_DIR=${path.join(confinement, 'refusals')}`,
       `HARDLINK_ACKS=${path.join(confinement, 'hardlink-acks.json')}`
@@ -205,6 +219,14 @@ describe('runtimeSpawn', () => {
     expect(() => layer.runtimeSpawn(python, [], { ...FACTS, python, permSocket: '/elsewhere/acp.sock' })).toThrow(
       /no safe value for PERM_SOCKET/
     )
+    // v0.0.9: nor is the old place under userData; only the short private socket of this userData is main's.
+    expect(() =>
+      layer.runtimeSpawn(python, [], { ...FACTS, python, permSocket: path.join(root, 'userData', 'run', 'acp.sock') })
+    ).toThrow(/no safe value for PERM_SOCKET/)
+    // Nor the pay socket at its old place: only socketPath(userData, 'pay') is main's.
+    expect(() =>
+      layer.runtimeSpawn(python, [], { ...FACTS, python, paySocket: path.join(root, 'userData', 'run', 'pay.sock') })
+    ).toThrow(/no safe value for PAY_SOCKET/)
     expect(layer.runtimeView()).toBeNull()
   })
 
@@ -271,6 +293,22 @@ describe('runtimeSpawn', () => {
 })
 
 describe('the launcher', () => {
+  // v0.0.9 (owner decision): rt's capture was a long userData (the e2e sandbox's) whose launcher socket overflowed
+  // sun_path, so the agent silently lost `terminal`. With the socket in its own short folder a long userData starts
+  // the launcher normally; the loud length check stays as a backstop (socket-path.test.ts).
+  it('a long userData no longer overflows: the launcher starts with a short socket outside userData', async () => {
+    const longUserData = path.join(mkdtempSync('/tmp/lsk-'), 'x'.repeat(90), 'userData')
+
+    dirs.push(path.dirname(path.dirname(longUserData)))
+    mkdirSync(longUserData, { recursive: true })
+
+    const { layer, made } = world('darwin', undefined, undefined, { userDataDir: longUserData })
+
+    await expect(layer.ensureLauncher('/rt', FACTS)).resolves.toBe('up')
+    expect(made).toHaveLength(1)
+    expectPrivateLauncherSocket(made[0].socketPath, longUserData)
+  })
+
   it('is started with the runtime python, the runtime plugin script, the socket, the journal dir and the spec', async () => {
     const { layer, made, python, root } = world()
 
@@ -285,7 +323,7 @@ describe('the launcher', () => {
     expect(made[0]).toMatchObject({
       python,
       script: launcherScript('/rt'),
-      socketPath: path.join(root, 'userData', 'confinement', 'run', 'launcher.sock'),
+      socketPath: socketPath(path.join(root, 'userData'), 'launcher'),
       journalDir: path.join(root, 'userData', 'confinement', 'ledger')
     })
     expect(launcherScript('/rt')).toBe('/rt/plugins/iclone-confinement/launcher.py')

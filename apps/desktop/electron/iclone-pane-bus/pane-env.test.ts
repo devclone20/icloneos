@@ -13,7 +13,7 @@ import { afterAll, beforeAll, expect, test, vi } from 'vitest'
 
 import { createPaneBroker, type PaneBroker } from './broker'
 import { BUS_CLI_FRAGMENT } from './cli'
-import { createBusServer, createPaneHooks, listenOnSocket } from './ipc'
+import { createBusServer, createPaneHooks, listenOnSocket, paneBusSocketFile } from './ipc'
 import { paneProcessEnv } from './pane-env'
 
 vi.mock('electron', () => ({
@@ -31,7 +31,7 @@ let broker: PaneBroker
 
 beforeAll(async () => {
   home = mkdtempSync(path.join('/tmp', 'v3d-env-'))
-  socket = path.join(home, 'bus', 'bus.sock')
+  socket = paneBusSocketFile(home)
   cli = path.join(home, 'it')
   writeFileSync(cli, `#!/bin/sh\n${BUS_CLI_FRAGMENT}\nexit 1\n`, { mode: 0o700 })
   broker = createPaneBroker()
@@ -42,6 +42,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await new Promise(resolve => server.close(resolve))
   rmSync(home, { force: true, recursive: true })
+  rmSync(path.dirname(socket), { force: true, recursive: true })
 })
 
 function itBus(env: NodeJS.ProcessEnv, ...argv: string[]): Promise<{ out: string; err: string }> {

@@ -57,7 +57,7 @@
   margin: 0 10px;
   font-size: var(--ic-type-md);
   line-height: 1.45;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
 }
 
 .mk-rail-clear {
@@ -67,7 +67,7 @@
   font-size: var(--ic-type-xs);
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   cursor: pointer;
   transition: color var(--ic-dur-fast) var(--ic-ease-std);
 }
@@ -198,7 +198,7 @@
   font-size: var(--ic-type-sm);
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   cursor: pointer;
   transition:
     background var(--ic-dur-fast) var(--ic-ease-std),
@@ -739,7 +739,7 @@ html[data-text-size='large'] .mk-cats {
 .mk-stack__hint {
   margin: -4px 0 0;
   font-size: var(--ic-type-md);
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
 }
 
 .mk-deliverable {
@@ -1366,7 +1366,7 @@ html[data-text-size='large'] .mk-cats {
 }
 
 .mk-input__hint {
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
 }
 
 .mk-input__hint--ok {
@@ -1461,7 +1461,7 @@ html[data-text-size='large'] .mk-cats {
 .mk-toggle__hint {
   font-size: var(--ic-type-md);
   line-height: 1.45;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
 }
 
 /* The schema editor. */

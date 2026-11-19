@@ -24,6 +24,7 @@ import path from 'node:path'
 
 import { DEV_PLUGIN_OVERLAY_DIR, ICLONE_PLUGIN_PREFIX, prepareDevPluginOverlay } from '../iclone-runtime-location'
 
+import { prepareSocket, socketPath } from './launcher-socket'
 import { writeInstallerConfig } from './live-guards'
 import { ensureMembersDir } from './members'
 import { type ConfinementPaths, realOrSelf } from './profiles'
@@ -108,7 +109,8 @@ export interface RuntimeWorldOptions {
    * alias folder (a link beside the real install, outside every root of the profile), and the real binary at the end.
    */
   interpreter?: 'direct' | 'linked'
-  /** Give the profile main's permission and pay sockets, at the world's `<userData>/run`, as a window's backend has them. */
+  /** Give the profile main's permission and pay sockets (v0.0.9: the short private ones of the world's userData, its
+   *  tokens at `<userData>/run`), as a window's backend has them. */
   mainSockets?: boolean
   /**
    * `beside`: HERMES_HOME is a folder of its own next to userData (an installed app's `~/.hermes`). `userData`: it is
@@ -390,8 +392,9 @@ export function createRuntimeWorld(options: RuntimeWorldOptions = {}): RuntimeWo
     ...(options.mainSockets
       ? {
           permDir: path.join(userDataDir, 'run'),
-          permSocket: path.join(userDataDir, 'run', 'perm.sock'),
-          paySocket: path.join(userDataDir, 'run', 'pay.sock'),
+          // v0.0.9: main's agent and pay sockets are the short private ones of this userData (launcher-socket.ts).
+          permSocket: socketPath(userDataDir, 'acp'),
+          paySocket: socketPath(userDataDir, 'pay'),
           policyFile: path.join(userDataDir, 'run', 'policy.json')
         }
       : {})
@@ -399,6 +402,8 @@ export function createRuntimeWorld(options: RuntimeWorldOptions = {}): RuntimeWo
 
   if (options.mainSockets) {
     mkdirSync(path.join(userDataDir, 'run'), { recursive: true })
+    // The private socket folder, checked as main checks it before a listen (ours, exactly 0700, never a link).
+    prepareSocket(socketPath(userDataDir, 'acp'))
   }
 
   // As main builds it: the links on the interpreter's way are the profile's literals, every other path a parameter.

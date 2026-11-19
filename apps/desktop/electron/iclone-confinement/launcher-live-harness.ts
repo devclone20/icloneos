@@ -69,6 +69,8 @@ def run(p):
                 os.close(fd)
         elif k == "stat":
             os.stat(p["path"])
+        elif k == "list":
+            os.listdir(p["path"])
         elif k == "write":
             os.close(os.open(p["path"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
             os.unlink(p["path"])
@@ -150,7 +152,7 @@ print(json.dumps(out))
 
 export interface RuntimeProbe {
   id: string
-  k: 'cat' | 'connect' | 'exec' | 'mach' | 'mkwrite' | 'procargs' | 'procenv' | 'psutil' | 'create' | 'read' | 'rename' | 'reopen' | 'route' | 'stat' | 'tcp' | 'unlink' | 'write'
+  k: 'cat' | 'connect' | 'exec' | 'mach' | 'mkwrite' | 'procargs' | 'procenv' | 'psutil' | 'create' | 'list' | 'read' | 'rename' | 'reopen' | 'route' | 'stat' | 'tcp' | 'unlink' | 'write'
   path?: string
   /** `tcp`: connect for real. `route`: answer ok unless the sandbox refuses the connect. */
   host?: string

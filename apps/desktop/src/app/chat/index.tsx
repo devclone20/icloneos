@@ -1,7 +1,7 @@
 import { type AppendMessage, AssistantRuntimeProvider, type ThreadMessage } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
-import type { ReadableAtom } from 'nanostores'
+import { computed, type ReadableAtom } from 'nanostores'
 import type * as React from 'react'
 import { memo, Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
@@ -19,8 +19,8 @@ import { ErrorState } from '@/components/ui/error-state'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
 import { type HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
-import type { ChatMessage } from '@/lib/chat-messages'
-import { NEW_SESSION_TITLE, quickModelOptions, sessionTitle } from '@/lib/chat-runtime'
+import { type ChatMessage, chatMessageText } from '@/lib/chat-messages'
+import { headerSessionTitle, NEW_SESSION_TITLE, quickModelOptions } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { useStoreSelector } from '@/lib/use-session-slice'
@@ -35,6 +35,7 @@ import {
   $contextSuggestions,
   $freshDraftReady,
   $gatewayState,
+  $messages,
   $resumeExhaustedSessionId,
   $sessions,
   getSessionOwnerHint,
@@ -130,7 +131,20 @@ function ChatHeader({
   const activeStoredSession =
     (selectedSessionId && sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))) || null
 
-  const title = activeStoredSession ? sessionTitle(activeStoredSession) : NEW_SESSION_TITLE
+  // v0.0.9 G GF-1: the prompt the thread pins under the header is the latest user line; never show it twice.
+  const pinnedPrompt = useStore(
+    useMemo(
+      () =>
+        computed($messages, messages => {
+          const latest = [...messages].reverse().find(message => message.role === 'user' && !message.hidden)
+
+          return latest ? chatMessageText(latest) : null
+        }),
+      []
+    )
+  )
+
+  const title = activeStoredSession ? headerSessionTitle(activeStoredSession, pinnedPrompt) : NEW_SESSION_TITLE
 
   // Which agent/persona owns this chat — glanceable in the header once a
   // second profile exists, so the open session's ownership is never ambiguous

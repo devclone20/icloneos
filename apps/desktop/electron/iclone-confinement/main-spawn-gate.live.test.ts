@@ -13,7 +13,7 @@ import path from 'node:path'
 
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
-import { startAcpSocketServer } from '../iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from '../iclone-acp-ipc'
 import { registerPermissions } from '../iclone-permissions/ipc'
 import { prepareHermesSpawn } from '../main/iclone-gate'
 
@@ -162,6 +162,7 @@ describe.runIf(runtimeAvailable())('the gate through the spawn main really makes
   const drive = async (scenario: string, ran: string, cwd = world.project, folder = world.project) => {
     const server = await startAcpSocketServer({
       dir: path.join(world.userData, 'run'),
+      socket: acpSocketFile(world.userData),
       resolveInft: () => ({ ok: false }),
       admitStreaming: () => false,
       run: async () => ({ code: 1 }),

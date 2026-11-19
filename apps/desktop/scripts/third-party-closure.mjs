@@ -8,7 +8,7 @@
 //                                                    BYTE FOR BYTE (rows, licence column, every licence text)
 //       [--repo <dir>]        another checkout (package-lock.json + THIRD_PARTY_NOTICES.md are read from it)
 //       [--modules <dir>]     where the installed packages are (default: the repo)
-//       [--acp-tree <dir>]    ignored since REL-6 (ruling 26: the ACP CLI is not shipped)
+//       [--acp-tree <dir>]    ignored (v0.0.9: the ACP CLI ships in Resources/acp-tools with its own NOTICES.md)
 //
 // Two generated sections, each between its own markers:
 //
@@ -22,10 +22,11 @@
 //    never listed. The set is a superset of what the bundles contain (a declared dependency no file imports is still
 //    listed); a bundle probe (vite + esbuild metafiles) proved every bundled package is in it.
 //
-// 2. The Virtuals ACP CLI is NOT shipped (REL-6, ruling 26): the app installs it at first use from the npm registry,
-//    under each package's own licence, and lists what that install fetches in apps/desktop/acp-cli-lock/NOTICES.md
-//    (scripts/acp-cli-notices.mjs). This file covers what the DMG ships, so `--write` removes any "ACP CLI" section
-//    and `--check` refuses one; a staged ACP tree (stage-acp-cli.mjs, kept as a proof tool) is not read here.
+// 2. The Virtuals ACP CLI ships in Resources/acp-tools (v0.0.9 F1-B, replaces ruling 26), built from the pinned
+//    lockfile, each package under its own licence; its packages' licence texts travel with it in
+//    Resources/acp-tools/NOTICES.md and the pin's table in Resources/acp-pin/NOTICES.md (apps/desktop/acp-cli-lock/
+//    NOTICES.md, scripts/acp-cli-notices.mjs). So this file still carries no "ACP CLI" section: `--write` removes one
+//    and `--check` refuses one (the header bullet points at the tree's own NOTICES.md).
 //
 // 3. "ACP native add-ons (Resources/acp-native)" (REL-6 r3, critic r2 M3; rulings 32 + 33). The macOS app ships its own
 //    copies of the ACP CLI's native add-ons; their licence texts (package LICENSEs, and the Rust crates and Rust std
@@ -1497,7 +1498,7 @@ function main(argv) {
     console.log(
       `[third-party-closure] wrote ${closure.size} desktop packages, the ACP native add-ons, ${FONT_FAMILIES.length} ` +
         `font families and ${ELECTRON_FRAMEWORKS.length} Electron frameworks into THIRD_PARTY_NOTICES.md (the ACP CLI ` +
-        'is not shipped: acp-cli-lock/NOTICES.md)'
+        'ships its own: Resources/acp-tools/NOTICES.md)'
     )
 
     return 0
@@ -1515,7 +1516,7 @@ function main(argv) {
     }
 
     console.log(
-      `[third-party-closure] ${closure.size} desktop packages (the ACP CLI is not shipped)` +
+      `[third-party-closure] ${closure.size} desktop packages (the ACP CLI carries its own NOTICES.md)` +
         `, ${imported.size} imported packages scanned; sections byte-checked; ${problems.length} problem(s),` +
         ` ${flagged.length} flagged licence(s), each named in LICENCE_REVIEW with its ruling`
     )

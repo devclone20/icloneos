@@ -29,6 +29,8 @@ export const CODE_PATH_ENV = [
   'HERMES_DESKTOP_IS_PACKAGED',
   'HERMES_DESKTOP_BOOT_FAKE',
   'HERMES_DESKTOP_BOOT_FAKE_ERROR',
+  // v0.0.9 r3: the fixture wallet for offline captures (fixture-wallet.ts); a packaged build never honours it.
+  'HERMES_DESKTOP_FIXTURE_WALLET',
   'HERMES_DESKTOP_HERMES',
   'HERMES_DESKTOP_HERMES_ROOT',
   'HERMES_DESKTOP_PYTHON',

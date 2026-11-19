@@ -38,7 +38,7 @@ describe('engine fallback banner with no storage (n1)', () => {
     })
     expect(screen.queryByRole('status')).not.toBeNull()
 
-    fireEvent.click(screen.getByRole('button'))
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('status')).toBeNull()
 
     // The next answer falls back for the same reason: a new fallback, same conversation and reason.

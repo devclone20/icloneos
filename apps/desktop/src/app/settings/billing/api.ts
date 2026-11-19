@@ -3,6 +3,7 @@ import { createContext, useContext, useMemo } from 'react'
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { isRecord } from '@/iclone-shared/guards'
 
+import { authorizeAction, authorizeCharge, OWNER_CONFIRM_REFUSAL } from './owner-confirm'
 import type {
   BillingChargeResponse,
   BillingChargeStatusResponse,
@@ -142,11 +143,46 @@ const callBilling = async <T>(
   }
 }
 
+/**
+ * A billing write that charges or arms a charge: the confirm is requested synchronously (before any await), bound to
+ * (action, subject, key); the RPC carries `idempotency_key` + `owner_confirm`, and is never sent without the confirm.
+ */
+const confirmedBilling = async (
+  requestGateway: BillingRequestGateway,
+  action: string,
+  subject: string,
+  method: string,
+  params: () => Record<string, unknown>
+): Promise<BillingResult<BillingMutationResponse>> => {
+  const idempotencyKey = crypto.randomUUID()
+  const confirm = await authorizeAction(action, subject, idempotencyKey)
+
+  if (!confirm.ok) {
+    return { ok: false, refusal: { kind: OWNER_CONFIRM_REFUSAL, message: confirm.error } }
+  }
+
+  return callBilling<BillingMutationResponse>(requestGateway, method, {
+    ...params(),
+    idempotency_key: idempotencyKey,
+    owner_confirm: confirm.ownerConfirm
+  })
+}
+
 export const createBillingApi = (requestGateway: BillingRequestGateway): BillingApi => ({
   charge: async (amountUsd, idempotencyKey = crypto.randomUUID()) => {
+    // F1-S: asked before the first await, so still inside the Buy / Retry click (useChargeFlow.start reaches here
+    // synchronously). No owner confirm from main = no charge request at all.
+    const confirm = await authorizeCharge(amountUsd, idempotencyKey)
+
+    if (!confirm.ok) {
+      return { ok: false, refusal: { kind: OWNER_CONFIRM_REFUSAL, message: confirm.error }, idempotencyKey }
+    }
+
     const result = await callBilling<BillingChargeResponse>(requestGateway, 'billing.charge', {
       amount_usd: amountUsd,
-      idempotency_key: idempotencyKey
+      idempotency_key: idempotencyKey,
+      // The runtime's check: main's single-use confirm for exactly this amount and key (gesture-locks-billing.ts).
+      owner_confirm: confirm.ownerConfirm
     })
 
     return { ...result, idempotencyKey }
@@ -159,21 +195,38 @@ export const createBillingApi = (requestGateway: BillingRequestGateway): Billing
     callBilling<SubscriptionPreviewResponse>(requestGateway, 'subscription.preview', {
       subscription_type_id: tierId
     }),
-  resumeSubscription: () => callBilling<BillingMutationResponse>(requestGateway, 'subscription.resume', {}),
+  // v0.0.9 Q: each of these asks main for the owner confirm FIRST, synchronously (the caller is inside the click of a
+  // `data-billing-charge-confirm` control); no confirm = no RPC.
+  resumeSubscription: () =>
+    confirmedBilling(requestGateway, 'subscription-resume', 'resume', 'subscription.resume', () => ({})),
   scheduleSubscriptionChange: tierId =>
-    callBilling<BillingMutationResponse>(requestGateway, 'subscription.change', {
+    confirmedBilling(requestGateway, 'subscription-change', tierId, 'subscription.change', () => ({
       subscription_type_id: tierId
-    }),
+    })),
   stepUp: sessionId =>
     callBilling<BillingMutationResponse>(requestGateway, 'billing.step_up', {
       ...(sessionId !== undefined ? { session_id: sessionId } : {})
     }),
-  updateAutoReload: input =>
-    callBilling<BillingMutationResponse>(requestGateway, 'billing.auto_reload', {
+  updateAutoReload: input => {
+    const params = {
       enabled: input.enabled,
       ...(input.threshold_usd !== undefined ? { threshold: input.threshold_usd } : {}),
       ...(input.reload_to_usd !== undefined ? { top_up_amount: input.reload_to_usd } : {})
-    })
+    }
+
+    // Turning it off charges nothing and needs no confirm.
+    if (!input.enabled) {
+      return callBilling<BillingMutationResponse>(requestGateway, 'billing.auto_reload', params)
+    }
+
+    return confirmedBilling(
+      requestGateway,
+      'auto-reload',
+      `on|${input.threshold_usd}|${input.reload_to_usd}`,
+      'billing.auto_reload',
+      () => params
+    )
+  }
 })
 
 // An override for the gateway-backed api — DEV fixtures provide a simulated

@@ -119,3 +119,79 @@ export function decideBootstrapRepair(input: RepairDecisionInput): RepairDecisio
         `has exited; restarting before escalating to reinstall`
   }
 }
+
+/**
+ * v0.0.9 F3 — what "Repair install" does for a known cause. Before this, Repair always ended in the installer (or a
+ * restart) whatever had failed; on 14 Nov 2026 it reinstalled the runtime twice while the failing record sat in
+ * `~/.hermes/installs`, a folder the installer never looks at. Now the cause picks the repair:
+ *
+ *   install-state-not-writable → the kit's `stale-install-record` (moves the record aside), then a plain restart
+ *   python-import              → the kit's `runtime-venv` (moves the broken record aside), then the installer
+ *   runtime-env-broken         → the same: the app's install lost its interpreter (r2 m-r2-2), never the first-run choice
+ *   gate-not-loaded            → the kit's `gate-not-starting` (the app's plugins switched back on, else the installer)
+ *   port-in-use                → the kit's `port-busy` (the app's own leftovers), then a plain restart
+ *   anything else              → the soft/hard ladder above, unchanged
+ *
+ * Pure. `kitClass` null means: no class repair, fall back to `decideBootstrapRepair`.
+ */
+export type RepairRouteCause =
+  | 'exit-nonzero'
+  | 'gate-not-loaded'
+  | 'install-state-not-writable'
+  | 'port-in-use'
+  | 'python-import'
+  | 'runtime-env-broken'
+  | 'timeout'
+  | 'unknown'
+
+export type RepairRouteClass = 'gate-not-starting' | 'port-busy' | 'runtime-venv' | 'stale-install-record'
+
+export interface RepairRoute {
+  kitClass: RepairRouteClass | null
+  /** The installer runs on the next start (in addition to the class repair, when there is one). */
+  forceReinstall: boolean
+  reason: string
+}
+
+export function routeBootstrapRepair(cause: RepairRouteCause | null | undefined): RepairRoute {
+  switch (cause) {
+    case 'install-state-not-writable':
+      return {
+        forceReinstall: false,
+        kitClass: 'stale-install-record',
+        reason: 'the runtime could not write its install state: the stale install record is moved aside, no reinstall'
+      }
+
+    case 'python-import':
+      return {
+        forceReinstall: true,
+        kitClass: 'runtime-venv',
+        reason: 'the runtime could not import its own modules: its dependency record is moved aside and reinstalled'
+      }
+
+    case 'runtime-env-broken':
+      return {
+        forceReinstall: true,
+        kitClass: 'runtime-venv',
+        reason: "the app's runtime has no working interpreter: its environment record is moved aside and reinstalled"
+      }
+
+    case 'gate-not-loaded':
+      return {
+        forceReinstall: false,
+        kitClass: 'gate-not-starting',
+        reason:
+          'the permission gate refused the last start: the kit decides between re-enabling the plugins and a reinstall'
+      }
+
+    case 'port-in-use':
+      return {
+        forceReinstall: false,
+        kitClass: 'port-busy',
+        reason: "a port or socket is held: the app's own leftovers are cleared, no reinstall"
+      }
+
+    default:
+      return { forceReinstall: false, kitClass: null, reason: 'no known cause: the soft/hard repair ladder applies' }
+  }
+}

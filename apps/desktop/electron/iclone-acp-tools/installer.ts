@@ -1,38 +1,27 @@
 /**
- * REL-6 (ruling 26) — the app-owned installer of the Virtuals ACP CLI. The app ships no CLI; on the owner's click it
- * installs the pinned tree from the npm registry into `userData/acp-cli/<sha256 of package-lock.json>/`, and every
- * ACP spawn goes through `runtime()`, which verifies that tree first and refuses (with the reason) when it is absent,
- * changed, or installed from another pin. Same shape as the Hermes runtime pin: fetch, verify, fail closed.
+ * v0.0.9 (owner decision 17 Nov, replaces ruling 26) — the ACP tools: the Virtuals ACP CLI the app SHIPS. Nothing is
+ * installed from the network any more. The build materialised the pinned tree (materialise.ts) into the signed app
+ * (Resources/acp-tools, bundle.ts); this module keeps a working copy of it in `userData/acp-cli/<sha256 of
+ * package-lock.json>/`, and every ACP spawn goes through `runtime()`, which verifies that copy first and refuses (with
+ * the reason) when it is absent, changed, or not this build's.
  *
- * WHY NOT `npm ci`. The app has no npm (and Electron's RunAsNode fuse is off, so it cannot run one). Requiring a system
- * Node/npm would put an unknown tool of unknown version, found on PATH, on the install path. What `npm ci
- * --ignore-scripts --omit=dev` does with a lockfile is: fetch each row's `resolved`, check its `integrity`, extract it
- * at the row's path. This module does exactly that, stricter: only https://registry.npmjs.org/ tarballs of the row's
- * own name and version (acp-pin.ts), sha512 required, redirects refused, only the CLI's runtime closure for this
- * platform (build tooling such as esbuild is never fetched), the same per-file prune the shipped tree had.
+ * WHAT VERIFIES. The bundle's own MANIFEST.json, read from inside the signed app: the copy's MANIFEST.json must be those
+ * exact bytes and every file must hash to it (same full and quick checks as before, manifest.ts). No Keychain key, no
+ * MAC, no install record: the app's signature is the authority (blocker K is gone — a Mac with the Keychain setting off
+ * runs the CLI like any other).
  *
- * WHY NO INSTALL SCRIPTS (`--ignore-scripts`). Nothing in the closure needs one, and none ever runs: bufferutil and
- * utf-8-validate (node-gyp-build) ship N-API prebuilds that load from `prebuilds/<platform>-<arch>` at run time, and
- * ws falls back to JS without them; es5-ext's postinstall only prints a message; esbuild and fsevents are build
- * tooling outside the closure. The CLI's one native artefact that must work, its Go signer
- * (`bin/acp-cli-signer-<os>`, published inside the npm package itself), is installed with its exec bit set
- * explicitly and covered by the package's sha512 and by the manifest.
+ * PLACED, NOT INSTALLED. The first check of a build places the copy from the bundle on its own (no network, no click:
+ * the owner's decision is that the app comes with the CLI), and so does the first check after an update from v0.0.8,
+ * whose npm-installed tree at the same path is replaced. A copy that is there and does NOT verify is never replaced
+ * silently: it is `unverified`, audited, and only the owner's **Repair** (`install()`, behind V3-F's gesture lock and
+ * audit in ipc.ts) restores it from the bundle — every byte re-checked against the bundle's manifest on the way, the
+ * new copy proven before it replaces anything.
  *
- * ATOMIC. The tree is built in `.install-<random>/`, checked against the manifest it just wrote, then renamed into
- * place; a cancel, a failure or a crash leaves no partial tree (leftovers are swept on the next start).
- *
- * SEALED OR NOTHING (round 2, critic M2 + lead ruling on m7). The manifest's MAC needs the OS-sealed key: a session
- * that cannot seal gets `unavailable · unsealable` (no install, no run), and a key that cannot be opened makes the
- * tree `unverified · key-unopenable`. The record of the install lives in V3-F's protected state (record.ts).
- *
- * CONFINED (round 2, critic M1). The tree is only as good as what Node loads from it: our launcher
- * (scripts/acp-launch.cjs) refuses any module that resolves outside `runtime/node_modules`, for require and import
- * alike, and hashes every file it loads against this manifest. What a check finds planted in the app-owned folders
- * above the tree is audited (never deleted, never loaded).
- *
- * NATIVE ADD-ONS (ruling 33): native.ts swaps the app's own copies in before the manifest is written.
+ * CONFINED (critic M1). Our launcher (scripts/acp-launch.cjs, Resources/acp-pin/launch.cjs) refuses any module that
+ * resolves outside `runtime/node_modules` and hashes every file it loads against the copy's MANIFEST.json (the bundle's
+ * bytes). What a check finds planted in the app-owned folders above the tree is audited (never deleted, never loaded).
  */
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import {
   chmodSync,
   closeSync,
@@ -52,47 +41,25 @@ import {
 import os from 'node:os'
 import path from 'node:path'
 
-import {
-  ACP_CLI_NAME,
-  type AcpPin,
-  installsFile,
-  isLegalText,
-  parsePin,
-  type PinRow,
-  type PinTarget,
-  runtimeClosure,
-  signerFor,
-  targetName
-} from '../../src/iclone-shared/acp-pin'
+import { ACP_CLI_NAME, parsePin, type PinTarget, targetName } from '../../src/iclone-shared/acp-pin'
 import type { AcpToolsProblemInfo, AcpToolsReason, AcpToolsView } from '../../src/iclone-shared/acp-tools'
 import { isAtomicTempName } from '../lib/atomic-write'
 
-import { AcpToolsError, logText, problemOf } from './errors'
 import {
-  type AcpManifest,
-  createManifestKey,
-  KEY_FILE,
-  type KeySealer,
-  MANIFEST_FILE,
-  type ManifestEntry,
-  openManifestKey,
-  quickUnchanged,
-  readManifest,
-  sha256Hex,
-  signManifest,
-  type Snapshot,
-  treeDigest,
-  verifyTree
-} from './manifest'
-import { addonsDigest, type NativeAddons, swapAddons } from './native'
-import { type InstallRecordStore, recordMatches, recordOf } from './record'
-import { gunzipAsync, readTar, type TarFile } from './tar'
+  type BundleManifest,
+  copyBundle,
+  defaultBundleDir,
+  isLegacyInstallManifest,
+  readBundleManifest
+} from './bundle'
+import { AcpToolsError, logText, problemOf } from './errors'
+import { KEY_FILE, type KeySealer, MANIFEST_FILE, quickUnchanged, sha256Hex, type Snapshot, verifyTree } from './manifest'
+import { NOTICES_FILE, RUNTIME_DIR } from './materialise'
+import { addonsDigest, type NativeAddons } from './native'
+import type { InstallRecordStore } from './record'
 
-export const NOTICES_FILE = 'NOTICES.md'
-const RUNTIME_DIR = 'runtime'
-const DOWNLOAD_CONCURRENCY = 8
-/** Largest unpacked tarball accepted (the CLI's own, with three signer binaries, is ~40 MB). */
-const MAX_UNPACKED = 256 * 1024 * 1024
+export { NOTICES_FILE } from './materialise'
+
 const PROGRESS_MS = 120
 const HEX64 = /^[0-9a-f]{64}$/
 
@@ -102,23 +69,25 @@ export interface AcpToolsAudit {
 }
 
 export interface AcpToolsDeps {
-  /** `userData/acp-cli`. */
+  /** `userData/acp-cli`: the working copy lives in `<root>/<lock sha256>/`. */
   root: string
   /** The shipped pin: `package.json` + `package-lock.json` (Resources/acp-pin, or acp-cli-lock in a dev run). */
   pinDir: string
   /** Our own launcher (Resources/acp-pin/launch.cjs, or scripts/acp-launch.cjs in a dev run). */
   launcher: string
   target: PinTarget
-  /** One registry GET; must refuse redirects, time out a stalled body and honour the signal (net-core.ts). */
-  fetch(url: string, signal: AbortSignal): Promise<Buffer>
-  /** The OS sealing (safeStorage). Null: this OS or session cannot seal, so nothing installs and nothing runs. */
-  sealer: KeySealer | null
-  /** FX-2: why there is no sealer, for the owner: the Keychain setting is off (default 'unsealable': the OS cannot). */
-  noSealReason?: 'keychain-off' | 'unsealable'
-  /** "This app installed this tree", in V3-F's protected state (record.ts). */
-  record: InstallRecordStore
-  /** Ruling 33: the app's own native add-ons for this target. */
+  /** The bundled tree (Resources/acp-tools). Default: beside the pin (bundle.ts `defaultBundleDir`). */
+  bundleDir?: string
+  /** Ruling 33: the app's own native add-ons for this target; the bundle must have been built with this very list. */
   native: NativeAddons
+  /** @deprecated v0.0.9: nothing is fetched at run time (the build materialises the tree). Ignored. */
+  fetch?(url: string, signal: AbortSignal): Promise<Buffer>
+  /** @deprecated v0.0.9: the bundle's manifest is authenticated by the app's signature, not a sealed key. Ignored. */
+  sealer?: KeySealer | null
+  /** @deprecated v0.0.9: the Keychain setting no longer matters to the ACP tools (blocker K). Ignored. */
+  noSealReason?: 'keychain-off' | 'unsealable'
+  /** @deprecated v0.0.9: the app's signature replaces the install record. Ignored. */
+  record?: InstallRecordStore
   audit?(entry: AcpToolsAudit): void
   log(line: string): void
   onChange?(view: AcpToolsView): void
@@ -150,18 +119,24 @@ export type InstallAnswer =
   | ({ ok: false; cancelled?: false } & AcpToolsProblemInfo)
 
 interface LoadedPin {
-  pin: AcpPin
+  cliVersion: string
   lockSha256: string
-  rows: PinRow[]
 }
 
-const sri512 = (data: Buffer) => `sha512-${createHash('sha512').update(data).digest('base64')}`
+interface LoadedBundle {
+  manifest: BundleManifest
+  bytes: Buffer
+  sha256: string
+}
+
+/** Why a copy is (re)placed from the bundle: the first check of a build, a v0.0.8 npm tree, or the owner's Repair. */
+type PlaceWhy = 'first-run' | 'legacy' | 'repair'
 
 const SENTENCE: Record<AcpToolsProblem, string> = {
-  absent: 'ACP tools are not installed: install them from ACP Market (downloads from npm)',
-  installing: 'ACP tools are being installed',
-  unverified: 'ACP tools could not be verified: reinstall them from ACP Market',
-  unavailable: 'ACP tools cannot be installed here'
+  absent: 'ACP tools are not installed: this build does not include the Virtuals ACP CLI',
+  installing: 'ACP tools are being restored from the copy included in the app',
+  unverified: 'ACP tools could not be verified: repair them from ACP Market or Settings',
+  unavailable: 'ACP tools cannot run in this build'
 }
 
 /**
@@ -174,7 +149,7 @@ export function problemText(code: AcpToolsProblem, reason?: AcpToolsReason | nul
 
 /**
  * The spawn gate's comparison (critic r2 D10): the runtime a caller resolved earlier is the verified one NOW only when
- * it names the same entry AND the same manifest digest (a reinstall keeps the path but changes the tree).
+ * it names the same entry AND the same manifest digest (a repair keeps the path; an app update changes the tree).
  */
 export function sameTree(
   now: { entry: string; treeSha256: string },
@@ -183,21 +158,28 @@ export function sameTree(
   return now.entry === then.entry && now.treeSha256 === then.treeSha256
 }
 
-/** What a check found: the view, and (installed only) the verified tree it may hand to a spawn. */
+/** What a check found: the view, the verified copy it may hand to a spawn, or that the copy must be placed first. */
 interface Checked {
   view: AcpToolsView
-  verified: { dir: string; manifest: AcpManifest; snapshot: Snapshot } | null
+  verified: { dir: string; manifest: BundleManifest; snapshot: Snapshot } | null
+  place?: Exclude<PlaceWhy, 'repair'>
 }
 
 export function createAcpTools(deps: AcpToolsDeps) {
   const now = deps.now ?? (() => new Date())
-  let loaded: LoadedPin | { reason: AcpToolsReason } | null = null
+  const bundleDir = deps.bundleDir ?? defaultBundleDir(deps.pinDir)
+  let loadedPin: LoadedPin | { reason: AcpToolsReason } | null = null
+  let loadedBundle: LoadedBundle | null = null
   let view: AcpToolsView = { state: 'checking', cliVersion: null }
   let verified: Checked['verified'] = null
   let installing: { controller: AbortController; promise: Promise<InstallAnswer> } | null = null
-  /** Bumped by every install: a check started before it never speaks for the tree after it (critic m5). */
+  /** Bumped by every placement: a check started before it never speaks for the copy after it (critic m5). */
   let generation = 0
   let checking: { generation: number; promise: Promise<AcpToolsView> } | null = null
+  /** The last automatic placement failed: no second automatic attempt this run; the owner's Repair retries. */
+  let placeFailure: AcpToolsProblemInfo | null = null
+  /** The owner cancelled an automatic placement this run: no automatic retry until his Repair (correctness 4). */
+  let placeCancelled = false
   let lastEmit = 0
   const audited = new Set<string>()
 
@@ -213,23 +195,60 @@ export function createAcpTools(deps: AcpToolsDeps) {
   }
 
   const pinOf = (): LoadedPin | { reason: AcpToolsReason } => {
-    if (loaded) {
-      return loaded
+    if (loadedPin) {
+      return loadedPin
     }
 
     try {
       const lockText = readFileSync(path.join(deps.pinDir, 'package-lock.json'), 'utf8')
       const pin = parsePin(readFileSync(path.join(deps.pinDir, 'package.json'), 'utf8'), lockText)
 
-      loaded = existsSync(deps.launcher)
-        ? { pin, lockSha256: sha256Hex(lockText), rows: runtimeClosure(pin, deps.target) }
+      loadedPin = existsSync(deps.launcher)
+        ? { cliVersion: pin.cliVersion, lockSha256: sha256Hex(lockText) }
         : { reason: 'launcher-missing' }
     } catch (error) {
       deps.log(`[iclone-acp-tools] the pin does not parse: ${logText(error)}`)
-      loaded = { reason: 'pin-invalid' }
+      loadedPin = { reason: 'pin-invalid' }
     }
 
-    return loaded
+    return loadedPin
+  }
+
+  /**
+   * The bundle, read once per run when it is this build's (the signed app cannot change under a running process; a
+   * refusal is read again on the next check). `absent`: this build includes no CLI (a dev run that did not stage it).
+   */
+  const bundleOf = (pin: LoadedPin): LoadedBundle | { absent: true } | ({ absent: false } & AcpToolsProblemInfo) => {
+    if (loadedBundle) {
+      return loadedBundle
+    }
+
+    const read = readBundleManifest(bundleDir)
+
+    if (!read.ok) {
+      return read.absent
+        ? { absent: true }
+        : { absent: false, reason: read.reason, ...(read.subject ? { subject: read.subject } : {}) }
+    }
+
+    const { manifest } = read
+
+    if (
+      manifest.lockSha256 !== pin.lockSha256 ||
+      manifest.cliVersion !== pin.cliVersion ||
+      manifest.target !== targetName(deps.target)
+    ) {
+      return { absent: false, reason: 'other-pin', subject: `included copy: ${manifest.target}` }
+    }
+
+    // Critic r2 m4, kept: the bundle must be the one built with THIS app's add-on list.
+    if (manifest.addons !== addonsDigest(deps.native)) {
+      return { absent: false, reason: 'addons-mismatch', subject: 'included copy' }
+    }
+
+    loadedBundle = { manifest, bytes: read.bytes, sha256: read.sha256 }
+
+    return loadedBundle
   }
 
   const dirFor = (lockSha256: string) => path.join(deps.root, lockSha256)
@@ -237,11 +256,16 @@ export function createAcpTools(deps: AcpToolsDeps) {
   const cliVersion = () => {
     const pin = pinOf()
 
-    return 'reason' in pin ? null : pin.pin.cliVersion
+    return 'reason' in pin ? null : pin.cliVersion
   }
 
-  /** Other pins' trees and every leftover of an interrupted install. Never the current pin's tree. */
-  const sweep = (keep: string | null) => {
+  /**
+   * Other pins' copies and every leftover of an interrupted placement. Never the current pin's copy. v0.0.9 Q
+   * (tests-perf 5): removed with the async `fs.rm`, never a recursive `rmSync` on the main thread (a v0.0.8 npm tree is
+   * ~12.6k files: seconds of a frozen window at the first start after the upgrade). The names are read once, before
+   * the first await, so a placement that starts meanwhile (a fresh random `.install-*`) is never in the list.
+   */
+  const sweep = async (keep: string | null): Promise<void> => {
     if (!existsSync(deps.root)) {
       return
     }
@@ -250,7 +274,7 @@ export function createAcpTools(deps: AcpToolsDeps) {
       const leftover = name.startsWith('.install-') || name.startsWith('.trash-')
 
       if ((leftover && !installing) || (HEX64.test(name) && name !== keep)) {
-        rmSync(path.join(deps.root, name), { recursive: true, force: true })
+        await fsp.rm(path.join(deps.root, name), { recursive: true, force: true }).catch(() => undefined)
       }
     }
   }
@@ -303,7 +327,7 @@ export function createAcpTools(deps: AcpToolsDeps) {
     verified: null
   })
 
-  /** Full check of the current pin's tree. Never throws; touches no shared state (check() applies its result). */
+  /** Full check of the working copy against the bundle. Never throws; touches no shared state (check() applies it). */
   const fullCheck = async (): Promise<Checked> => {
     await deps.beforeCheck?.()
 
@@ -313,14 +337,21 @@ export function createAcpTools(deps: AcpToolsDeps) {
       return { view: { state: 'unavailable', cliVersion: null, reason: pin.reason }, verified: null }
     }
 
-    const version = pin.pin.cliVersion
+    const version = pin.cliVersion
+    const bundle = bundleOf(pin)
 
-    if (!deps.sealer) {
-      // Lead ruling on m7: no OS seal, no install and no run (there is no unsealed tree in 0.0.3).
-      return {
-        view: { state: 'unavailable', cliVersion: version, reason: deps.noSealReason ?? 'unsealable' },
-        verified: null
-      }
+    if ('absent' in bundle) {
+      return bundle.absent
+        ? { view: { state: 'absent', cliVersion: version, stale: false }, verified: null }
+        : {
+            view: {
+              state: 'unavailable',
+              cliVersion: version,
+              reason: bundle.reason,
+              ...(bundle.subject ? { subject: bundle.subject } : {})
+            },
+            verified: null
+          }
     }
 
     strays()
@@ -328,41 +359,39 @@ export function createAcpTools(deps: AcpToolsDeps) {
     const dir = dirFor(pin.lockSha256)
 
     if (!existsSync(dir)) {
-      return {
-        view: { state: 'absent', cliVersion: version, stale: readdirSafe(deps.root).some(name => HEX64.test(name)) },
-        verified: null
+      // The owner's decision: the app comes with the CLI. Placed from the bundle without a click — unless an automatic
+      // placement already failed this run (then it is the owner's Repair that retries, never a loop).
+      if (placeFailure) {
+        return unverified(version, placeFailure)
       }
+
+      // v0.0.9 Q (correctness 4): the owner cancelled the automatic placement: no copy until his Repair (never a loop).
+      return placeCancelled
+        ? { view: { state: 'absent', cliVersion: version, stale: false }, verified: null }
+        : { view, verified: null, place: 'first-run' }
     }
 
-    const key = openManifestKey(deps.root, deps.sealer)
+    let copied: Buffer
 
-    if (!key.ok) {
-      return unverified(version, { reason: key.reason })
+    try {
+      copied = readFileSync(path.join(dir, MANIFEST_FILE))
+    } catch {
+      return unverified(version, { reason: 'manifest-missing' })
     }
 
-    const read = readManifest(dir, key.key)
+    if (sha256Hex(copied) !== bundle.sha256) {
+      // A v0.0.8 npm install at this path is the app's own past state, not a tamper: replaced once, audited.
+      if (isLegacyInstallManifest(copied) && !placeFailure) {
+        // Cancelled once: the old tree stays where it is and is not run; the owner's Repair replaces it.
+        return placeCancelled
+          ? { view: { state: 'absent', cliVersion: version, stale: false }, verified: null }
+          : { view, verified: null, place: 'legacy' }
+      }
 
-    if (!read.ok) {
-      return unverified(version, { reason: read.reason })
+      return unverified(version, { reason: 'manifest-signature' })
     }
 
-    const { manifest } = read
-
-    if (manifest.lockSha256 !== pin.lockSha256 || manifest.target !== targetName(deps.target)) {
-      return unverified(version, { reason: 'other-pin' })
-    }
-
-    // Critic r2 m4: an install made with another app build's add-ons (a replay of an earlier install of this pin, or
-    // an app update that changed them) is not this app's: reinstall.
-    if (manifest.addons !== addonsDigest(deps.native)) {
-      return unverified(version, { reason: 'other-pin' })
-    }
-
-    if (!recordMatches(deps.record.read(), manifest)) {
-      return unverified(version, { reason: 'not-recorded' })
-    }
-
-    const tree = await verifyTree(dir, manifest)
+    const tree = await verifyTree(dir, bundle.manifest)
 
     if (!tree.ok) {
       return unverified(
@@ -374,11 +403,11 @@ export function createAcpTools(deps: AcpToolsDeps) {
     return {
       view: {
         state: 'installed',
-        cliVersion: manifest.cliVersion,
-        packages: manifest.packages,
-        installedAt: manifest.createdAt
+        cliVersion: bundle.manifest.cliVersion,
+        packages: bundle.manifest.packages,
+        installedAt: bundle.manifest.createdAt
       },
-      verified: { dir, manifest, snapshot: tree.snapshot }
+      verified: { dir, manifest: bundle.manifest, snapshot: tree.snapshot }
     }
   }
 
@@ -394,10 +423,16 @@ export function createAcpTools(deps: AcpToolsDeps) {
     const mine = generation
 
     const promise = fullCheck()
-      .then(({ view: next, verified: tree }) => {
-        // A check that started before an install is stale: it never sets the view or the verified tree.
+      .then(async ({ view: next, verified: tree, place: why }) => {
+        // A check that started before a placement is stale: it never sets the view or the verified tree.
         if (mine !== generation || installing) {
           return next
+        }
+
+        if (why) {
+          const answer = await place(why)
+
+          return answer.ok ? answer.view : view
         }
 
         verified = tree
@@ -475,12 +510,16 @@ export function createAcpTools(deps: AcpToolsDeps) {
     }))
 
   /**
-   * Before EVERY spawn: the tree must be the verified one. Nothing moved since the last full check (stat of every
-   * file and directory, inode/size/mtime/ctime/mode) passes at once; anything that moved gets a full check, whose
-   * verdict stands.
+   * Before EVERY spawn: the copy must be the verified one. Nothing moved since the last full check (stat of every file
+   * and directory, inode/size/mtime/ctime/mode) passes at once; anything that moved gets a full check, whose verdict
+   * stands (a changed copy is `unverified`: never re-placed behind the owner's back).
    */
   const runtime = async (): Promise<RuntimeAnswer> => {
+    // v0.0.9: placing is a local copy from the app bundle (first run, v0.0.8 tree, Repair), never a download — a run
+    // asked for meanwhile waits for it instead of failing with "being restored".
     if (installing) {
+      await installing.promise.catch(() => undefined)
+
       return answerFor(view)
     }
 
@@ -493,174 +532,20 @@ export function createAcpTools(deps: AcpToolsDeps) {
     return answerFor(await check())
   }
 
-  const fetchRow = async (row: PinRow, signal: AbortSignal): Promise<TarFile[]> => {
-    if (signal.aborted) {
-      throw new Error('cancelled')
-    }
-
-    const subject = `${row.name}@${row.version}`
-    const tgz = await deps.fetch(row.resolved, signal)
-
-    if (sri512(tgz) !== row.integrity) {
-      throw new AcpToolsError('integrity', subject, 'the tarball does not match the lockfile’s sha512')
-    }
-
-    try {
-      return readTar(await gunzipAsync(tgz, MAX_UNPACKED))
-    } catch (error) {
-      throw new AcpToolsError('tar-unsafe', subject, logText(error))
-    }
-  }
-
-  const noticeFor = (row: PinRow, legal: { path: string; text: string }[]) => {
-    const head = `## ${row.name} ${row.version} — ${row.license ?? 'no licence declared'}`
-
-    if (legal.length === 0) {
-      return `${head}\n\nThe package carries no licence file.\n`
-    }
-
-    return (
-      [head, ...legal.map(file => `### ${file.path}\n\n\`\`\`\`text\n${file.text.trimEnd()}\n\`\`\`\``)].join('\n\n') +
-      '\n'
-    )
-  }
-
-  const build = async (pin: LoadedPin, tmp: string, signal: AbortSignal) => {
-    const files: Record<string, ManifestEntry> = {}
-    const notices: string[] = []
-    const total = pin.rows.length
-    let done = 0
-    let bytes = 0
-    const signer = `bin/${signerFor(deps.target.platform)}`
-
-    const put = async (rel: string, data: Buffer, mode: number) => {
-      const abs = path.join(tmp, ...rel.split('/'))
-
-      await fsp.mkdir(path.dirname(abs), { recursive: true, mode: 0o755 })
-      await fsp.writeFile(abs, data, { mode })
-      await fsp.chmod(abs, mode)
-      files[rel] = { sha256: sha256Hex(data), size: data.length, mode }
-    }
-
-    const noticesByKey = new Map<string, string>()
-    let next = 0
-    let failure: unknown = null
-
-    const worker = async () => {
-      while (next < pin.rows.length && !failure) {
-        const row = pin.rows[next++] as PinRow
-        const subject = `${row.name}@${row.version}`
-
-        try {
-          const entries = await fetchRow(row, signal)
-          const legal: { path: string; text: string }[] = []
-
-          for (const file of entries) {
-            if (!installsFile(row, file.path, deps.target)) {
-              continue
-            }
-
-            if (file.path.split('/').some(part => part.toLowerCase() === 'node_modules')) {
-              throw new AcpToolsError('nested-modules', subject, `it carries its own node_modules (${file.path})`)
-            }
-
-            const isSigner = row.name === ACP_CLI_NAME && file.path === signer
-
-            await put(`${RUNTIME_DIR}/${row.key}/${file.path}`, file.data, isSigner ? 0o755 : file.mode)
-
-            if (!file.path.includes('/') && isLegalText(file.path)) {
-              legal.push({ path: file.path, text: file.data.toString('utf8') })
-            }
-
-            bytes += file.data.length
-          }
-
-          // Ruling 28: a package that names a licence FILE instead of a licence (`SEE LICENSE IN LICENSE`, the Segment
-          // packages among them) installs only with that file; without it the whole install is refused.
-          const named = /^SEE LICEN[CS]E IN (.+)$/i.exec(row.license ?? '')?.[1]?.trim()
-
-          if (named && !legal.some(file => file.path.toLowerCase() === named.toLowerCase())) {
-            throw new AcpToolsError('licence-file-missing', subject, `it names its licence file ${named} and has none`)
-          }
-
-          noticesByKey.set(row.key, noticeFor(row, legal))
-          done += 1
-          emit({ state: 'installing', cliVersion: pin.pin.cliVersion, phase: 'download', done, total, bytes }, false)
-        } catch (error) {
-          failure ??= error
-        }
-      }
-    }
-
-    await Promise.all(Array.from({ length: DOWNLOAD_CONCURRENCY }, worker))
-
-    if (signal.aborted) {
-      throw new Error('cancelled')
-    }
-
-    if (failure) {
-      throw failure
-    }
-
-    for (const row of pin.rows) {
-      notices.push(noticesByKey.get(row.key) as string)
-    }
-
-    const cliSigner = path.join(tmp, RUNTIME_DIR, 'node_modules', ...ACP_CLI_NAME.split('/'), ...signer.split('/'))
-
-    if (!existsSync(cliSigner)) {
-      throw new AcpToolsError('signer-missing', `${ACP_CLI_NAME}@${pin.pin.cliVersion}`)
-    }
-
-    // Ruling 33: the app's own (Team-signed in a release) add-ons replace npm's, before the manifest is written.
-    const { swapped, digest } = await swapAddons({
-      native: deps.native,
-      target: targetName(deps.target),
-      lockSha256: pin.lockSha256,
-      tmp,
-      runtimeDir: RUNTIME_DIR,
-      files,
-      log: deps.log
-    })
-
-    await put(NOTICES_FILE, Buffer.from(noticesText(pin, swapped, notices)), 0o644)
-
-    emit({ state: 'installing', cliVersion: pin.pin.cliVersion, phase: 'verify', done: total, total, bytes })
-
-    return { files, addons: digest }
-  }
-
-  const noticesText = (pin: LoadedPin, swapped: number, notices: string[]) => {
-    const signer = signerFor(deps.target.platform)
-
-    return [
-      `# ACP tools — licences of the installed packages`,
-      '',
-      `Installed by iclone os from https://registry.npmjs.org/ on ${now().toISOString()} for ${targetName(deps.target)}:`,
-      `${ACP_CLI_NAME} ${pin.pin.cliVersion} and its runtime packages (${pin.rows.length}), each under its own`,
-      'licence as published on npm. iclone os does not redistribute them. Below: each package, the licence it declares,',
-      'and the licence files it ships.',
-      '',
-      `The Go signer \`bin/${signer}\` is a program published inside ${ACP_CLI_NAME} on npm; iclone os did not build`,
-      'it and holds no source for it. It is installed only because it comes inside that package, whose bytes the',
-      'lockfile’s sha512 and this install’s manifest pin, and it runs as a separate program.',
-      deps.target.platform === 'darwin'
-        ? 'It is written without the macOS quarantine flag (and the CLI itself runs `xattr -d com.apple.quarantine` on it' +
-          ' before use), so Gatekeeper does not assess it when it runs.'
-        : '',
-      swapped > 0
-        ? `The ${swapped} native add-on file(s) of @napi-rs/keyring, bufferutil and utf-8-validate (MIT) are the copies this app ships, made from the same versions and signed by its developer, in place of npm's copies; their licence notices, with the Rust crates linked into the keyring binding, are in THIRD_PARTY_NOTICES.md ("ACP native add-ons") and beside them in the app (Resources/acp-native).`
-        : '',
-      ''
-    ]
-      .filter((line, index, all) => line !== '' || all[index - 1] !== '')
-      .join('\n')
-      .concat('\n', notices.join('\n'))
-  }
-
   const failedAnswer = (problem: AcpToolsProblemInfo): InstallAnswer => ({ ok: false, ...problem })
 
-  const install = (): Promise<InstallAnswer> => {
+  const WHY: Record<PlaceWhy, string> = {
+    'first-run': 'first run of this build',
+    legacy: 'replacing the v0.0.8 npm install',
+    repair: "the owner's Repair"
+  }
+
+  /**
+   * Place the working copy from the bundle (no network): copy every listed file, each checked against the bundle's
+   * manifest as it is read; prove the new copy; only then swap it in. Atomic: a failure, a cancel or a crash leaves no
+   * partial copy (leftovers are swept on the next start) and the previous copy where it was.
+   */
+  const place = (why: PlaceWhy): Promise<InstallAnswer> => {
     if (installing) {
       return installing.promise
     }
@@ -671,56 +556,48 @@ export function createAcpTools(deps: AcpToolsDeps) {
       return Promise.resolve(failedAnswer({ reason: pin.reason }))
     }
 
+    const bundle = bundleOf(pin)
+
+    if ('absent' in bundle) {
+      return Promise.resolve(
+        failedAnswer(
+          bundle.absent
+            ? { reason: 'manifest-missing', subject: 'included copy' }
+            : { reason: bundle.reason, ...(bundle.subject ? { subject: bundle.subject } : {}) }
+        )
+      )
+    }
+
+    if (why === 'repair') {
+      placeFailure = null
+      placeCancelled = false
+    }
+
     const controller = new AbortController()
     const tmp = path.join(deps.root, `.install-${randomBytes(6).toString('hex')}`)
     const final = dirFor(pin.lockSha256)
+    const files = Object.keys(bundle.manifest.files).length
 
     const promise = (async (): Promise<InstallAnswer> => {
       generation += 1
-      emit({
-        state: 'installing',
-        cliVersion: pin.pin.cliVersion,
-        phase: 'download',
-        done: 0,
-        total: pin.rows.length,
-        bytes: 0
-      })
+      emit({ state: 'installing', cliVersion: pin.cliVersion, phase: 'verify', done: 0, total: files, bytes: 0 })
       deps.audit?.({
         kind: 'use',
-        reason: `acp tools: install ${ACP_CLI_NAME}@${pin.pin.cliVersion} (${pin.rows.length} packages, lock ${pin.lockSha256.slice(0, 12)}) from registry.npmjs.org`
+        reason: `acp tools: place the included ${ACP_CLI_NAME}@${pin.cliVersion} (${files} files, tree ${bundle.manifest.treeSha256.slice(0, 12)}) from the app bundle — ${WHY[why]}`
       })
 
       try {
-        // Lead ruling on m7: an OS or session that cannot seal gets no install (refused before any fetch).
-        const key = createManifestKey(deps.root, deps.sealer)
+        mkdirSync(deps.root, { recursive: true, mode: 0o700 })
+        await copyBundle({
+          from: bundleDir,
+          to: tmp,
+          manifest: bundle.manifest,
+          manifestBytes: bundle.bytes,
+          signal: controller.signal
+        })
 
-        if (!key.ok) {
-          throw new AcpToolsError(key.reason)
-        }
-
-        await fsp.mkdir(tmp, { recursive: true, mode: 0o700 })
-
-        const { files, addons } = await build(pin, tmp, controller.signal)
-
-        const manifest: AcpManifest = signManifest(
-          {
-            v: 1,
-            lockSha256: pin.lockSha256,
-            cliVersion: pin.pin.cliVersion,
-            target: targetName(deps.target),
-            createdAt: now().toISOString(),
-            packages: pin.rows.length,
-            addons,
-            files,
-            treeSha256: treeDigest(files)
-          },
-          key.key
-        )
-
-        await fsp.writeFile(path.join(tmp, MANIFEST_FILE), `${JSON.stringify(manifest)}\n`, { mode: 0o644 })
-
-        // The new tree is proven BEFORE it replaces anything: a tree that does not verify never moves into place.
-        const proof = await verifyTree(tmp, manifest)
+        // The new copy is proven BEFORE it replaces anything: a copy that does not verify never moves into place.
+        const proof = await verifyTree(tmp, bundle.manifest)
 
         if (!proof.ok) {
           throw new AcpToolsError('new-tree-unverified', proof.subject, proof.reason)
@@ -730,12 +607,6 @@ export function createAcpTools(deps: AcpToolsDeps) {
           throw new Error('cancelled')
         }
 
-        try {
-          deps.record.write(recordOf(manifest, now().toISOString()))
-        } catch (error) {
-          throw new AcpToolsError('record-unwritable', undefined, logText(error))
-        }
-
         const trash = path.join(deps.root, `.trash-${randomBytes(6).toString('hex')}`)
 
         if (existsSync(final)) {
@@ -743,12 +614,13 @@ export function createAcpTools(deps: AcpToolsDeps) {
         }
 
         renameSync(tmp, final)
-        rmSync(trash, { recursive: true, force: true })
-        // From here a fresh check speaks for the new tree (critic m5): the generation moved, so a check started
-        // before the rename can neither answer this install nor set the view.
+        // Tests-perf 5: the old tree (a v0.0.8 npm install: ~12.6k files) goes off the main thread.
+        await fsp.rm(trash, { recursive: true, force: true }).catch(() => undefined)
+        // From here a fresh check speaks for the new copy (critic m5): the generation moved, so a check started
+        // before the rename can neither answer this placement nor set the view.
         generation += 1
         installing = null
-        sweep(pin.lockSha256)
+        await sweep(pin.lockSha256)
 
         const next = await check()
 
@@ -760,7 +632,8 @@ export function createAcpTools(deps: AcpToolsDeps) {
                 : { reason: next.reason, subject: next.subject }
               : { reason: 'internal' }
 
-          deps.audit?.({ kind: 'refuse', reason: `acp tools: the installed tree did not verify: ${problem.reason}` })
+          placeFailure = problem
+          deps.audit?.({ kind: 'refuse', reason: `acp tools: the placed copy did not verify: ${problem.reason}` })
           emit({ ...next, lastError: problem })
 
           return failedAnswer(problem)
@@ -768,22 +641,28 @@ export function createAcpTools(deps: AcpToolsDeps) {
 
         deps.audit?.({
           kind: 'use',
-          reason: `acp tools: installed ${ACP_CLI_NAME}@${next.cliVersion} and verified ${Object.keys(files).length} files (sealed)`
+          reason: `acp tools: ${ACP_CLI_NAME}@${next.cliVersion} included and verified (${files} files, ${WHY[why]})`
         })
-        deps.log(`[iclone-acp-tools] installed ${next.cliVersion} (${pin.rows.length} packages) into ${final}`)
+        deps.log(`[iclone-acp-tools] placed the included ${next.cliVersion} into ${final} (${WHY[why]})`)
 
         return { ok: true, view: next }
       } catch (error) {
-        rmSync(tmp, { recursive: true, force: true })
+        await fsp.rm(tmp, { recursive: true, force: true }).catch(() => undefined)
 
         const cancelled = controller.signal.aborted
         const problem = problemOf(error)
 
+        if (cancelled) {
+          placeCancelled = true
+        } else {
+          placeFailure = problem
+        }
+
         deps.audit?.({
           kind: 'refuse',
-          reason: `acp tools: install ${cancelled ? 'cancelled' : `failed: ${problem.reason}${problem.subject ? ` (${problem.subject})` : ''}`}`
+          reason: `acp tools: placing the included copy ${cancelled ? 'cancelled' : `failed: ${problem.reason}${problem.subject ? ` (${problem.subject})` : ''}`}`
         })
-        deps.log(`[iclone-acp-tools] install ${cancelled ? 'cancelled' : `failed: ${logText(error)}`}`)
+        deps.log(`[iclone-acp-tools] placing the included copy ${cancelled ? 'cancelled' : `failed: ${logText(error)}`}`)
         generation += 1
         installing = null
 
@@ -803,8 +682,9 @@ export function createAcpTools(deps: AcpToolsDeps) {
   }
 
   /**
-   * The installed tree's NOTICES.md, as a read-only COPY outside the tree (critic nit: an editor that saved the
-   * original would make the tree unverified). Only while the tree is the verified one, and only its manifest's bytes.
+   * The verified copy's NOTICES.md (the pin's table, then every package's licence texts), as a read-only COPY outside
+   * the tree (critic nit: an editor that saved the original would make the tree unverified). Only while the copy is
+   * the verified one, and only the manifest's bytes.
    */
   const noticesFile = (): string | null => {
     if (view.state !== 'installed' || !verified) {
@@ -847,15 +727,12 @@ export function createAcpTools(deps: AcpToolsDeps) {
     view: (): AcpToolsView => view,
     /** The pin's CLI version, without touching the tree. */
     cliVersion,
-    /** Full check now (startup, Settings): sweeps leftovers of an interrupted install first. */
+    /** Full check now (startup, Settings): sweeps leftovers of an interrupted placement first. */
     refresh: (): Promise<AcpToolsView> => {
-      if (!installing) {
-        sweepLeftovers(deps.root)
-      }
-
-      return check()
+      return (installing ? Promise.resolve() : sweepLeftovers(deps.root)).then(() => check())
     },
-    install,
+    /** v0.0.9: the owner's Repair — restore the working copy from the bundle, offline. (Name kept for the IPC.) */
+    install: (): Promise<InstallAnswer> => place('repair'),
     cancel: (): boolean => {
       if (!installing) {
         return false
@@ -884,11 +761,11 @@ export function createAcpTools(deps: AcpToolsDeps) {
         void check()
       }
     },
-    /** Remove other pins' trees (after a verified install of the current one). */
-    sweep: () => {
+    /** Remove other pins' copies (after a verified placement of the current one). */
+    sweep: (): Promise<void> => {
       const pin = pinOf()
 
-      sweep('reason' in pin ? null : pin.lockSha256)
+      return sweep('reason' in pin ? null : pin.lockSha256)
     }
   }
 }
@@ -901,10 +778,11 @@ function readdirSafe(dir: string): string[] {
   }
 }
 
-function sweepLeftovers(root: string) {
+/** Leftovers of an interrupted placement, off the main thread (names read once, before the first await). */
+async function sweepLeftovers(root: string): Promise<void> {
   for (const name of readdirSafe(root)) {
     if (name.startsWith('.install-') || name.startsWith('.trash-')) {
-      rmSync(path.join(root, name), { recursive: true, force: true })
+      await fsp.rm(path.join(root, name), { recursive: true, force: true }).catch(() => undefined)
     }
   }
 }

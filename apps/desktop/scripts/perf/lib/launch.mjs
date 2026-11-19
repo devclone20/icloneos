@@ -256,7 +256,7 @@ export async function startIsolatedInstance({
     const spawnAt = Date.now()
     const electron = spawn(
       electronBin,
-      ['.', `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`, ...ANTI_THROTTLE_FLAGS],
+      ['.', `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`, '--use-mock-keychain', ...ANTI_THROTTLE_FLAGS],
       { cwd: DESKTOP_DIR, stdio: ['ignore', 'inherit', 'inherit'], env }
     )
     children.push(electron)

@@ -78,6 +78,11 @@ export async function ensureCuratedRuntimeConfig(deps: {
    * caller runs the integrity check first. Without it the console script `hermesBin` runs (a dev checkout).
    */
   sealed?: { python: string; sealEnv: (env: NodeJS.ProcessEnv) => NodeJS.ProcessEnv }
+  /**
+   * v0.0.9 point A: the app's runtime's own env (main/runtime-install-state.ts `managedRuntimeEnv`: its private
+   * HERMES_DEPENDENCY_HOME and no lazy installs; empty for any other runtime). Required, so no caller forgets it.
+   */
+  runtimeEnv: Readonly<Record<string, string>>
   runtimeSha: null | string
   timeoutMs?: number
 }): Promise<{ ran: boolean; reason?: string }> {
@@ -108,10 +113,20 @@ export async function ensureCuratedRuntimeConfig(deps: {
         {
           ...deps.sealed.sealEnv({ ...process.env, HERMES_HOME: deps.hermesHome }),
           PYTHONDONTWRITEBYTECODE: '1',
+          // v0.0.9 F2 point A: this unconfined run of the app's runtime uses the user's HERMES_HOME (it must: the
+          // setting lands in that home's config.yaml), so it must never sync dependencies — a lazy install here would
+          // create `<HERMES_HOME>/installs/<key>`, the install state the confined backend then cannot lease. The
+          // runtime has no setting that moves its install state apart from HERMES_HOME (pm/environments.py
+          // `dependency_home_root`); this one stops every on-demand install (pm/install.py `lazy_installs_allowed`).
+          // Set after the seal, which would drop it.
+          HERMES_DISABLE_LAZY_INSTALLS: '1',
+          // The point-A pin: this run selects (and leases) the runtime's private dependencies, never
+          // `<HERMES_HOME>/installs/<key>` (runtime-patches/pm-dependency-home.patch).
+          ...deps.runtimeEnv,
           ...NO_LINKS_ENV
         }
       ]
-    : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome, ...NO_LINKS_ENV }]
+    : [deps.hermesBin, cliArgs, { ...process.env, HERMES_HOME: deps.hermesHome, ...deps.runtimeEnv, ...NO_LINKS_ENV }]
 
   const result = await deps
     .run(cmd, args, { env, timeoutMs: deps.timeoutMs ?? CURATED_CONFIG_TIMEOUT_MS })

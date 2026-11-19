@@ -66,7 +66,7 @@ export function SessionsSettings() {
         untombstoneSessions([session.id, session._lineage_root_id])
         setSessions(prev => [{ ...session, archived: false }, ...prev.filter(s => s.id !== session.id)])
         triggerHaptic('selection')
-        notify({ durationMs: 2_000, kind: 'success', message: s.restored })
+        notify({ kind: 'success', message: s.restored })
       } catch (err) {
         notifyError(err, s.unarchiveFailed)
       } finally {
@@ -340,7 +340,7 @@ function DefaultProjectDirSetting() {
       const result = await settings.setDefaultProjectDir(picked.dir)
       setDir(result.dir)
       applyConfiguredDefaultProjectDir(result.dir)
-      notify({ durationMs: 4_000, kind: 'success', message: s.defaultDirUpdated })
+      notify({ kind: 'success', message: s.defaultDirUpdated })
     } catch (err) {
       notifyError(err, s.updateDirFailed)
     } finally {

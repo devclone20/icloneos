@@ -76,7 +76,10 @@ export class RealSessionBuilder {
       env: {
         ...process.env,
         HERMES_HOME: hermesHome,
-        PYTHONPATH: REPO_ROOT
+        PYTHONPATH: REPO_ROOT,
+        // v0.0.9 e2e harness (triage B1): `uv run --active` uses the ACTIVE venv; with none it created a bare
+        // `.venv` and died on `import ruamel`. The repo venv (with the agent's packages) is the active one.
+        VIRTUAL_ENV: process.env.VIRTUAL_ENV || path.join(REPO_ROOT, '.venv')
       },
       stdio: 'pipe'
     })

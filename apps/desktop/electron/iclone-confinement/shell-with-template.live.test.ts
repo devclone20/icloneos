@@ -13,7 +13,7 @@ import type { Writable } from 'node:stream'
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
-import { startAcpSocketServer } from '../iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from '../iclone-acp-ipc'
 import { permissionsSpawn, registerPermissions } from '../iclone-permissions/ipc'
 
 import { createLauncherWorld, type LauncherWorld } from './launcher-live-harness'
@@ -394,6 +394,7 @@ describe.runIf(runtimeAvailable())('a clean install: the real template under the
 
     const server = await startAcpSocketServer({
       dir,
+      socket: acpSocketFile(lab.userDataDir),
       resolveInft: () => ({ ok: false }),
       admitStreaming: () => false,
       run: async () => ({ code: 1 }),
@@ -401,7 +402,7 @@ describe.runIf(runtimeAvailable())('a clean install: the real template under the
     } as never)
 
     try {
-      const perm = permissionsSpawn(dir)
+      const perm = permissionsSpawn(lab.userDataDir)
       const driver = path.join(lab.project, 'fx35-driver.py')
 
       writeFileSync(driver, DRIVER)

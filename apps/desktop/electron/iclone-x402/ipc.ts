@@ -1,9 +1,11 @@
 /**
- * V3-J — the agent's pay socket (contract §1.1): its own unix socket, `<userData>/run/pay.sock`, separate from the
+ * V3-J — the agent's pay socket (contract §1.1): its own unix socket, `pay.sock` in the short private socket folder of
+ * this userData (v0.0.9, launcher-socket.ts: never under userData), separate from the
  * acp socket, carrying exactly one verb (`verb.ts`: `pay`, `send`, `status`, `stop`). Who is asking is decided HERE,
  * never by the request:
  *
- *   - the socket lives in a 0700 dir and is 0600 (macOS checks socket permissions on connect: only this uid gets in);
+ *   - the socket lives in its private folder (ours, exactly 0700, never a link, checked before the listen) and is 0600
+ *     (macOS checks socket permissions on connect: only this uid gets in);
  *   - every Hermes spawn gets its own token (`paySpawn(slug)`, like `iclone-acp-ipc`'s per-launch token, but one per
  *     spawn and bound to that spawn's profile slug). The token goes into its own file, `<run>/pay-<spawn id>.token`
  *     (fix Jm2: one file per spawn, named by a fresh 16-hex spawn id, created exclusively 0600 in the 0700 run dir),
@@ -35,21 +37,22 @@ import { chmodSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } f
 import net from 'node:net'
 import path from 'node:path'
 
+import { prepareSocket, socketPath as privateSocketPath } from '../iclone-confinement/launcher-socket'
 import { withCallingSession } from '../iclone-permissions/calling-session'
+import { assertSocketPathFits } from '../socket-path'
 
 import type { PaymentAuditSink } from './client'
 import { paymentsVerb, type PaymentsVerbDeps } from './verb'
 
-/** The pay socket's name in main's socket folder (the runtime profile names it as the confined Hermes' pay socket). */
-export const PAY_SOCKET_NAME = 'pay.sock'
-const SOCKET_NAME = PAY_SOCKET_NAME
+/** v0.0.9 (owner decision): the pay socket of this userData, in its short private folder (launcher-socket.ts), never
+ *  under userData; the runtime profile passes it as the confined Hermes' pay socket only when it is exactly this. */
+export const paySocketFile = (userDataDir: string): string => privateSocketPath(userDataDir, 'pay')
 const REQUEST_MAX_BYTES = 16 * 1024
 const REQUEST_WAIT_MS = 10_000
 const ARGV_MAX = 8
 const INFLIGHT_PER_TOKEN = 4
 const CONNECTIONS_MAX = 64
 // macOS sun_path is 104 bytes including the terminator.
-const SUN_PATH_MAX = 103
 const TOKEN_RE = /^[0-9a-f]{64}$/
 // `st_dev:st_ino` of a folder, as Node and Python both print them (decimal).
 const HOME_RE = /^[0-9]{1,24}:[0-9]{1,24}$/
@@ -77,8 +80,10 @@ function sweepTokenFiles(dir: string): number {
 type Frame = { t: 'o' | 'e'; d: string } | { t: 'x'; c: number }
 
 interface PaySocketDeps {
-  /** `<userData>/run`: created 0700 if missing; refused if it is a symlink or another user's. */
+  /** `<userData>/run`, the token files' folder: created 0700 if missing; refused if it is a symlink or another user's. */
   dir: string
+  /** The socket: paySocketFile(userData), in its short private folder. */
+  socket: string
   /** The verb's dependencies, read per request (null client while payments are starting or disabled). */
   verb: () => PaymentsVerbDeps
   audit: PaymentAuditSink | null
@@ -135,22 +140,6 @@ function ownedPrivateDir(dir: string): void {
   chmodSync(dir, 0o700)
 }
 
-function clearStaleSocket(file: string): void {
-  try {
-    if (!lstatSync(file).isSocket()) {
-      throw new Error(`refusing ${file}: exists and is not a socket`)
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return
-    }
-
-    throw error
-  }
-
-  rmSync(file, { force: true })
-}
-
 /** Pure: one request line → `{token, home, argv}`, or null for anything malformed. The request never carries an agent;
  *  `home` is the identity of the folder the caller runs in (absent: an older client, refused as unbound). */
 export function parsePayRequest(
@@ -188,14 +177,13 @@ export function parsePayRequest(
 }
 
 export async function startPaySocketServer(deps: PaySocketDeps): Promise<PaySocketServer> {
-  const socketPath = path.join(deps.dir, SOCKET_NAME)
+  const socketPath = deps.socket
 
-  if (Buffer.byteLength(socketPath) > SUN_PATH_MAX) {
-    throw new Error(`socket path is longer than ${SUN_PATH_MAX} bytes: ${socketPath}`)
-  }
-
+  assertSocketPathFits(socketPath, 'The payment socket (pay.sock)')
+  // Its private folder is checked (ours, exactly 0700, never a link; only our own stale socket removed) before the
+  // listen: a refused folder opens no pay socket at all.
+  prepareSocket(socketPath)
   ownedPrivateDir(deps.dir)
-  clearStaleSocket(socketPath)
 
   const swept = sweepTokenFiles(deps.dir)
 

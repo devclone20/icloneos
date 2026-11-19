@@ -4,7 +4,7 @@
  * and takes the pointer. (jsdom has no layout: the classes that bound it are pinned here; the live run clicks it with a
  * trusted pointer event.)
  */
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { translateNow } from '@/i18n'
@@ -44,6 +44,12 @@ describe('the gate-refused card keeps a long error inside its callout (critic r2
     render(<BootFailureOverlay />)
 
     const repair = await screen.findByRole('button', { name: translateNow('boot.failure.repairInstall') })
+    // v0.0.9 r3 (design N6): the engine text is behind Details (closed on a card that already explains itself).
+    const details = screen.getByTestId('boot-failure-details')
+
+    expect(details.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(details)
+    expect(details.getAttribute('aria-expanded')).toBe('true')
     const callout = screen.getByTestId('boot-failure-error')
 
     // The padding as utilities: in the built app .ic-sys-callout's own padding loses to preflight (ic-system chunk first).

@@ -136,11 +136,12 @@ async function boot() {
   dirs.push(st.userData)
   vi.spyOn(console, 'error').mockImplementation(() => undefined)
 
-  const { initIclonePrivy } = await import('./iclone-privy')
+  const { initIclonePrivy, isScannedInftId } = await import('./iclone-privy')
 
   initIclonePrivy({ getMainWindow: () => null, isTrustedSender: () => true })
 
   return {
+    isScannedInftId,
     scan: (address: string) =>
       st.handlers.get('iclone:inft-scan')!({}, address) as Promise<{
         ok: boolean
@@ -166,6 +167,20 @@ const word = (address: string) => `0x${address.slice(2).padStart(64, '0')}`
 beforeEach(() => vi.restoreAllMocks())
 afterEach(() => vi.unstubAllGlobals())
 afterAll(() => dirs.forEach(dir => fs.rmSync(dir, { recursive: true, force: true })))
+
+describe('v0.0.9 r3 (eng n2): the real scan handler notes only the signed-in wallet', () => {
+  it('signed out (no session announced), a full scan of any address admits no iNFT id to acp-run', async () => {
+    stubNetwork({ base: 3 })
+    const main = await boot()
+    const result = await main.scan(WALLET)
+    const first = result.agents[0] as { chain: string; contract: string; tokenId: string }
+
+    expect(result.agents.length).toBeGreaterThan(0)
+    expect(main.isScannedInftId(`${first.chain.toLowerCase()}:${first.contract.toLowerCase()}:${first.tokenId}`)).toBe(
+      false
+    )
+  })
+})
 
 describe('iclone:inft-scan — the full roster scan (sign-in, Rescan)', () => {
   it('a 3-page wallet (150 items) comes back whole, and complete', async () => {

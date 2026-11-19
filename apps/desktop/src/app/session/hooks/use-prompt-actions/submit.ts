@@ -181,7 +181,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       // back, so a send with no reason looks like nothing happened; a queued drain keeps its entry and says nothing.
       const keepWithReason = (reason: string): false => {
         if (!options?.fromQueue) {
-          notify({ id: SEND_KEPT_NOTIFICATION_ID, kind: 'warning', message: reason, survivesClear: true })
+          notify({ durationMs: 0, id: SEND_KEPT_NOTIFICATION_ID, kind: 'warning', message: reason, survivesClear: true })
         }
 
         return false

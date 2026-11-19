@@ -55,6 +55,7 @@ import { errorMessage } from '../src/iclone-shared/errors'
 import { asRecord } from '../src/iclone-shared/guards'
 import { slugForInft } from '../src/iclone-shared/inft-slug'
 
+import { type AcpWriteAuditSink, createAcpOwnerWrites } from './gesture-locks-acp'
 import { isAcpRead, ruleFor, validateArgv } from './iclone-acp-argv'
 import {
   CARD_BLOCKED_TTL_MS,
@@ -67,7 +68,14 @@ import {
   sameCardAgent
 } from './iclone-acp-card'
 import { ACP_SESSION_EXPIRED_RE, createExpiryGate } from './iclone-acp-expiry'
-import { type AgentRunSink, type InftResolution, startAcpSocketServer, streamingSlugs } from './iclone-acp-ipc'
+import {
+  acpSocketFile,
+  acpTokenFile,
+  type AgentRunSink,
+  type InftResolution,
+  startAcpSocketServer,
+  streamingSlugs
+} from './iclone-acp-ipc'
 import { type AcpCallClass, createAcpLanes } from './iclone-acp-lanes'
 import { envelopeError, firstString, parseJsonLoose, redactCardOutput } from './iclone-acp-output'
 import {
@@ -97,23 +105,24 @@ import {
   writeInftKv
 } from './iclone-acp-store'
 import { createAcpTools, problemText, sameTree } from './iclone-acp-tools/installer'
-import { type AcpTools } from './iclone-acp-tools/installer'
+import { type AcpTools, type AcpToolsDeps } from './iclone-acp-tools/installer'
 import { type InstallAuditSink, registerAcpToolsIpc, requestInstall } from './iclone-acp-tools/ipc'
-import type { KeySealer } from './iclone-acp-tools/manifest'
+import { type KeySealer, MANIFEST_FILE } from './iclone-acp-tools/manifest'
 import { type NativeAddons, nativeAddonsFor } from './iclone-acp-tools/native'
-import { registryFetch } from './iclone-acp-tools/net'
-import { fileRecordStore } from './iclone-acp-tools/record'
 import { type AcpWatch, initAcpWatch, type WatchChild, type WatchStart } from './iclone-acp-watch'
 import { agentcardStatus } from './iclone-agentcard-status'
 import { guardedHandler } from './iclone-consent'
 import { emailStateCall } from './iclone-email-state'
 import { economyRefusal } from './iclone-ownership-gate'
 import { sealTelemetryEnv } from './iclone-telemetry-seal'
+import { acpRunInftRefusal } from './inft-known-ids'
 import type { IpcSenderEventLike } from './ipc-sender-guard'
 import { writeFileAtomicSync } from './lib/atomic-write'
 import { registerTeardown } from './teardown-registry'
 
 export { slugForInft }
+// The rule lives with the notes it reads (dependency-free, so the renderer's reopen loop test runs it too).
+export { acpRunInftRefusal }
 export { validateArgv } from './iclone-acp-argv'
 
 // The CLI's cold start is 15–21 s on this class of machine (measured); a
@@ -248,6 +257,34 @@ function pinPaths(): { pinDir: string; launcher: string } {
       }
 }
 
+/** v0.0.9 F1-B: where this build's bundled CLI tree is — Resources/acp-tools when packaged, the staged
+ *  `build/acp-tools` in a dev run (what `npm run build` made, when it did). Same answer as bundle.ts
+ *  `defaultBundleDir(pinDir)`, said explicitly here so the app's two callers cannot drift. */
+function bundleDirPath(): string {
+  return app.isPackaged
+    ? path.join(process.resourcesPath, 'acp-tools')
+    : path.join(app.getAppPath(), 'build', 'acp-tools')
+}
+
+/** v0.0.9 F1-B: the app's ACP tools over the bundled tree. Nothing is fetched, sealed or recorded at run time: the
+ *  bundle's manifest is authenticated by the app's own signature, so the Keychain plays no part (blocker K). */
+function createAppAcpTools(onChange?: AcpToolsDeps['onChange']): AcpTools {
+  const { pinDir, launcher } = pinPaths()
+  const target = { platform: process.platform, arch: process.arch, libc: linuxLibc() }
+
+  return createAcpTools({
+    root: path.join(app.getPath('userData'), 'acp-cli'),
+    pinDir,
+    launcher,
+    target,
+    bundleDir: bundleDirPath(),
+    native: nativeAddons(targetName(target)),
+    audit: entry => installAudit({ ...entry, kind: entry.kind === 'use' ? 'use' : 'refuse', gesture: false }),
+    log: line => console.info(line),
+    onChange
+  })
+}
+
 function linuxLibc(): 'glibc' | 'musl' | null {
   if (process.platform !== 'linux') {
     return null
@@ -268,8 +305,13 @@ async function toolsBlock(): Promise<string | null> {
     return problemText('unavailable', 'installer-down')
   }
 
-  if (tools.view().state === 'checking') {
+  const state = tools.view().state
+
+  if (state === 'checking') {
     await tools.refresh()
+  } else if (state === 'installing') {
+    // v0.0.9: a placement from the app bundle is in flight (first run, v0.0.8 tree, Repair) — wait for it, it is local.
+    await tools.runtime()
   }
 
   return tools.problem()
@@ -1580,11 +1622,13 @@ function installAcpWrapper(socketPath: string, tokenPath: string): void {
 }
 
 async function startAgentDoor(): Promise<void> {
-  const dir = path.join(app.getPath('userData'), 'run')
+  const userData = app.getPath('userData')
+  const dir = path.join(userData, 'run')
 
   try {
     const server = await startAcpSocketServer({
       dir,
+      socket: acpSocketFile(userData),
       resolveInft: key => resolveInftKey(currentRegistryRows(), key, stageSlug),
       // K29: the same verdict the market window's listener gets (V3-I's windowMay, set at startup).
       admitStreaming: slug => windowAdmits(slug),
@@ -1593,7 +1637,7 @@ async function startAgentDoor(): Promise<void> {
     })
 
     registerTeardown('acp agent door', () => server.close())
-    installAcpWrapper(server.socketPath, path.join(dir, 'acp.token'))
+    installAcpWrapper(server.socketPath, acpTokenFile(userData))
   } catch (error) {
     console.warn('[iclone-acp-ipc] the agent door did not open:', error)
   }
@@ -1628,29 +1672,30 @@ interface CheckResult {
 }
 
 /**
- * REL-6 (ruling 26): the bundle carries no CLI. The packaged proof is that it carries none (no Resources/acp-cli) and
- * that the pin it installs from at first use parses and is the one it was built with. No CLI command runs here: the
- * throwaway userData of a self-test never has an install.
+ * v0.0.9 F1-B (owner decision 17 Nov, replaces ruling 26): the app SHIPS the CLI in Resources/acp-tools. The packaged
+ * proof: no stray Resources/acp-cli, the pin parses, and — when the bundle is there — the included copy is placed in
+ * this self-test's throwaway userData, VERIFIES against the bundle's manifest (`verified`), and `chain list --json`
+ * runs through the exact confined launch path (`ensureRuntime(true)`). A packaged app with no bundle fails. A dev run
+ * that never staged one (`npm run build` not run) reports the pin alone (`bundled: false`), as before.
  */
-async function selftestAcp(): Promise<CheckResult> {
+export async function selftestAcp(): Promise<CheckResult> {
   if (app.isPackaged && existsSync(path.join(process.resourcesPath, 'acp-cli'))) {
-    return { ok: false, bundled: true, error: 'Resources/acp-cli is in the bundle (REL-6: the app ships only the pin)' }
+    return {
+      ok: false,
+      bundled: true,
+      error: 'Resources/acp-cli is in the bundle (the CLI ships only as Resources/acp-tools)'
+    }
   }
 
   const { pinDir, launcher } = pinPaths()
+  let pinFacts: { version: string; lockSha256: string; packages: number }
 
   try {
     const lockText = readFileSync(path.join(pinDir, 'package-lock.json'), 'utf8')
     const pin = parsePin(readFileSync(path.join(pinDir, 'package.json'), 'utf8'), lockText)
     const rows = runtimeClosure(pin, { platform: process.platform, arch: process.arch, libc: linuxLibc() })
 
-    if (!existsSync(launcher)) {
-      return { ok: false, bundled: false, error: 'acp-pin/launch.cjs is missing' }
-    }
-
-    return {
-      ok: true,
-      bundled: false,
+    pinFacts = {
       version: pin.cliVersion,
       lockSha256: createHash('sha256').update(lockText).digest('hex'),
       packages: rows.length
@@ -1658,6 +1703,41 @@ async function selftestAcp(): Promise<CheckResult> {
   } catch (error) {
     return { ok: false, bundled: false, error: `the ACP pin does not parse: ${errorMessage(error)}` }
   }
+
+  if (!existsSync(launcher)) {
+    return { ok: false, bundled: false, error: 'acp-pin/launch.cjs is missing' }
+  }
+
+  if (!existsSync(path.join(bundleDirPath(), MANIFEST_FILE))) {
+    return app.isPackaged
+      ? { ok: false, bundled: false, ...pinFacts, error: 'Resources/acp-tools is missing: no ACP CLI in this build' }
+      : { ok: true, bundled: false, ...pinFacts }
+  }
+
+  // A self-test launch never ran initIcloneAcp (startIcloneSelftest skips the app's startup): the tools are made here,
+  // over the self-test's own throwaway userData, so the copy it places is discarded with it.
+  tools ??= createAppAcpTools(() => {
+    healthy = null
+    failed = null
+  })
+
+  const view = await tools.refresh()
+
+  if (view.state !== 'installed') {
+    return {
+      ok: false,
+      bundled: true,
+      verified: false,
+      ...pinFacts,
+      error: tools.problem() ?? `the included ACP CLI is ${view.state}`
+    }
+  }
+
+  const health = await ensureRuntime(true)
+
+  return health.ok === true
+    ? { ok: true, bundled: true, verified: true, ...pinFacts }
+    : { ok: false, bundled: true, verified: true, ...pinFacts, error: health.error }
 }
 
 async function selftestPty(): Promise<CheckResult> {
@@ -1752,17 +1832,22 @@ export interface IcloneAcpDeps {
   isTrustedSender: AcpSenderGuard
   /** REL-6: main's gesture verdict for an IPC sender and payload (V3-F `permissionGestureOk`). Absent = no gesture. */
   gestureOk?: (event: unknown, input: unknown) => boolean
-  /** REL-6: the OS sealing for the installed tree's manifest key (safeStorage). Absent: nothing installs or runs.
-   *  V3-FX M1: a function is read on every check, so the owner's Keychain setting takes effect live. */
+  /** @deprecated v0.0.9 F1-B: ignored — the bundled tree needs no sealed key (blocker K). Kept for main.ts. */
   sealer?: KeySealer | null | (() => KeySealer | null)
-  /** FX-2: why there is no sealer (the Keychain setting off, or an OS that cannot seal); live when a function. */
+  /** @deprecated v0.0.9 F1-B: ignored (see `sealer`). */
   noSealReason?: 'keychain-off' | 'unsealable' | (() => 'keychain-off' | 'unsealable')
   /** REL-6: V3-F's audit for the install (class I) and the tree's refusals. Absent = the install is refused. */
   audit?: InstallAuditSink
+  /** F1-S: V3-F's audit for the owner-locked writes (register-erc8004, the catalogue writes). Absent = every one of
+   *  them is refused from the window (gesture-locks-acp.ts). */
+  writeAudit?: AcpWriteAuditSink
   /** REL-6: every tools state change, to the app windows (`iclone:acp-tools:changed`). */
   broadcastTools?: (view: unknown) => void
   /** REL-6: opens a fixed local file (the notices); the renderer never names a path. */
   openFile?: (file: string) => Promise<unknown>
+  /** v0.0.9 critic m5: main's own roster scans returned this card id (iclone-privy `isScannedInftId`). Absent = only
+   *  an iNFT that already has a home may run (`iclone:acp-run` refuses the rest before any directory is made). */
+  isKnownInft?: (inftId: string) => boolean
 }
 
 /** V3-F's audit for the tools (set by initIcloneAcp). No audit: every install is refused (requestInstall). */
@@ -1788,7 +1873,12 @@ export function refreshAcpToolsSealing(): void {
 
 /** REL-6: why the ACP tools cannot run right now (no disk access), or null. WORK refuses "online" on it. */
 export function acpToolsProblem(): string | null {
-  return devOverride() ? null : (tools?.problem() ?? problemText('unavailable', 'installer-down'))
+  if (devOverride()) {
+    return null
+  }
+
+  // Not `tools?.problem() ?? …`: problem() answers null when the tools are fine, which `??` turned into installer-down.
+  return tools ? tools.problem() : problemText('unavailable', 'installer-down')
 }
 
 export function initIcloneAcp(deps: IcloneAcpDeps) {
@@ -1799,37 +1889,13 @@ export function initIcloneAcp(deps: IcloneAcpDeps) {
   initialized = true
   installAudit = deps.audit ?? (() => null)
 
-  const { pinDir, launcher } = pinPaths()
-
-  const target = { platform: process.platform, arch: process.arch, libc: linuxLibc() }
-
-  const sealer = deps.sealer
-  const noSeal = deps.noSealReason
-
-  tools = createAcpTools({
-    root: path.join(app.getPath('userData'), 'acp-cli'),
-    pinDir,
-    launcher,
-    target,
-    fetch: registryFetch,
-    // V3-FX M1: read on every check and install, so a Keychain toggle takes effect without a restart.
-    get sealer() {
-      return typeof sealer === 'function' ? sealer() : (sealer ?? null)
-    },
-    get noSealReason() {
-      return typeof noSeal === 'function' ? noSeal() : noSeal
-    },
-    // The record of the install lives in V3-F's protected state, not beside the tree (lead ruling on critic m7).
-    record: fileRecordStore(path.join(app.getPath('userData'), 'permissions', 'acp-tools-install.json')),
-    native: nativeAddons(targetName(target)),
-    audit: entry => installAudit({ ...entry, kind: entry.kind === 'use' ? 'use' : 'refuse', gesture: false }),
-    log: line => console.info(line),
-    onChange: view => {
-      // Any change of the tools (installed, removed, changed under us) re-earns the self-test.
-      healthy = null
-      failed = null
-      deps.broadcastTools?.(view)
-    }
+  // v0.0.9 F1-B: `deps.sealer` / `deps.noSealReason` are not read by the ACP tools (the bundle needs no Keychain);
+  // they stay in IcloneAcpDeps because main.ts still passes them (payments keep their own sealing).
+  tools = createAppAcpTools(view => {
+    // Any change of the tools (installed, removed, changed under us) re-earns the self-test.
+    healthy = null
+    failed = null
+    deps.broadcastTools?.(view)
   })
   void tools.refresh()
   // Same check as the terminal and consent IPC: a sender the guard refuses (a <webview> guest, a subframe, a window
@@ -1840,9 +1906,29 @@ export function initIcloneAcp(deps: IcloneAcpDeps) {
   ipc.handle('iclone:acp-check', () => checkRuntime())
   // The owner's own AgentCard account (`agentcard` CLI): a state only, never its output.
   ipc.handle('iclone:agentcard-status', () => agentcardStatus())
-  ipc.handle('iclone:acp-run', (_event, inftId: string, argv: unknown, timeoutMs?: number) =>
-    runAcp(String(inftId ?? ''), argv, timeoutMs)
-  )
+
+  // F1-S: the window's owner-locked writes run only on an admission its own click earned (`iclone:acp-owner-confirm`,
+  // sent by the preload inside that click); the agent's door (runForAgent) never comes through here.
+  const ownerWrites = createAcpOwnerWrites({
+    gestureOk: (event, input) => deps.gestureOk?.(event, input) === true,
+    audit: deps.writeAudit
+  })
+
+  ipc.handle('iclone:acp-owner-confirm', (event, input) => ownerWrites.confirm(event, input))
+  const isKnownInft = deps.isKnownInft ?? (() => false)
+
+  ipc.handle('iclone:acp-run', (event, inftId: string, argv: unknown, timeoutMs?: number) => {
+    // Before the admission is spent and before runAcp makes `inft/<slug>/acp` and the scratch dir (critic m5).
+    const unknown = acpRunInftRefusal(inftId, isKnownInft, slug => existsSync(inftRoot(slug)))
+
+    if (unknown) {
+      return refusal(unknown)
+    }
+
+    const refused = ownerWrites.admit(event, inftId, argv)
+
+    return refused ? refusal(refused) : runAcp(String(inftId ?? ''), argv, timeoutMs)
+  })
   ipc.handle('iclone:acp-status', (_event, inftId: string, opts: unknown) =>
     readStatus(String(inftId ?? ''), statusOptions(opts))
   )

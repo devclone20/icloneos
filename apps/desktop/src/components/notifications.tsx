@@ -1,60 +1,252 @@
+import './notification-system.css'
+
 import { useStore } from '@nanostores/react'
-import { type CSSProperties, type ReactNode, useEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+  type WheelEvent
+} from 'react'
 import { createPortal } from 'react-dom'
 
-import { IcButton, IcCopyButton } from '@/components/onboarding/ic-system'
-import { Codicon } from '@/components/ui/codicon'
-import { useI18n } from '@/i18n'
+import { IcIconAction } from '@/components/ic/controls'
+import { IcAlert, IcPageButton } from '@/components/ic/ic-page'
+import { prefersReducedMotion } from '@/hooks/use-media-query'
+import { f4Notes } from '@/i18n/en/v009-f4'
 import { triggerHaptic } from '@/lib/haptics'
-import { AlertCircle, AlertTriangle, CheckCircle2, type IconComponent, Info, X } from '@/lib/icons'
-import { cn } from '@/lib/utils'
+import { X } from '@/lib/icons'
 import {
   $notifications,
+  $toastOverflow,
   type AppNotification,
-  clearNotifications,
   dismissNotification,
-  type NotificationKind
+  type NotificationKind,
+  openNotificationCentre,
+  pauseNotification,
+  resumeNotification
 } from '@/store/notifications'
 
-type ToneVariant = 'default' | 'destructive' | 'warning' | 'success'
+import { NativeDecisionHost } from './native-decision-host'
+import { NotificationCentre } from './notification-centre'
+import { accentStyle, SeverityIcon } from './notification-glyph'
 
-const tone: Record<NotificationKind, { icon: IconComponent; iconClass: string; variant: ToneVariant }> = {
-  error: { icon: AlertCircle, iconClass: 'text-(--ic-danger)', variant: 'destructive' },
-  warning: { icon: AlertTriangle, iconClass: 'text-(--ic-warning)', variant: 'warning' },
-  info: { icon: Info, iconClass: 'text-(--ic-text-2)', variant: 'default' },
-  success: { icon: CheckCircle2, iconClass: 'text-(--ic-success)', variant: 'success' }
+/**
+ * v0.0.9 F4 — type 1, the toast: one stack at the bottom right, at most three, the rest "+N in Notifications".
+ * A toast says what happened (title) and why (message) in at most three lines; "More" — or a click anywhere on it —
+ * opens its entry in the notification centre, where nothing is cut. Hover or focus pauses it; ✕ and Esc (with focus
+ * inside) and a swipe to the right close it, with a 120 ms exit (0 ms under reduced motion); errors stay until closed
+ * (store/notifications.ts).
+ */
+
+/** Past this many characters a toast's words may need more than three lines: "More" is always offered. */
+export const MORE_THRESHOLD = 150
+
+export function needsMore(notification: Pick<AppNotification, 'detail' | 'message' | 'nextStep'>): boolean {
+  return (
+    notification.message.length > MORE_THRESHOLD ||
+    Boolean(notification.nextStep) ||
+    Boolean(notification.detail && notification.detail !== notification.message)
+  )
 }
 
-const STACK_SURFACE = 'ic-sys pointer-events-auto'
+/**
+ * v0.0.9 F4b — the exit. A toast that leaves the store (✕, Esc, swipe, its timer, the stack cap) stays painted for
+ * `--ic-dur-fast` (120 ms) with `data-leaving` so the CSS can play the exit; under reduced motion it goes at once
+ * (0 ms). A leaving toast is inert and hidden from assistive tech: it is already gone for everyone but the eye.
+ */
+export const TOAST_EXIT_MS = 120
 
-function partitionNotifications(notifications: AppNotification[]) {
-  const defaultStack: AppNotification[] = []
-  const bottomRightStack: AppNotification[] = []
+/** The exit length right now: the OS setting is read as the exit starts (it can flip mid-session). */
+export const toastExitMs = () => (prefersReducedMotion() ? 0 : TOAST_EXIT_MS)
 
-  for (const notification of notifications) {
-    if (notification.placement === 'bottom-right') {
-      bottomRightStack.push(notification)
-    } else {
-      defaultStack.push(notification)
+/** A horizontal drag (pointer) or two-finger swipe (trackpad wheel) this far closes the toast. */
+export const SWIPE_CLOSE_PX = 72
+
+export function swipeCloses(distancePx: number): boolean {
+  return Math.abs(distancePx) >= SWIPE_CLOSE_PX
+}
+
+/** The stack's own bottom padding (notification-system.css `.icn-stack`): the toasts' painted edge sits this far up. */
+const STACK_PAD_BOTTOM_PX = 24
+/** The CSS `bottom` of the stack at rest. */
+const STACK_BASE_BOTTOM_PX = 4
+/** Air between the lowest toast and the composer's top edge. */
+const COMPOSER_GAP_PX = 8
+
+interface RectLike {
+  bottom: number
+  left: number
+  right: number
+  top: number
+}
+
+/**
+ * v0.0.9 critic m4 / design 3: how far the stack lifts so no toast covers a composer. Every visible composer whose
+ * columns overlap the stack's columns pushes the lowest toast above its top edge (plus a gap); none = 0 (the corner).
+ * Pure; `composers` are viewport rects, `stack` is the stack's own rect, `viewportHeight` is `innerHeight`.
+ */
+export function stackLiftPx(composers: readonly RectLike[], stack: RectLike, viewportHeight: number): number {
+  let lift = 0
+
+  for (const rect of composers) {
+    const overlapsColumns = rect.right > stack.left && rect.left < stack.right
+    const visible = rect.bottom > 0 && rect.top < viewportHeight && rect.bottom > rect.top
+
+    if (!overlapsColumns || !visible) {
+      continue
     }
+
+    const needed = viewportHeight - rect.top + COMPOSER_GAP_PX - STACK_PAD_BOTTOM_PX - STACK_BASE_BOTTOM_PX
+
+    lift = Math.max(lift, Math.ceil(needed))
   }
 
-  return { bottomRightStack, defaultStack }
+  return Math.max(0, Math.min(lift, Math.max(0, viewportHeight - 160)))
+}
+
+/** The composer roots on screen (chat, panes, the HUD): `[data-slot="composer-root"]`. */
+const COMPOSER_SELECTOR = '[data-slot="composer-root"]'
+/** While a toast is up, the composer can move under it (a pane opens, the thread view mounts): look again this often. */
+const COMPOSER_RECHECK_MS = 750
+
+function useComposerLift(active: boolean) {
+  const stackRef = useRef<HTMLDivElement | null>(null)
+  const [lift, setLift] = useState(0)
+
+  useEffect(() => {
+    if (!active) {
+      setLift(0)
+
+      return
+    }
+
+    const measure = () => {
+      const stack = stackRef.current
+
+      if (!stack) {
+        return
+      }
+
+      const composers = [...document.querySelectorAll<HTMLElement>(COMPOSER_SELECTOR)].map(node =>
+        node.getBoundingClientRect()
+      )
+
+      setLift(stackLiftPx(composers, stack.getBoundingClientRect(), window.innerHeight))
+    }
+
+    measure()
+    window.addEventListener('resize', measure)
+    const timer = window.setInterval(measure, COMPOSER_RECHECK_MS)
+
+    return () => {
+      window.removeEventListener('resize', measure)
+      window.clearInterval(timer)
+    }
+  }, [active])
+
+  return { lift, stackRef }
+}
+
+export interface ToastPresence {
+  leaving: boolean
+  notification: AppNotification
+}
+
+/**
+ * The painted list: the store's toasts (newest first, as the store orders them) plus, when the exit animates, the
+ * ones that just left, kept at the place they held. A leaving toast whose id comes back is live again (same id = one).
+ */
+export function mergeToastPresence(
+  current: readonly AppNotification[],
+  previous: readonly ToastPresence[],
+  animate: boolean
+): ToastPresence[] {
+  const out: ToastPresence[] = current.map(notification => ({ leaving: false, notification }))
+
+  if (!animate) {
+    return out
+  }
+
+  const live = new Set(current.map(n => n.id))
+
+  previous.forEach((entry, index) => {
+    if (!live.has(entry.notification.id)) {
+      out.splice(Math.min(index, out.length), 0, { leaving: true, notification: entry.notification })
+    }
+  })
+
+  return out
+}
+
+function useToastPresence(notifications: AppNotification[]): ToastPresence[] {
+  const [source, setSource] = useState(notifications)
+  const [rendered, setRendered] = useState<ToastPresence[]>(() => mergeToastPresence(notifications, [], false))
+  const timersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+
+  // Derived during render (not in an effect) so a leaving toast never blinks out for a frame before its exit.
+  if (source !== notifications) {
+    setSource(notifications)
+    setRendered(previous => mergeToastPresence(notifications, previous, toastExitMs() > 0))
+  }
+
+  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (timer bookkeeping)
+  useEffect(() => {
+    const timers = timersRef.current
+
+    for (const entry of rendered) {
+      const id = entry.notification.id
+
+      if (!entry.leaving) {
+        // Back from leaving (same id re-notified): its pending removal must not take the live toast.
+        const pending = timers.get(id)
+
+        if (pending !== undefined) {
+          clearTimeout(pending)
+          timers.delete(id)
+        }
+
+        continue
+      }
+
+      if (!timers.has(id)) {
+        timers.set(
+          id,
+          setTimeout(() => {
+            timers.delete(id)
+            setRendered(list => list.filter(e => !(e.leaving && e.notification.id === id)))
+          }, TOAST_EXIT_MS)
+        )
+      }
+    }
+  }, [rendered])
+
+  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref read on unmount
+  useEffect(() => {
+    const timers = timersRef.current
+
+    return () => {
+      for (const timer of timers.values()) {
+        clearTimeout(timer)
+      }
+
+      timers.clear()
+    }
+  }, [])
+
+  return rendered
 }
 
 export function NotificationStack() {
   const notifications = useStore($notifications)
-  const { bottomRightStack, defaultStack } = partitionNotifications(notifications)
-  const { t } = useI18n()
+  const overflow = useStore($toastOverflow)
+  const painted = useToastPresence(notifications)
   const lastNotificationIdRef = useRef<string | null>(null)
-  const [expanded, setExpanded] = useState(false)
-  const copy = t.notifications
-
-  useEffect(() => {
-    if (defaultStack.length <= 1) {
-      setExpanded(false)
-    }
-  }, [defaultStack.length])
+  const { lift, stackRef } = useComposerLift(painted.length > 0)
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
@@ -77,215 +269,280 @@ export function NotificationStack() {
 
   return (
     <>
-      {defaultStack.length > 0 && (
-        <TopCenterStack
-          copy={copy}
-          expanded={expanded}
-          notifications={defaultStack}
-          onToggleExpanded={() => setExpanded(v => !v)}
-        />
-      )}
-      {bottomRightStack.length > 0 && <BottomRightStack copy={copy} notifications={bottomRightStack} />}
+      {painted.length > 0
+        ? createPortal(
+            <div
+              aria-label={f4Notes.region}
+              className="icn-stack"
+              data-composer-lift={lift > 0 ? '' : undefined}
+              data-testid="toast-stack"
+              ref={stackRef}
+              role="region"
+              style={lift > 0 ? ({ '--icn-stack-lift': `${lift}px` } as CSSProperties) : undefined}
+            >
+              {overflow > 0 ? (
+                <button className="icn-overflow" onClick={() => openNotificationCentre()} type="button">
+                  {f4Notes.overflow(overflow)}
+                </button>
+              ) : null}
+              {/* Oldest first, so the newest sits nearest the corner. */}
+              {[...painted].reverse().map(({ leaving, notification: n }) => (
+                <NotificationItem key={n.id} leaving={leaving} notification={n} />
+              ))}
+            </div>,
+            document.body
+          )
+        : null}
+      <NotificationCentre />
+      <NativeDecisionHost />
     </>
   )
 }
 
-// Portaled to <body> on the over-modal rung so a toast clears an open dialog —
-// see the top-center variant below for why.
-const REGION_BASE = 'pointer-events-none fixed z-(--z-over-modal) flex gap-2'
+const isControl = (target: EventTarget | null) =>
+  target instanceof Element && target.closest('button, a, input, textarea, select, [role="button"]') !== null
 
-// Primary stack: top-center, collapsed to the latest toast with a "+N more"
-// expander + clear-all — the noisy/important surface (errors, warnings,
-// action toasts). Without the portal it lives inside the React root subtree,
-// which any body-level dialog/overlay portal paints over — so a toast fired
-// while a dialog is open was invisible.
-function TopCenterStack({
-  copy,
-  expanded,
-  notifications,
-  onToggleExpanded
-}: {
-  copy: ReturnType<typeof useI18n>['t']['notifications']
-  expanded: boolean
-  notifications: AppNotification[]
-  onToggleExpanded: () => void
-}) {
-  const [latest, ...older] = notifications
+/** The live swipe offset rides a custom property; the CSS turns it into translateX + a fade (tokens only there). */
+const swipeStyle = (dx: number): CSSProperties | undefined =>
+  dx > 0 ? ({ '--icn-swipe-x': `${Math.round(dx)}px` } as CSSProperties) : undefined
 
-  return createPortal(
-    <div
-      aria-label={copy.region}
-      className={cn(
-        REGION_BASE,
-        'left-1/2 top-[calc(var(--titlebar-height,34px)+0.75rem)] w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 flex-col'
-      )}
-      role="region"
-    >
-      <NotificationItem notification={latest} />
-      {expanded && older.map(n => <NotificationItem key={n.id} notification={n} />)}
-      {older.length > 0 && (
-        <div className={cn(STACK_SURFACE, 'ic-toast flex min-h-8 items-center justify-between px-3 py-0 text-xs')}>
-          <IcButton className="-ml-2" onClick={onToggleExpanded} size="xs" type="button" variant="text">
-            {expanded ? copy.hide : copy.show} {copy.more(older.length)}
-          </IcButton>
-          <IcButton className="-mr-2" onClick={clearNotifications} size="xs" type="button" variant="text">
-            {copy.clearAll}
-          </IcButton>
-        </div>
-      )}
-    </div>,
-    document.body
-  )
-}
+function NotificationItem({ leaving, notification }: { leaving: boolean; notification: AppNotification }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const hoveredRef = useRef(false)
+  // Swipe: the pointer drag in flight (start x + pointer id), the live offset, and a latch so the click that ends a
+  // drag never opens the entry. The trackpad's two-finger swipe arrives as horizontal wheel deltas instead.
+  const dragRef = useRef<{ pointerId: number; startX: number } | null>(null)
+  const draggedRef = useRef(false)
+  const wheelRef = useRef<{ at: number; dx: number }>({ at: 0, dx: 0 })
+  const [swipeX, setSwipeX] = useState(0)
+  const [swiped, setSwiped] = useState(false)
+  const more = needsMore(notification)
+  const id = notification.id
 
-// Ambient stack: bottom-right, every toast shown at once (routine confirmations
-// rarely queue up), newest on top, no expand/clear-all chrome.
-function BottomRightStack({
-  copy,
-  notifications
-}: {
-  copy: ReturnType<typeof useI18n>['t']['notifications']
-  notifications: AppNotification[]
-}) {
-  return createPortal(
-    <div
-      aria-label={copy.region}
-      className={cn(REGION_BASE, 'right-4 bottom-4 w-[min(24rem,calc(100%-2rem))] flex-col-reverse')}
-      role="region"
-    >
-      {notifications.map(n => (
-        <NotificationItem key={n.id} notification={n} />
-      ))}
-    </div>,
-    document.body
-  )
-}
+  const close = () => {
+    const stack = ref.current?.closest('.icn-stack')
+    const focusWasInside = Boolean(ref.current?.contains(globalThis.document.activeElement))
 
-// Emphasize only the leading money figure ("$16.00" — the amount used) with the
-// accent color (semibold), leaving the rest of the line in its default muted
-// tone. No accent, or no figure in the message → render the text untouched.
-function renderMessage(message: string, accent?: string): ReactNode {
-  const match = accent ? /\$\d+(?:\.\d{2})?/.exec(message) : null
+    dismissNotification(id)
 
-  if (!match) {
-    return message
+    // Esc / ✕ from the keyboard: the reading position moves to the next toast instead of falling to <body>.
+    if (focusWasInside) {
+      globalThis.requestAnimationFrame?.(() => {
+        stack?.querySelector<HTMLElement>('.icn-toast:not([data-leaving])')?.focus({ preventScroll: true })
+      })
+    }
   }
 
-  const start = match.index
-  const end = start + match[0].length
+  const swipeAway = () => {
+    setSwiped(true)
+    close()
+  }
 
-  return (
-    <>
-      {message.slice(0, start)}
-      <span className="font-semibold" style={{ color: accent }}>
-        {match[0]}
-      </span>
-      {message.slice(end)}
-    </>
-  )
-}
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || isControl(event.target)) {
+      return
+    }
 
-// AlertTitle defaults to a single-line clamp. Toast errors are often a full
-// sentence, so the toast wraps — then caps height and scrolls instead of
-// growing down the chat or clipping with an ellipsis.
-export function toastTitleClassName() {
-  return 'col-start-auto line-clamp-none max-h-[4.5em] overflow-y-auto overscroll-contain whitespace-normal wrap-break-word'
-}
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX }
+    draggedRef.current = false
+  }
 
-function NotificationItem({ notification }: { notification: AppNotification }) {
-  const styles = tone[notification.kind]
-  const Icon = styles.icon
-  const hasDetail = Boolean(notification.detail && notification.detail !== notification.message)
-  const { t } = useI18n()
-  const copy = t.notifications
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
 
-  // Nudge the icon down to sit on the first text line, in `ch` so it tracks the
-  // toast's font size instead of a fixed rem. `accentColor` (when set) tints the
-  // icon + message as a severity ramp, overriding the kind's default color.
-  const accent = notification.accentColor
-  const iconStyle: CSSProperties = { marginTop: '0.42ch', ...(accent ? { color: accent } : {}) }
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return
+    }
+
+    // Only toward the edge the stack sits on (right); a drag back left rests at 0.
+    const dx = Math.max(0, event.clientX - drag.startX)
+
+    if (dx > 4 && !draggedRef.current) {
+      draggedRef.current = true
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    }
+
+    setSwipeX(dx)
+  }
+
+  const endDrag = (event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return
+    }
+
+    dragRef.current = null
+    event.currentTarget.releasePointerCapture?.(event.pointerId)
+
+    if (event.type === 'pointerup' && swipeCloses(event.clientX - drag.startX) && event.clientX > drag.startX) {
+      swipeAway()
+
+      return
+    }
+
+    setSwipeX(0)
+  }
+
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    // A horizontal two-finger swipe; vertical wheel scrolls the stack as before. Deltas older than 300 ms start over.
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) {
+      return
+    }
+
+    const now = Date.now()
+    const acc = now - wheelRef.current.at > 300 ? 0 : wheelRef.current.dx
+
+    wheelRef.current = { at: now, dx: acc + event.deltaX }
+
+    if (swipeCloses(wheelRef.current.dx)) {
+      wheelRef.current = { at: 0, dx: 0 }
+      swipeAway()
+    }
+  }
+
+  const openEntry = () => {
+    dismissNotification(id)
+    openNotificationCentre(id)
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      event.stopPropagation()
+      close()
+
+      return
+    }
+
+    if (event.key === 'Enter' && event.target === event.currentTarget) {
+      event.preventDefault()
+      openEntry()
+    }
+  }
+
+  const onClick = (event: MouseEvent<HTMLDivElement>) => {
+    if (draggedRef.current) {
+      draggedRef.current = false
+
+      return
+    }
+
+    if (!isControl(event.target)) {
+      openEntry()
+    }
+  }
+
+  // Leaving: painted for the exit only — no handlers, no focus, not announced.
+  if (leaving) {
+    return (
+      <div
+        aria-hidden="true"
+        className="icn-toast"
+        data-accent={notification.accentColor ? '' : undefined}
+        data-kind={notification.kind}
+        data-leaving=""
+        data-slot="ic-toast"
+        data-swiped={swiped ? '' : undefined}
+        data-testid="toast-leaving"
+        inert
+        style={{ ...accentStyle(notification.accentColor), ...swipeStyle(swipeX) }}
+      >
+        <SeverityIcon icon={notification.icon} kind={notification.kind} />
+        <div className="icn-text">
+          {notification.title ? <p className="icn-title">{notification.title}</p> : null}
+          <p className="icn-body" data-clamp={more ? '' : undefined}>
+            {notification.message}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
-      aria-live={notification.kind === 'error' ? 'assertive' : 'polite'}
-      className={cn(STACK_SURFACE, 'ic-toast')}
+      aria-describedby={`${id}-body`}
+      aria-labelledby={notification.title ? `${id}-title` : `${id}-body`}
+      className="icn-toast"
+      data-accent={notification.accentColor ? '' : undefined}
+      data-kind={notification.kind}
       data-slot="ic-toast"
-      data-tone={styles.variant}
+      data-swiping={swipeX > 0 ? '' : undefined}
+      data-testid="toast"
+      onBlur={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !hoveredRef.current) {
+          resumeNotification(id)
+        }
+      }}
+      onClick={onClick}
+      onFocus={() => pauseNotification(id)}
+      onKeyDown={onKeyDown}
+      onMouseEnter={() => {
+        hoveredRef.current = true
+        pauseNotification(id)
+      }}
+      onMouseLeave={event => {
+        hoveredRef.current = false
+
+        if (!event.currentTarget.contains(globalThis.document.activeElement)) {
+          resumeNotification(id)
+        }
+      }}
+      onPointerCancel={endDrag}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onWheel={onWheel}
+      ref={ref}
       role={notification.kind === 'error' ? 'alert' : 'status'}
+      style={{ ...accentStyle(notification.accentColor), ...swipeStyle(swipeX) }}
+      tabIndex={0}
     >
-      {notification.icon ? (
-        <Codicon className={styles.iconClass} name={notification.icon} size="1rem" style={iconStyle} />
-      ) : (
-        <Icon className={styles.iconClass} style={iconStyle} />
-      )}
-      <div className="col-start-2 min-w-0">
-        {notification.title && (
-          <div className={cn('ic-toast__title', toastTitleClassName())} title={notification.title}>
+      <SeverityIcon icon={notification.icon} kind={notification.kind} />
+      <div className="icn-text">
+        {notification.title ? (
+          <p className="icn-title" id={`${id}-title`}>
             {notification.title}
+          </p>
+        ) : null}
+        <p className="icn-body" data-clamp={more ? '' : undefined} id={`${id}-body`}>
+          {notification.message}
+        </p>
+        {notification.meta ? <p className="icn-meta">{notification.meta}</p> : null}
+        {more || notification.action ? (
+          <div className="icn-actions">
+            {notification.action ? (
+              <IcPageButton
+                onClick={() => {
+                  notification.action?.onClick()
+                  dismissNotification(id)
+                }}
+                tone="note"
+              >
+                {notification.action.label}
+              </IcPageButton>
+            ) : null}
+            {more ? (
+              <IcPageButton onClick={openEntry} tone="quiet">
+                {f4Notes.more}
+              </IcPageButton>
+            ) : null}
           </div>
-        )}
-        <div className="ic-toast__body">
-          <p className="m-0 wrap-break-word">{renderMessage(notification.message, accent)}</p>
-          {notification.meta && <p className="m-0 text-xs text-(--ic-text-2) tabular-nums">{notification.meta}</p>}
-          {hasDetail && <NotificationDetail detail={notification.detail || ''} />}
-          {notification.action && (
-            <IcButton
-              className="mt-1.5"
-              onClick={() => {
-                notification.action?.onClick()
-                dismissNotification(notification.id)
-              }}
-              size="xs"
-              type="button"
-              variant="textStrong"
-            >
-              {notification.action.label}
-            </IcButton>
-          )}
-        </div>
+        ) : null}
       </div>
-      <IcButton
-        aria-label={copy.dismiss}
-        className="col-start-3 -mr-1 text-(--ic-text-2)"
-        onClick={() => dismissNotification(notification.id)}
-        size="icon-xs"
-        type="button"
-        variant="ghost"
-      >
-        <X className="size-3.5" />
-      </IcButton>
+      <div className="icn-close">
+        <IcIconAction label={f4Notes.close} onClick={close}>
+          <X aria-hidden="true" size={14} />
+        </IcIconAction>
+      </div>
     </div>
   )
 }
 
-function NotificationDetail({ detail }: { detail: string }) {
-  const { t } = useI18n()
-  const copy = t.notifications
-
-  return (
-    <details className="mt-2 text-xs text-(--ic-text-2)">
-      <summary className="select-none font-medium text-(--ic-text-2) hover:text-(--ic-text-1)">{copy.details}</summary>
-      <div className="mt-1 rounded-(--ic-radius-sm) bg-(--ic-surface-sunken) p-2">
-        <pre
-          className="max-h-32 whitespace-pre-wrap wrap-break-word font-mono text-[0.6875rem] leading-relaxed"
-          data-selectable-text="true"
-        >
-          {detail}
-        </pre>
-        <IcCopyButton
-          className="mt-1 px-1.5 py-0.5 text-[0.6875rem]"
-          errorMessage={copy.copyDetailFailed}
-          iconClassName="size-3"
-          label={copy.copyDetail}
-          text={detail}
-        >
-          {copy.copyDetail}
-        </IcCopyButton>
-      </div>
-    </details>
-  )
-}
-
+/**
+ * Type 3 under its old name: an inline notice is the inline alert (IcAlert). Kept for the model picker's two call
+ * sites; new code uses IcAlert directly.
+ */
 export function InlineNotice({
   kind = 'info',
   title,
@@ -297,21 +554,9 @@ export function InlineNotice({
   children: ReactNode
   className?: string
 }) {
-  const styles = tone[kind]
-  const Icon = styles.icon
-
   return (
-    <div
-      className={cn('ic-sys ic-toast min-w-0 shadow-none backdrop-blur-none', className)}
-      data-slot="ic-notice"
-      data-tone={styles.variant}
-      role={kind === 'error' ? 'alert' : 'status'}
-    >
-      <Icon className={cn('mt-0.5 size-4', styles.iconClass)} />
-      <div className="ic-toast__body">
-        {title && <div className="ic-toast__title">{title}</div>}
-        <div>{children}</div>
-      </div>
-    </div>
+    <IcAlert className={className} title={title} tone={kind}>
+      {children}
+    </IcAlert>
   )
 }

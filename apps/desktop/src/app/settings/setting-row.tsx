@@ -9,6 +9,7 @@ import {
   useMemo
 } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { cn } from '@/lib/utils'
 
 /** The ids a row's control points at: its title names it, its hint describes it. */
@@ -169,17 +170,14 @@ export function SettingRow({
             </div>
           )}
           {detail && (
-            <div className="mt-1 block font-mono text-[length:var(--conversation-caption-font-size)] text-(--ic-text-3)">
+            <div className="mt-1 block font-mono text-[length:var(--conversation-caption-font-size)] text-(--ic-text-2-aa)">
               {detail}
             </div>
           )}
           {error && (
-            <div
-              className="mt-1 text-[length:var(--conversation-caption-font-size)] leading-(--conversation-caption-line-height) text-(--ic-danger)"
-              role="alert"
-            >
+            <IcAlert className="mt-1" tone="error">
               {error}
-            </div>
+            </IcAlert>
           )}
           {below}
         </div>

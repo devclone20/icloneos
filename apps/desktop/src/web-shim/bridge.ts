@@ -228,6 +228,8 @@ export const ABSENT_IN_WEB = [
   'agentRuntime',
   'homeSettings',
   'appUpdate',
+  // F1-S: Buy credits needs main's owner confirm; a browser has no main, so the web app charges nothing.
+  'billingCharge',
   'dataUrlReadMax',
   // REL-6: the ACP tools installer writes the CLI into this Mac's app folder; a browser installs nothing (and the
   // Market pane reads the bridge as absent, so it is not gated there).
@@ -240,11 +242,17 @@ export const ABSENT_IN_WEB = [
   'icloneConfinement',
   'icloneDoctor',
   'icloneModel',
+  // v0.0.9 F3: the repair kit moves this Mac's app and agent folders; no main in a browser: nothing to repair.
+  'icloneRepairKit',
   // V3-ON: the Set up step reads this Mac's system permissions and installed packages; a browser has neither, so the
   // step is not offered there (the consent flow is unchanged).
   'icloneSetup',
   'icloneSkills',
   'icloneUpdates',
+  // v0.0.9 W1b: the voice extra installs into this Mac's app-private dependency home; a browser installs nothing.
+  'icloneVoiceExtra',
+  // v0.0.9 F4b: main's native dialogs re-asked in the window; a browser has no main and no native dialog to re-ask.
+  'nativeDecisions',
   // V3-D: the pane bus broker and its Unix socket live in main; the renderer's
   // paneBus() reads it as absent and iT keeps working without the bus.
   'paneBus',
@@ -253,6 +261,9 @@ export const ABSENT_IN_WEB = [
   // AI record captures the screen with desktopCapturer in main. A browser has neither, so the title-bar tool reads the
   // bridge as absent and is not offered, and nothing records.
   'screenRecord',
+  // v0.0.9 F6: the 3D iNFT's own window is an OS window opened by main; a browser keeps the stage in the page (the
+  // window menu then shows no "Open in new window").
+  'stage3dWindow',
   // The VS Code Marketplace theme search runs in the desktop main process (electron/vscode-marketplace.ts). The
   // runtime serves no themes marketplace route, so the web build has none: the theme pages say so instead (V3-0).
   'themes'

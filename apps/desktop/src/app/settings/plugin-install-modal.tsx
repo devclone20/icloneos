@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router'
 
 import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import { NEW_CHAT_ROUTE, SETTINGS_ROUTE } from '@/app/routes'
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -19,7 +20,6 @@ import { Switch } from '@/components/ui/switch'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
 import { useI18n } from '@/i18n'
 import { ExternalLink } from '@/lib/external-link'
-import { AlertTriangle } from '@/lib/icons'
 import { resolvePluginSourceLinks } from '@/lib/plugin-source-urls'
 import { installAgentPlugin, loadAgentPlugins } from '@/store/agent-plugins'
 import { notify } from '@/store/notifications'
@@ -310,9 +310,7 @@ export function PluginInstallModal() {
             )}
 
             {phase === 'error' && probe?.error && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-[length:var(--conversation-caption-font-size)] text-destructive">
-                {probe.error}
-              </p>
+              <IcAlert tone="error">{probe.error}</IcAlert>
             )}
 
             {phase === 'ready' && probe && (
@@ -362,15 +360,9 @@ export function PluginInstallModal() {
                 )}
 
                 {(probe.insecure || (probe.warnings?.length ?? 0) > 0) && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[length:var(--conversation-caption-font-size)] text-foreground">
-                    <AlertTriangle
-                      aria-hidden
-                      className="mt-0.5 size-3.5 shrink-0 text-amber-600 dark:text-amber-400"
-                    />
-                    <span>
-                      {[...(probe.warnings ?? []), probe.insecure ? m.insecureWarning : ''].filter(Boolean).join(' ')}
-                    </span>
-                  </div>
+                  <IcAlert tone="warning">
+                    {[...(probe.warnings ?? []), probe.insecure ? m.insecureWarning : ''].filter(Boolean).join(' ')}
+                  </IcAlert>
                 )}
 
                 {probe.agent && (
@@ -392,9 +384,9 @@ export function PluginInstallModal() {
             )}
 
             {installError && (
-              <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 whitespace-pre-wrap text-[length:var(--conversation-caption-font-size)] text-destructive">
-                {installError}
-              </p>
+              <IcAlert tone="error">
+                <span className="whitespace-pre-wrap">{installError}</span>
+              </IcAlert>
             )}
           </div>
         )}

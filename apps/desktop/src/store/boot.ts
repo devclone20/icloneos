@@ -62,6 +62,25 @@ export function applyDesktopBootProgress(incoming: DesktopBootProgress) {
   })
 }
 
+/**
+ * v0.0.9 F3 (e2e G-m4, closable error screen): main's own progress — its pushes and the snapshot the boot hook asks
+ * for once. Neither may revive a boot the renderer already FAILED: the snapshot answer can land after
+ * `failDesktopBoot` (a boot that fails fast, before main publishes `backend.error`), and its `running: true`, merged
+ * over the latched failure, kept the error but turned the boot back to "running". The failure card needs a boot that
+ * is not running, so it never showed, and onboarding sat on "The failure screen shows what happened" with nothing
+ * shown. A failed boot is restarted only on purpose (Retry reloads; resumeDesktopBootForRetry); a progress event
+ * that carries its own error still applies.
+ */
+export function applyMainBootProgress(incoming: DesktopBootProgress) {
+  const current = $desktopBoot.get()
+
+  if (current.error && !current.running && !incoming.error && incoming.running) {
+    return
+  }
+
+  applyDesktopBootProgress(incoming)
+}
+
 export function setDesktopBootStep(step: {
   phase: string
   message: string

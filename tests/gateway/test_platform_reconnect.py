@@ -73,7 +73,9 @@ def _make_runner():
     runner._honcho_managers = {}
     runner._honcho_configs = {}
     runner._shutdown_all_gateway_honcho = lambda: None
-    runner.session_store = MagicMock()
+    # A bare MagicMock store answers ``_routing_home`` with a mock, and the heartbeat restore at startup then opened
+    # ``MagicMock/mock._routing_home/<id>/state.db`` in the repository root. No routing home = the hermetic gateway home.
+    runner.session_store = MagicMock(_routing_home=None)
     return runner
 
 

@@ -116,7 +116,7 @@
   border: 1px solid transparent;
   border-radius: var(--ic-radius-sm);
   background: none;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   cursor: pointer;
   transition:
     background var(--ic-dur-fast) var(--ic-ease-std),
@@ -208,7 +208,7 @@
   border: none;
   border-radius: var(--ic-radius-pill);
   background: none;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
   font-size: var(--ic-type-md);
   font-weight: 500;
   cursor: pointer;
@@ -285,11 +285,7 @@
   align-items: flex-start;
   gap: 6px;
   font-size: var(--ic-type-md);
-  color: var(--ic-text-2);
-}
-
-.icui-note[data-tone='danger'] {
-  color: var(--ic-danger);
+  color: var(--ic-text-2-aa);
 }
 
 /* empty & loading ------------------------------------------------------ */
@@ -435,7 +431,7 @@
   margin: 0;
   font-size: var(--ic-type-xs);
   line-height: 1.45;
-  color: var(--ic-text-3);
+  color: var(--ic-text-2-aa);
 }
 
 .icui-input,

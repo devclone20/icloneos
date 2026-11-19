@@ -342,7 +342,6 @@ function FirstLaunchSheet() {
 
                 if (!snapshot.keychainEncrypted) {
                   notify({
-                    durationMs: 8_000,
                     kind: 'info',
                     message: bank.sheet.allowAllKeychain,
                     title: bank.sheet.allowAllKeychainTitle

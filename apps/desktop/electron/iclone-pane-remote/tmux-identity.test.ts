@@ -18,7 +18,13 @@ import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest'
 
 import { createPaneBroker, type PaneBroker } from '../iclone-pane-bus/broker'
 import { BUS_CLI_FRAGMENT } from '../iclone-pane-bus/cli'
-import { createBusServer, createPaneHooks, listenOnSocket, type TerminalPaneHooks } from '../iclone-pane-bus/ipc'
+import {
+  createBusServer,
+  createPaneHooks,
+  listenOnSocket,
+  paneBusSocketFile,
+  type TerminalPaneHooks
+} from '../iclone-pane-bus/ipc'
 import { paneProcessEnv, type PreparedPane } from '../iclone-pane-bus/pane-env'
 
 import { TMUX_SOCKET_LABEL } from './tmux-cmd'
@@ -116,7 +122,7 @@ async function waitForSession(session: string): Promise<void> {
 
 beforeAll(async () => {
   home = mkdtempSync(path.join('/tmp', 'v3d-id-'))
-  socket = path.join(home, 'bus', 'bus.sock')
+  socket = paneBusSocketFile(home)
   cli = path.join(home, 'it')
   writeFileSync(cli, `#!/bin/sh\n${BUS_CLI_FRAGMENT}\necho "not a bus call" >&2\nexit 1\n`, { mode: 0o700 })
 
@@ -146,6 +152,7 @@ afterAll(async () => {
   await new Promise(resolve => server.close(resolve))
   // The killed sessions' shells may still be flushing a file.
   rmSync(home, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 })
+  rmSync(path.dirname(socket), { force: true, recursive: true })
 })
 
 describe.skipIf(!TMUX)('M1: no bus identity crosses tmux', () => {

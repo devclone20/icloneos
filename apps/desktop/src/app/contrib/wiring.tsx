@@ -14,6 +14,7 @@ import { type CSSProperties, lazy, type ReactNode, Suspense, useCallback, useEff
 import { useLocation, useNavigate } from 'react-router'
 
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
+import { AgentRestartStoppedBanner } from '@/components/agent-restart-stopped-banner'
 import { formatRefValue } from '@/components/assistant-ui/directive-text'
 import { BootFailureOverlay } from '@/components/boot-failure-overlay'
 import { ConfirmHost } from '@/components/confirm-host'
@@ -134,6 +135,7 @@ import { useSessionListActions } from '../session/hooks/use-session-list-actions
 import { useSessionStateCache } from '../session/hooks/use-session-state-cache'
 import { startWorkspaceSession } from '../session/workspace-session-target'
 import { PluginInstallModal } from '../settings/plugin-install-modal'
+import { closeSettingsBeside, useSettingsPane } from '../settings/settings-dock'
 import { useOverlayRouting } from '../shell/hooks/use-overlay-routing'
 import { useWindowControlsOverlayWidth } from '../shell/hooks/use-window-controls-overlay-width'
 import { titlebarControlsPosition, titlebarToolsRightCss } from '../shell/titlebar'
@@ -295,6 +297,11 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // already covers it; it stays in the expression because the ⌘. toggle reads
   // the same flag and a reader should not have to prove the implication.
   const overlayFloating = settingsOpen || commandCenterOpen || agentsOpen || cronOpen || skillsOpen
+
+  // v0.0.9 r2 (F6 spec gap): Settings as a PANE beside the Message window (or left open after Message closed) — not its
+  // route. The `/settings` route taking Settings back (a door that navigates there) ends the pane form: one Settings.
+  const settingsPane = useSettingsPane(settingsOpen)
+  const settingsShown = settingsOpen || settingsPane
 
   // Chat and every overlay render OVER the home layer, so the dock never
   // leaves the screen (owner rule). This used to be gated on a "the user has
@@ -1216,6 +1223,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       <UpdatesOverlay />
       <GatewayConnectingOverlay />
       <BootFailureOverlay />
+      <AgentRestartStoppedBanner />
       <CommandPalette />
       <PluginInstallModal />
       <SessionSwitcher />
@@ -1232,11 +1240,11 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         />
       )}
 
-      {settingsOpen && (
+      {settingsShown && (
         <Suspense fallback={null}>
           <SettingsView
             gateway={gateway}
-            onClose={closeOverlayToPreviousRoute}
+            onClose={settingsOpen ? closeOverlayToPreviousRoute : closeSettingsBeside}
             onConfigSaved={() => {
               void refreshHermesConfig()
               void refreshCurrentModel()

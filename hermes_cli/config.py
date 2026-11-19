@@ -122,6 +122,8 @@ _ENV_VAR_NAME_DENYLIST: frozenset[str] = frozenset({
     # Hermes runtime location
     "HERMES_HOME", "HERMES_PROFILE", "HERMES_CONFIG", "HERMES_ENV",
     "HERMES_CONFIG_PATH", "HERMES_ENV_PATH",
+    # Dependency root (which environment's packages this process imports) — the app sets it at spawn only.
+    "HERMES_DEPENDENCY_HOME",
     # MCP catalog trust root; package-manager wrappers may still set it in the process env.
     "HERMES_OPTIONAL_MCPS",
     # Local ACP subprocess selection (executable/argv authority).

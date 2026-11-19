@@ -17,6 +17,7 @@ import {
   formatRunDuration,
   packRows
 } from './diagnostics-settings-model'
+import { RepairKitSection } from './diagnostics-settings-repair-kit'
 import { type DiagnosticsCheckCopy, useDiagnosticsCheckCopy } from './machine/diagnostics-checks-copy'
 import { type DiagnosticsCopy, useDiagnosticsCopy } from './machine/diagnostics-copy'
 import { SettingsContent } from './primitives'
@@ -177,6 +178,8 @@ export function DiagnosticsSettings({ navigate }: { navigate?: (view: SettingsVi
   if (!bridge) {
     return (
       <SettingsContent>
+        {/* v0.0.9 F3: the repair kit has its own bridge and stays usable without the doctor. */}
+        <RepairKitSection />
         <p className="mx-auto mt-6 max-w-2xl text-sm text-muted-foreground">{d.unavailable}</p>
       </SettingsContent>
     )
@@ -189,6 +192,8 @@ export function DiagnosticsSettings({ navigate }: { navigate?: (view: SettingsVi
 
   return (
     <SettingsContent>
+      {/* v0.0.9 F3: the known causes first -- what the owner opens this page for when the agent will not start. */}
+      <RepairKitSection />
       <div data-diagnostics-state={running ? 'running' : !report ? 'idle' : clear ? 'pass' : 'fail'}>
         <SettingRow
           control={

@@ -27,6 +27,7 @@ import {
 } from '../windows-remote-lifecycle'
 
 import { claimBackendChild, primaryProfileKey, stopBackendChild, waitForBackendExit } from './backend'
+import { resetBackendAutoRestart } from './backend-auto-restart'
 import { desktopParentStartMarker, reapOrphanedBackendsOnce, releaseBackendChild } from './backend-ownership'
 import { ensureRuntime, startPoolIdleReaper } from './backend-pool'
 import { type ProbeWebSocketImpl, waitForHermes } from './backend-readiness'
@@ -53,6 +54,7 @@ import {
 import type { RemoteSshConfig } from './remote'
 import { bootstrapSshConnection, buildRemoteConnection } from './remote'
 import { makeDashboardReadyFile, resolveHermesCwd, resolveWebDist } from './runtime'
+import { managedRuntimeEnv } from './runtime-install-state'
 import { decryptDesktopSecret } from './secrets'
 import { lateBound, QuitInProgressError, quitState, refuseWhileQuitting } from './state'
 import {
@@ -609,6 +611,8 @@ export async function drainManagedSshScope(scope: ManagedSshScope) {
 
       if (scope.primary) {
         backendConnectionState.invalidate()
+        // v0.0.9 Q (correctness 2): the update replaces the primary on purpose; no automatic restart stays pending.
+        resetBackendAutoRestart()
       } else if (backendPool.get(scope.key) === scope.entry) {
         backendPool.delete(scope.key)
       }
@@ -695,7 +699,8 @@ export async function spawnPoolBackend(
   // step 3 in hermes_cli/main.py), so the child re-homes to this profile.
   // --port 0: the OS assigns an ephemeral port; the child announces it on stdout.
   const backendArgs = ['--profile', profile, 'serve', '--host', '127.0.0.1', '--port', '0']
-  const backend = await ensureRuntime(resolveHermesBackend(backendArgs))
+  // A pool backend never reports into the primary's boot progress (runtime-progress.ts).
+  const backend = await ensureRuntime(resolveHermesBackend(backendArgs), { reportBootProgress: false })
   refuseWhileQuitting('pool boot') // after the runtime
   await ensureRuntimeUpdateCheckOff(profile) // iclone-seam: r1-config — updates.check off → spawn
   refuseWhileQuitting('pool boot') // after the update-check config
@@ -758,7 +763,9 @@ export async function spawnPoolBackend(
         ...parentIdentityEnv,
         HERMES_WEB_DIST: webDist,
         ...(readyFile ? { HERMES_DESKTOP_READY_FILE: readyFile } : {})
-      }),
+        // v0.0.9 point A + Q decision 4: the same private dependency root and no lazy installs as the primary
+        // (runtime-install-state), set explicitly here and never inherited.
+      }, managedRuntimeEnv(backend.root)),
       shell: backend.shell,
       stdio: gated.stdio
     })

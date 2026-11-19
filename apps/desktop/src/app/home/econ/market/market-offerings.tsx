@@ -210,8 +210,10 @@ export function OfferingDetail({ deleting, error, offering, onClose, onDelete, o
             <Action disabled={deleting} kind="quiet" onClick={() => setConfirming(false)}>
               Keep it
             </Action>
+            {/* F1-S: the owner-click lock — the delete runs only on a real click or key here. */}
             <button
               className="e-btn mk-btn--danger"
+              data-acp-market-confirm=""
               disabled={deleting}
               onClick={() => onDelete(offering)}
               type="button"

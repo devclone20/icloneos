@@ -1,10 +1,14 @@
 {
-  "_comment": "K98: protectedPaths() for this synthetic input, pinned by electron/iclone-permissions/protected-paths.k98.test.ts",
+  "_comment": "K98: protectedPaths() for this synthetic input, pinned by electron/iclone-permissions/protected-paths.k98.test.ts; v0.0.9: socketFolders = socketFolders() for the same input (the private socket folder, per-user and its /tmp fallback)",
   "input": {
     "userDataDir": "/ud",
     "hermesHome": "/home/u/.hermes",
     "home": "/home/u",
-    "hermesRoot": null
+    "hermesRoot": null,
+    "socketPlace": {
+      "tmpdir": "/private/var/folders/xx/abc/T",
+      "uid": 501
+    }
   },
   "protectedPaths": [
     "/ud/permissions",
@@ -18,6 +22,14 @@
     "/home/u/.hermes/iclone-perm-spool",
     "/home/u/.hermes/iclone-perm-stats",
     "/ud/acp-work",
-    "/home/u/Library/Caches/iclone-os-confinement/members"
+    "/home/u/Library/Caches/iclone-os-confinement/members",
+    "/private/var/folders/xx/abc/T/ic-3b999633e3",
+    "/tmp/501-3b999633e3",
+    "/private/tmp/501-3b999633e3"
+  ],
+  "socketFolders": [
+    "/private/var/folders/xx/abc/T/ic-3b999633e3",
+    "/tmp/501-3b999633e3",
+    "/private/tmp/501-3b999633e3"
   ]
 }

@@ -1,6 +1,9 @@
+import { f1sOwnerClick } from '@/i18n/en/v009-f1s'
+
 import type { BillingRefusal } from './api'
 import { formatMoney } from './billing-amounts'
 import type { BillingCopy } from './copy'
+import { OWNER_CONFIRM_REFUSAL } from './owner-confirm'
 
 interface BillingRefusalPresentation {
   action: { type: 'none' } | { type: 'portal'; url?: string } | { type: 'retry' } | { type: 'step_up' }
@@ -85,8 +88,21 @@ export const resolveRefusal = (refusal: BillingRefusal, copy: BillingCopy): Bill
     case 'endpoint_unavailable':
       return { action: { type: 'retry' }, message: words.unavailableMessage, title: words.unavailableTitle }
 
+    // F1-S: main gave no owner confirm (no real click on Buy / Retry) — the app sent no charge. Retry is itself a
+    // marked control, so the owner's click there is the confirm.
+    case OWNER_CONFIRM_REFUSAL:
+      return { action: { type: 'retry' }, message: f1sOwnerClick.chargeMessage, title: f1sOwnerClick.chargeTitle }
+
+    // m-r2-1: the runtime could not read the portal's answer (it timed out or the connection dropped). The charge may
+    // have gone through: Try again re-sends the SAME purchase (its idempotency key), so the portal charges at most once.
+    case 'network_error':
+
     case 'timeout':
       return { action: { type: 'retry' }, message: words.timeoutMessage, title: words.timeoutTitle }
+
+    // The portal failed on its side (policy: recovery retry). Same rule: Try again is the same purchase.
+    case 'internal_error':
+      return { action: { type: 'retry' }, message: words.failedMessage, title: words.failedTitle }
 
     case 'transport':
       return { action: { type: 'retry' }, message: words.offlineMessage, title: words.offlineTitle }

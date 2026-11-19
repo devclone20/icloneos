@@ -25,9 +25,10 @@ import { hiddenWindowsChildOptions } from './windows-child-options'
 
 export function execText(command: string, args: string[], { timeout = 3000 } = {}): Promise<string> {
   return new Promise<string>((resolve, reject) => {
-    execFile(command, args, hiddenWindowsChildOptions({ encoding: 'utf8', timeout }), (error, stdout) => {
+    execFile(command, args, hiddenWindowsChildOptions({ encoding: 'utf8', timeout }), (error, stdout, stderr) => {
       if (error) {
-        reject(error)
+        // What the command printed travels with the failure: `ps` for a pid that is gone exits 1 and prints nothing.
+        reject(Object.assign(error, { stdout: String(stdout || ''), stderr: String(stderr || '') }))
       } else {
         resolve(String(stdout || '').trim())
       }
@@ -85,13 +86,49 @@ export async function processStartMarker(pid: number): Promise<string> {
     return `win:${ticks}`
   }
 
-  const started = await execText('ps', ['-p', String(pid), '-o', 'lstart='])
+  let started: string
+
+  try {
+    started = await execText('ps', ['-p', String(pid), '-o', 'lstart='])
+  } catch (error) {
+    throw psProbeGone(error) ? Object.assign(new Error(`No process with PID ${pid}`), { code: 'ESRCH' }) : error
+  }
 
   if (!started) {
     throw new Error(`Missing process start marker for PID ${pid}`)
   }
 
   return `ps:${started}`
+}
+
+/**
+ * v0.0.9 r3 (eng r3-n1): `ps -p <pid>` for a pid that is gone exits with status 1 and prints nothing (macOS and procps
+ * alike), so `execFile`'s error carries the NUMBER 1, never ENOENT/ESRCH. Callers read ESRCH as "gone"; without this the
+ * dead pid read as "unknown": its ownership record was kept forever and a SIGKILL that worked was logged as a failed stop.
+ * Exit 1 with any output (a sandbox refusal, a usage error) stays a probe failure.
+ */
+export function psProbeGone(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false
+  }
+
+  const { code, killed, signal, stdout, stderr } = error as {
+    code?: unknown
+    killed?: unknown
+    signal?: unknown
+    stdout?: unknown
+    stderr?: unknown
+  }
+
+  return (
+    code === 1 &&
+    killed !== true &&
+    !signal &&
+    typeof stdout === 'string' &&
+    !stdout.trim() &&
+    typeof stderr === 'string' &&
+    !stderr.trim()
+  )
 }
 
 type StartMarkerProbe = { ok: true; startMarker: string } | { ok: false; reason: string }

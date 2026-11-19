@@ -45,7 +45,7 @@ import {
 import { runtimeDigests } from '../iclone-runtime-digest'
 import { ensureRuntimeIntegrity, warmRuntimeDigests } from '../iclone-runtime-integrity'
 import { PYTHON_ISOLATION_FLAGS, sealHermesSpawnEnv } from '../iclone-spawn-env'
-import { PAY_SOCKET_NAME } from '../iclone-x402/ipc'
+import { paySocketFile } from '../iclone-x402/ipc'
 import { RUNTIME_PIN } from '../runtime-pin.generated'
 import { registerTeardown } from '../teardown-registry'
 import { profileHermesHome } from '../update-runtime-align'
@@ -156,7 +156,8 @@ export interface PreparedHermesSpawn {
    * gate's env (V3-F lock, V3-G confinement, the bytecode prefix) applied LAST, so nothing overrides it. A pool backend
    * keeps no payment env.
    */
-  seal: (composed: Record<string, string | undefined>) => Record<string, string>
+  /** `appEnv`: main's explicit env for its own runtime (`managedRuntimeEnv`), never taken from `composed`. */
+  seal: (composed: Record<string, string | undefined>, appEnv?: Readonly<Record<string, string>>) => Record<string, string>
   stdio: typeof GATED_STDIO
   /** Right after spawn: the key down fd 3 (then closed), and the child's pid registered with the authority. */
   attach: (child: Pick<ChildProcess, 'once' | 'pid' | 'stdio'>) => void
@@ -387,7 +388,7 @@ export async function prepareHermesSpawn(options: {
   })
 
   // V3-F: the policy lock in env; the spawn key only on fd 3, written by attach() and closed (never env or argv).
-  const permissions = permissionsSpawn(path.join(app.getPath('userData'), 'run'))
+  const permissions = permissionsSpawn(app.getPath('userData'))
 
   if (options.role !== 'primary' && !permissions.keyLine) {
     throw new IcloneGateError(
@@ -425,7 +426,7 @@ export async function prepareHermesSpawn(options: {
         command,
         cwd: options.cwd,
         // The pay env reaches the window's backend only (the seal drops it for a pool backend).
-        paySocket: options.role === 'primary' ? path.join(app.getPath('userData'), 'run', PAY_SOCKET_NAME) : null,
+        paySocket: options.role === 'primary' ? paySocketFile(app.getPath('userData')) : null,
         permissions: permissions.env,
         // An unmanaged dev runtime discovers its plugins in the app-owned overlay (HERMES_BUNDLED_PLUGINS): a read
         // hole of the profile, or the confinement plugin itself would never load.
@@ -485,7 +486,7 @@ export async function prepareHermesSpawn(options: {
   return {
     command: command => (wrap ? wrap(command, []).command : command),
     argv: (args, command) => (wrap && command !== undefined ? wrap(command, isolated(args)).args : isolated(args)),
-    seal: composed => sealHermesSpawnEnv(composed, { gateEnv, role, runtimeRoot: report.runtimeRoot }),
+    seal: (composed, appEnv) => sealHermesSpawnEnv(composed, { appEnv, gateEnv, role, runtimeRoot: report.runtimeRoot }),
     stdio: GATED_STDIO,
     attach: child => {
       child.once('exit', () => {

@@ -83,6 +83,16 @@ describe('status line', () => {
     $turnStartedAt.set(Date.now())
     const { container } = renderIndicator()
 
-    expect(container.querySelector('[role="status"]')?.hasAttribute('data-conversation-scaffold')).toBe(true)
+    // Reviewed (v0.0.9 G GF-7, owner decision): the pulse and the hint keep the scaffold fade, inside the line; the
+    // turn timer is read by the owner and sits outside it, in AA ink.
+    const row = container.querySelector('[role="status"]')!
+
+    expect(row.hasAttribute('data-conversation-scaffold')).toBe(false)
+    expect(row.querySelector(':scope > [data-conversation-scaffold]')).not.toBeNull()
+
+    const timer = row.querySelector('[data-slot="status-timer"]')!
+
+    expect(timer.closest('[data-conversation-scaffold]')).toBeNull()
+    expect(timer.innerHTML).toContain('--ic-text-1')
   })
 })

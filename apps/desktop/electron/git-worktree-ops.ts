@@ -225,11 +225,43 @@ async function ensureGitRepo(gitBin: string, dir: string) {
 
 // Resolve the repo's MAIN worktree root, so `.worktrees/` always nests under the
 // primary checkout even when called from a linked worktree.
+const realOrNull = (value: string): null | string => {
+  try {
+    return fs.realpathSync(value)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * v0.0.9 (G :209): git names the main worktree by its real path, so a project opened through a link (/tmp on macOS
+ * is /private/tmp, or any linked folder) got its new worktrees under a spelling that is not under the project the
+ * person opened, and the session's coding status vanished. Keep the caller's spelling: the caller's folder or the
+ * nearest of its parents that IS the main worktree. A caller inside another checkout keeps git's path.
+ */
+function inCallerSpelling(gitPath: string, callerPath: string): string {
+  const target = realOrNull(gitPath)
+
+  if (!target) {
+    return gitPath
+  }
+
+  for (let dir = path.resolve(callerPath); ; dir = path.dirname(dir)) {
+    if (realOrNull(dir) === target) {
+      return dir
+    }
+
+    if (path.dirname(dir) === dir) {
+      return gitPath
+    }
+  }
+}
+
 async function mainRoot(gitBin: string, cwd: string) {
   const list = await listWorktrees(cwd, gitBin)
   const main = list.find(tree => tree.isMain)
 
-  return main ? main.path : cwd
+  return main ? inCallerSpelling(main.path, cwd) : cwd
 }
 
 function uniqueDir(base: string) {

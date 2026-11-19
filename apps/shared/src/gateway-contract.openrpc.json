@@ -4063,7 +4063,7 @@
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/ProfileParams"
+            "$ref": "#/components/schemas/SubscriptionResumeParams"
           }
         }
       ],
@@ -5557,6 +5557,7 @@
       },
       "BillingAutoReloadParams": {
         "additionalProperties": false,
+        "description": "Under icloneOS (policy lock) switching auto-reload ON needs ``owner_confirm``: main's single-use token for the\nowner's click, bound to action ``auto-reload``, subject ``on|<threshold>|<top_up_amount>`` (both decimal strings,\nat most 2 places) and ``idempotency_key``. Switching it off needs none.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -5604,6 +5605,30 @@
             ],
             "default": null,
             "title": "Top Up Amount"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Idempotency Key"
+          },
+          "owner_confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Confirm"
           }
         },
         "title": "BillingAutoReloadParams",
@@ -5718,6 +5743,7 @@
       },
       "BillingChargeParams": {
         "additionalProperties": false,
+        "description": "Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Buy\nfor exactly this ``amount_usd`` (a string) and ``idempotency_key``: 64 lowercase hex, checked over the\npermission channel before the portal is called. A plain Hermes process ignores it.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -5757,6 +5783,18 @@
             ],
             "default": null,
             "title": "Idempotency Key"
+          },
+          "owner_confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Confirm"
           }
         },
         "title": "BillingChargeParams",
@@ -35422,7 +35460,7 @@
       },
       "SubscriptionChangeParams": {
         "additionalProperties": false,
-        "description": "Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation).",
+        "description": "Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation). Under icloneOS\n(policy lock) a change to a tier needs ``owner_confirm``: main's single-use token for the owner's click, bound to\naction ``subscription-change``, this ``subscription_type_id`` and ``idempotency_key``. A cancellation needs none.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -35452,6 +35490,30 @@
             "default": false,
             "title": "Cancel",
             "type": "boolean"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Idempotency Key"
+          },
+          "owner_confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Confirm"
           }
         },
         "title": "SubscriptionChangeParams",
@@ -35718,6 +35780,50 @@
         "title": "SubscriptionPreviewResult",
         "type": "object"
       },
+      "SubscriptionResumeParams": {
+        "additionalProperties": false,
+        "description": "Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Resume\n(it re-enables the recurring spend), bound to action ``subscription-resume`` and ``idempotency_key``.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "idempotency_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Idempotency Key"
+          },
+          "owner_confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Confirm"
+          }
+        },
+        "title": "SubscriptionResumeParams",
+        "type": "object"
+      },
       "SubscriptionStateResult": {
         "additionalProperties": false,
         "description": "``_serialize_subscription_state``; the view's fallback emits only ``ok / logged_in / error``.",
@@ -35923,6 +36029,7 @@
       },
       "SubscriptionUpgradeParams": {
         "additionalProperties": false,
+        "description": "Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Upgrade,\nbound to action ``subscription-upgrade``, this ``subscription_type_id`` and ``idempotency_key``: checked over the\npermission channel before the portal charges. A plain Hermes process ignores it.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -35959,6 +36066,18 @@
             ],
             "default": null,
             "title": "Idempotency Key"
+          },
+          "owner_confirm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Confirm"
           }
         },
         "title": "SubscriptionUpgradeParams",

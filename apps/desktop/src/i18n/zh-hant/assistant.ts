@@ -5,6 +5,7 @@ export const assistant: TranslationOverrides['assistant'] = {
     loadingSession: '正在載入工作階段',
     showEarlier: '顯示較早的訊息',
     loadingResponse: '智慧代理正在載入回覆',
+    agentWorking: '智慧代理正在工作',
     resumeWhenBackgroundDone: count =>
       count === 1 ? '背景工作完成後將自動繼續' : `${count} 個背景工作完成後將自動繼續`,
     thinking: '思考中',
@@ -124,6 +125,13 @@ export const assistant: TranslationOverrides['assistant'] = {
     statusRecovered: '已復原',
     statusDone: '完成',
     permissionAsked: '已請求您的許可',
+    refused: '已拒絕',
+    refusedByMode: (tool, mode) => `${tool} 未執行：此對話的權限模式（${mode}）不允許。`,
+    refusedNoGateway: tool => `${tool} 未執行：無法連線 icloneOS，因此只允許讀取。`,
+    refusedGeneric: tool => `${tool} 未執行：icloneOS 不允許此操作。`,
+    refusedChangeMode: '變更權限模式',
+    refusedSentToAgent: '傳送給代理的內容',
+    statusRefused: '執行前被拒絕',
     memoryWriteNoted: '已記下記憶寫入',
     actions: {
       read: '已讀取',

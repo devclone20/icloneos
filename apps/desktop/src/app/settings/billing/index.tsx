@@ -216,11 +216,15 @@ function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: B
           busy={busy}
           onPortal={openExternal}
           onRetry={() => {
-            if (!clampedAmount) {
+            // eng n1: Try again on an open purchase finishes THAT purchase (its amount, its key).
+            const retryAmount =
+              flow.outcome?.kind === 'failure' && flow.outcome.retryAmountUsd ? flow.outcome.retryAmountUsd : clampedAmount
+
+            if (!retryAmount) {
               return
             }
 
-            void flow.start(clampedAmount)
+            void flow.start(retryAmount)
           }}
           outcome={flow.outcome}
         />
@@ -252,7 +256,15 @@ function BuyCreditsRow({ billing, row }: { billing: BillingStateResponse; row: B
             type="number"
             value={amount}
           />
-          <Button disabled={!canBuy} onClick={startBuy} size="xs" type="button" variant="secondary">
+          {/* F1-S: the owner-click lock — only a real click or key here counts (owner-confirm.ts). */}
+          <Button
+            data-billing-charge-confirm=""
+            disabled={!canBuy}
+            onClick={startBuy}
+            size="xs"
+            type="button"
+            variant="secondary"
+          >
             {copy.buy.action}
           </Button>
         </div>
@@ -322,7 +334,7 @@ function BuyCreditsOutcome({
     <div className="mt-2 flex min-w-0 flex-wrap items-center gap-2 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
       <FeedbackLines message={outcome.message} title={outcome.title} />
       {outcome.action?.type === 'retry' && (
-        <Button onClick={onRetry} size="sm" type="button" variant="outline">
+        <Button data-billing-charge-confirm="" onClick={onRetry} size="sm" type="button" variant="outline">
           {copy.actions.tryAgain}
         </Button>
       )}

@@ -374,7 +374,10 @@ async function launchAgainst(sandbox: Sandbox): Promise<{ app: ElectronApplicati
     HERMES_DESKTOP_BOOT_FAKE_ERROR: 'E2E at-rest storage spec: local backend intentionally not started'
   })
 
-  const { app, page } = await launchDesktop(env)
+  const { app, page } = await launchDesktop(env, {
+    claim: 'non-ready',
+    reason: 'token at rest: the local backend is intentionally not started (fake boot error); main-process storage only'
+  })
 
   // The capability bridge is what we drive; it lands with the preload, well
   // before the app would be "ready" in the boot sense.
@@ -525,6 +528,7 @@ test.afterEach(async () => {
 
 test.describe('remote gateway session token at rest', () => {
   test('with keychain encryption opted IN, a newly configured token is never written to userData in plaintext, and still works after restart', async () => {
+    test.skip(true, "N/A in v0.0.9 (owner decision): it needs a real keychain across a restart; Chromium's mock keychain is per process, and a throwaway keychain (security create-keychain, search-list changes) goes through the user's real securityd and preferences and cannot be isolated. Persistence is covered by the two-instance fake-safeStorage integration test instead.")
     const fake = gateway!
     sandbox = createSandbox('at-rest-fresh')
 
@@ -732,6 +736,7 @@ test.describe('remote gateway session token at rest', () => {
    * only difference from a real pre-fix install is the one bit under test.
    */
   test('an install whose connection.json predates owner-only mode is tightened on read', async () => {
+    test.skip(true, "N/A in v0.0.9 (owner decision): it needs a real keychain across a restart; Chromium's mock keychain is per process, and a throwaway keychain (security create-keychain, search-list changes) goes through the user's real securityd and preferences and cannot be isolated. Persistence is covered by the two-instance fake-safeStorage integration test instead.")
     const fake = gateway!
     sandbox = createSandbox('at-rest-tighten')
 

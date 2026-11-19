@@ -26,7 +26,10 @@ export function CurrentPlanCard({ onViewPlans, plan }: { onViewPlans: () => void
             )}
             {/* Scheduled downgrade → chargeless undo (subscription.resume), no confirm. */}
             {plan.pending && (
-              <Button disabled={resumeFlow.busy} onClick={() => void resumeFlow.resume()} size="sm" type="button">
+              <Button
+                data-billing-charge-confirm=""
+                disabled={resumeFlow.busy}
+                onClick={() => void resumeFlow.resume()} size="sm" type="button">
                 {resumeFlow.busy ? copy.actions.undoing : copy.actions.undo}
               </Button>
             )}

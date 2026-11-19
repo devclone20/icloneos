@@ -4,6 +4,19 @@ import * as path from 'node:path'
 
 import { app, BrowserWindow, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, session } from 'electron'
 
+import { profileSlugFor } from '../src/iclone-shared/inft-slug'
+
+import {
+  activeFixtureWallet,
+  FIXTURE_ART_DIR,
+  FIXTURE_WALLET_ENV,
+  fixtureProfile,
+  fixtureScanResult,
+  fixtureSession,
+  resolveFixtureWallet,
+  setActiveFixtureWallet,
+  withFixtureArt
+} from './fixture-wallet'
 import { blockAnalytics, type SessionLike } from './iclone-analytics-block'
 import { guardedHandler } from './iclone-consent'
 import {
@@ -17,7 +30,9 @@ import {
   type ScanSenderGuard
 } from './iclone-inft-book'
 import { type ResolvedInftProfile, resolveInftProfile } from './iclone-profile'
+import { createSessionScopedInftIds } from './inft-known-ids'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import { codePathEnv } from './packaged-env'
 import { registerTeardown } from './teardown-registry'
 
 /**
@@ -123,6 +138,8 @@ interface InftScanResult {
   complete?: boolean
   /** Not complete only because a chain hit the ceiling: the most the app reads, so the O1 seed may come from it. */
   capped?: boolean
+  /** v0.0.9 W1b: the chains this scan could not read to the end (see `incompleteChains`); absent = none. */
+  incomplete?: string[]
   error?: string
 }
 
@@ -845,6 +862,18 @@ async function scanViaRpc(address: string, chain: string): Promise<InftScanItem[
   return agents
 }
 
+/**
+ * v0.0.9 W1b (F5 partial state): the chains a whole-wallet scan could not read to the end — the indexer failed (only
+ * the trusted contracts were recovered over RPC, so another collection there may be missing) or stopped short (a page
+ * or cursor error) — and that did not merely reach the 5 000 ceiling. The Collection names them in its partial alert.
+ */
+export function incompleteChains(
+  chains: readonly string[],
+  perChain: readonly ({ complete: boolean; capped: boolean } | null)[]
+): string[] {
+  return chains.filter((_, i) => perChain[i]?.complete !== true && perChain[i]?.capped !== true)
+}
+
 async function scanInfts(address: string, signal?: AbortSignal): Promise<InftScanResult> {
   if (!isAddress(address)) {
     return { ok: false, source: 'none', agents: [], error: 'bad address' }
@@ -863,6 +892,8 @@ async function scanInfts(address: string, signal?: AbortSignal): Promise<InftSca
   const complete = perChain.every(scan => scan?.complete === true)
   const capped = !complete && perChain.every(scan => scan?.complete === true || scan?.capped === true)
   const merged = perChain.flatMap(scan => scan?.items ?? [])
+  const incomplete = incompleteChains(INDEXER_CHAINS, perChain)
+  const missing = incomplete.length > 0 ? { incomplete } : {}
 
   // Any chain whose indexer failed falls back to raw-RPC enumeration of THAT
   // chain's trusted contracts (enumerable, else the ownerOf probe) — the
@@ -898,11 +929,12 @@ async function scanInfts(address: string, signal?: AbortSignal): Promise<InftSca
       source: anyIndexer ? 'indexer' : 'rpc',
       agents: await enrichFromChain(unique),
       complete,
-      capped
+      capped,
+      ...missing
     }
   }
 
-  return { ok: true, source: 'none', agents: [], complete, capped }
+  return { ok: true, source: 'none', agents: [], complete, capped, ...missing }
 }
 
 const homeScanner = createHomeScanner({
@@ -911,6 +943,16 @@ const homeScanner = createHomeScanner({
   fullScan: scanInfts,
   ethCallBatch
 })
+
+// v0.0.9 critic m5: every id this app's own scans returned (iclone:acp-run refuses an id that is neither one of these
+// nor an iNFT with a home already, before it creates any directory).
+// v0.0.9 r3 (eng n2): scoped to the signed-in wallet and the current sign-in (inft-known-ids.ts).
+const knownInftIds = createSessionScopedInftIds()
+
+/** True when main's own roster scan (full or refresh) returned this card id since the last sign-out. */
+export function isScannedInftId(inftId: unknown): boolean {
+  return knownInftIds.has(inftId)
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Loopback static server — serves exactly iclone/privy/privy.html and
@@ -1044,6 +1086,8 @@ export function onPrivySession(listener: PrivySessionListener): () => void {
 }
 
 function announceSession(payload: IclonePrivySessionPayload): void {
+  knownInftIds.session(payload.status === 'in' ? payload.address : null)
+
   for (const listener of sessionListeners) {
     try {
       listener(payload.status, payload.address)
@@ -1508,6 +1552,7 @@ function createStatusWindow(privyDir: string): BrowserWindow {
 async function logoutPrivy(getMainWindow: () => BrowserWindow | null): Promise<{ ok: boolean; error?: string }> {
   signInGeneration += 1
   homeScanner.abort()
+  knownInftIds.clear()
   abortStatusProbe?.()
   signInRecord?.write('out')
   announceSession({ ...SIGNED_OUT_PAYLOAD })
@@ -1532,6 +1577,65 @@ async function logoutPrivy(getMainWindow: () => BrowserWindow | null): Promise<{
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// v0.0.9 r3 — the fixture wallet (dev/test builds only; fixture-wallet.ts)
+// ─────────────────────────────────────────────────────────────────────────
+
+let fixtureSignedIn = true
+let fixtureScans = 0
+
+/** Connect wallet / Sign out in a fixture run: the session flips at once, no Privy window, no partition touched. */
+function fixtureSignIn(getMainWindow: () => BrowserWindow | null, signedIn: boolean): { ok: true } {
+  const fake = activeFixtureWallet()
+
+  if (!fake) {
+    return { ok: true }
+  }
+
+  fixtureSignedIn = signedIn
+  signInGeneration += 1
+  knownInftIds.clear()
+
+  const payload = fixtureSession(fake, signedIn)
+  const target = getMainWindow()
+
+  if (target && !target.isDestroyed()) {
+    target.webContents.send(SESSION_CHANNEL, payload)
+  }
+
+  announceSession(payload)
+
+  return { ok: true }
+}
+
+/**
+ * A roster scan in a fixture run: the fixture wallet only, after its delay. v0.0.9 r3b (MR3-1): noted like a real scan
+ * (the session is the fixture address), so `iclone:acp-run` admits the fixture iNFTs and the reopen exercises the real
+ * agent path. Dev/test builds only: no fixture is ever active in a packaged build.
+ */
+function fixtureScan(fake: NonNullable<ReturnType<typeof activeFixtureWallet>>, address: string): Promise<InftScanResult> {
+  if (!fixtureSignedIn || address.toLowerCase() !== fake.address.toLowerCase()) {
+    return Promise.resolve({ ok: false, source: 'none', agents: [], error: 'fixture: not the fixture wallet' })
+  }
+
+  const attempt = fixtureScans
+  const token = knownInftIds.begin(address)
+
+  fixtureScans += 1
+
+  return new Promise(resolve =>
+    setTimeout(() => {
+      const result = fixtureScanResult(fake, attempt)
+
+      if (result.ok) {
+        knownInftIds.noteScan(token, result.agents)
+      }
+
+      resolve(result)
+    }, fake.scanDelayMs)
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────
 
@@ -1549,6 +1653,20 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
   }
 
   initialized = true
+
+  // v0.0.9 r3: the offline fixture wallet (dev/test builds only: codePathEnv answers undefined when packaged).
+  // v0.0.9 r4: a dev/test run's built-in iNFTs wear the art tiles of fixtures/inft-art (never packed, never fetched).
+  const resolved = resolveFixtureWallet(codePathEnv(FIXTURE_WALLET_ENV), app.isPackaged === true) // iclone-seam: p7-env
+
+  const fixture = resolved
+    ? withFixtureArt(resolved, app.isPackaged === true, path.join(app.getAppPath(), FIXTURE_ART_DIR))
+    : null
+
+  setActiveFixtureWallet(fixture)
+
+  if (fixture) {
+    console.log(`[iclone-privy] FIXTURE wallet ${fixture.address} (${fixture.scan}): no Privy, no network`)
+  }
 
   const privyDir = resolvePrivyDir()
 
@@ -1570,6 +1688,12 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
   })
 
   ipcMain.handle(OPEN_CHANNEL, async (_event: IpcMainInvokeEvent): Promise<PrivyOpenResult> => {
+    if (activeFixtureWallet()) {
+      fixtureSignIn(getMainWindow, true)
+
+      return { ok: true }
+    }
+
     if (!privyDir) {
       return privyOpenRefusal('unavailable')
     }
@@ -1591,7 +1715,9 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
     return { ok: true }
   })
 
-  ipcMain.handle(LOGOUT_CHANNEL, () => logoutPrivy(getMainWindow))
+  ipcMain.handle(LOGOUT_CHANNEL, () =>
+    activeFixtureWallet() ? Promise.resolve(fixtureSignIn(getMainWindow, false)) : logoutPrivy(getMainWindow)
+  )
 
   const readStatus = createPrivyStatusReader(() => {
     // Same rule as OPEN_CHANNEL: never load the origin when another process
@@ -1647,13 +1773,24 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
   })
 
   // A sign-in or sign-out by hand this launch (signInGeneration > 0) is newer news than the update: no hint then.
-  ipcMain.handle(STATUS_CHANNEL, () =>
-    readStatus().then(answer =>
+  ipcMain.handle(STATUS_CHANNEL, () => {
+    const fake = activeFixtureWallet()
+
+    if (fake) {
+      const payload = fixtureSession(fake, fixtureSignedIn)
+
+      // The fixture session is main's session too (the scoped notes and the session listeners learn it).
+      announceSession(payload)
+
+      return Promise.resolve(payload)
+    }
+
+    return readStatus().then(answer =>
       answer && signInGeneration === 0 && signedOutByUpdate(updateBoot, answer)
         ? { ...answer, afterUpdate: true as const }
         : answer
     )
-  )
+  })
 
   // The scan channels answer the app's own renderer only (the Privy window runs this preload on a remote page).
   // A refused sender gets null. No guard = refuse.
@@ -1664,12 +1801,34 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
       return Promise.resolve({ ok: false, source: 'none', agents: [], error: 'bad address' })
     }
 
-    return homeScanner.full(address)
+    const fake = activeFixtureWallet()
+
+    if (fake) {
+      return fixtureScan(fake, address)
+    }
+
+    const token = knownInftIds.begin(address)
+
+    return homeScanner.full(address).then(result => {
+      knownInftIds.noteScan(token, result.agents)
+
+      return result
+    })
   })
 
-  scanIpc.handle(SCAN_TICK_CHANNEL, (_event: unknown, address: unknown, checkedIds: unknown) =>
-    homeScanner.tick(address, checkedIds)
-  )
+  scanIpc.handle(SCAN_TICK_CHANNEL, (_event: unknown, address: unknown, checkedIds: unknown) => {
+    if (activeFixtureWallet()) {
+      return Promise.resolve({ ok: true, skipped: true, arrivals: [], owners: {} })
+    }
+
+    const token = knownInftIds.begin(typeof address === 'string' ? address : '')
+
+    return homeScanner.tick(address, checkedIds).then(result => {
+      knownInftIds.noteScan(token, result.arrivals)
+
+      return result
+    })
+  })
 
   ipcMain.handle(PROFILE_RESOLVE_CHANNEL, (_event: IpcMainInvokeEvent, item: unknown): Promise<ResolvedInftProfile> => {
     const it = item as InftScanItem | null | undefined
@@ -1687,6 +1846,10 @@ export function initIclonePrivy({ getMainWindow, versionChange, isTrustedSender 
       })
     }
 
-    return resolveInftProfile(it)
+    // v0.0.9 r3b (MR3-1): a fixture iNFT with a soul resolves offline (dev/test builds only).
+    const fake = activeFixtureWallet()
+    const offline = fake ? fixtureProfile(fake, it, profileSlugFor(it.contract, it.tokenId)) : null
+
+    return offline ? Promise.resolve(offline) : resolveInftProfile(it)
   })
 }

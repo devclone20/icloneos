@@ -874,15 +874,18 @@ export function foldAllRuns(input: RunFoldInput): RunView[] {
     const lastStop = stops.get(start.run)
     const stop = lastStop && stopEndedRun(lastStop, end) ? lastStop : undefined
     const rootRow = input.rows.find(row => row.pid === start.pid)
+
     // Verified: the root is alive only if the kernel holds that pid in this run (a recycled pid is not the root).
     // Its token gone, the pid and the start time are all there is (orphanOwners).
     const rootAlive =
       !end && Boolean(rootRow) && (!input.verified || rootRow?.run === start.run || orphaned.roots.has(start.run))
+
     const leftEnd = leftEnds.get(start.run)
     // The kernel answers when it can. When it cannot, the launcher's own word that something lives on is all there is,
     // and it outranks the first process's exit status, which says nothing about what that process left running.
     const leftOpen = !input.verified && leftRunning.has(start.run) && !leftEnd
     const outsideLive = start.outside && !leftEnd ? outsideGroupMembers(leftGroups.get(start.run), input.rows).length : 0
+
     const live =
       outsideLive > 0
         ? outsideLive
@@ -891,6 +894,7 @@ export function foldAllRuns(input: RunFoldInput): RunView[] {
           : rootAlive || leftOpen
             ? 1
             : 0
+
     // fx29 (round2 medium): the count is a process whose run record is gone, handed to this row by the clock; the pane
     // says so instead of calling it this command's.
     const orphanLive = input.verified && !rootAlive && live > 0 && !membersOf.has(start.run) && outsideLive === 0

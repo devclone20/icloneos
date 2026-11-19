@@ -1,5 +1,9 @@
 #!/usr/bin/env node
-// acp-pack-absent.mjs — REL-6 (ruling 26): a packed app carries NO ACP CLI. The app installs the CLI at first use
+// acp-pack-absent.mjs — v0.0.9: the pack SHIPS the CLI now (acp-pack-bundled.mjs is the gate); this file keeps the
+// pack scan both gates share (`scanPack`, with the bundled tree as its one `skipRel` exception) and the v0.0.3–v0.0.8
+// "no CLI at all" check below, for reference and its tests. Original text:
+//
+// REL-6 (ruling 26): a packed app carries NO ACP CLI. The app installs the CLI at first use
 // from the npm registry (electron/iclone-acp-tools/); the bundle ships only the pin (Resources/acp-pin: the committed
 // lockfile and our own launcher). This check reads the packed tree, never launches it:
 //
@@ -144,8 +148,11 @@ export function asarPaths(file) {
 /**
  * Walk the packed tree. `pinRel` is the pin dir relative to the root; its lockfile is the one place the CLI's
  * package names may appear, and only as text.
+ *
+ * v0.0.9: `skipRel` (a path relative to the root, e.g. `Contents/Resources/acp-tools`) is the ONE place the CLI may be:
+ * the bundled tree, which acp-pack-bundled.mjs checks file by file against its manifest. Everything else is scanned.
  */
-export function scanPack(root, { pinRel = null } = {}) {
+export function scanPack(root, { pinRel = null, skipRel = null } = {}) {
   const counts = {
     files: 0,
     asars: 0,
@@ -185,6 +192,10 @@ export function scanPack(root, { pinRel = null } = {}) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name)
       const at = rel ? `${rel}/${entry.name}` : entry.name
+
+      if (skipRel !== null && at === skipRel) {
+        continue
+      }
 
       if (entry.isDirectory()) {
         dirHit(at)

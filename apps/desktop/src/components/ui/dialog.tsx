@@ -38,14 +38,14 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
 
 type DialogBannerTone = 'error' | 'warn' | 'info'
 
-// Tinted, edge-to-edge bottom banner per tone. Error/warn keep their semantic
-// destructive/primary tokens; info derives from the dialog's own bubble
-// background so it reads as part of the themed dialog — lifted 30% toward white
-// in light mode, deepened 20% toward black in dark mode.
+// v0.0.9 F4b — the edge-to-edge bottom banner is the inline alert (type 3) in a dialog: the same plates and inks as
+// IcAlert (ic-page.css), so an error reads the same in a dialog as on a page. Error = the danger plate and ink (AA);
+// warn and info = the raised plate with the ink (warn) or the AA secondary ink (info). No theme-dependent
+// primary/destructive/bubble mixes any more (their contrast was never measured).
 const DIALOG_BANNER_TONES: Record<DialogBannerTone, string> = {
-  error: 'bg-destructive/12 text-destructive',
-  warn: 'bg-primary/12 text-primary',
-  info: 'bg-[color-mix(in_srgb,var(--ui-chat-bubble-background),white_30%)] text-[color-mix(in_srgb,var(--ui-chat-bubble-background),black_60%)] dark:bg-[color-mix(in_srgb,var(--ui-chat-bubble-background),black_20%)] dark:text-[color-mix(in_srgb,var(--ui-chat-bubble-background),white_60%)]'
+  error: 'bg-(--ic-danger-soft) text-(--ic-danger-ink)',
+  warn: 'bg-(--ic-surface-raised) text-(--ic-text-1)',
+  info: 'bg-(--ic-surface-raised) text-(--ic-text-2-aa)'
 }
 
 // Radix focuses the first focusable element inside Dialog.Content on open. In
@@ -165,7 +165,7 @@ function DialogContent({
                 DIALOG_BANNER_TONES[bannerTone]
               )}
               data-slot="dialog-banner"
-              role={bannerTone === 'error' ? 'alert' : 'status'}
+              role={bannerTone === 'info' ? 'status' : 'alert'}
             >
               {banner}
             </div>

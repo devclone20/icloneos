@@ -73,11 +73,21 @@ export const SUB_LOCKS = Object.freeze({
   'plugins/platforms/photon/sidecar': Object.freeze({})
 })
 
-// The accepted risks of the Privy sign-in page's lock (owner decision 2026-11-03/04; picomatch: lead decision
-// 2026-11-17): one entry per finding, each with its own advisory. The `until` version forces the next release to
-// re-decide them (the gate refuses an expired waiver).
+// The accepted risks of the Privy sign-in page's lock (owner decision 2026-11-03/04): one entry per finding, each with
+// its own advisory. The `until` version forces the next release to re-decide them (the gate refuses an expired waiver).
+// picomatch (GHSA-fc5q-39xc-vjpf) is not waived: v0.0.9 took it out of the lock (anymatch stub, login-island/stubs).
 const SIGN_IN_UNTIL =
-  'v0.0.9: re-decided each release; removed when a compatible fix exists (backlog: SECURITY.md §3.3)'
+  'v0.0.10: re-decided each release; removed when a compatible fix exists (backlog: SECURITY.md §3.3)'
+/**
+ * v0.0.9 renewal (owner decision "renew", 2026-11-18). The upgrade check the lead ran that day at 18:05 (the same for
+ * both locks): zod 3.x latest is 3.25.76, with no fix; the fix exists only in zod >= 4.6.6, whose root `zod` export is
+ * the v4 API and breaks every v3 consumer below; @privy-io/react-auth 3.52.0, the newest, still resolves zod 3. No
+ * upgrade fits either lock, so the three entries are renewed once, to v0.0.10 (the gate refuses them from v0.0.10 on).
+ */
+export const ZOD_RENEWAL_V009 =
+  'renewed for v0.0.9 to v0.0.10 by the owner ("renew", 2026-11-18) on the lead\'s upgrade check of 2026-11-18 18:05: ' +
+  'zod 3.x latest = 3.25.76 (no fix); the fix exists only in zod >= 4.6.6, whose root export is the v4 API and breaks ' +
+  'the v3 consumers; @privy-io/react-auth 3.52.0 still resolves zod 3; so no upgrade fits either lock; '
 const SIGN_IN_DECIDED =
   'accepted by the owner 2026-11-03/04, re-decided 2026-11-05 for v0.0.6 by the security review; removed when a ' +
   'compatible fix exists; ' +
@@ -90,22 +100,19 @@ const SIGN_IN_DECIDED =
   'unchanged since 2026-11-02 (sha256 4e56921f and 3287799b); in privy-login.js the only zod parse calls are zod\'s own ' +
   'internals (no shipped code parses data with a zod schema), no array schema has a size constraint, and ' +
   'decode-uri-component is absent; ' +
-  're-decided for v0.0.8 (2026-11-13): still no compatible fix, per the fresh npm audit of the lock run at the release close'
+  're-decided for v0.0.8 (2026-11-13): still no compatible fix, per the fresh npm audit of the lock run at the release close; ' +
+  ZOD_RENEWAL_V009 +
+  // Reachability (v009-picomatch-done.md "Remaining" 1): which input reaches zod, from whom.
+  'reachability (2026-11-18): privy-login.js bundles only zod/index.js plus zod/v3 (10 files, esbuild metafile), never ' +
+  'the patched v4/core; its importers are @privy-io/api-base and an x402 chunk (the payment path, which the sign-in page ' +
+  'never calls); the only safeParse/parseAsync call sites in the bundle are zod\'s own internals, so no input from ' +
+  'the network, the page or the user is parsed with a zod array schema'
 const SIGN_IN_ZOD_NO_FIX =
   'no compatible fix: GHSA-mrhx-c7xc-m3w5 is fixed only in zod 4.6.6, no 3.x release has it, and the consumers need ' +
   'zod 3 (@privy-io/api-base ^3.25.76, @coinbase/cdp-sdk ^3.25.76, x402 ^3.24.2, @reown/appkit-wallet 3.22.4 exact); ' +
   'the newest @privy-io/react-auth (3.51.2, checked 2026-11-05) still resolves it; '
 const SIGN_IN_ZOD_WORST =
   'worst case: the sign-in window runs out of memory (a DoS of the sign-in window only), no data or code is exposed; '
-
-// GHSA-fc5q-39xc-vjpf (picomatch ReDoS, high, vulnerable range <= 4.0.7) has no patched release. Not the owner's
-// 2026-11-03/04 decision: the lead's, for v0.0.8, after a reachability check reviewed by an independent lens.
-const PICOMATCH_NO_FIX =
-  'no compatible fix: GHSA-fc5q-39xc-vjpf (vulnerable range <= 4.0.7) has no patched release (first patched version: ' +
-  'none); '
-const PICOMATCH_DECIDED =
-  'decided for v0.0.8 (2026-11-17) by the lead with a reviewed reachability check; removed when a patched picomatch ' +
-  'exists or the dependency leaves the tree'
 
 /**
  * The app's own npm locks bundled into what electron-builder packages (G-42, v0.0.5): by folder from the repo root,
@@ -127,59 +134,20 @@ export const APP_LOCKS = Object.freeze({
       advisories: Object.freeze({
         'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
       })
-    }),
-    // The two nested copies (@reown/appkit-wallet and @wagmi/connectors), both 3.22.4: one name@version, one entry.
-    'zod@3.22.4': Object.freeze({
-      until: SIGN_IN_UNTIL,
-      severity: 'high',
-      reason:
-        SIGN_IN_ZOD_NO_FIX +
-        'these copies are in the lock but not in privy-login.js (esbuild metafile, 2026-11-04); ' +
-        SIGN_IN_ZOD_WORST +
-        SIGN_IN_DECIDED,
-      advisories: Object.freeze({
-        'GHSA-mrhx-c7xc-m3w5': 'HIGH, CWE-770: memory exhaustion validating oversized constrained collections'
-      })
-    }),
-    'decode-uri-component@0.2.2': Object.freeze({
-      until: SIGN_IN_UNTIL,
-      severity: 'high',
-      reason:
-        'no compatible fix: GHSA-qr28-fpjm-wq7f is fixed only in 0.5.1, and the consumer is query-string 7 ' +
-        "(@wagmi/connectors > @walletconnect/utils > query-string 7.1.3 > decode-uri-component 0.2.2); npm's only " +
-        'fix is a semver-major @privy-io/react-auth; neither package is in privy-login.js, they are in the lock only ' +
-        '(esbuild metafile, 2026-11-04); worst case if that changes: the sign-in window hangs on a malformed ' +
-        'percent-encoded input (a DoS of the sign-in window only), no data or code is exposed; ' +
-        SIGN_IN_DECIDED,
-      advisories: Object.freeze({
-        'GHSA-qr28-fpjm-wq7f': 'HIGH, CWE-400/407: denial of service via quadratic replacement of percent-encoded runs'
-      })
-    }),
-    'picomatch@2.3.2': Object.freeze({
-      until: SIGN_IN_UNTIL,
-      severity: 'high',
-      reason:
-        PICOMATCH_NO_FIX +
-        "npm's only suggestion is a semver-major @privy-io/react-auth; the one dependency path is @privy-io/react-auth > " +
-        '@walletconnect/ethereum-provider > @walletconnect/keyvaluestorage > unstorage > anymatch > picomatch; ' +
-        'neither anymatch nor picomatch is in privy-login.js (0 hits for picomatch, anymatch, extglob, ' +
-        'POSIX_REGEX_SOURCE; only unstorage core is bundled, and anymatch serves only its filesystem drivers and watch, ' +
-        'which are not), so no shipped call site passes any pattern to picomatch; worst case if that changes: a ReDoS ' +
-        'stalls the sign-in window (a DoS of the sign-in window only), no data or code is exposed; ' +
-        PICOMATCH_DECIDED,
-      advisories: Object.freeze({
-        'GHSA-fc5q-39xc-vjpf': 'HIGH, CWE-1333: ReDoS through single-branch repeated extglobs'
-      })
     })
+    // zod@3.22.4 (the two @reown/appkit-wallet copies) and decode-uri-component@0.2.2 are no longer waived: v0.0.9
+    // overrides them out of the lock (zod@3.22.4 -> 4.6.7, query-string -> 10.0.0, which has no decode-uri-component);
+    // neither was in privy-login.js, which is byte-identical after the change.
   })
 })
 
-// The accepted risks of the optional ACP CLI's lock (owner decision 2026-11-03/04; picomatch: lead decision 2026-11-17):
-// one entry per finding, each with its own advisory, matched by name@version and id (a GHSA id, or npm's own id when the
-// advisory has no GHSA; a re-keyed npm synthetic id also matches when every high advisory in its chain is waived here).
-// The `until` version forces the next release to re-decide them (the gate refuses an expired waiver).
+// The accepted risks of the optional ACP CLI's lock (owner decision 2026-11-03/04): one entry per finding, each with
+// its own advisory, matched by name@version and id (a GHSA id, or npm's own id when the advisory has no GHSA; a re-keyed
+// npm synthetic id also matches when every high advisory in its chain is waived here). The `until` version forces the
+// next release to re-decide them (the gate refuses an expired waiver). picomatch (GHSA-fc5q-39xc-vjpf) is not waived:
+// v0.0.9 took tsup's build-only subtree out of the lock (scripts/acp-lock-prune.mjs).
 const ACP_CLI_UNTIL =
-  'v0.0.9: re-decided each release; removed when a compatible fix exists (backlog: move the ACP CLI to acp-node-v2, ' +
+  'v0.0.10: re-decided each release; removed when a compatible fix exists (backlog: move the ACP CLI to acp-node-v2, ' +
   'which itself still needs zod 3 through @account-kit/infra)'
 const ACP_CLI_WORST =
   'only the optional ACP CLI is affected (installed from this lock only when the user adds it); in the module graph ' +
@@ -191,7 +159,15 @@ const ACP_CLI_WORST =
   '@virtuals-protocol/acp-cli 1.0.40 needs acp-node ^0.3.0-beta.40 and acp-node-v2 ^0.1.15, both through ' +
   '@account-kit/infra 4.88.5, which needs zod ^3.22.4); acp-cli-lock is unchanged since 2026-11-01 (sha256 dc5a9c6b), ' +
   'and the install still runs only on the user\'s gesture (iclone:acp-tools:install, gestureOk); ' +
-  're-decided for v0.0.8 (2026-11-13): still no compatible fix, per the fresh npm audit of the lock run at the release close'
+  're-decided for v0.0.8 (2026-11-13): still no compatible fix, per the fresh npm audit of the lock run at the release close; ' +
+  ZOD_RENEWAL_V009 +
+  // Reachability (v009-picomatch-done.md "Remaining" 2 and 3): which input reaches zod, from whom.
+  'reachability (2026-11-18): the CLI graph loads only zod/index.js plus zod/v3 (10 files), never v4/core; its ' +
+  'importers (@alchemy/common transport/connectionSchema, @aa-sdk/core utils, client and signer schemas, ' +
+  '@account-kit/infra schema, @account-kit/smart-contracts session-key/signer) build no array schema (0 z.array) and ' +
+  'parse only the CLI\'s own local configuration (SmartAccountClientOptsSchema.parse(config.opts), ' +
+  'ChainSchema.parse(chain), ConnectionConfigSchema.parse(config.alchemyConnection), BigNumberishSchema.safeParse), ' +
+  'from the user\'s own ACP setup, never from the network'
 // npm's own id for the meta-advisory it writes on acp-node (no GHSA: no acp-node release is outside the vulnerable
 // range). npm derives that id from whichever vulnerable dependency it resolves first (@aa-sdk/core or
 // @account-kit/infra, both only through zod), so the same lock gives one of two ids from run to run (v0.0.5,
@@ -199,6 +175,9 @@ const ACP_CLI_WORST =
 // re-keyed npm id on this same name@version is waived only when its whole chain bottoms out in waived GHSAs.
 export const ACP_NODE_NPM_ADVISORY =
   'npm-1txMmhaogPxbj7reguNwwkMchCH+SRUpDXCtKakoRl5f4mKoKdab1Hvm+oz6p3pLhTTHkLAOr+YLrf/ylFhtIA=='
+/** The id npm re-keyed the same meta-advisory to on 2026-11-18 (via @aa-sdk/core); waived through matchSynthetic. */
+export const ACP_NODE_NPM_ADVISORY_REKEYED =
+  'npm-OPmtdP9I5g2bZvvvk844ueQUbNiW/mIzJ0lRrzM0X3wYedMH5Y1wibbsEr6xw30t8GUo9+QLJGKfKc8K70ecGQ=='
 
 /**
  * The optional ACP CLI's npm lock (G-42, v0.0.5): by folder from the repo root, with its own waivers (same rules as
@@ -225,30 +204,17 @@ export const ACP_LOCKS = Object.freeze({
       reason:
         'no compatible fix: an effect of zod 3 (GHSA-mrhx-c7xc-m3w5) through @account-kit/infra and @aa-sdk/core; ' +
         'npm writes its own advisory on acp-node because no acp-node release is outside the vulnerable range ' +
-        '(the package is deprecated for acp-node-v2); ' +
+        '(the package is deprecated for acp-node-v2); npm keys it ' +
+        ACP_NODE_NPM_ADVISORY.slice(0, 9) +
+        '… or, re-keyed on 2026-11-18, ' +
+        ACP_NODE_NPM_ADVISORY_REKEYED.slice(0, 9) +
+        '… (both waived only through the waived GHSA-mrhx-c7xc-m3w5 chain, matchSynthetic); it has no code of its ' +
+        'own: its reachability is the zod entry\'s; ' +
         ACP_CLI_WORST,
       advisories: Object.freeze({
         [ACP_NODE_NPM_ADVISORY]:
           'HIGH, CWE-770 (npm meta-advisory, no GHSA): depends on vulnerable versions of @account-kit/infra or ' +
           '@aa-sdk/core (npm names whichever it resolves first; both only through zod GHSA-mrhx-c7xc-m3w5)'
-      })
-    }),
-    'picomatch@4.0.7': Object.freeze({
-      until: ACP_CLI_UNTIL,
-      severity: 'high',
-      reason:
-        PICOMATCH_NO_FIX +
-        'only the optional ACP CLI is affected (installed from this lock only when the user adds it); the one path ' +
-        'into its runtime graph is @virtuals-protocol/acp-node > tsup > tinyglobby (also through sucrase) > picomatch ' +
-        '(also through fdir), and ' +
-        'tsup is a build tool acp-node lists as a runtime dependency: the install puts it on disk, but nothing in the ' +
-        "CLI's module graph from dist/bin/acp.js loads tsup, sucrase, tinyglobby, fdir or picomatch (acp-cli 1.0.38 and " +
-        'acp-node 0.3.0-beta-subscription.2 read from the exact tarballs), so no agent-, user- or network-supplied ' +
-        'glob reaches it; worst case if that changes: a ReDoS stalls the ACP CLI process (a DoS of that one process ' +
-        'only), no data or code is exposed; ' +
-        PICOMATCH_DECIDED,
-      advisories: Object.freeze({
-        'GHSA-fc5q-39xc-vjpf': 'HIGH, CWE-1333: ReDoS through single-branch repeated extglobs'
       })
     })
   })

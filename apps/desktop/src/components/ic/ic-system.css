@@ -1,6 +1,14 @@
 /* The system surfaces' material (ic-system.tsx): roles from ic-tokens.css only,
    no literal colour, radius, shadow or blur. Layered as `components`, so a call
-   site's Tailwind utility (spacing, a weight, a max-height) still wins. */
+   site's Tailwind utility (spacing, a weight, a max-height) still wins.
+
+   v0.0.9 r4 (design r3 N3): the packaged build links this sheet BEFORE the Tailwind sheet (index.html), so its
+   `@layer components` block used to be the first layer the page met. Layer order is first-seen, which put
+   `components` UNDER Tailwind's `base` — preflight's `button { background: transparent; padding: 0;
+   border-radius: 0 }` then beat every .ic-btn: the boot card's Repair lost its accent pill. This statement fixes
+   the order whichever sheet loads first; it must equal Tailwind's own (layer-order.test.ts). */
+@layer properties, theme, base, components, utilities;
+
 @layer components {
   .ic-sys {
     color: var(--ic-text-1);
@@ -55,7 +63,7 @@
   }
 
   .ic-sys-hint {
-    color: var(--ic-text-3);
+    color: var(--ic-text-2-aa);
     font-size: var(--ic-type-md);
     line-height: 1.5;
   }
@@ -166,6 +174,18 @@
 
   .ic-btn[data-variant='default']:hover {
     background: var(--ic-accent-strong);
+  }
+
+  /* r4d (design r4 F3-1): in the light skin white on the light gold measured about 3:1. The system primary takes the
+     house CTA plate (gold with night ink mixed in, cta-contrast.test ≥ 4.5:1), the same as the light econ and hero
+     primaries, so the light skin has one primary. */
+  :root[data-hermes-theme='iclone-light'] .ic-btn[data-variant='default'] {
+    background: var(--ic-cta-fill);
+    color: var(--ic-cta-ink);
+  }
+
+  :root[data-hermes-theme='iclone-light'] .ic-btn[data-variant='default']:hover {
+    background: var(--ic-cta-fill-hover);
   }
 
   .ic-btn[data-variant='destructive'] {

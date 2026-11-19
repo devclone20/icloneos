@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { attachRendererConsoleCapture, formatRendererBoundaryReport, formatRendererConsoleLine } from './renderer-log'
+import {
+  attachFixtureSwitchTap,
+  attachRendererConsoleCapture,
+  formatRendererBoundaryReport,
+  formatRendererConsoleLine
+} from './renderer-log'
 
 describe('formatRendererConsoleLine', () => {
   it('formats the canonical Electron 36+ details shape at error level', () => {
@@ -74,5 +79,58 @@ describe('formatRendererBoundaryReport', () => {
 
     expect(report).toBe('[renderer crash:main] [error-boundary:root] boom')
     expect(report).not.toContain('\n')
+  })
+})
+
+// v0.0.9 r4 (eng r3b-m3): the dev-only reopen-loop tap is never attached in a production window.
+describe('attachFixtureSwitchTap', () => {
+  const fakeWin = () => {
+    const listeners: Array<(...args: unknown[]) => void> = []
+    const on = vi.fn((_event: 'console-message', listener: (...args: unknown[]) => void) => listeners.push(listener))
+
+    return { win: { webContents: { on } }, on, listeners }
+  }
+
+  it('attaches nothing in a packaged build, even if a fixture were somehow set', async () => {
+    const { resolveFixtureWallet } = await import('./fixture-wallet')
+    const devFixture = resolveFixtureWallet('builtin:reopen', false)
+    const { win, on } = fakeWin()
+
+    expect(devFixture).not.toBeNull()
+    expect(attachFixtureSwitchTap(win, { fixture: devFixture, isPackaged: true }, vi.fn())).toBe(false)
+    expect(on).not.toHaveBeenCalled()
+  })
+
+  it('attaches nothing in the production path: packaged resolves no fixture', async () => {
+    const { resolveFixtureWallet } = await import('./fixture-wallet')
+    const { win, on } = fakeWin()
+
+    const fixture = resolveFixtureWallet('builtin:reopen', true)
+
+    expect(attachFixtureSwitchTap(win, { fixture, isPackaged: true }, vi.fn())).toBe(false)
+    expect(attachFixtureSwitchTap(win, { fixture: null, isPackaged: false }, vi.fn())).toBe(false)
+    expect(on).not.toHaveBeenCalled()
+  })
+
+  it('in a dev fixture run copies only the switch "done" line into the log', async () => {
+    const { resolveFixtureWallet } = await import('./fixture-wallet')
+    const { win, on, listeners } = fakeWin()
+    const log = vi.fn()
+
+    expect(attachFixtureSwitchTap(win, { fixture: resolveFixtureWallet('builtin:reopen', false), isPackaged: false }, log)).toBe(true)
+    expect(on).toHaveBeenCalledTimes(1)
+    listeners[0]({}, { level: 1, message: '[inft-switch] inft-000000-101 done 42 persona', sourceUrl: '', lineNumber: 0 })
+    listeners[0]({}, { level: 1, message: 'unrelated', sourceUrl: '', lineNumber: 0 })
+    expect(log).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledWith('[fixture] inft connected inft-000000-101 (42 ms, persona)')
+  })
+
+  it('main-window wires the gated tap, never the raw every-message tap', async () => {
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const src = fs.readFileSync(path.join(__dirname, 'main', 'main-window.ts'), 'utf8')
+
+    expect(src).not.toMatch(/attachRendererConsoleTap\s*\(/)
+    expect(src).toMatch(/attachFixtureSwitchTap\(\s*windowsState\.mainWindow,\s*\{\s*fixture: activeFixtureWallet\(\), isPackaged: app\.isPackaged === true \}/)
   })
 })

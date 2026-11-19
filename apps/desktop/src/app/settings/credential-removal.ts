@@ -242,7 +242,6 @@ export function afterRemoval(target: RemovalTarget, result: RemovalResult, notic
 
   notify({
     action: docsUrl ? { label: copy.revokeAtProvider, onClick: () => openExternalLink(docsUrl) } : undefined,
-    durationMs: 4_000,
     kind: result.result === 'terminal_started' ? 'info' : 'success',
     message:
       notice?.message ??

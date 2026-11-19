@@ -33,7 +33,7 @@ import { persistStringArray, storedStringArray } from '@/lib/storage'
 import { cn } from '@/lib/utils'
 
 import { ICLONE_STORAGE } from './lib/storage-keys'
-import { claimRightEdge } from './right-edge'
+import { claimRightEdge, watchRightEdge } from './right-edge'
 
 export const $filesIslandOpen = atom(false)
 
@@ -115,6 +115,8 @@ function FilesIslandPanel(): JSX.Element {
 
   // Own the right edge while open — matches `.ifiles`' own width rule.
   useEffect(() => claimRightEdge('files', 'min(30rem, calc(100vw - 96px))'), [])
+  // v0.0.9 F4: another island taking the edge (the notification centre, the iNFT collection) closes this one.
+  useEffect(() => watchRightEdge('files', () => $filesIslandOpen.set(false)), [])
 
   const loadDir = useCallback(async (path: string) => {
     setDirs(current => ({ ...current, [path]: { ...current[path], loading: true } }))

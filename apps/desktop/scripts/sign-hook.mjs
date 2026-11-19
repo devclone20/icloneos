@@ -168,6 +168,17 @@ export function isAcpNative(appPath, filePath) {
 }
 
 /**
+ * v0.0.9: the bundled ACP CLI tree (Resources/acp-tools) — its Go signer and add-ons were Developer-ID signed BEFORE the
+ * pack by sign-acp-bundle.mjs and its manifest resealed over those exact bytes; the working copy the app runs is
+ * checked against that manifest, so osx-sign must leave the whole tree alone too (the app's seal still covers it).
+ */
+export function isAcpBundle(appPath, filePath) {
+  const rel = relative(appPath, filePath).split(sep).join('/')
+
+  return rel === 'Contents/Resources/acp-tools' || rel.startsWith('Contents/Resources/acp-tools/')
+}
+
+/**
  * The `ignore` handed to osx-sign: ONE function that skips the add-ons and keeps every rule Builder passed (a function,
  * a RegExp or a string, alone or in an array). Never an array: @electron/osx-sign 1.3.x keeps `ignore` only when it is
  * not one (its option check returns nothing for an array), so an array signs every file, the add-ons included, and the
@@ -178,6 +189,7 @@ export function acpNativeIgnore(appPath, ignore) {
 
   return filePath =>
     isAcpNative(appPath, filePath) ||
+    isAcpBundle(appPath, filePath) ||
     rules.some(rule => (typeof rule === 'function' ? Boolean(rule(filePath)) : filePath.match(rule) !== null))
 }
 

@@ -8,9 +8,11 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import asar from '@electron/asar'
 import { beforeAll, test } from 'vitest'
 
 import afterPack, { removeDefaultApp } from './after-pack.mjs'
+import { packedDevFixtureLeaks } from './dev-fixtures-check.mjs'
 import { ADDON_OUTPUT, assertPinnedAddon } from './build-iclone-fsevents.mjs'
 import { electronDistDir } from './electron-dist.mjs'
 import { CHROMIUM_LICENSES_FILE } from './electron-licenses.mjs'
@@ -62,7 +64,7 @@ async function runtimeBundleDir() {
   return bundled
 }
 
-async function packed(platform, { withPlugins = false } = {}) {
+async function packed(platform, { withPlugins = false, asarExtra = {} } = {}) {
   const appOutDir = fs.mkdtempSync(path.join(os.tmpdir(), 'k146-pack-'))
   const resources =
     platform === 'darwin'
@@ -70,7 +72,20 @@ async function packed(platform, { withPlugins = false } = {}) {
       : path.join(appOutDir, 'resources')
   fs.mkdirSync(resources, { recursive: true })
   fs.writeFileSync(path.join(resources, 'default_app.asar'), 'electron default app')
-  fs.writeFileSync(path.join(resources, 'app.asar'), 'our app')
+  // r4d: a real archive (afterPack lists it to prove no dev fixture is packed).
+  const appDir = fs.mkdtempSync(path.join(os.tmpdir(), 'k146-app-'))
+
+  fs.writeFileSync(path.join(appDir, 'package.json'), '{"name":"our-app","main":"dist/electron-main.mjs"}')
+  fs.mkdirSync(path.join(appDir, 'dist'))
+  fs.writeFileSync(path.join(appDir, 'dist', 'electron-main.mjs'), 'export {}\n')
+
+  for (const [rel, body] of Object.entries(asarExtra)) {
+    fs.mkdirSync(path.dirname(path.join(appDir, rel)), { recursive: true })
+    fs.writeFileSync(path.join(appDir, rel), body)
+  }
+
+  await asar.createPackage(appDir, path.join(resources, 'app.asar'))
+  fs.rmSync(appDir, { force: true, recursive: true })
 
   const gate = withPlugins ? await pluginGate() : null
 
@@ -169,3 +184,28 @@ test("afterPack refuses a pack whose Chromium licence file is not the packed dis
       )
   )
 })
+
+// v0.0.9 r4d (eng r4-m2): the packed app never carries the dev fixture art. Red on 52cae17554 (no such check).
+test('r4-m2: afterPack refuses a pack whose app.asar or Resources carry fixtures/, on every platform', async () => {
+  for (const platform of PLATFORMS) {
+    const leaky = await packed(platform, { withPlugins: true, asarExtra: { 'fixtures/inft-art/101-aurora.svg': '<svg/>' } })
+
+    assert.deepEqual(packedDevFixtureLeaks(leaky.resources), [
+      'app.asar carries a dev fixture: fixtures',
+      'app.asar carries a dev fixture: fixtures/inft-art',
+      'app.asar carries a dev fixture: fixtures/inft-art/101-aurora.svg'
+    ], platform)
+    await assert.rejects(quiet(() => afterPack(leaky.context)), /dev fixtures in the pack/, platform)
+
+    const extra = await packed(platform, { withPlugins: true })
+
+    fs.mkdirSync(path.join(extra.resources, 'fixtures', 'inft-art'), { recursive: true })
+    fs.writeFileSync(path.join(extra.resources, 'fixtures', 'inft-art', '101-aurora.svg'), '<svg/>')
+    await assert.rejects(quiet(() => afterPack(extra.context)), /Resources carries a dev fixture: fixtures/, platform)
+
+    const clean = await packed(platform, { withPlugins: true })
+
+    assert.deepEqual(packedDevFixtureLeaks(clean.resources), [], platform)
+  }
+}, 120_000)
+

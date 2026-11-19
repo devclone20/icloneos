@@ -58,6 +58,9 @@ if (winParam === 'quick') {
   void import('./app/wake-indicator/wake-indicator-root').then(({ mountWakeIndicator }) => mountWakeIndicator())
 } else if (winParam === 'pet') {
   void import('./components/pet/pet-overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
+} else if (winParam === 'stage3d') {
+  // v0.0.9 F6: the 3D iNFT's own window mounts only the stage (no app shell, no second gateway client).
+  void import('./app/home/stage3d-window/stage3d-window-root').then(({ mountStage3dWindow }) => mountStage3dWindow())
 } else {
   applyBootRoute()
 

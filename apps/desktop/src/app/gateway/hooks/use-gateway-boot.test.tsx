@@ -1,8 +1,10 @@
 import { act, cleanup, render } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { DesktopConnectionsRegistry } from '@/global'
 import { createClientSessionState } from '@/lib/chat-runtime'
+import { $backendRestart, resetBackendRestartForTests } from '@/store/backend-restart'
 import { $desktopBoot } from '@/store/boot'
 import {
   $connectionsRegistry,
@@ -25,7 +27,13 @@ import {
   endGatewaySwitch,
   recoverActiveSourceAfterFailedGatewaySwitch
 } from '@/store/gateway-switch'
-import { notifyError } from '@/store/notifications'
+import {
+  $notificationHistory,
+  $notifications,
+  clearNotificationHistory,
+  clearNotifications,
+  notifyError
+} from '@/store/notifications'
 import { $activeGatewayProfile, $profiles, ensureGatewayProfile } from '@/store/profile'
 import {
   $activeSessionId,
@@ -47,8 +55,9 @@ import { deferred } from '../../../test/deferred'
 
 import rt4FirstLaunch from './__fixtures__/rt4-first-launch.json'
 import v002ServeSync from './__fixtures__/v002-serve-uv-sync.json'
+import { _resetConnectionsRegistryBootForTests } from './connections-registry-boot'
 import { takeGatewaySurvivor } from './gateway-hmr-survivor'
-import { primaryRuntimeConnectionId, useGatewayBoot } from './use-gateway-boot'
+import { BACKEND_STOPPED_NOTIFICATION_ID, primaryRuntimeConnectionId, useGatewayBoot } from './use-gateway-boot'
 
 vi.mock(import('@/store/notifications'), async importOriginal => ({
   ...(await importOriginal()),
@@ -237,7 +246,7 @@ function fakeDesktop() {
 
       return () => {
         connectionApplied = null
-  backendRestarted = null
+        backendRestarted = null
       }
     }),
     onPowerResume: vi.fn(callback => {
@@ -416,6 +425,34 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     expect(beforeConnectionSwitch).toHaveBeenCalledTimes(1)
     await flushAsync()
     expect($gatewayState.get()).toBe('open')
+  })
+
+  it('m-r2-4: a failed boot is said once — by the boot card — with no raw "Desktop boot failed" toast beside it', async () => {
+    const desktop = fakeDesktop()
+
+    const failure = new Error(
+      "Error invoking remote method 'hermes:connection': Error: Hermes backend exited before it became ready (1)."
+    )
+
+    desktop.getConnection = vi.fn(async () => {
+      throw failure
+    })
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    $notifications.set([])
+    $notificationHistory.set([])
+
+    render(<Harness />)
+    await flushAsync()
+    await flushAsync()
+
+    // The card's state: the boot failed.
+    expect($desktopBoot.get().error).toBe(failure.message)
+    expect($desktopBoot.get().running).toBe(false)
+    // No toast over the window (notifyError would raise one; notify would add a live toast)…
+    expect(notifyError).not.toHaveBeenCalled()
+    expect($notifications.get()).toEqual([])
+    // …the notification centre still keeps what happened.
+    expect($notificationHistory.get()[0]).toMatchObject({ kind: 'error', title: 'Desktop boot failed' })
   })
 
   it('a stale failed Settings switch cannot publish failure or disarm the newer switch owner', async () => {
@@ -1265,6 +1302,104 @@ describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => 
     expect(refreshSessions).toHaveBeenCalled()
   })
 
+  it('the "Backend stopped" toast leaves when the restarted backend is open again, one toast per state (Q proofs F2-a)', async () => {
+    let exited: (() => void) | null = null
+
+    const desktop = {
+      ...fakeDesktop(),
+      onBackendExit: vi.fn((callback: () => void) => {
+        exited = callback
+
+        return () => {
+          exited = null
+        }
+      })
+    }
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    clearNotifications()
+    render(<Harness />)
+    await flushAsync()
+    expect($gatewayState.get()).toBe('open')
+
+    const stoppedToasts = () => $notifications.get().filter(n => n.id === BACKEND_STOPPED_NOTIFICATION_ID)
+
+    for (let crash = 0; crash < 2; crash += 1) {
+      const socketsBefore = FakeWebSocket.instances.length
+
+      act(() => FakeWebSocket.instances[socketsBefore - 1].drop())
+      act(() => exited?.())
+      expect(stoppedToasts()).toHaveLength(1)
+
+      act(() => backendRestarted?.())
+      await flushAsync()
+
+      expect($gatewayState.get()).toBe('open')
+      expect(stoppedToasts()).toHaveLength(0)
+    }
+
+    clearNotifications()
+  })
+
+  it('design 3/10/11: the crash entry says the agent stopped, why and what to do; the stopped banner takes it over', async () => {
+    let exited: ((exit: unknown) => void) | null = null
+    const restartBackend = vi.fn(async () => ({ ok: true }))
+
+    const desktop = {
+      ...fakeDesktop(),
+      restartBackend,
+      onBackendExit: vi.fn((callback: (exit: unknown) => void) => {
+        exited = callback
+
+        return () => {
+          exited = null
+        }
+      })
+    }
+
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    clearNotifications()
+    clearNotificationHistory()
+    resetBackendRestartForTests()
+    render(<Harness />)
+    await flushAsync()
+
+    const stoppedToasts = () => $notifications.get().filter(n => n.id === BACKEND_STOPPED_NOTIFICATION_ID)
+    const socketsBefore = FakeWebSocket.instances.length
+
+    act(() => FakeWebSocket.instances[socketsBefore - 1].drop())
+    act(() => exited?.({ code: null, signal: 'SIGKILL' }))
+
+    const toast = stoppedToasts()[0]
+
+    expect(toast).toMatchObject({
+      title: 'The agent stopped',
+      // r4d (design r4 F2-1): the signal name is in Details, never in the body.
+      message: expect.not.stringContaining('SIGKILL'),
+      detail: 'Exit signal: SIGKILL',
+      nextStep: expect.stringContaining('Restart agent')
+    })
+    expect(toast?.action?.label).toBe('Restart agent')
+    await act(async () => toast?.action?.onClick())
+    expect(restartBackend).toHaveBeenCalledTimes(1)
+
+    // Main gives up: the stopped banner is the one surface now; the sticky toast leaves, the centre keeps the entry.
+    act(() => $backendRestart.set({ ...$backendRestart.get(), phase: 'stopped', stoppedBecause: 'limit' }))
+    expect($gatewayState.get()).not.toBe('open')
+    expect(stoppedToasts()).toHaveLength(0)
+    expect($notificationHistory.get().some(r => r.id === BACKEND_STOPPED_NOTIFICATION_ID)).toBe(true)
+
+    // A further exit while the banner holds the band records the entry and shows no toast.
+    act(() => exited?.({ code: 1, signal: null }))
+    expect(stoppedToasts()).toHaveLength(0)
+    expect($notificationHistory.get().find(r => r.id === BACKEND_STOPPED_NOTIFICATION_ID)?.message).toBe(
+      'Its background process quit with error code 1.'
+    )
+
+    resetBackendRestartForTests()
+    clearNotifications()
+  })
+
   it('a restart in a window whose boot never finished goes the full way, so the window still comes up (F41b)', async () => {
     const desktop = fakeDesktop()
     const originalGetConnection = desktop.getConnection
@@ -2065,5 +2200,131 @@ describe('useGatewayBoot first-launch install budget (RTB-3, real timelines)', (
     await advance(120_000)
     expect($desktopBoot.get().error).toBeNull()
     expect(desktop.getConnection).toHaveBeenCalledTimes(1)
+  })
+})
+
+// v0.0.9 pass 4 — a pre-v0.0.9 regression caught by v0.0.9 e2e, caused by e1b478779f: deleting ConnectionSwitcher
+// dropped the only callers of the registry's boot duties. These WIRING tests mount the real boot hook with no Settings
+// surface at all; they fail when nothing calls initializeConnectionsRegistry / refreshConnectionsRegistry at boot or on
+// connections.onChanged (store/connections.test.ts covers the functions in isolation, and passed with zero callers).
+describe('the connections registry at boot (regression from e1b478779f)', () => {
+  const registry: DesktopConnectionsRegistry = {
+    connections: [
+      { id: 'primary-vps', kind: 'remote', label: 'VPS', tokenPreview: '...t', tokenSet: true },
+      { id: 'coder-remote', kind: 'remote', label: 'Coder', tokenPreview: '...c', tokenSet: true }
+    ],
+    lastUsed: 'primary-vps',
+    launchMode: 'last-used',
+    primary: 'primary-vps',
+    secureTokenStorage: true,
+    version: 2
+  } as DesktopConnectionsRegistry
+
+  function desktopWithRegistry() {
+    const desktop = fakeDesktop() as ReturnType<typeof fakeDesktop> & Record<string, unknown>
+    let changed: ((payload: unknown) => void) | null = null
+    const list = vi.fn(async () => registry)
+    const setLastUsed = vi.fn(async (id: string) => ({ ok: true, registry: { ...registry, lastUsed: id } }))
+
+    desktop.connections = {
+      list,
+      onChanged: vi.fn((callback: (payload: unknown) => void) => {
+        changed = callback
+
+        return () => {
+          changed = null
+        }
+      }),
+      setLastUsed
+    }
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+
+    return { emitChanged: (payload: unknown) => changed?.(payload), list, setLastUsed }
+  }
+
+  beforeEach(() => _resetConnectionsRegistryBootForTests())
+
+  it('loads the registry at boot, with no Settings surface mounted', async () => {
+    const { list } = desktopWithRegistry()
+
+    render(<Harness />)
+    await flushAsync()
+
+    expect(list).toHaveBeenCalled()
+    expect($connectionsRegistry.get()?.connections.map(c => c.id)).toEqual(['primary-vps', 'coder-remote'])
+  })
+
+  it('restores the last-used source once the primary boot settled', async () => {
+    const { setLastUsed } = desktopWithRegistry()
+
+    render(<Harness />)
+    await flushAsync()
+    await flushAsync()
+
+    expect($desktopBoot.get().running).toBe(false)
+    expect(setLastUsed).toHaveBeenCalledTimes(1)
+    expect(setLastUsed).toHaveBeenCalledWith('primary-vps')
+  })
+
+  it('never restores while the primary boot is still held (consent, the permission gate, the backend coming up)', async () => {
+    const { list, setLastUsed } = desktopWithRegistry()
+    const desktop = window.hermesDesktop as unknown as { getConnection: unknown }
+
+    // Main has not published the primary connection: the boot is held where consent and the gate hold it.
+    desktop.getConnection = vi.fn(() => new Promise(() => undefined))
+    render(<Harness />)
+    await flushAsync()
+    await flushAsync()
+
+    expect($desktopBoot.get().running).toBe(true)
+    expect(list).toHaveBeenCalled()
+    expect(setLastUsed).not.toHaveBeenCalled()
+  })
+
+  it('a failed boot (the gate refused, the agent could not start) never restores', async () => {
+    const { setLastUsed } = desktopWithRegistry()
+    const desktop = window.hermesDesktop as unknown as { getConnection: unknown }
+
+    desktop.getConnection = vi.fn(async () => {
+      throw new Error('The permission gate is not in place')
+    })
+    render(<Harness />)
+    await flushAsync()
+    await flushAsync()
+
+    expect($desktopBoot.get().error).toBeTruthy()
+    expect(setLastUsed).not.toHaveBeenCalled()
+  })
+
+  it('StrictMode double effects and a remount (hot reload) restore once', async () => {
+    const { setLastUsed } = desktopWithRegistry()
+
+    const first = render(
+      <StrictMode>
+        <Harness />
+      </StrictMode>
+    )
+
+    await flushAsync()
+    await flushAsync()
+    first.unmount()
+    render(<Harness />)
+    await flushAsync()
+    await flushAsync()
+
+    expect(setLastUsed).toHaveBeenCalledTimes(1)
+  })
+
+  it('connections.onChanged re-pulls the registry (a connection added, renamed or removed in another window)', async () => {
+    const { emitChanged, list } = desktopWithRegistry()
+
+    render(<Harness />)
+    await flushAsync()
+    const before = list.mock.calls.length
+
+    act(() => emitChanged({ connectionId: 'coder-remote', reason: 'saved' }))
+    await flushAsync()
+
+    expect(list.mock.calls.length).toBe(before + 1)
   })
 })

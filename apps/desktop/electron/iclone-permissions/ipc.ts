@@ -14,6 +14,7 @@ import path from 'node:path'
 import { currentConfinement } from '../iclone-confinement'
 import { pnpmStoreRoots } from '../iclone-confinement/hardlinks'
 import { gitRootOf } from '../iclone-confinement/launcher-policy'
+import { socketPath } from '../iclone-confinement/launcher-socket'
 import { execOnBehalfWrites, projectRootRefusal } from '../iclone-confinement/profiles'
 import type { ConsentSenderGuard } from '../iclone-consent'
 import { guardedHandler } from '../iclone-consent'
@@ -538,13 +539,15 @@ interface PermissionsSpawn {
   attach: (child: SpawnedChild) => void
 }
 
-export function permissionsSpawn(socketDir: string): PermissionsSpawn {
+/** v0.0.9: the agent socket is the short private one of this userData (launcher-socket.ts), never under it; its token
+ *  stays in `<userData>/run` (iclone-acp-ipc.ts acpSocketFile / acpTokenFile name the same two paths). */
+export function permissionsSpawn(userDataDir: string): PermissionsSpawn {
   const env: Record<string, string> = {
     ICLONE_POLICY_LOCK: '1',
     ICLONE_POLICY_KEY_FD: String(PERMISSIONS_KEY_FD),
     ICLONE_POLICY_KEY_PPID: String(process.pid),
-    ICLONE_PERM_SOCKET: path.join(socketDir, 'acp.sock'),
-    ICLONE_PERM_TOKEN_FILE: path.join(socketDir, 'acp.token')
+    ICLONE_PERM_SOCKET: socketPath(userDataDir, 'acp'),
+    ICLONE_PERM_TOKEN_FILE: path.join(userDataDir, 'run', 'acp.token')
   }
 
   if (!active) {
@@ -727,5 +730,89 @@ export function recordInstall(entry: { kind: 'refuse' | 'use'; reason: string; g
     reason: entry.reason,
     gesture: entry.gesture === true,
     action: { tool: 'acp-tools.install', target: 'https://registry.npmjs.org/', project_root: null }
+  })
+}
+
+/** v0.0.9 r3 (eng n4): a repair-kit apply or undo (moves user files aside, or back), or its refusal. */
+export function recordRepairKit(entry: {
+  kind: 'refuse' | 'use'
+  tool: 'repair-kit.apply' | 'repair-kit.undo'
+  reason: string
+  gesture: boolean
+}): AuditRecord | null {
+  if (
+    !active ||
+    (entry.kind !== 'refuse' && entry.kind !== 'use') ||
+    (entry.tool !== 'repair-kit.apply' && entry.tool !== 'repair-kit.undo') ||
+    typeof entry.reason !== 'string'
+  ) {
+    return null
+  }
+
+  return active.audit.append({
+    src: 'main',
+    kind: entry.kind,
+    class: 'Wo',
+    reason: entry.reason,
+    gesture: entry.gesture === true,
+    action: { tool: entry.tool, target: 'repair-kit', project_root: null }
+  })
+}
+
+/** F1-S: an owner-locked ACP write from the window (register-erc8004 · offering create/update/delete · resource create). */
+export function recordAcpWrite(entry: {
+  kind: 'refuse' | 'use'
+  reason: string
+  gesture: boolean
+  command: string
+  lock: string
+}): AuditRecord | null {
+  if (!active || (entry.kind !== 'refuse' && entry.kind !== 'use') || typeof entry.reason !== 'string') {
+    return null
+  }
+
+  return active.audit.append({
+    src: 'main',
+    kind: entry.kind,
+    class: entry.lock === 'acp-register' ? '$' : 'N',
+    reason: entry.reason,
+    gesture: entry.gesture === true,
+    action: { tool: `acp.${String(entry.command).replace(/ /g, '.')}`, target: String(entry.lock), project_root: null }
+  })
+}
+
+/** F1-S: Settings › Billing › Buy credits — the owner-click decision on one charge. */
+const BILLING_AUDIT_TOOLS: ReadonlySet<string> = new Set([
+  'billing.charge',
+  'subscription.upgrade',
+  'subscription.change',
+  'subscription.resume',
+  'billing.auto_reload'
+])
+
+export function recordBillingCharge(entry: {
+  kind: 'refuse' | 'use'
+  reason: string
+  gesture: boolean
+  /** v0.0.9 r3 (eng n4): the runtime method the decision is about; absent = billing.charge (the original lock). */
+  tool?: string
+}): AuditRecord | null {
+  if (!active || (entry.kind !== 'refuse' && entry.kind !== 'use') || typeof entry.reason !== 'string') {
+    return null
+  }
+
+  const tool = entry.tool ?? 'billing.charge'
+
+  if (!BILLING_AUDIT_TOOLS.has(tool)) {
+    return null
+  }
+
+  return active.audit.append({
+    src: 'payment',
+    kind: entry.kind,
+    class: '$',
+    reason: entry.reason,
+    gesture: entry.gesture === true,
+    action: { tool, target: 'nous-portal', project_root: null }
   })
 }

@@ -69,6 +69,42 @@ export function todosForHydration(todos: readonly TodoItem[] | null): TodoItem[]
 const FINISHED_LINGER_MS = 4_000
 const clearTimers = keyedTimeouts()
 
+/** The newest snapshot revision applied per session (the runtime's TodoStore counter, monotonic per session). */
+const appliedRevision = new Map<string, number>()
+
+const sameTodos = (a: readonly TodoItem[] | undefined, b: readonly TodoItem[]) =>
+  a !== undefined &&
+  a.length === b.length &&
+  a.every((item, index) => item.id === b[index].id && item.status === b[index].status && item.content === b[index].content)
+
+/**
+ * Apply a todo snapshot from the live stream: `todo.updated`, or a Todo tool event (v0.0.9 pass 4). The two carry the
+ * same state, so this is idempotent: an equal list is not set again (no flicker, no second card). A snapshot older
+ * than one already applied is dropped, and once a versioned snapshot landed an unversioned one (a tool.start's
+ * arguments) cannot roll it back.
+ */
+export function applySessionTodoSnapshot(sid: string, todos: TodoItem[], revision?: number) {
+  if (!sid) {
+    return
+  }
+
+  const applied = appliedRevision.get(sid)
+
+  if (applied !== undefined && (revision === undefined || revision < applied)) {
+    return
+  }
+
+  if (revision !== undefined) {
+    appliedRevision.set(sid, revision)
+  }
+
+  if (sameTodos($todosBySession.get()[sid], todos)) {
+    return
+  }
+
+  setSessionTodos(sid, todos)
+}
+
 export function setSessionTodos(sid: string, todos: TodoItem[]) {
   if (!sid) {
     return
@@ -84,6 +120,7 @@ export function setSessionTodos(sid: string, todos: TodoItem[]) {
 
 export function clearSessionTodos(sid: string) {
   clearTimers.cancel(sid)
+  appliedRevision.delete(sid)
 
   const map = $todosBySession.get()
 

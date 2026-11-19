@@ -10,7 +10,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { startAcpSocketServer } from './iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from './iclone-acp-ipc'
 import { CONSENT_PERMISSION_KEYS } from './iclone-consent'
 import {
   createDoctor,
@@ -680,6 +680,7 @@ describe('the door through the agent socket', () => {
     const server = await startAcpSocketServer({
       admitStreaming: () => true,
       dir,
+      socket: acpSocketFile(dir),
       resolveInft: () => ({ ok: true, slug: 't1' }),
       run: async () => ({ code: 0 }),
       log: () => {}

@@ -1,4 +1,5 @@
 export { toChatMessages } from './hydration'
+export { dropPreToolStreamedText } from './interim-off'
 export {
   appendAssistantTextPart,
   appendReasoningPart,

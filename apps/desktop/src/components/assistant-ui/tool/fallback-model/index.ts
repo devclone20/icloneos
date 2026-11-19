@@ -24,6 +24,7 @@ import type {
   ToolMeta,
   ToolMetaSpec,
   ToolPart,
+  ToolRefusal,
   ToolStatus,
   ToolTitleAction,
   ToolTone,
@@ -702,6 +703,11 @@ export const OWNER_PERMISSION_PENDING = "Waiting for the owner's permission in i
 function toolStatus(part: ToolPart, resultRecord: Record<string, unknown>): ToolStatus {
   if (part.result === undefined) {
     return 'running'
+  }
+
+  // Refused before it ran (the permission gate, confinement): not a run and not a failure of one.
+  if (resultRecord.refused === true) {
+    return 'refused'
   }
 
   // Explicit success wins over isError / nested-error heuristics. Memory writes
@@ -1420,6 +1426,60 @@ function dynamicTitle(
   return fallback
 }
 
+/**
+ * v0.0.9 G GF-M2: the owner's line for a refused call. The tool result is written to the AGENT ("BLOCKED by icloneOS
+ * permissions … tell the owner …"); the owner reads what did not run and why, in plain words, with the chat's mode
+ * named when the mode refused it.
+ */
+/** v0.0.9 G UI lens: the name the owner knows a tool by: its translated display name, an MCP tool as server · action,
+ *  else its id title-cased. */
+export function toolDisplayName(toolName: string): string {
+  const named = translateNow(`assistant.tool.names.${toolName}`)
+
+  if (named !== `assistant.tool.names.${toolName}`) {
+    return named
+  }
+
+  const mcp = /^mcp_([a-z0-9]+)_(.+)$/i.exec(toolName)
+
+  if (mcp) {
+    return `${capitalize(mcp[1])} · ${mcp[2].split('_').filter(Boolean).join(' ')}`
+  }
+
+  return titleForTool(toolName)
+}
+
+// The plugin capitalises the mode id (manual -> Manual, acceptEdits -> Acceptedits); the owner reads its picker label.
+const MODE_IDS = ['manual', 'automatic', 'plan', 'acceptEdits', 'ignore'] as const
+
+function modeLabel(token: string): string {
+  const id = MODE_IDS.find(mode => mode.toLowerCase() === token.toLowerCase())
+
+  if (!id) {
+    return token
+  }
+
+  const label = translateNow(`settings.permissions.modes.${id}.name`)
+
+  return label === `settings.permissions.modes.${id}.name` ? token : label
+}
+
+export function refusalForOwner(toolName: string, raw: string): ToolRefusal {
+  const tool = toolDisplayName(toolName)
+  const token = /\bMode: ([A-Za-z]+)\./.exec(raw)?.[1]
+  const mode = token ? modeLabel(token) : undefined
+
+  if (mode) {
+    return { modeRefusal: true, owner: translateNow('assistant.tool.refusedByMode', tool, mode), raw }
+  }
+
+  if (/is not reachable/i.test(raw)) {
+    return { modeRefusal: false, owner: translateNow('assistant.tool.refusedNoGateway', tool), raw }
+  }
+
+  return { modeRefusal: false, owner: translateNow('assistant.tool.refusedGeneric', tool), raw }
+}
+
 export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
   const argsRecord = parseMaybeObject(part.args)
   const resultRecord = parseMaybeObject(part.result)
@@ -1428,7 +1488,11 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
   // Skip residual error-heuristic text once status is success (stale isError
   // envelope over a landed memory write would otherwise foul the subtitle).
   const asked = status === 'asked'
-  const error = status === 'success' || asked ? '' : toolErrorText(part, resultRecord)
+  const refused = status === 'refused'
+  const error = status === 'success' || asked || refused ? '' : toolErrorText(part, resultRecord)
+  // The reason a refused call gives, shown as its subtitle and detail (never the red error block).
+  const refusalReason = refused ? toolErrorText({ ...part, isError: true }, resultRecord) : ''
+  const refusal = refused ? refusalForOwner(part.toolName, refusalReason) : undefined
   // Over-budget memory refusals stay amber — don't claim "Saved".
   const memoryMissed = part.toolName === 'memory' && part.result !== undefined && status !== 'success'
 
@@ -1437,16 +1501,19 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
       ? meta.pending
       : asked
         ? translateNow('assistant.tool.permissionAsked')
+        : refused
+          ? // v0.0.9 G GF-4: "Refused · <tool>", so the row still says what was refused; the reason is the subtitle.
+            `${translateNow('assistant.tool.refused')} · ${toolDisplayName(part.toolName)}`
         : memoryMissed
           ? translateNow('assistant.tool.memoryWriteNoted')
           : meta.done
 
   const baseTitleParts = titlePartsFromAction(baseTitle, part.result === undefined ? meta.pendingAction : undefined)
-  const titleParts = asked ? baseTitleParts : dynamicTitle(part, argsRecord, resultRecord, baseTitleParts)
+  const titleParts = asked || refused ? baseTitleParts : dynamicTitle(part, argsRecord, resultRecord, baseTitleParts)
 
   const title = titleParts.title
   const titleEnriched = title !== baseTitle
-  const baseSubtitle = error || toolSubtitle(part, argsRecord, resultRecord)
+  const baseSubtitle = error || refusalReason || toolSubtitle(part, argsRecord, resultRecord)
 
   const keepSubtitleWithTitle =
     part.toolName === 'terminal' ||
@@ -1456,8 +1523,8 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
   const subtitle = titleEnriched && !error && !keepSubtitleWithTitle ? '' : baseSubtitle
   const detailBody = stripDividerLines(toolDetailText(part, argsRecord, resultRecord))
 
-  const detail = error
-    ? [error, detailBody]
+  const detail = error || refusalReason
+    ? [error || refusalReason, detailBody]
         .filter(Boolean)
         .filter((value, index, list) => list.findIndex(entry => entry.trim() === value.trim()) === index)
         .join('\n\n')
@@ -1489,6 +1556,7 @@ export function buildToolView(part: ToolPart, inlineDiff: string): ToolView {
 
   return {
     countLabel: resultCount ? formatCountLabel(resultCount) : undefined,
+    refusal,
     detail,
     detailLabel: error ? 'Error details' : toolDetailLabel(part.toolName),
     durationLabel: durationLabel(resultRecord),

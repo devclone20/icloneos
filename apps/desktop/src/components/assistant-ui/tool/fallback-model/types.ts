@@ -1,5 +1,5 @@
 export type ToolTone = 'agent' | 'browser' | 'default' | 'file' | 'image' | 'terminal' | 'web'
-export type ToolStatus = 'asked' | 'error' | 'running' | 'success' | 'warning'
+export type ToolStatus = 'asked' | 'error' | 'refused' | 'running' | 'success' | 'warning'
 
 export interface ToolPart {
   args?: unknown
@@ -29,7 +29,16 @@ export interface CountMetric {
   noun: string
 }
 
+/** v0.0.9 G GF-M2: a refused call, said to the owner (owner) and kept as the agent read it (raw, the detail only). */
+export interface ToolRefusal {
+  owner: string
+  /** The refusal came from this chat's permission mode: the row offers the mode picker. */
+  modeRefusal: boolean
+  raw: string
+}
+
 export interface ToolView {
+  refusal?: ToolRefusal
   countLabel?: string
   detail: string
   detailLabel: string

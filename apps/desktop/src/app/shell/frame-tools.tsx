@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { registerIcloneBrowserTool } from '@/app/home/browser-tool'
 import { useIcloneHudTool } from '@/app/home/hud-tool'
+import { registerIcloneNotificationsTool } from '@/app/home/notifications-tool'
 import { registerScreenRecordTool } from '@/app/home/screen-record-tool'
 import { registerIcloneThemeTool } from '@/app/home/theme-tool'
 import { $homeCopy, $toolsCopy } from '@/app/home/tools-copy'
@@ -15,13 +16,16 @@ import { cn } from '@/lib/utils'
 import type { TitlebarTool } from './titlebar-controls'
 
 /** OUR frame's tools, left to right at the top right: wallet, theme cycle, the
- *  browser pair, AI record beside them, then HUD mode (the old titlebar's system cluster sat last). */
+ *  browser pair, AI record beside them, the notifications bell, then HUD mode
+ *  (the old titlebar's system cluster sat last). */
 export const FRAME_TOOL_IDS = [
   'iclone-wallet',
   'iclone-theme-cycle',
   'iclone-browser-headed',
   'iclone-browser-recording',
   'iclone-ai-record',
+  // v0.0.9 F4: the bell (the notification centre's door), last before HUD mode.
+  'iclone-notifications',
   'iclone-hud'
 ] as const
 
@@ -93,6 +97,7 @@ export function FrameTools() {
     registerIcloneThemeTool()
     registerIcloneBrowserTool()
     registerScreenRecordTool()
+    registerIcloneNotificationsTool()
   }, [])
 
   useIcloneHudTool()

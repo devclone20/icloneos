@@ -67,6 +67,7 @@ describe('ensureCuratedRuntimeConfig (R1.runtime.config)', () => {
       markerFile: path.join(dir, 'curated-runtime-config.json'),
       policy: 'curated' as const,
       run: vi.fn(async () => ({ code: 0 })),
+      runtimeEnv: {},
       runtimeSha: PIN.sha,
       ...over
     }
@@ -99,6 +100,20 @@ describe('ensureCuratedRuntimeConfig (R1.runtime.config)', () => {
     ])
   })
 
+  it('v0.0.9 point A: the app runtime\'s pin (managedRuntimeEnv) rides on both forms, after the seal', async () => {
+    const pin = { HERMES_DEPENDENCY_HOME: '/rt/.iclone-deps/hermes', HERMES_DISABLE_LAZY_INSTALLS: '1' }
+    // A seal that drops every HERMES_* but HERMES_HOME: the pin must still reach the child.
+    const sealEnv = (env: NodeJS.ProcessEnv) => ({ HERMES_HOME: String(env.HERMES_HOME) })
+
+    for (const over of [{ hermesHome: '/home/a' }, { hermesHome: '/home/b', sealed: { python: '/py', sealEnv } }]) {
+      const d = deps({ ...over, runtimeEnv: pin })
+
+      await expect(ensureCuratedRuntimeConfig(d)).resolves.toEqual({ ran: true })
+      const opts = (vi.mocked(d.run).mock.calls[0] as unknown as [string, string[], { env: NodeJS.ProcessEnv }])[2]
+      expect(opts.env).toMatchObject(pin)
+    }
+  })
+
   it('K-RT15 / m4: packaged, the CLI is the env Python on the verified tree, sealed, isolated, no bytecode written', async () => {
     const sealEnv = vi.fn((env: NodeJS.ProcessEnv) => ({ HERMES_HOME: String(env.HERMES_HOME), SEALED: '1' }))
     const d = deps({ sealed: { python: '/venv/bin/python', sealEnv } })
@@ -125,6 +140,9 @@ describe('ensureCuratedRuntimeConfig (R1.runtime.config)', () => {
       'false'
     ])
     expect(opts.env).toEqual({
+      // v0.0.9 F2 point A: this unconfined run with the user's HERMES_HOME never syncs dependencies (no
+      // `<HERMES_HOME>/installs/<key>` can come from it). Set after the seal, which drops foreign HERMES_*.
+      HERMES_DISABLE_LAZY_INSTALLS: '1',
       HERMES_HOME: '/home/.hermes',
       HERMES_HOME_NO_LINKS: '1',
       PYTHONDONTWRITEBYTECODE: '1',
@@ -202,6 +220,7 @@ describe('runtime ahead of the pin (R1.probe.align_ahead → U1)', () => {
       markerFile: path.join(dir, 'marker.json'),
       policy: 'curated',
       run,
+      runtimeEnv: {},
       runtimeSha: 'f'.repeat(40)
     })
 

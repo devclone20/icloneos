@@ -10,6 +10,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 
+import { socketPath } from '../iclone-confinement/launcher-socket'
 import type { DoorPermission, PermissionDoorOutcome } from '../iclone-consent-door'
 
 import type { PaymentAuditEntry } from './client'
@@ -34,6 +35,8 @@ interface DoorCall {
 export interface Wired {
   dir: string
   socketDir: string
+  /** v0.0.9: the pay socket, the short private one of the userData (launcher-socket.ts), never under it. */
+  paySocket: string
   host: ResourceHost
   stub: StubFacilitator
   registered: ReturnType<typeof registerPayments>
@@ -151,6 +154,7 @@ export async function makeWired(options: WiredOptions = {}): Promise<Wired> {
   return {
     dir,
     socketDir,
+    paySocket: socketPath(dir, 'pay'),
     host,
     stub,
     registered,

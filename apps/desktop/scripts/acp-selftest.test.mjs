@@ -64,15 +64,24 @@ describe('judgePackagedSelftest — the shipped app’s own report', () => {
     })
   })
 
-  it('REL-6: refuses an app that reports a bundled CLI (or says nothing about it)', () => {
+  it('v0.0.9: the app SHIPS the CLI — a passing report about the bundled copy passes; one that did not verify fails', () => {
     for (const acp of [
       { ok: true, version: '1.0.38', chains: 4 },
-      { ok: true, bundled: true, version: '1.0.38' }
+      { ok: true, bundled: true, verified: true, version: '1.0.38' }
     ]) {
       const stdout = JSON.stringify({ ...pass, acp })
 
-      expect(judgePackagedSelftest({ status: 0, stdout, stderr: '' }, '1.0.38').error).toMatch(/bundled ACP CLI/)
+      expect(judgePackagedSelftest({ status: 0, stdout, stderr: '' }, '1.0.38').ok).toBe(true)
     }
+
+    const unverified = JSON.stringify({
+      ...pass,
+      acp: { ok: true, bundled: true, verified: false, version: '1.0.38', error: 'file-changed' }
+    })
+
+    expect(judgePackagedSelftest({ status: 0, stdout: unverified, stderr: '' }, '1.0.38').error).toMatch(
+      /bundled ACP CLI did not verify: file-changed/
+    )
   })
 
   it('names the failing part, a version drift, or a missing report', () => {

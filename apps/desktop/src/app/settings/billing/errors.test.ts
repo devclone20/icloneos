@@ -18,11 +18,12 @@ const expectedActions: Record<
   idempotency_conflict: 'none',
   idempotency_key_required: 'none',
   insufficient_scope: 'step_up',
-  internal_error: 'none',
+  // m-r2-1: the shared policy's recovery for both is retry (a lost or failed portal answer); Try again re-sends the same key.
+  internal_error: 'retry',
   invalid_charge_id: 'none',
   invalid_request: 'none',
   monthly_cap_exceeded: 'portal',
-  network_error: 'none',
+  network_error: 'retry',
   no_payment_method: 'portal',
   org_access_denied: 'none',
   preview_rejected: 'none',
@@ -95,5 +96,16 @@ describe('resolveRefusal', () => {
 
     expect(resolved.title).toBe(BILLING_COPY.ja.refusal.roleTitle)
     expect(resolved.title).not.toBe(en.refusal.roleTitle)
+  })
+})
+
+describe('F1-S: the owner-confirm refusal', () => {
+  it('says nothing was charged and offers Retry (itself a marked control: the owner’s click there is the confirm)', () => {
+    const presented = resolveRefusal({ kind: 'owner_confirm', message: '[billing-charge:gesture]' }, en)
+
+    expect(presented.action).toEqual({ type: 'retry' })
+    expect(presented.message).toMatch(/Nothing was charged/)
+    // Backend / main text never reaches the person.
+    expect(presented.message).not.toContain('[billing-charge:gesture]')
   })
 })

@@ -353,3 +353,34 @@ test('an empty or missing ownership file is NOT corrupt — reap sweeps normally
   // Empty roster: rewriting [] is harmless and keeps the legacy behavior.
   assert.equal(writes.length, 1)
 })
+
+test('correctness 7: listOrphans reports exactly what reapOrphans would stop, and changes nothing', async () => {
+  const orphan = ownershipEntry({ pid: 60, nonce: 'orphan' })
+  const liveParent = ownershipEntry({ pid: 61, nonce: 'live-parent' })
+  const reused = ownershipEntry({ pid: 62, nonce: 'reused' })
+  const uncertain = ownershipEntry({ pid: 63, nonce: 'uncertain' })
+  const initial = stored([orphan, liveParent, reused, uncertain])
+  const store = memoryStore(initial)
+  const stop = vi.fn()
+
+  const ownership = createBackendOwnership({
+    matchesIdentity: async entry => (entry.pid === reused.pid ? false : entry.pid === uncertain.pid ? undefined : true),
+    matchesParent: async entry => (entry.pid === liveParent.pid ? true : false),
+    stop,
+    store
+  })
+
+  assert.deepEqual(await ownership.listOrphans(), [orphan])
+  assert.equal(stop.mock.calls.length, 0)
+  assert.equal(store.value(), initial)
+  assert.deepEqual(await ownership.reapOrphans(), [orphan.pid])
+})
+
+test('listOrphans on a corrupt file lists nothing and quarantines nothing', async () => {
+  const quarantine = vi.fn()
+  const store = { ...memoryStore('{not json'), quarantine }
+  const ownership = createOwnership(store, {})
+
+  assert.deepEqual(await ownership.listOrphans(), [])
+  assert.equal(quarantine.mock.calls.length, 0)
+})

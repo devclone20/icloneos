@@ -34,6 +34,8 @@ export type AssistantTranslations = {
     loadingSession: string
     showEarlier: string
     loadingResponse: string
+    /** The live status line's accessible name while the agent works (v0.0.9: never the substrate's name). */
+    agentWorking: string
     resumeWhenBackgroundDone: (count: number) => string
     thinking: string
     thought: string
@@ -155,6 +157,17 @@ export type AssistantTranslations = {
     statusDone: string
     /** A call the permission gate is holding for the owner's answer: it neither failed nor ran. */
     permissionAsked: string
+    refused: string
+    /** v0.0.9 G GF-M2: what the OWNER reads under a refused row (never the agent-directed tool result). */
+    refusedByMode: (tool: string, mode: string) => string
+    refusedNoGateway: (tool: string) => string
+    refusedGeneric: (tool: string) => string
+    refusedChangeMode: string
+    /** v0.0.9 G UI lens: a tool's display name, for a row that must name the tool (a refusal). English is the
+     *  fallback for a locale or a tool that has none; an unknown tool falls back to its id, title-cased. */
+    names?: Partial<Record<string, string>>
+    refusedSentToAgent: string
+    statusRefused: string
     /** Over-budget / rejected memory write title — not "Saved to memory". */
     memoryWriteNoted: string
     actions: {

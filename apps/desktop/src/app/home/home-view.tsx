@@ -24,19 +24,31 @@ import { homeCards } from '@/app/settings/inft-book/book-model'
 import { INFT_BOOK_PANE } from '@/app/settings/inft-book/book-pane'
 import { provisionalHomeIds } from '@/app/settings/inft-book/book-seed'
 import { $bookChecked, selectionFor } from '@/app/settings/inft-book/book-store'
-import { publishDockWindowHost, settingsDockItem, useDockWindows } from '@/app/settings/settings-dock'
+import {
+  openSettingsBeside,
+  publishDockWindowHost,
+  settingsDockItem,
+  useDockWindows
+} from '@/app/settings/settings-dock'
 import { useI18n } from '@/i18n'
+import { f6Stage } from '@/i18n/en/v009-f6'
 import { slugForInft } from '@/iclone-shared/inft-slug'
 import { ESCAPE_PRIORITY, isTopEscapeLayer, pushEscapeLayer } from '@/lib/escape-layers'
 import { comboFromEvent, formatCombo, isEditableTarget } from '@/lib/keybinds/combo'
 import { persistStringArray, storedStringArray } from '@/lib/storage'
 import { setSidebarOpen } from '@/store/layout'
+import { notify } from '@/store/notifications'
 
 import { $acpConfigMap, refreshAcpConfigMap } from './acp-setup'
 import { resetAura } from './aura-prefs'
 import { CollectionsPanel, CollectionsTab, type INftCardData } from './collections'
-import { $containersOpen, LazyContainersWindow, useContainersDockItem } from './containers/containers-dock'
-import { Dock, type DockItem, focusDockTile } from './dock'
+import {
+  $containersBeside,
+  $containersOpen,
+  LazyContainersWindow,
+  useContainersDockItem
+} from './containers/containers-dock'
+import { Dock, type DockItem, type DockSplit, focusDockTile } from './dock'
 import { $econBadges } from './econ/badges'
 import { prefetchEcon } from './econ/prefetch'
 import { ECON_APPS, ECON_ORDER } from './econ/registry'
@@ -56,6 +68,7 @@ import {
   $inftRoster,
   $inftRosterError,
   $inftRosterStatus,
+  $inftScanMissing,
   $privyRestoring,
   $privySession,
   $privySignedOutByUpdate,
@@ -66,23 +79,24 @@ import {
   walletPrompt
 } from './privy-session'
 import { Stage3D } from './stage3d'
+import { $stagePlace, onStageHandoverFailed, stageHandover } from './stage3d-window/handover'
+import { resetStagePlacement, StageAwayPlate, StagePaneMenu, useStagePlacementStyle } from './stage3d-window/stage-pane'
 import { $activeInft, recallInftChoice } from './stage-store'
 import { WalletPanel } from './wallet-panel'
 import { $walletPanelOpen, hideWalletPanel } from './wallet-tool'
-import type { IcWindowId } from './window'
+import { DockSplitPreview, type IcWindowId, PaneLayer } from './window'
 import { isWindowExpanded, retractWindow } from './window/expanded'
+import { focusPane } from './window/pane-focus'
+import { $panes } from './window/pane-layout'
 
 // The dock answers ⌘⇧1…⌘⇧8 in tile order (⌘1–9 belong to profile switching,
 // ⌃1–9 to session slots). Formatted once for the tooltips.
 const DOCK_CHORDS = Array.from({ length: 8 }, (_, index) => `mod+shift+${index + 1}`)
 const DOCK_HINTS = DOCK_CHORDS.map(formatCombo)
 
-// What a signed-out visitor sees in the island: two illustrative cards from
-// the collection, neither of them configured (nothing here is theirs yet).
-const SAMPLE_CARDS: INftCardData[] = [
-  { id: 'i01-sample-1', name: 'icloneOS i01 · #1', collection: 'icloneOS i01', chain: 'Robinhood', configured: false },
-  { id: 'i01-sample-2', name: 'icloneOS i01 · #2', collection: 'icloneOS i01', chain: 'Robinhood', configured: false }
-]
+// v0.0.9 Q (proofs F5): signed out, the roster is EMPTY — no sample cards, ever. The Collection shows its "Connect
+// wallet" state and the dock counts nothing that is not the owner's.
+const NO_CARDS: INftCardData[] = []
 
 type HomeMode = 'stage' | 'window'
 
@@ -103,6 +117,27 @@ function readCardOrder(): string[] {
   return storedStringArray(CARD_ORDER_KEY)
 }
 
+/**
+ * Closing a Dock window: alone, the keyboard goes back to its tile (the focused × leaves with it); beside another pane,
+ * to that pane — it fills the window now (v0.0.9 F6). A pane that made room for a dropped one finds the keyboard in
+ * the newcomer already, and it stays there (focusDockTile / focusPane leave a focus inside a pane alone).
+ */
+function closePaneToDock(pane: null | string, tile: null | string, close: () => void): void {
+  // The pane with the focus keeps it (after a replace that is the newcomer), else the one left.
+  const { focused, open } = $panes.get()
+
+  const survivor =
+    focused !== null && focused !== pane && open.includes(focused) ? focused : (open.find(id => id !== pane) ?? null)
+
+  close()
+
+  if (survivor !== null) {
+    focusPane(survivor)
+  } else if (tile !== null) {
+    focusDockTile(tile)
+  }
+}
+
 const isEconKind = (value: string): value is EconKind => (ECON_ORDER as string[]).includes(value)
 
 /** The Message window's IcWindow id (msg-window.tsx). */
@@ -113,7 +148,10 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
   const navigate = useNavigate()
   const i18n = useI18n().t
   const copy = i18n.desktop.home
-  const { closeEcon, econ, settingsOpen, toggleEcon } = useDockWindows(isEconKind)
+  const { closeEcon, econ, settingsOpen, settingsRoute, showEcon, toggleEcon } = useDockWindows(isEconKind)
+  // v0.0.9 F6 (owner addition): a second econ app, opened only by dropping its Dock icon beside the first (two econ
+  // panes side by side: Email + ACP Market). The first one keeps its chassis, its reload memory and its clicks.
+  const [econ2, setEcon2] = useState<EconKind | null>(null)
   const [collectionsOpen, setCollectionsOpen] = useState(false)
   const [stageBackdrop, setStageBackdrop] = useState<string | null>(null)
   // A model that will not load used to dismiss the iNFT outright: the stage
@@ -130,6 +168,8 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
   const walletLine = walletPrompt(session.status, restoring, rosterStatus, recallInftChoice(), signedOutByUpdate)
   const [connectPending, setConnectPending] = useState(false)
   const rosterError = useStore($inftRosterError)
+  // v0.0.9 W1b (F5 partial): the chains the last scan could not read, named in the Collection's partial alert.
+  const scanMissing = useStore($inftScanMissing)
   const activeInft = useStore($activeInft)
   const acpConfigMap = useStore($acpConfigMap)
   const fieldCeiling = useStore($fieldCeiling)
@@ -150,7 +190,24 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
     resetAura()
     setStageError(null)
     setStageAttempt(0)
+    resetStagePlacement()
+
+    // F6: another iNFT (or none) while the last one performs in its own window — that window shows the old iNFT, so
+    // it closes and the stage comes home with the new one.
+    if ($stagePlace.get() === 'away') {
+      void stageHandover.bringBack()
+    }
   }, [activeInft?.id])
+
+  // F6: the 3D iNFT in its own window. Where it performs, and how a failed detach is told.
+  const stagePlace = useStore($stagePlace)
+  const stagePlacementStyle = useStagePlacementStyle()
+
+  useEffect(() => {
+    onStageHandoverFailed(() => notify({ kind: 'warning', message: f6Stage.openFailed }))
+
+    return () => onStageHandoverFailed(null)
+  }, [])
 
   // The DISPLAYED field: the token's color with its brightness capped
   // (owner rule: "brilhante demais" — a near-white field is glare at full
@@ -260,10 +317,10 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
     return homeCards(inftRoster, checked, lost)
   }, [acpConfigMap, bookChecked, inftRoster, ownership, session.address])
 
-  // The rendered roster: scanned cards (or the signed-out samples) overlaid
+  // The rendered roster: scanned cards (none when signed out) overlaid
   // with the real per-iNFT Virtuals CLI state, in the owner's chosen order.
   const cards = useMemo<INftCardData[]>(() => {
-    const base = session.status === 'in' ? homeRoster : SAMPLE_CARDS
+    const base = session.status === 'in' ? homeRoster : NO_CARDS
 
     const overlaid = base.map(card => {
       const status = acpConfigMap[slugForInft(card.id)]
@@ -351,33 +408,51 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
   const closeEconToDock = useCallback(() => {
     const kind = econ
 
-    closeEcon()
-
-    if (kind) {
-      focusDockTile(kind)
-    }
+    closePaneToDock(kind ? econWindowId(kind) : null, kind, closeEcon)
   }, [closeEcon, econ])
+
+  const closeEcon2ToDock = useCallback(() => {
+    const kind = econ2
+
+    closePaneToDock(kind ? econWindowId(kind) : null, kind, () => setEcon2(null))
+  }, [econ2])
+
+  // The second econ pane alone (the first closed) is the one a reload brings back, like the first one alone.
+  useEffect(() => {
+    if (econ === null && econ2 !== null) {
+      try {
+        window.sessionStorage.setItem(ICLONE_STORAGE.dockWindow.key, econ2)
+      } catch {
+        // Storage denied: the window simply does not survive a reload.
+      }
+    }
+  }, [econ, econ2])
 
   const containersOpen = useStore($containersOpen)
 
   const closeContainersToDock = useCallback(() => {
-    $containersOpen.set(false)
-    focusDockTile('containers')
+    closePaneToDock('containers', 'containers', () => $containersOpen.set(false))
   }, [])
 
   const closeMessageToDock = useCallback(() => {
-    closeMessageWindow(onClose)
-    focusDockTile('chat')
+    closePaneToDock(MESSAGE_WINDOW_ID, 'chat', () => closeMessageWindow(onClose))
   }, [onClose])
 
-  // The window this surface's Escape would close: the econ window over everything, else the Message window.
-  const topWindowId = econ
-    ? econWindowId(econ)
-    : containersOpen
-      ? 'containers'
-      : mode === 'window'
-        ? MESSAGE_WINDOW_ID
-        : null
+  // F6: with two panes open, Escape goes to the FOCUSED one — the Message window beside an econ window included.
+  const focusedPane = useStore($panes).focused
+  const messageOnTop = mode === 'window' && focusedPane === MESSAGE_WINDOW_ID
+  // Two econ panes: the focused one is Escape's (the first one by default).
+  const econTop = econ2 !== null && focusedPane === econWindowId(econ2) ? econ2 : (econ ?? econ2)
+  const econOnTop = (Boolean(econTop) || containersOpen) && !messageOnTop
+
+  // The window this surface's Escape would close: the focused Dock window (econ by default), else the Message window.
+  const topWindowId = econOnTop
+    ? econTop
+      ? econWindowId(econTop)
+      : 'containers'
+    : mode === 'window'
+      ? MESSAGE_WINDOW_ID
+      : null
 
   useEffect(() => {
     // A proper escape-layer citizen. The raw listener this replaces fired on
@@ -398,7 +473,8 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
       const target = homeEscapeTarget({
         collectionsOpen,
         // Containers is a Dock window like the econ ones: without this, Escape over it would leave the stage.
-        econ: Boolean(econ) || containersOpen,
+        // F6: not when the Message window beside it has the focus — Escape is the focused pane's.
+        econ: econOnTop,
         editable: isEditableTarget(event.target),
         // An expanded window retracts on the first Escape and closes on the next (STAGE tester 1 W-1).
         expanded: topWindowId !== null && isWindowExpanded(topWindowId),
@@ -419,7 +495,9 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
           retractWindow(topWindowId)
         }
       } else if (target === 'econ') {
-        if (econ) {
+        if (econTop !== null && econTop === econ2 && econTop !== econ) {
+          closeEcon2ToDock()
+        } else if (econ) {
           closeEconToDock()
         } else {
           closeContainersToDock()
@@ -441,11 +519,15 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
     }
   }, [
     closeContainersToDock,
+    closeEcon2ToDock,
     closeEconToDock,
     closeMessageToDock,
     collectionsOpen,
     containersOpen,
     econ,
+    econ2,
+    econOnTop,
+    econTop,
     mode,
     onClose,
     topWindowId
@@ -465,20 +547,10 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
     setCollectionsOpen(true)
   }, [session.status])
 
-  // One Dock window at a time: the econ windows share the Message and Settings
-  // windows' frame, so opening one closes the other. Navigating home IS their
-  // close (wiring.tsx wires onClose to that), so opening from either goes home
-  // first and the econ window lands clean on the stage.
-  const openEcon = useCallback(
-    (kind: EconKind) => {
-      toggleEcon(kind)
-
-      if (mode === 'window' || settingsOpen) {
-        navigate(HOME_ROUTE, { replace: true })
-      }
-    },
-    [mode, navigate, settingsOpen, toggleEcon]
-  )
+  // v0.0.9 F6: up to TWO Dock windows, side by side (window/pane-layout.ts). An econ window opens beside the Message
+  // window or Settings instead of closing it; the pane layer keeps the count at two (a 3rd replaces the pane without
+  // focus) and folds the pair into tabs when the app is too narrow for both.
+  const openEcon = useCallback((kind: EconKind) => toggleEcon(kind), [toggleEcon])
 
   // V3-G: the Containers window, one Dock window at a time like the others.
   // Opening it leaves the chat for the home route: its close goes back there, so the chord twice changes nothing.
@@ -503,6 +575,78 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
 
   const containersItem = useContainersDockItem(DOCK_HINTS[7], openContainers, backFromContainers)
 
+  // v0.0.9 F6 (owner addition, 18 Nov): every Dock icon can be dragged onto the window to open its pane beside the one
+  // already open (window/dock-split.ts). The placement is set before `onDrop` runs; each drop only opens its window.
+  // A drop always means side by side: Containers stays beside it (its one-window rule is the click's), and the 3D
+  // stage goes back behind the panes if it sat on a half.
+  const prepareDrop = useCallback(() => {
+    if ($containersOpen.get()) {
+      $containersBeside.set(true)
+    }
+
+    resetStagePlacement()
+  }, [])
+
+  const dropEcon = useCallback(
+    (kind: EconKind, replaced: null | string) => {
+      prepareDrop()
+
+      if (econ !== null && replaced === econWindowId(econ)) {
+        // The first econ chassis switches app in place: it keeps the side the drop landed on.
+        showEcon(kind)
+      } else if (econ2 !== null && replaced === econWindowId(econ2)) {
+        setEcon2(kind)
+      } else if (econ === null) {
+        showEcon(kind)
+      } else if (econ2 === null) {
+        setEcon2(kind)
+      } else {
+        showEcon(kind)
+      }
+    },
+    [econ, econ2, prepareDrop, showEcon]
+  )
+
+  const splitOf = useCallback(
+    (pane: IcWindowId, open: (replaced: null | string) => void): DockSplit => ({
+      pane,
+      onDrop: plan => {
+        prepareDrop()
+        open(plan.replaced)
+      }
+    }),
+    [prepareDrop]
+  )
+
+  // v0.0.9 r2 (F6 spec gap): Message and Settings pair like any two panes. Message opening while Settings is its
+  // route keeps Settings as a pane (its tab and sub-view ride along in the query) — unless Message is replacing it;
+  // Settings opening while the Message window is up opens beside it instead of taking the chat's route.
+  const openMessage = useCallback(
+    (replaced: null | string = null) => {
+      setSidebarOpen(false)
+
+      if (settingsRoute && replaced !== 'settings') {
+        openSettingsBeside()
+        navigate(`${NEW_CHAT_ROUTE}${location.search}`)
+
+        return
+      }
+
+      navigate(NEW_CHAT_ROUTE)
+    },
+    [location.search, navigate, settingsRoute]
+  )
+
+  const openSettings = useCallback(() => {
+    if (mode === 'window') {
+      openSettingsBeside()
+
+      return
+    }
+
+    navigate(SETTINGS_ROUTE)
+  }, [mode, navigate])
+
   // Owner rule: NO Home tile. The dock only exists on the home surface, so a
   // button to reach it would point at where you already are. The door that is
   // actually needed — from the full-page routes, which render no dock at all —
@@ -515,15 +659,12 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
         hint: DOCK_HINTS[0],
         icon: <IcMessage size={22} />,
         active: mode === 'window',
-        onSelect: () => {
-          // The Message window opens over the ever-present home; the chat's
-          // own sidebar starts collapsed so it reads as one clean window.
-          closeEcon()
-          setSidebarOpen(false)
-          navigate(NEW_CHAT_ROUTE)
-        }
+        // The Message window opens over the ever-present home — beside an open econ window or Settings since F6 (two
+        // panes); the chat's own sidebar starts collapsed so it reads as one clean window.
+        onSelect: () => openMessage(),
+        split: splitOf(MESSAGE_WINDOW_ID, openMessage)
       },
-      ...ECON_ORDER.map((kind, index) => {
+      ...ECON_ORDER.map((kind, index): DockItem => {
         const app = ECON_APPS[kind]
         const Icon = app.Icon
 
@@ -532,29 +673,45 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
           label: copy.tile[kind],
           hint: DOCK_HINTS[index + 1],
           icon: <Icon size={22} />,
-          active: econ === kind,
+          active: econ === kind || econ2 === kind,
           badge: activeBadges?.[kind] || undefined,
-          onSelect: () => openEcon(kind)
+          // The second econ pane's tile closes it, as a lit tile does.
+          onSelect: () => (econ2 === kind ? closeEcon2ToDock() : openEcon(kind)),
+          split: {
+            pane: econWindowId(kind),
+            onDrop: plan => dropEcon(kind, plan.replaced)
+          }
         }
       }),
       {
         // The tile's word comes from the catalogue like the six econ tiles (U4-p2-03-p2b).
-        ...settingsDockItem({ active: settingsOpen, hint: DOCK_HINTS[6], onSelect: () => navigate(SETTINGS_ROUTE) }),
-        label: i18n.commandCenter.settings
+        ...settingsDockItem({ active: settingsOpen, hint: DOCK_HINTS[6], onSelect: openSettings }),
+        label: i18n.commandCenter.settings,
+        split: splitOf('settings', openSettings)
       },
-      containersItem
+      {
+        ...containersItem,
+        split: splitOf('containers', () => {
+          $containersBeside.set(true)
+          $containersOpen.set(true)
+        })
+      }
     ],
     [
       activeBadges,
-      closeEcon,
+      closeEcon2ToDock,
       containersItem,
       copy,
+      dropEcon,
       econ,
+      econ2,
       i18n.commandCenter.settings,
       mode,
-      navigate,
       openEcon,
-      settingsOpen
+      openMessage,
+      openSettings,
+      settingsOpen,
+      splitOf
     ]
   )
 
@@ -594,8 +751,15 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
         style={activeInft ? ({ '--istage-live-bg': field?.display ?? '#0b0a10' } as React.CSSProperties) : undefined}
       >
         {activeInft && (
-          <div className="ihome__stage ihome__stage--live">
-            {stageError ? (
+          <div
+            className="ihome__stage ihome__stage--live"
+            data-stage-place={stagePlace === 'docked' ? undefined : stagePlace}
+            style={stagePlace === 'docked' ? stagePlacementStyle : undefined}
+          >
+            {stagePlace !== 'docked' ? (
+              // F6: the iNFT performs in its own window; its context left with the stage (gpu-lease, one live 3D).
+              <StageAwayPlate />
+            ) : stageError ? (
               <div className="istage-fail" role="status">
                 <p className="istage-fail__head">{copy.couldNotSummon(activeInft.name.toLowerCase())}</p>
                 <p className="istage-fail__why">{stageError}</p>
@@ -626,6 +790,12 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
               />
             )}
             {mode === 'stage' && <p className="ihome__inft-name">{activeInft.name.toLowerCase()}</p>}
+            {mode === 'stage' && stagePlace === 'docked' && !stageError && (
+              <StagePaneMenu
+                field={field?.display ?? null}
+                inft={{ id: activeInft.id, name: activeInft.name, modelUrl: activeInft.modelUrl }}
+              />
+            )}
             {mode === 'stage' && (
               <button
                 aria-label={copy.dismissInft}
@@ -656,7 +826,8 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
             onClose={hideWalletPanel}
             onSignOut={() => {
               hideWalletPanel()
-              logoutPrivy()
+
+              return logoutPrivy()
             }}
           />
         )}
@@ -665,7 +836,7 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
           <div
             className="ihome__stage"
             /* A window is open over the stage (Settings included): the wordmark and the tagline step back. */
-            data-quiet={econ || settingsOpen || collectionsOpen || walletPanelOpen ? '' : undefined}
+            data-quiet={econ || econ2 || settingsOpen || collectionsOpen || walletPanelOpen ? '' : undefined}
           >
             <p className="ihome__wordmark">iclone os</p>
             <p className="ihome__tagline">{copy[TAGLINE[walletLine.prompt]]}</p>
@@ -698,8 +869,11 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
 
         {mode === 'window' && <MessageWindow onClose={closeMessageToDock} />}
 
+        {/* F6: the panes' usable width, the divider between two panes, the folded pair's tabs. */}
+        <PaneLayer />
+
         <Dock items={dockItems} />
-        <LazyContainersWindow blocked={Boolean(econ) || settingsOpen || mode === 'window'} />
+        <LazyContainersWindow blocked={Boolean(econ || econ2) || settingsOpen || mode === 'window'} />
 
         {econ && (
           <EconWindow
@@ -712,6 +886,21 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
             slug={activeInft ? slugForInft(activeInft.id) : undefined}
           />
         )}
+
+        {econ2 && (
+          <EconWindow
+            configured={activeConfigured}
+            inftId={activeInft?.id}
+            inftName={activeInft?.name}
+            kind={econ2}
+            onClose={closeEcon2ToDock}
+            onOpenInfts={openCollections}
+            slug={activeInft ? slugForInft(activeInft.id) : undefined}
+          />
+        )}
+
+        {/* F6 (owner addition): the live split preview while a Dock icon is dragged over the window. */}
+        <DockSplitPreview />
 
         <CollectionsTab
           onToggle={() => (collectionsOpen ? setCollectionsOpen(false) : openCollections())}
@@ -735,7 +924,13 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
                 : undefined
             }
             cards={cards}
+            missingCollections={scanMissing}
             onClose={() => setCollectionsOpen(false)}
+            // v0.0.9 F5: Open iNFT Book in the header in every state (loading, signed out, error, grid).
+            onOpenBook={() => {
+              setCollectionsOpen(false)
+              navigate(INFT_BOOK_PANE)
+            }}
             onReorder={handleReorder}
             onSelect={id => {
               const card = cards.find(item => item.id === id)
@@ -746,6 +941,12 @@ export function HomeView({ mode, onClose }: { mode: HomeMode; onClose: () => voi
               }
 
               setCollectionsOpen(false)
+            }}
+            // v0.0.9 W1b (F5 §4): a card's "Set up in EconomyOS" opens that iNFT’s setup (Settings › EconomyOS ?inft=),
+            // the same deep link an econ app's "Open Setup" uses (econ/handoff.ts). It never switches the stage.
+            onSetUp={id => {
+              setCollectionsOpen(false)
+              navigate(`${SETTINGS_ROUTE}?tab=economyos&inft=${encodeURIComponent(id)}`)
             }}
             scanError={rosterError}
             scanStatus={rosterStatus}

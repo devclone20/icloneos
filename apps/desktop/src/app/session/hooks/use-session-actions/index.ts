@@ -2318,7 +2318,7 @@ export function useSessionActions({
           dropSessionState(tiledRuntimeId)
         }
 
-        notify({ durationMs: 2_000, kind: 'success', message: copy.archived })
+        notify({ kind: 'success', message: copy.archived })
       } catch (err) {
         if (archived) {
           restoreListedSession(archived, listed?.slice)

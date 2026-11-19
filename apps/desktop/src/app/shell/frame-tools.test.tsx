@@ -85,6 +85,10 @@ describe('frameTools', () => {
     expect(FRAME_TOOL_IDS.indexOf('iclone-hud')).toBeGreaterThan(FRAME_TOOL_IDS.indexOf('iclone-browser-recording'))
   })
 
+  it('puts the notifications bell last before HUD mode (v0.0.9 F4)', () => {
+    expect(FRAME_TOOL_IDS.indexOf('iclone-notifications')).toBe(FRAME_TOOL_IDS.indexOf('iclone-hud') - 1)
+  })
+
   it('puts AI record directly beside the browser record button', () => {
     expect(FRAME_TOOL_IDS.indexOf('iclone-ai-record')).toBe(FRAME_TOOL_IDS.indexOf('iclone-browser-recording') + 1)
   })
@@ -133,6 +137,8 @@ describe('FrameTools', () => {
       'Record',
       // The owner's order: AI record beside the browser button. This module is not mocked here, its real words show.
       expect.stringMatching(/^AI record/),
+      // v0.0.9 F4: the bell, real module (not mocked): its words carry the unread count when there is one.
+      expect.stringMatching(/^Notifications/),
       'HUD mode'
     ])
     expect(screen.getByRole('toolbar').className).toContain('[-webkit-app-region:no-drag]')

@@ -113,6 +113,18 @@
   background: var(--ic-dock-tile-press);
 }
 
+/* v0.0.9 F6: the tile being dragged onto the window to split it rests dimmed in its place (the preview carries it). */
+.dock__icon[data-dragging] {
+  opacity: 0.5;
+  transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock__icon[data-dragging] {
+    transition: none;
+  }
+}
+
 /* Toned tiles (today only Settings): frosted material glass in the
    app's tone — a lift sheen over the upper half, a glint edge on top, a night
    base line and a soft tone glow. */
@@ -324,3 +336,14 @@
 :root[dir='rtl'] .dock[data-autohide]:not([data-revealed]):not(:has(:focus-visible)) {
   transform: translateX(calc(100% + 24px));
 }
+
+/* r4d (design r4 F6-3): while a Dock icon is dragged onto the window, no hover tip ("Email ⌘⇧2") stays up over the
+   live split preview: the preview's own chip names the pane. */
+body:has([data-ic-split-preview]) [data-slot='tooltip-content'],
+body:has([data-ic-split-preview]) .dock__tooltip,
+.dock__icon[data-dragging] ~ .dock__tooltip {
+  /* r5 (design F6-3): the Dock's own label tip (.dock__tooltip, CSS on hover) is what stayed up in 02-light, not a
+     Radix tip; it goes too, and so does the dragged tile's own, from the first frame of the drag. */
+  display: none;
+}
+

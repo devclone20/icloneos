@@ -1,5 +1,6 @@
 import { useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
@@ -194,9 +195,9 @@ export function FunctionMatrix({
       ) : null}
       <p className="pt-2 text-[0.75rem] leading-4 text-(--ui-text-tertiary)">{copy.touchNote}</p>
       {error ? (
-        <p className="pt-2 text-[0.75rem] leading-4 text-destructive" role="alert">
+        <IcAlert className="mt-2" tone="error">
           {error}
-        </p>
+        </IcAlert>
       ) : null}
     </div>
   )

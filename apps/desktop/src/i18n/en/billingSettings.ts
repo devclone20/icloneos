@@ -192,6 +192,10 @@ export const enBillingSettings = {
     failedGeneric: 'Try again, or use another card on the portal.',
     unconfirmedTitle: 'Your last charge is not confirmed yet',
     unconfirmed: 'Check your balance on the portal before you try again.',
+    openPurchase: (amount: string) =>
+      `Your ${amount} purchase got no clear answer. Try again finishes that same purchase and can never charge twice; check the portal before you buy a different amount.`,
+    lapsedPurchase: (amount: string) =>
+      `Your ${amount} purchase from earlier never got a clear answer, and it is too old to finish safely. Check your balance on the portal; your next Buy is a new purchase.`,
     checkFailedTitle: 'The charge could not be checked',
     untrackedTitle: 'This charge cannot be followed',
     untrackedMessage: 'The charge was accepted but cannot be tracked. Check your balance on the portal.',

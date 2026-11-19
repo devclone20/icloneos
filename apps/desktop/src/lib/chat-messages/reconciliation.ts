@@ -180,15 +180,51 @@ export function preserveLocalAssistantErrors(
     }
   }
 
-  if (preserveIds.size === 0) {
-    return mergedNextMessages
-  }
-
   const preserved = currentMessages
     .filter(message => preserveIds.has(message.id))
     .map(message => ({ ...message, pending: false }))
 
-  return [...mergedNextMessages, ...preserved]
+  return keepLocalNotices(preserveIds.size === 0 ? mergedNextMessages : [...mergedNextMessages, ...preserved], currentMessages)
+}
+
+/**
+ * v0.0.9 (G 914237d39d side finding): a system line the desktop wrote itself (`localNotice`: a slash answer, a
+ * /compress refused as busy) is never in the stored transcript, so every refresh used to drop it and the answer
+ * vanished seconds after it was shown. Each one missing from `next` goes back right after the message it followed
+ * in `current` (or first, when it led), once. A stored system row with the same text is the same line: no double.
+ */
+function keepLocalNotices(nextMessages: ChatMessage[], currentMessages: ChatMessage[]): ChatMessage[] {
+  const nextIds = new Set(nextMessages.map(message => message.id))
+
+  const storedSystemText = new Set(
+    nextMessages.filter(message => message.role === 'system').map(message => normalizedTimelineText(message))
+  )
+
+  const missing = currentMessages.filter(
+    message =>
+      message.localNotice &&
+      !nextIds.has(message.id) &&
+      !storedSystemText.has(normalizedTimelineText(message))
+  )
+
+  if (missing.length === 0) {
+    return nextMessages
+  }
+
+  const result = [...nextMessages]
+
+  for (const notice of missing) {
+    const at = currentMessages.indexOf(notice)
+    let anchor = -1
+
+    for (let probe = at - 1; probe >= 0 && anchor < 0; probe -= 1) {
+      anchor = result.findIndex(message => message.id === currentMessages[probe].id)
+    }
+
+    result.splice(anchor + 1, 0, notice)
+  }
+
+  return result
 }
 
 export function branchGroupForUser(userMessage: ChatMessage): string {

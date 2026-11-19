@@ -11,6 +11,7 @@
  *   await                the owner's answer to a pending ask (no sequence)
  *   replay               a line of a dead process's write-ahead log, wrapped and signed by a live process
  *   gapnote              a live process reports log lines no key can verify (main writes the `gap`)
+ *   billing              v0.0.9: spend main's single-use owner confirm for one Buy credits charge (amount + key)
  * Exit 0 = allowed/recorded, 1 = refused, 64 = usage, 3 = not signed by a Hermes process this icloneOS started.
  */
 import { createHmac } from 'node:crypto'
@@ -21,7 +22,7 @@ import { isPermissionFunction } from './functions'
 import { isPermissionMode } from './modes'
 import { type PolicySigner, verifyMac } from './policy-file'
 
-const PERM_VERBS = ['ask', 'await', 'beat', 'bye', 'event', 'gapnote', 'hello', 'replay'] as const
+const PERM_VERBS = ['ask', 'await', 'beat', 'billing', 'bye', 'event', 'gapnote', 'hello', 'replay'] as const
 
 type PermVerbName = (typeof PERM_VERBS)[number]
 
@@ -59,6 +60,28 @@ function parseObject(text: string): Record<string, unknown> | null {
 interface PermDeps {
   authority: PermissionAuthority | null
   signer: PolicySigner | null
+}
+
+/**
+ * v0.0.9 F1-S / R-f1s-5 — `billing`: the runtime's check before it sends `billing.charge` to the portal. Only a Hermes
+ * process this icloneOS started can ask (the spawn key signs the request), and the answer is main's single-use owner
+ * confirm (electron/gesture-locks-billing.ts `consumeAction`: bound to the action, its subject and the idempotency key,
+ * 120 s). The payload names `action` + `subject` (v0.0.9 Q: `subscription.upgrade`, `subscription.change`,
+ * `subscription.resume` and `billing.auto_reload` take the same confirm); a payload with no `action` is a Buy credits
+ * charge whose subject is `amountUsd`. Main sets the consumer once the billing lock is registered; none set = every
+ * billing write refused.
+ */
+type BillingConfirmConsumer = (
+  ownerConfirm: unknown,
+  subject: unknown,
+  idempotencyKey: unknown,
+  action: unknown
+) => boolean
+
+let billingConfirmConsumer: BillingConfirmConsumer | null = null
+
+export function setBillingConfirmConsumer(consumer: BillingConfirmConsumer | null): void {
+  billingConfirmConsumer = consumer
 }
 
 export async function permVerb(
@@ -141,6 +164,20 @@ export async function permVerb(
 
     case 'replay':
       return answer(replayLine(authority, signer, raw) ? 0 : 1, {})
+    case 'billing': {
+      let confirmed = false
+
+      try {
+        const action = raw.action === undefined ? 'charge' : raw.action
+        const subject = raw.action === undefined ? raw.amountUsd : raw.subject
+
+        confirmed = billingConfirmConsumer?.(raw.ownerConfirm, subject, raw.idempotencyKey, action) === true
+      } catch {
+        confirmed = false
+      }
+
+      return answer(confirmed ? 0 : 1, { confirmed })
+    }
 
     case 'event':
       return recordEvent(authority, raw, keyId) ? answer(0, { recorded: true }) : answer(64, { error: USAGE })

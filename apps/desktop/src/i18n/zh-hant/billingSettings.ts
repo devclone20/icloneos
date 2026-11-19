@@ -192,6 +192,10 @@ export const zhHantBillingSettings: BillingSettingsCopy = {
     failedGeneric: '請重試，或在入口網站中使用其他卡。',
     unconfirmedTitle: '你上一筆付款尚未確認',
     unconfirmed: '重試前請先在入口網站中查看餘額。',
+    openPurchase: (amount: string) =>
+      `你的 ${amount} 購買沒有得到明確答覆。重試會完成同一筆購買，絕不會重複扣款；購買其他金額前請先查看入口網站。`,
+    lapsedPurchase: (amount: string) =>
+      `你之前的 ${amount} 購買一直沒有明確答覆，且已過久，無法安全完成。請在入口網站中查看餘額；下一次購買將是一筆新的購買。`,
     checkFailedTitle: '無法檢查這筆付款',
     untrackedTitle: '無法追蹤這筆付款',
     untrackedMessage: '付款已被接受，但無法追蹤。請在入口網站中查看餘額。',

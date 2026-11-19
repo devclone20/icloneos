@@ -41,6 +41,7 @@ import { observeUpdaterHandoff, spawnUpdaterProcess } from '../updater-process'
 
 import { ACTIVE_HERMES_ROOT, HERMES_HOME, IS_MAC, IS_PACKAGED, IS_WINDOWS, SOURCE_REPO_ROOT } from './env'
 import { rememberLog, updatePolicy } from './log'
+import { managedRuntimeEnv } from './runtime-install-state'
 import { quitState } from './state'
 import { getOriginUrl, preflightStateDb, runningAppBundle, UPDATE_HANDOFF_DWELL_MS } from './updates'
 
@@ -284,7 +285,8 @@ export async function applyAgentUpdate(request: unknown): Promise<IcloneAgentUpd
           return null
         }
       },
-      run: spawnCapped
+      run: spawnCapped,
+      runtimeEnv: managedRuntimeEnv(ACTIVE_HERMES_ROOT)
     })
 
     const args = [

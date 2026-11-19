@@ -31,6 +31,13 @@
   border-top-left-radius: 0;
 }
 
+/* r4d (design r4 F6-3): a filled Message reaches the app's left edge, the Dock's lane included, and the Dock tucks
+   away (dock-autohide.ts). While the Dock is back over it (the pointer at the edge, a Dock drag, keyboard focus in the
+   rail), the session rail steps right of the Dock and its gutter, never under it. */
+:root:has(.dock[data-autohide]:is([data-revealed], :focus-within)) .imsg-side {
+  left: max(var(--iwin-outer-left, var(--ic-frame-left)), var(--ic-frame-left));
+}
+
 /* The Message head (contract D §14): the econ windows' own title pill
    (econ.css `.ic-win__head h2`, aliases in ic-tokens.css), reading
    "iclone os", where "● email" sits. One band for both views (owner

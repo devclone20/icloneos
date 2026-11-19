@@ -321,6 +321,17 @@ describe('spawnPoolBackend — no pool backend while the app is quitting', () =>
     expect(poolModule.ensureRuntime).not.toHaveBeenCalled()
   })
 
+  // v0.0.9 pass 4 (fleet-profile-rail :320, app bug found by e2e): a pool backend's runtime check wrote into the
+  // PRIMARY's boot progress, so the app read as booting again after it was ready. Owner's clean form: the pool asks for
+  // no boot progress at all. Red before: ensureRuntime was called without the option.
+  it('a pool backend checks its runtime without reporting into the primary boot progress', async () => {
+    quitDuring(vi.mocked(poolModule.ensureRuntime))
+    await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(
+      QuitInProgressError
+    )
+    expect(poolModule.ensureRuntime).toHaveBeenCalledWith(expect.anything(), { reportBootProgress: false })
+  })
+
   it('a quit that begins during the runtime check is refused right after it: no update-check config', async () => {
     quitDuring(vi.mocked(poolModule.ensureRuntime))
     await expect(spawnPoolBackend('work', entry() as never, { forceLocal: true })).rejects.toBeInstanceOf(

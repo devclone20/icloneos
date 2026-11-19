@@ -1,6 +1,7 @@
 import './dock.css'
 
 import {
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type PointerEvent as ReactPointerEvent,
@@ -14,6 +15,22 @@ import { useMediaQuery } from '@/hooks/use-media-query'
 import { useI18n } from '@/i18n'
 
 import { useDockAutoHide } from './dock-autohide'
+import {
+  $dockDrag,
+  abandonDrop,
+  applyDrop,
+  beginDockDrag,
+  cancelDockDrag,
+  canStartDockDrag,
+  DOCK_DRAG_SLOP_PX,
+  type DropPlan,
+  endDockDrag,
+  isDockDragging,
+  moveDockDrag
+} from './window/dock-split'
+import { DockSplitMenu } from './window/dock-split-menu'
+import { focusIsInPane, focusPane } from './window/pane-focus'
+import { $panes } from './window/pane-layout'
 
 export interface DockItem {
   id: string
@@ -30,6 +47,14 @@ export interface DockItem {
   /** Optional brand tone (`ic-tone--<tone>`, ic-tokens.css): a toned TILE wears it as frosted material glass with a
    *  glow; untoned tiles are the dock's plain frosted glass. Every symbol is heavy night ink (owner design). */
   tone?: string
+  /** v0.0.9 F6: the tile can be dragged onto the window to open its pane beside the one already open
+   *  (window/dock-split.ts). `pane` is the IcWindow id it opens; `onDrop` opens it (the placement is already set). */
+  split?: DockSplit
+}
+
+export interface DockSplit {
+  pane: string
+  onDrop: (plan: Exclude<DropPlan, { kind: 'move' | 'outside' }>) => void
 }
 
 interface DockProps {
@@ -185,6 +210,12 @@ export function totalGrowthForTest(count: number, y: number): number {
  */
 export function focusDockTile(id: string): void {
   requestAnimationFrame(() => {
+    // v0.0.9 F6: a pane that made room for a newcomer closes with the keyboard already in the newcomer (or in the
+    // pane that stays): it stays there, never pulled back to this tile.
+    if (focusIsInPane()) {
+      return
+    }
+
     document.querySelector<HTMLElement>(`.dock__icon[data-dock="${id}"]`)?.focus({ preventScroll: true })
   })
 }
@@ -461,11 +492,37 @@ export function Dock({ items }: DockProps) {
   // selects, a drag-off release does not, as in the macOS Dock. `click` stays only for keyboard and programmatic
   // activation (detail 0). Down's `preventDefault` also cancels the focus move, so a focus left on a tile moves to
   // the pressed one (its tooltip and Space follow); focus outside the dock (a field's caret) is never taken.
+  // F6 drag-to-split: where the press began, and whether it became a drag (or a drag cancelled by Esc).
+  // ONE press at a time: a second finger or pen mid-drag is ignored (it would have overwritten the drag's press and
+  // selected on its release); a stale press whose release never came is replaced.
+  const pressRef = useRef<{
+    dragged: boolean
+    pointerId: number
+    tile: HTMLButtonElement
+    x: number
+    y: number
+  } | null>(null)
+
   const handlePointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
     if (event.button !== 0) {
       return
     }
 
+    const live = pressRef.current
+
+    if (live && live.pointerId !== event.pointerId && live.dragged && isDockDragging()) {
+      event.preventDefault()
+
+      return
+    }
+
+    pressRef.current = {
+      dragged: false,
+      pointerId: event.pointerId,
+      tile: event.currentTarget,
+      x: event.clientX,
+      y: event.clientY
+    }
     event.preventDefault()
     const focused = event.currentTarget.ownerDocument.activeElement
 
@@ -482,9 +539,89 @@ export function Dock({ items }: DockProps) {
     event.currentTarget.dataset.pressed = ''
   }, [])
 
+  // A pressed tile that travels past the slop, with a pane open to split against, becomes a drag: the tile keeps the
+  // pointer (captured on down), so the move and the release arrive here wherever the pointer goes.
+  const handlePointerMove = useCallback(
+    (index: number) => (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const press = pressRef.current
+      const split = items[index]?.split
+
+      if (!press || press.pointerId !== event.pointerId || !split) {
+        return
+      }
+
+      if (press.dragged) {
+        moveDockDrag(event.clientX, event.clientY)
+
+        return
+      }
+
+      if (
+        Math.hypot(event.clientX - press.x, event.clientY - press.y) < DOCK_DRAG_SLOP_PX ||
+        !canStartDockDrag(split.pane)
+      ) {
+        return
+      }
+
+      press.dragged = true
+      event.currentTarget.dataset.dragging = ''
+      beginDockDrag(split.pane, event.clientX, event.clientY)
+    },
+    [items]
+  )
+
+  // The drop opens the pane (its placement is already set), then the keyboard goes into it. A window that could not
+  // open leaves no placement waiting for it.
+  const runDrop = useCallback(
+    (index: number, plan: DropPlan) => {
+      if (plan.kind === 'outside') {
+        return
+      }
+
+      if (plan.kind !== 'move') {
+        try {
+          items[index]?.split?.onDrop(plan)
+        } catch (error) {
+          abandonDrop(plan)
+
+          throw error
+        }
+      }
+
+      focusPane(plan.incoming)
+    },
+    [items]
+  )
+
   const handlePointerUp = useCallback(
     (index: number) => (event: ReactPointerEvent<HTMLButtonElement>) => {
       const tile = event.currentTarget
+      const press = pressRef.current
+
+      // Another pointer's release (a second finger mid-drag): not this press.
+      if (press && press.pointerId !== event.pointerId) {
+        return
+      }
+
+      pressRef.current = null
+      delete tile.dataset.dragging
+
+      if (press?.dragged) {
+        // A drag never selects: the release drops (or cancels, outside the window / after Esc).
+        delete tile.dataset.pressed
+
+        try {
+          tile.releasePointerCapture(event.pointerId)
+        } catch {
+          // Already released.
+        }
+
+        if (isDockDragging()) {
+          runDrop(index, endDockDrag(event.clientX, event.clientY))
+        }
+
+        return
+      }
 
       if (!('pressed' in tile.dataset)) {
         return
@@ -510,12 +647,104 @@ export function Dock({ items }: DockProps) {
         items[index]?.onSelect()
       }
     },
+    [items, runDrop]
+  )
+
+  // A cancel (pointercancel), or the capture lost without a release (Cmd-Tab mid-drag, the release in another app):
+  // the tile's state goes, and a live drag is cancelled.
+  const handlePointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
+    const press = pressRef.current
+
+    if (press && press.pointerId !== event.pointerId) {
+      return
+    }
+
+    delete event.currentTarget.dataset.pressed
+    delete event.currentTarget.dataset.dragging
+
+    if (press?.dragged) {
+      cancelDockDrag()
+    }
+
+    pressRef.current = null
+  }, [])
+
+  // Esc or the window's blur ended the drag in the store: the dragged tile stops looking dragged at once (its release
+  // still comes, and still never selects).
+  useEffect(
+    () =>
+      $dockDrag.subscribe(drag => {
+        const press = pressRef.current
+
+        if (drag === null && press?.dragged) {
+          delete press.tile.dataset.dragging
+          delete press.tile.dataset.pressed
+        }
+      }),
+    []
+  )
+
+  // F6: the keyboard way to split (and a right-click): the tile's split menu.
+  const [menuAt, setMenuAt] = useState<null | number>(null)
+
+  const openSplitMenu = useCallback(
+    (index: number) => {
+      if (!items[index]?.split || $panes.get().open.length === 0) {
+        return false
+      }
+
+      setMenuAt(index)
+
+      return true
+    },
     [items]
   )
 
-  const handlePointerCancel = useCallback((event: ReactPointerEvent<HTMLButtonElement>) => {
-    delete event.currentTarget.dataset.pressed
-  }, [])
+  const handleTileKeyDown = useCallback(
+    (index: number) => (event: ReactKeyboardEvent<HTMLButtonElement>) => {
+      const asks =
+        (event.key === 'Enter' && event.shiftKey) ||
+        (event.key === 'F10' && event.shiftKey) ||
+        event.key === 'ContextMenu'
+
+      if (asks && openSplitMenu(index)) {
+        event.preventDefault()
+      }
+    },
+    [openSplitMenu]
+  )
+
+  const handleContextMenu = useCallback(
+    (index: number) => (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (openSplitMenu(index)) {
+        event.preventDefault()
+      }
+    },
+    [openSplitMenu]
+  )
+
+  const closeSplitMenu = useCallback(
+    (refocus: boolean) => {
+      const at = menuAt
+
+      setMenuAt(null)
+
+      if (refocus && at !== null && !focusIsInPane()) {
+        railRef.current?.querySelectorAll<HTMLElement>('.dock__icon')[at]?.focus({ preventScroll: true })
+      }
+    },
+    [menuAt]
+  )
+
+  // A Dock that leaves mid-drag (the home unmounts) leaves no preview behind.
+  useEffect(
+    () => () => {
+      if (pressRef.current?.dragged) {
+        cancelDockDrag()
+      }
+    },
+    []
+  )
 
   const handleClick = useCallback(
     (index: number) => (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -547,12 +776,18 @@ export function Dock({ items }: DockProps) {
         >
           {item.active ? <span aria-hidden="true" className="dock__active-dot" /> : null}
           <button
+            aria-haspopup={item.split ? 'menu' : undefined}
+            aria-keyshortcuts={item.split ? 'Shift+Enter' : undefined}
             aria-label={item.badge ? `${item.label} (${item.badge})` : item.label}
             className={item.tone ? `dock__icon ic-tone ic-tone--${item.tone}` : 'dock__icon'}
             data-dock={item.id}
             onClick={handleClick(index)}
+            onContextMenu={item.split ? handleContextMenu(index) : undefined}
+            onKeyDown={item.split ? handleTileKeyDown(index) : undefined}
+            onLostPointerCapture={handlePointerCancel}
             onPointerCancel={handlePointerCancel}
             onPointerDown={handlePointerDown}
+            onPointerMove={item.split ? handlePointerMove(index) : undefined}
             onPointerUp={handlePointerUp(index)}
             type="button"
           >
@@ -569,6 +804,13 @@ export function Dock({ items }: DockProps) {
             {item.label}
             {item.hint ? <kbd className="dock__hint">{item.hint}</kbd> : null}
           </span>
+          {menuAt === index && item.split ? (
+            <DockSplitMenu
+              onChoose={plan => runDrop(index, applyDrop(plan))}
+              onClose={closeSplitMenu}
+              pane={item.split.pane}
+            />
+          ) : null}
         </div>
       ))}
     </nav>

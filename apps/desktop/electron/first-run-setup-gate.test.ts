@@ -131,3 +131,31 @@ test('remote apply without a waiter has no first-run side effects', async () => 
   assert.equal(hidden, 0)
   assert.equal(gate.isLocalBootstrapConfirmed(), true)
 })
+
+test('m-r2-2: a broken install of the app runtime is never gated on the first-run choice', async () => {
+  const prompts: unknown[] = []
+  const gate = createFirstRunSetupGate({ promptChoice: backend => prompts.push(backend), stuckAfterMs: 0 })
+  const broken = { ...bootstrapBackend, brokenInstall: 'the interpreter is gone' }
+
+  assert.equal(gate.shouldGate(broken), false)
+  assert.equal(await gate.wait(broken), 'continue-local')
+  assert.deepEqual(prompts, [])
+  // A real first run is still asked.
+  assert.equal(gate.shouldGate(bootstrapBackend), true)
+})
+
+test("m-r2-2: the owner's Repair reinstall settles a waiting choice and the next install is not asked again", async () => {
+  const prompts: unknown[] = []
+  const gate = createFirstRunSetupGate({ promptChoice: backend => prompts.push(backend), stuckAfterMs: 0 })
+  const waiting = gate.wait(bootstrapBackend)
+
+  gate.resetForOwnerReinstall()
+
+  assert.equal(await waiting, 'reset')
+  assert.equal(gate.shouldGate(bootstrapBackend), false)
+  assert.equal(gate.isLocalBootstrapConfirmed(), true)
+
+  // A plain repair reset still asks again (unchanged).
+  gate.resetForRepair()
+  assert.equal(gate.shouldGate(bootstrapBackend), true)
+})

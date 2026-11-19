@@ -27,6 +27,7 @@ import {
 import { confinementMembersDir } from '../iclone-permissions/classify-policy'
 import { writeFileAtomicSync } from '../lib/atomic-write'
 import { chmodFolderInRoot } from '../lib/no-follow-fs'
+import { assertSocketPathFits } from '../socket-path'
 
 import type { ConfinementBackend } from './backend'
 import { createContainerBackend } from './backend-container'
@@ -57,6 +58,7 @@ import {
 } from './hardlinks'
 import { createLauncher, type Launcher, type LauncherOptions, type LauncherState } from './launcher'
 import { createLauncherPolicyMirror, type LauncherPass } from './launcher-policy'
+import { prepareSocket } from './launcher-socket'
 import { createMemberProbe, ensureMembersDir, isRunToken, type MemberProbe, sweepTokens } from './members'
 import { createOneShotLedger, oneFileLinkTarget, type OneFileRules, oneShotFolder, oneShotRoute } from './one-shot'
 import { probeContainer, probeFailedView, probeSeatbelt } from './probe'
@@ -514,7 +516,7 @@ export function createConfinement(deps: ConfinementDeps) {
   // This process has spawned nothing yet, so no acknowledgement on disk is one of its runtimes (a reboot reuses pids).
   sweepAcks(ackFile, () => false)
 
-  const launcherSocket = path.join(runDir, 'launcher.sock')
+  const launcherSocket = launcherSocketFile(deps.userDataDir)
   const linkFiles = hardlinkFiles(deps.userDataDir)
   const ledgerFiles = runFiles(deps.userDataDir)
   const audit = (event: HardlinkAuditEvent) => refusals.append(auditRow(event, now().toISOString()))
@@ -897,6 +899,11 @@ export function createConfinement(deps: ConfinementDeps) {
     launcherPolicy.setRuntimeRoots(runtimeRoots(paths, facts))
 
     if (!launcher) {
+      // The launcher (Python) binds this path: a path it cannot bind is the agent's start failure, said here, never a
+      // terminal tool that silently goes missing.
+      assertSocketPathFits(launcherSocket, 'The terminal launcher socket (launcher.sock)')
+      // Its private folder is checked (ours, 0700, never a link) before the launcher listens (launcher-socket.ts).
+      prepareSocket(launcherSocket)
       launcherStartedAt = now().getTime()
       launcher = (deps.createLauncher ?? createLauncher)({
         python: deps.launcherInterpreter ?? python,
@@ -1354,6 +1361,9 @@ export function createConfinement(deps: ConfinementDeps) {
         TERMINAL_ENV: HERMES_BACKEND_NAME[current.backend],
         // Hermes runs under the runtime profile; its confined commands go through the launcher on this socket.
         ICLONE_CONFINEMENT_LAUNCHER: launcherSocket,
+        // v0.0.9: the socket left the run dir for its private folder, so the plugin is told where the run dir is (its
+        // refusal journal went to the socket's folder by default, core.py journal_dir).
+        ICLONE_LAUNCHER_JOURNAL_DIR: runDir,
         ICLONE_RUNTIME_CONFINED: '1',
         // fx18 (F3): the user's name and e-mail for the session's own git config, and nothing else of ~/.gitconfig.
         ...gitIdentityEnv(

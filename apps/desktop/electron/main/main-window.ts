@@ -4,9 +4,10 @@ import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, nativeTheme, screen } from 'electron'
 
 import { errorMessage } from '../../src/iclone-shared/errors'
+import { activeFixtureWallet } from '../fixture-wallet'
 import { missingRendererAssets } from '../renderer-bundle'
 import { loadRendererLoadErrorPage } from '../renderer-load-error-page'
-import { attachRendererConsoleCapture } from '../renderer-log'
+import { attachFixtureSwitchTap, attachRendererConsoleCapture } from '../renderer-log'
 import { chatWindowWebPreferences } from '../session-windows'
 import type { ThrottleWindowLike } from '../stream-throttle'
 import { installWindowRendererLifecycle } from '../window-renderer-lifecycle'
@@ -45,7 +46,13 @@ import {
 } from './theme'
 import { WINDOW_BUTTON_POSITION } from './window-chrome'
 import { sendWindowStateChanged } from './window-events'
-import { wakeIndicatorController, wireCommonWindowHandlers, wireWindowReveal } from './windows'
+import {
+  closeStage3dWindow,
+  installDisplayAwareMinimum,
+  wakeIndicatorController,
+  wireCommonWindowHandlers,
+  wireWindowReveal
+} from './windows'
 
 let nativeThemeListenerInstalled = false
 
@@ -54,6 +61,8 @@ export function createWindow() {
   const savedWindowState = readWindowState()
   windowsState.mainWindow = new BrowserWindow({
     ...computeWindowOptions(savedWindowState, screen.getAllDisplays()),
+    // v0.0.9 F6: absolute floors only. The live minimum is ⅓ × ½ of the display the window is on (never under one
+    // 375-pt pane), applied and re-measured by installDisplayAwareMinimum below.
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
     title: 'iclone os',
@@ -81,6 +90,9 @@ export function createWindow() {
   })
 
   const createdMainWindow = windowsState.mainWindow
+
+  // F6: the display-aware minimum (re-measured on move, debounced 150 ms, and on every display change).
+  installDisplayAwareMinimum(createdMainWindow)
 
   // Chat-surface registration: see applyWindowTranslucency.
   translucencyBackedWindows.add(windowsState.mainWindow)
@@ -158,7 +170,11 @@ export function createWindow() {
   bindGeometryPersistence(windowsState.mainWindow, schedulePersistWindowState)
   windowsState.mainWindow.on('maximize', schedulePersistWindowState)
   windowsState.mainWindow.on('unmaximize', schedulePersistWindowState)
-  windowsState.mainWindow.on('close', () => schedulePersistWindowState.flush())
+  windowsState.mainWindow.on('close', () => {
+    schedulePersistWindowState.flush()
+    // F6: the 3D iNFT's own window closes first, with the app (or with the window it belongs to).
+    closeStage3dWindow()
+  })
 
   // the closed wrapper remains truthy, so clear only the window this callback owns.
   windowsState.mainWindow.on('closed', () => {
@@ -261,6 +277,15 @@ export function createWindow() {
   // every renderer-content window shares (#79428: crashes in secondary/HUD/
   // quick-entry windows used to vanish without a trace).
   attachRendererConsoleCapture(windowsState.mainWindow, 'main', rememberLog)
+  // v0.0.9 r3b (MR3-1, the dev reopen loop): while a fixture wallet is active (never in a packaged build:
+  // fixture-wallet.ts) the iNFT switch's info-level "done" line is copied into desktop.log as the marker
+  // `[fixture] inft connected <slug> …` that the reopen loop counts. r4 (eng r3b-m3): the listener is attached only
+  // in that dev/test run; a production window gets none (initIclonePrivy has set the fixture before any window).
+  attachFixtureSwitchTap(
+    windowsState.mainWindow,
+    { fixture: activeFixtureWallet(), isPackaged: app.isPackaged === true },
+    rememberLog
+  )
 
   // #95575: a torn renderer bundle (update replaced the app while its files
   // were locked) loads fine and then dies on the first lazy import — a white

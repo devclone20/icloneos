@@ -20,7 +20,7 @@
 }
 
 /* A note's colour is its border: long sentences read in the ink, never in a status hue. */
-.iecon[data-kind='containers'] :is(.e-note--warn, .e-note--error) {
+.iecon[data-kind='containers'] :is(.e-note[data-tone='warning'], .e-note[data-tone='error']) {
   color: var(--e-ink);
 }
 
@@ -165,11 +165,11 @@ button.icont__verdict-pill:focus-visible {
   color: var(--e-ink);
 }
 
-.iecon[data-kind='containers'] .icont__standing .e-note--warn {
+.iecon[data-kind='containers'] .icont__standing .e-note[data-tone='warning'] {
   border-inline-start-color: var(--e-warn);
 }
 
-.iecon[data-kind='containers'] :is(.icont__standing .e-note--error, [data-isolation-line]) {
+.iecon[data-kind='containers'] :is(.icont__standing .e-note[data-tone='error'], [data-isolation-line]) {
   border-inline-start-color: var(--e-down);
 }
 

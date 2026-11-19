@@ -46,7 +46,12 @@ describe('Settings > Machine > Agent runtime (RTB-6)', () => {
     await screen.findByText(title)
     expect(screen.getByText(translateNow('settings.agentRuntime.skipped'))).toBeTruthy()
     expect(screen.getByText(`cua-driver — ${translateNow('install.recovery.packageStates.failed')}`)).toBeTruthy()
+    // v0.0.9 Q: the preload's repair-kit lock counts only a click on this marker, and the call is synchronous in it.
+    expect(
+      screen.getByText(translateNow('settings.agentRuntime.installAgain')).closest('[data-repair-kit-confirm]')
+    ).toBeTruthy()
     fireEvent.click(screen.getByText(translateNow('settings.agentRuntime.installAgain')))
+    expect(api.installAgain).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(reload).toHaveBeenCalledTimes(1))
     expect(api.installAgain).toHaveBeenCalledTimes(1)
   })

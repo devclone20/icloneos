@@ -63,6 +63,13 @@
   transform: none;
 }
 
+/* The Book tile is all art (ruling 46, no caption): its art fills the fixed-height tile (the Home card's 4:5 art box
+   is for a card that grows by its caption). */
+.inft-book__card .inft-card__art {
+  flex: 1 1 auto;
+  aspect-ratio: auto;
+}
+
 .inft-book__card .inft-card__headmark {
   width: 56px;
   height: 56px;
@@ -182,4 +189,13 @@
   .inft-book__mark {
     border: 1px solid CanvasText;
   }
+}
+
+/* v0.0.9 r4 (design r3 N4): a library filter, not a form. The shared select is `width: 100%` (ic-ui.css), which in
+   this wrapping bar gave each select its own row. Here the search, both selects and the segmented control share one
+   line at ≥ 900px and wrap only when the pane is narrower. */
+.inft-book__bar .icui-select {
+  width: auto;
+  flex: 0 1 200px;
+  min-width: 140px;
 }

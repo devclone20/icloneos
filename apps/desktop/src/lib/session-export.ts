@@ -52,7 +52,7 @@ export async function exportSession(sessionId: string, params: Omit<ExportSessio
     anchor.click()
     URL.revokeObjectURL(downloadUrl)
 
-    notify({ kind: 'success', message: translateNow('desktop.sessionExported'), durationMs: 2_000 })
+    notify({ kind: 'success', message: translateNow('desktop.sessionExported') })
   } catch (err) {
     notifyError(err, translateNow('desktop.sessionExportFailed'))
   }

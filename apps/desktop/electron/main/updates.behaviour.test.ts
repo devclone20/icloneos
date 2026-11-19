@@ -15,6 +15,8 @@ import path from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as ActiveRuntimeState from '../active-runtime-state'
+
 const h = vi.hoisted(() => ({
   canImport: vi.fn(() => true),
   classify: vi.fn((_marker: unknown, _schema: unknown, usable: boolean) => ({
@@ -32,7 +34,10 @@ vi.mock('electron', () => ({
   BrowserWindow: {},
   dialog: {}
 }))
-vi.mock('../active-runtime-state', () => ({ classifyActiveRuntime: h.classify }))
+vi.mock('../active-runtime-state', async importOriginal => ({
+  ...(await importOriginal<typeof ActiveRuntimeState>()),
+  classifyActiveRuntime: h.classify
+}))
 vi.mock('../backend-probes', () => ({
   canImportHermesCli: h.canImport,
   shouldTrustHermesOverride: () => false,

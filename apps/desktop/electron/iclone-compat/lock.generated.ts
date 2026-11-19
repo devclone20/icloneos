@@ -4,8 +4,8 @@ export const RUNTIME_LOCK = {
   generator: 'iclone/contract/extract.mjs@1',
   app: { upstreamReference: '10b388300a63d83857fac3ca4f8b05b64e01bc50' },
   verifiedAgainst: {
-    rev: '38728b1966330f7b0e8f3970100cabc2e04b72bf',
-    openrpcSha256: 'a826e83867ee8a2ed15f4cf16901d054078fe67db2771f393065009f385ce140',
+    rev: '3c003675528c22f3f801a6fa38a254b565ff7d4f',
+    openrpcSha256: 'ddc69f44fce892ad0dc8c6ff180924cfa33995f2668c788b9cff9f9ddd61d2f6',
     specTier: 'openrpc',
     result: 'amber:3-roots'
   },
@@ -17,10 +17,13 @@ export const RUNTIME_LOCK = {
       resultReads: []
     },
     'billing.auto_reload': {
-      params: { enabled: 'boolean', 'threshold?': 'string', 'top_up_amount?': 'string' },
+      params: { 'enabled?': 'boolean', 'threshold?': 'string', 'top_up_amount?': 'string' },
       resultReads: []
     },
-    'billing.charge': { params: { amount_usd: 'string', idempotency_key: 'string' }, resultReads: [] },
+    'billing.charge': {
+      params: { amount_usd: 'string', idempotency_key: 'string', owner_confirm: 'string' },
+      resultReads: []
+    },
     'billing.charge_status': { params: { charge_id: 'string' }, resultReads: [] },
     'billing.state': { params: {}, resultReads: [] },
     'billing.step_up': { params: { 'session_id?': 'string' }, resultReads: [] },
@@ -251,7 +254,7 @@ export const RUNTIME_LOCK = {
     'setup.status': { params: {}, resultReads: [] },
     'skills.manage': { params: { action: 'opaque', query: 'opaque' }, resultReads: [], via: 'js' },
     'slash.exec': { params: { command: 'string', session_id: 'string' }, resultReads: ['output?'] },
-    'subscription.change': { params: { subscription_type_id: 'string' }, resultReads: [] },
+    'subscription.change': { params: {}, resultReads: [] },
     'subscription.preview': { params: { subscription_type_id: 'string' }, resultReads: [] },
     'subscription.resume': { params: {}, resultReads: [] },
     'subscription.state': { params: {}, resultReads: [] },
@@ -365,6 +368,7 @@ export const RUNTIME_LOCK = {
     'terminal.close': { payloadReads: [] },
     'terminal.read': { payloadReads: [] },
     'thinking.delta': { payloadReads: [] },
+    'todo.updated': { payloadReads: [] },
     'tool.complete': { payloadReads: [] },
     'tool.generating': { payloadReads: [] },
     'tool.start': { payloadReads: [] },
@@ -545,10 +549,12 @@ export const RUNTIME_LOCK = {
   env: [
     'HERMES_BUNDLED_PLUGINS',
     'HERMES_DASHBOARD_SESSION_TOKEN',
+    'HERMES_DEPENDENCY_HOME',
     'HERMES_DESKTOP',
     'HERMES_DESKTOP_PASSWORD_STORE',
     'HERMES_DESKTOP_READY_FILE',
     'HERMES_DESKTOP_TERMINAL',
+    'HERMES_DISABLE_LAZY_INSTALLS',
     'HERMES_HOME',
     'HERMES_HOME_NO_LINKS',
     'HERMES_LANGUAGE',
@@ -589,8 +595,8 @@ export const RUNTIME_LOCK = {
     tools: 'path'
   },
   ipc: {
-    mainChannels: 260,
-    preloadRefs: 359,
+    mainChannels: 265,
+    preloadRefs: 376,
     unpaired: [
       'hermes:git:baseBranchList',
       'hermes:git:branchList',
@@ -620,6 +626,7 @@ export const RUNTIME_LOCK = {
       'iclone:acp-detach',
       'iclone:acp-event',
       'iclone:acp-install',
+      'iclone:acp-owner-confirm',
       'iclone:acp-run',
       'iclone:acp-stage',
       'iclone:acp-status',
@@ -632,6 +639,8 @@ export const RUNTIME_LOCK = {
       'iclone:app-update:download',
       'iclone:app-update:notice',
       'iclone:app-update:restart',
+      'iclone:billing:authorize-action',
+      'iclone:billing:authorize-charge',
       'iclone:confinement:changed',
       'iclone:diagnostics:preview',
       'iclone:diagnostics:save',
@@ -647,6 +656,7 @@ export const RUNTIME_LOCK = {
       'iclone:inft-kv-set',
       'iclone:inft-scan',
       'iclone:inft-scan-tick',
+      'iclone:native-decision:ask',
       'iclone:pane-bus:clear',
       'iclone:pane-bus:plan',
       'iclone:pane-bus:probe',
@@ -662,11 +672,17 @@ export const RUNTIME_LOCK = {
       'iclone:payments:status',
       'iclone:payments:stop',
       'iclone:permissions:changed',
+      'iclone:repair-kit:apply',
+      'iclone:repair-kit:history',
+      'iclone:repair-kit:scan',
+      'iclone:repair-kit:undo',
       'iclone:screen-record:discard',
       'iclone:screen-record:start',
       'iclone:screen-record:status',
       'iclone:screen-record:stop',
-      'iclone:screen-record:take'
+      'iclone:screen-record:take',
+      'iclone:voice-extra:install',
+      'iclone:voice-extra:status'
     ]
   },
   engineDeps: {

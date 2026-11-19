@@ -265,6 +265,44 @@ def process_gate() -> Optional[Tuple[Dict[str, Any], bool]]:
         return _gate, False
 
 
+def owner_charge_confirmed(owner_confirm: str, amount_usd: str, idempotency_key: str, wait: float = 5.0) -> bool:
+    """v0.0.9 R-f1s-5 — may this process send ``billing.charge`` for exactly this amount and key? Asks main, over the
+    permission gate's signed channel, to spend the owner confirm it issued on the owner's click on Buy. False whenever
+    main cannot be asked (not started by icloneOS, no gate, no key, timeout): the caller then refuses (fail closed)."""
+    return owner_action_confirmed("charge", amount_usd, owner_confirm, idempotency_key, wait)
+
+
+def owner_action_confirmed(action: str, subject: str, owner_confirm: str, idempotency_key: str,
+                           wait: float = 5.0) -> bool:
+    """v0.0.9 — the same question for any billing write that charges or arms a charge (``subscription-upgrade``,
+    ``subscription-change``, ``subscription-resume``, ``auto-reload``, or ``charge``): main spends the owner confirm it
+    issued on the owner's click for exactly this action, subject and key. False whenever main cannot be asked.
+
+    The gate is the bundled plugin's (built once per process by ``process_gate``); if no tool call loaded the plugin
+    yet, plugin discovery runs once so the bundled gate registers and attests itself first. Nothing here builds or
+    seeds a gate: only the bundled plugin can."""
+    if not locked():
+        return False
+    with _gate_lock:
+        gate = _gate
+    if gate is None:
+        try:
+            from hermes_cli.plugins import discover_plugins
+
+            discover_plugins()
+        except Exception:  # noqa: BLE001 — no gate is a refusal below
+            pass
+        with _gate_lock:
+            gate = _gate
+    channel = gate.get("channel") if isinstance(gate, dict) else None
+    if channel is None or not getattr(channel, "usable", False) or not hasattr(channel, "billing_action_confirm"):
+        return False
+    try:
+        return channel.billing_action_confirm(action, subject, owner_confirm, idempotency_key, wait) is True
+    except Exception:  # noqa: BLE001 — fail closed
+        return False
+
+
 def process_ack() -> Tuple[Dict[str, Any], "threading.Lock"]:
     """What this process last told main about the agent's commands, one per process however many plugin copies load.
     Only the first copy arms it; the config note is the launch home's alone."""

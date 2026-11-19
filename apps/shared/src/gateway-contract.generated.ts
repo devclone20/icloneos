@@ -165,11 +165,13 @@ export interface SubscriptionPreviewResult {
   effective_at?: string | null
 }
 export type SubscriptionChangeEffect = 'charge_now' | 'scheduled' | 'no_op' | 'blocked'
-/** Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation). */
+/** Either a target tier (downgrade / same-price change) or ``cancel`` (period-end cancellation). Under icloneOS (policy lock) a change to a tier needs ``owner_confirm``: main's single-use token for the owner's click, bound to action ``subscription-change``, this ``subscription_type_id`` and ``idempotency_key``. A cancellation needs none. */
 export interface SubscriptionChangeParams {
   profile?: string | null
   subscription_type_id?: string | null
   cancel?: boolean
+  idempotency_key?: string | null
+  owner_confirm?: string | null
 }
 /** ``_billing_pending_change``: ``message`` + the raw NAS body in ``payload`` on success. */
 export interface BillingPendingChangeResult {
@@ -183,10 +185,18 @@ export interface BillingPendingChangeResult {
   code?: string | null
   recovery?: string | null
 }
+/** Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Resume (it re-enables the recurring spend), bound to action ``subscription-resume`` and ``idempotency_key``. */
+export interface SubscriptionResumeParams {
+  profile?: string | null
+  idempotency_key?: string | null
+  owner_confirm?: string | null
+}
+/** Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Upgrade, bound to action ``subscription-upgrade``, this ``subscription_type_id`` and ``idempotency_key``: checked over the permission channel before the portal charges. A plain Hermes process ignores it. */
 export interface SubscriptionUpgradeParams {
   profile?: string | null
   subscription_type_id?: string | null
   idempotency_key?: string | null
+  owner_confirm?: string | null
 }
 /** The money route: ``status`` separates a completed upgrade from an SCA / decline that must finish in the portal at ``recovery_url``; ``idempotency_key`` is echoed (also on error) so a retry reuses it. */
 export interface SubscriptionUpgradeResult {
@@ -205,10 +215,12 @@ export interface SubscriptionUpgradeResult {
   reason?: string | null
   idempotency_key?: string | null
 }
+/** Under icloneOS (policy lock) ``owner_confirm`` is main's single-use token for the owner's click on Buy for exactly this ``amount_usd`` (a string) and ``idempotency_key``: 64 lowercase hex, checked over the permission channel before the portal is called. A plain Hermes process ignores it. */
 export interface BillingChargeParams {
   profile?: string | null
   amount_usd?: number | string | null
   idempotency_key?: string | null
+  owner_confirm?: string | null
 }
 /** ``202 {chargeId}`` — money is not confirmed yet; poll ``billing.charge_status``. */
 export interface BillingChargeResult {
@@ -244,11 +256,14 @@ export interface BillingChargeStatusResult {
   settled_at?: string | null
   reason?: string | null
 }
+/** Under icloneOS (policy lock) switching auto-reload ON needs ``owner_confirm``: main's single-use token for the owner's click, bound to action ``auto-reload``, subject ``on|<threshold>|<top_up_amount>`` (both decimal strings, at most 2 places) and ``idempotency_key``. Switching it off needs none. */
 export interface BillingAutoReloadParams {
   profile?: string | null
   enabled?: boolean
   threshold?: number | string | null
   top_up_amount?: number | string | null
+  idempotency_key?: string | null
+  owner_confirm?: string | null
 }
 /** A write with no success payload beyond ``ok``. */
 export interface BillingMutationResult {
@@ -5420,7 +5435,7 @@ export interface RpcMethods {
   /** Chargeless quote of what a plan change would do (billing:manage). */
   'subscription.preview': { params: SubscriptionPreviewParams; result: SubscriptionPreviewResult }
   /** Clear a scheduled downgrade / cancellation (re-enables recurring spend). */
-  'subscription.resume': { params: ProfileParams; result: BillingPendingChangeResult }
+  'subscription.resume': { params: SubscriptionResumeParams; result: BillingPendingChangeResult }
   /** Current plan, tier catalog and usage for the picker; fail-open when logged out. */
   'subscription.state': { params: ProfileParams; result: SubscriptionStateResult }
   /** Prorate, charge and flip the plan (billing:manage, idempotent). */

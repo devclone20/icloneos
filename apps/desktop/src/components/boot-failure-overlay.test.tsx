@@ -68,7 +68,9 @@ describe('BootFailureOverlay', () => {
   it('swaps to the in-place gateway settings view (no route nav) and back', async () => {
     render(<BootFailureOverlay />)
 
-    fireEvent.click(screen.getByRole('button', { name: /gateway settings/i }))
+    // v0.0.9 r4 (design r3 N3): the local card names it the agent's settings.
+    expect(screen.queryByRole('button', { name: /gateway settings/i })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /agent settings/i }))
     // Recovery actions give way to the embedded panel (behind a Back control).
     expect(await screen.findByRole('button', { name: /back/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()
@@ -104,7 +106,7 @@ describe('BootFailureOverlay', () => {
 
     try {
       render(<BootFailureOverlay />)
-      fireEvent.click(screen.getByRole('button', { name: /gateway settings/i }))
+      fireEvent.click(screen.getByRole('button', { name: /agent settings/i }))
 
       expect(await screen.findByRole('button', { name: /back/i })).toBeTruthy()
       expect(screen.queryByRole('button', { name: /retry/i })).toBeNull()

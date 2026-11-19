@@ -1280,7 +1280,7 @@ async function executeRunInSandboxAttempt(target, index, warmup, mock, output, s
   )
   const child = spawn(
     electron,
-    [target.targetDesktop, `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`],
+    [target.targetDesktop, `--user-data-dir=${userData}`, `--remote-debugging-port=${port}`, '--use-mock-keychain'],
     {
       cwd: target.targetDesktop,
       env: sanitizedEnv({

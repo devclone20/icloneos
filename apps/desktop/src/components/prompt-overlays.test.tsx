@@ -63,7 +63,7 @@ describe('PromptOverlays', () => {
 
     expect(screen.getByText('Administrator password')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
 
     await waitFor(() => expect($sudoRequest.get()).toBeNull())
     expect(fake.respond).not.toHaveBeenCalled()
@@ -77,7 +77,7 @@ describe('PromptOverlays', () => {
 
     expect(screen.getByText('TEST_SECRET')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
 
     await waitFor(() => expect($secretRequest.get()).toBeNull())
     expect(fake.respond).not.toHaveBeenCalled()
@@ -91,7 +91,7 @@ describe('PromptOverlays', () => {
 
     expect(screen.getByText('Administrator password')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
 
     await waitFor(() => expect($sudoRequest.get()).toBeNull())
     expect(fake.respond).toHaveBeenCalledTimes(1)
@@ -113,7 +113,7 @@ describe('PromptOverlays', () => {
 
     expect(screen.getByText('TEST_SECRET')).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
 
     await waitFor(() => expect($secretRequest.get()).toBeNull())
     expect(fake.respond).toHaveBeenCalledWith('secret-1', { result: { value: '' } })
@@ -126,10 +126,63 @@ describe('PromptOverlays', () => {
 
     renderPrompts()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
 
     await waitFor(() => expect(notifyError).toHaveBeenCalledTimes(1))
     expect($sudoRequest.get()).toMatchObject({ requestId: 'sudo-1' })
     expect($serverRequests.get().map(entry => entry.id)).toEqual(['sudo-1'])
+  })
+})
+
+// v0.0.9 F4 X7: an answer to a blocking prompt is only ever an explicit act. Old code mapped every close path
+// (Esc AND a click outside) through onOpenChange(false) to a refusal; a stray click answered the prompt.
+describe('PromptOverlays — Esc is the explicit "Not now", outside is not an answer (F4 X7)', () => {
+  it('Esc sends exactly one refusal frame and never the typed value', async () => {
+    replayOpenRequests(fake.gateway, [{ id: 'sudo-1', method: 'sudo', params: { session_id: 's1' } }])
+
+    renderPrompts()
+
+    const field = screen.getByPlaceholderText(/password/i)
+    fireEvent.change(field, { target: { value: 'hunter2' } })
+    fireEvent.keyDown(field, { code: 'Escape', key: 'Escape' })
+    fireEvent.keyDown(document.activeElement ?? field, { code: 'Escape', key: 'Escape' })
+
+    await waitFor(() => expect($sudoRequest.get()).toBeNull())
+    expect(fake.respond).toHaveBeenCalledTimes(1)
+    expect(fake.respond).toHaveBeenCalledWith('sudo-1', { result: { value: '' } })
+  })
+
+  it('a pointer-down outside the dialog does not answer and keeps the prompt open', async () => {
+    replayOpenRequests(fake.gateway, [
+      {
+        id: 'secret-1',
+        method: 'secret',
+        params: { env_var: 'TEST_SECRET', prompt: 'Paste a secret', session_id: 's1' }
+      }
+    ])
+
+    renderPrompts()
+
+    expect(screen.getByText('TEST_SECRET')).toBeTruthy()
+
+    fireEvent.pointerDown(document.body)
+    fireEvent.mouseDown(document.body)
+    fireEvent.focusIn(document.body)
+
+    // Give any (wrong) async answer a chance to leave.
+    await new Promise(resolve => setTimeout(resolve, 20))
+
+    expect(fake.respond).not.toHaveBeenCalled()
+    expect($secretRequest.get()).toMatchObject({ requestId: 'secret-1' })
+    expect(screen.getByText('TEST_SECRET')).toBeTruthy()
+  })
+
+  it('the refusal button is labelled "Not now" (no ambiguous Cancel)', () => {
+    setSudoRequest({ requestId: 'sudo-2', sessionId: 's1' })
+
+    renderPrompts()
+
+    expect(screen.getByRole('button', { name: 'Not now' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull()
   })
 })

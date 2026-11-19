@@ -836,7 +836,8 @@ describe('a full backup before every agent update', () => {
         hermesHome: '/h',
         log: line => void logs.push(line),
         readConfig: () => config,
-        run
+        run,
+        runtimeEnv: { HERMES_DEPENDENCY_HOME: '/h/hermes-agent/.iclone-deps/hermes' }
       })
 
     expect(await ensure('updates:\n  pre_update_backup: full\n')).toEqual({ changed: false, previous: 'full' })
@@ -849,6 +850,7 @@ describe('a full backup before every agent update', () => {
       ['config', 'set', 'updates.pre_update_backup', 'full']
     ])
     expect(opts.env.HERMES_HOME).toBe('/h')
+    expect(opts.env.HERMES_DEPENDENCY_HOME).toBe('/h/hermes-agent/.iclone-deps/hermes')
     expect(logs[0]).toMatch(/quick → full: set/)
   })
 })

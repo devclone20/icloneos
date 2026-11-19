@@ -30,3 +30,28 @@ export function claimRightEdge(owner: string, widthCss: string): () => void {
     root.style.removeProperty('--iclone-island-w')
   }
 }
+
+/**
+ * v0.0.9 F4: the other half of "one island at a time" for islands that open from different places (FILES from the
+ * dock, the iNFT collection from its tab, the notification centre from the titlebar bell). While `owner` is open,
+ * another island claiming the edge closes it: `onTaken` runs once that claim lands. Returns the disposer.
+ */
+export function watchRightEdge(owner: string, onTaken: () => void): () => void {
+  const root = document.documentElement
+
+  if (typeof MutationObserver === 'undefined') {
+    return () => undefined
+  }
+
+  const observer = new MutationObserver(() => {
+    const holder = root.dataset.icloneIsland
+
+    if (holder && holder !== owner) {
+      onTaken()
+    }
+  })
+
+  observer.observe(root, { attributeFilter: ['data-iclone-island'], attributes: true })
+
+  return () => observer.disconnect()
+}

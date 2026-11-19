@@ -1568,6 +1568,35 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='aui_user-message-root'] {
   top: var(--sticky-human-top);
+  container-type: scroll-state;
+}
+
+/* v0.0.9 G GF-6: the stuck prompt's slab reaches up to the viewport's top (the sticky offset strip showed a half-cut
+   reply line) and fades 8px down into the thread. Only while stuck: at rest the row is in the flow and masks nothing.
+   The HUD keeps static rows, which never stick. */
+[data-slot='sticky-human-mask'],
+[data-slot='sticky-human-fade'] {
+  display: none;
+  position: absolute;
+  right: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+@container scroll-state(stuck: top) {
+  [data-slot='sticky-human-mask'] {
+    display: block;
+    bottom: 100%;
+    height: calc(var(--sticky-human-top) + 1px);
+    background: var(--ic-surface);
+  }
+
+  [data-slot='sticky-human-fade'] {
+    display: block;
+    top: 100%;
+    height: 8px;
+    background: linear-gradient(var(--ic-surface), transparent);
+  }
 }
 
 [data-slot='aui_user-message-root'],

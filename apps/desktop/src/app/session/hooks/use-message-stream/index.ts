@@ -10,6 +10,7 @@ import {
   type ChatMessagePart,
   chatMessageText,
   completeOpenTimelineParts,
+  dropPreToolStreamedText,
   type GatewayEventPayload,
   mergeFinalAssistantText,
   reasoningPart,
@@ -24,16 +25,23 @@ import {
   stripGeneratedImageEchoes
 } from '@/lib/generated-images'
 import { parseTodos } from '@/lib/todos'
+import { $interimAssistantMessages } from '@/store/interim-assistant-messages'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { isDiskFullErrorMessage, notifyError } from '@/store/notifications'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { upsertSubagent } from '@/store/subagents'
-import { setSessionTodos } from '@/store/todos'
+import { applySessionTodoSnapshot } from '@/store/todos'
 
 import type { ClientSessionState } from '../../../types'
 
 import { useGatewayEventHandler } from './gateway-event'
-import { completionErrorText, delegateTaskPayloads, MAX_STREAM_FLUSH_GAP_MS, STREAM_DELTA_FLUSH_MS } from './utils'
+import {
+  completionErrorText,
+  delegateTaskPayloads,
+  MAX_STREAM_FLUSH_GAP_MS,
+  STREAM_DELTA_FLUSH_MS,
+  todoRevision
+} from './utils'
 
 interface MessageStreamOptions {
   activeGatewayProfile?: string
@@ -465,7 +473,7 @@ export function useMessageStream({
         const todos = parseTodos(payload.todos) ?? parseTodos(payload.result) ?? parseTodos(payload.args)
 
         if (todos) {
-          setSessionTodos(sessionId, todos)
+          applySessionTodoSnapshot(sessionId, todos, todoRevision(payload))
         }
       }
 
@@ -721,6 +729,12 @@ export function useMessageStream({
         // provably done here — nothing can still be running — so seal any
         // tool-call parts that never saw their completion event.
         nextMessages = sealOpenToolParts(nextMessages)
+
+        // display.interim_assistant_messages off: the commentary streamed beside this turn's tool calls goes, the
+        // final answer stays (lib/chat-messages/interim-off.ts).
+        if (!$interimAssistantMessages.get()) {
+          nextMessages = dropPreToolStreamedText(nextMessages)
+        }
 
         const hasInlineError = nextMessages.some(m => m.role === 'assistant' && m.error && !m.hidden)
         const lastVisible = [...nextMessages].reverse().find(m => !m.hidden)

@@ -36,6 +36,7 @@ test.afterAll(async () => {
 })
 
 test('local bot replaces an open group main workspace', async () => {
+    test.skip(true, 'N/A in v0.0.9: upstream main-workspace tabs for group and bot chats (openWorkspace tiles in the pane shell); icloneOS removed that pane shell (commit e9ee554304) and hosts Bots only inside Settings › Sessions & Bots (src/app/settings/sessions-bots.tsx:52)')
   test.setTimeout(180_000)
   const page = fixture!.page
 

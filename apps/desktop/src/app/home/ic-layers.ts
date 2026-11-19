@@ -29,8 +29,9 @@ const ihome = {
   dock: 44,
   inftTab: 45,
   controls: 60,
-  inftScrim: 61,
-  inftPanel: 62,
+  splitPreview: 61,
+  inftScrim: 62,
+  inftPanel: 63,
   walletScrim: 64,
   walletPanel: 65
 } as const satisfies Scope
@@ -58,6 +59,7 @@ const WHAT: Readonly<Record<string, string>> = {
   'ihome.econ': '.iecon: a dock window opened over the Message window',
   'ihome.dock': '.dock: the rail, above the windows it opens',
   'ihome.controls': ".iwin-controls .iop: the window's controls",
+  'ihome.splitPreview': '.ic-split-preview: the Dock-drag split preview, over the panes and their controls',
   'ihome.inftScrim': '.inft-scrim: collections, modal, above every control',
   'ihome.inftPanel': '.inft-panel',
   'ihome.walletScrim': '.iwbal-scrim: wallet, modal',

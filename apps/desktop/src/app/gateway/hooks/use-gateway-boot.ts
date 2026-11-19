@@ -5,6 +5,7 @@ import { shouldApplyPostBootProgressError } from '@/components/boot-failure-reau
 import type { HermesConnection } from '@/global'
 import { HermesGateway } from '@/hermes'
 import { translateNow } from '@/i18n'
+import { f2Crash } from '@/i18n/en/v009-f2'
 import { AGENT_INSTALL_SKIPPED_TAG } from '@/iclone-shared/agent-runtime-status'
 import { errorMessage } from '@/iclone-shared/errors'
 import { awaitBackendBoot } from '@/lib/backend-boot-activity'
@@ -13,9 +14,11 @@ import { decideLivenessForceClose, LIVENESS_REPROBE_DELAY_MS } from '@/lib/gatew
 import { reconnectBackoffDelayMs } from '@/lib/reconnect-backoff'
 import { RECONNECT_ATTEMPT_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout'
 import { $agentRuntimeSkipped } from '@/store/agent-runtime'
+import { $backendRestart, backendExitCause, backendExitDetail, backendStoppedSurface } from '@/store/backend-restart'
 import {
   $desktopBoot,
   applyDesktopBootProgress,
+  applyMainBootProgress,
   completeDesktopBoot,
   failDesktopBoot,
   resumeDesktopBootForRetry,
@@ -23,6 +26,7 @@ import {
   skipDesktopBoot
 } from '@/store/boot'
 import { resetBackgroundPollingGuard } from '@/store/composer-status'
+import { refreshConnectionsRegistry } from '@/store/connections'
 import {
   $gateway,
   activeGatewayConnectionId,
@@ -49,7 +53,7 @@ import {
   isCurrentGatewaySwitch,
   registerGatewaySwitchLifecycle
 } from '@/store/gateway-switch'
-import { notify, notifyError } from '@/store/notifications'
+import { dismissNotification, notify, notifyError, readableError, recordNotification } from '@/store/notifications'
 import {
   $activeGatewayProfile,
   normalizeProfileKey,
@@ -60,6 +64,7 @@ import {
   $activeSessionId,
   $connection,
   $currentCwd,
+  $gatewayState,
   $selectedStoredSessionId,
   $sessions,
   ensureDefaultWorkspaceCwd,
@@ -84,7 +89,46 @@ import {
 import { windowProfileOverride } from '@/store/windows'
 import type { RpcEvent } from '@/types/hermes'
 
+import { startConnectionsRegistryAtBoot } from './connections-registry-boot'
 import { stashGatewaySurvivor, survivorIsStale, takeGatewaySurvivor } from './gateway-hmr-survivor'
+
+/** The one "Backend stopped" toast: replaced in place on each exit, dismissed when the gateway is open again. */
+export const BACKEND_STOPPED_NOTIFICATION_ID = 'backend-stopped'
+
+function currentBackendStoppedSurface() {
+  const boot = $desktopBoot.get()
+
+  return backendStoppedSurface({
+    bootError: boot.error,
+    bootRunning: boot.running,
+    gatewayState: $gatewayState.get(),
+    restart: $backendRestart.get()
+  })
+}
+
+/**
+ * v0.0.9 r2 (m-r2-4, one surface per state): a boot that failed has just put the boot card up (`failDesktopBoot`), and
+ * after ✕ the stopped banner says it. Neither may sit beside a raw "Desktop boot failed — Error invoking remote
+ * method…" toast: the notification centre keeps the entry, nothing pops over the window.
+ */
+export function recordDesktopBootFailure(error: unknown): string {
+  const title = translateNow('boot.errors.desktopBootFailed')
+  const readable = readableError(error, title)
+
+  return recordNotification({ detail: readable.detail, kind: 'error', message: readable.message, title })
+}
+
+/** "Restart agent" on the crash entry: main's manual restart (the stopped banner's Retry). A failure is said. */
+async function restartAgentFromNotice() {
+  const result = await window.hermesDesktop?.restartBackend?.().catch((error: unknown) => ({
+    error: error instanceof Error ? error.message : String(error),
+    ok: false
+  }))
+
+  if (result && !result.ok) {
+    notify({ kind: 'error', title: f2Crash.restartFailed, message: result.error || f2Crash.causeUnknown })
+  }
+}
 
 // After the reconnect loop has been failing for this long, raise a NON-blocking
 // warning toast. Full-screen BootFailureOverlay used to lock the user out of
@@ -716,12 +760,13 @@ export function useGatewayBoot({
         return
       }
 
-      applyDesktopBootProgress(payload)
+      // v0.0.9 F3: main's own progress never revives a boot the renderer already failed (applyMainBootProgress).
+      applyMainBootProgress(payload)
     })
 
     void desktop
       .getBootProgress()
-      .then(snapshot => applyDesktopBootProgress(snapshot))
+      .then(snapshot => applyMainBootProgress(snapshot))
       .catch(() => undefined)
 
     setDesktopBootStep({
@@ -861,25 +906,36 @@ export function useGatewayBoot({
     const forceReconnectNow = () => reconnectNow({ forceOpenSocket: true })
     const offPowerResume = desktop.onPowerResume?.(() => void forceReconnectNow())
     const offConnectionApplied = desktop.onConnectionApplied?.(() => void softSwitch())
+
     // The same backend restarted (isolation on or off, a Settings restart): the sessions are still its sessions, so this is a
     // reconnect, and use-route-resume brings the open conversation back on the closed->open edge. softSwitch would draft over
     // it. A window whose boot never finished has nothing to keep and takes the full way.
-    const offBackendRestarted = desktop.onBackendRestarted?.(() => void (bootCompleted ? forceReconnectNow() : softSwitch()))
+    const offBackendRestarted = desktop.onBackendRestarted?.(
+      () => void (bootCompleted ? forceReconnectNow() : softSwitch())
+    )
+
     const offGatewayReconnect = registerGatewayReconnect(forceReconnectNow)
 
     // Registry lifecycle: a removed connection's secondaries must close NOW
     // (remote/cloud have no local process whose death would drop the socket —
     // they'd keep streaming ghost events); a materially edited one is
     // disposed AND re-dialed so its sockets target the new endpoint.
+    // The registry at boot: load it now and restore the last-used source once the primary boot settles
+    // (connections-registry-boot.ts; the duties a deleted switcher used to carry, e1b478779f).
+    const stopConnectionsRegistryBoot = startConnectionsRegistryAtBoot()
+
     const offConnectionsChanged = desktop.connections?.onChanged?.(payload => {
+      // Every change re-pulls the registry snapshot, so this window's rail and caches follow a connection added,
+      // renamed or removed in another window (this listener is the only one: the switcher that had its own is gone).
+      void refreshConnectionsRegistry().catch(() => undefined)
+
       if (!payload || typeof payload.connectionId !== 'string') {
         return
       }
 
       // 'saved' is a pure registry-refresh push (new connection or label
       // rename — #95393): no endpoint moved, so there is nothing to dispose,
-      // redial, or forget. The switcher's own onChanged listener re-pulls the
-      // registry snapshot for it.
+      // redial, or forget. The re-pull above is all it needs.
       if (payload.reason === 'saved') {
         return
       }
@@ -972,7 +1028,7 @@ export function useGatewayBoot({
     // included: only a hold-changing event lifts it) and follows main's install heartbeats
     // (src/lib/backend-boot-activity.ts). lib/boot-wait had no other caller and was removed; its scenarios moved there.
 
-    const offExit = desktop.onBackendExit(() => {
+    const offExit = desktop.onBackendExit(exit => {
       if ($gatewaySwitching.get()) {
         return
       }
@@ -981,12 +1037,45 @@ export function useGatewayBoot({
         failDesktopBoot(translateNow('boot.errors.backgroundExitedDuringStartup'))
       }
 
-      notify({
-        kind: 'error',
-        title: translateNow('boot.errors.backendStopped'),
-        message: translateNow('boot.errors.backgroundExited'),
-        durationMs: 0
-      })
+      // v0.0.9 design 3/10/11: what happened (the agent stopped), why (the exit main reported) and what to do (main
+      // restarts it; Restart agent if it stays down). One surface per state: when the boot card or the stopped banner
+      // already says it, the centre keeps the entry and no toast covers the window.
+      const entry = {
+        action: { label: f2Crash.restart, onClick: () => void restartAgentFromNotice() },
+        id: BACKEND_STOPPED_NOTIFICATION_ID,
+        kind: 'error' as const,
+        message: backendExitCause(exit),
+        detail: backendExitDetail(exit),
+        nextStep: f2Crash.nextStep,
+        title: translateNow('boot.errors.backendStopped')
+      }
+
+      if (currentBackendStoppedSurface() === 'toast') {
+        notify({ ...entry, durationMs: 0 })
+      } else {
+        recordNotification(entry)
+      }
+    })
+
+    // The stopped banner (or the boot card) took the state over: the sticky toast leaves, the centre keeps the entry.
+    const dropStoppedToastIfOwned = () => {
+      if (currentBackendStoppedSurface() !== 'toast') {
+        dismissNotification(BACKEND_STOPPED_NOTIFICATION_ID)
+      }
+    }
+
+    const offStoppedBanner = $backendRestart.listen(dropStoppedToastIfOwned)
+    const offStoppedBootCard = $desktopBoot.listen(dropStoppedToastIfOwned)
+
+    // v0.0.9 Q (proofs F2-a): the "Backend stopped" toast is about a state, and the state ended once the gateway is
+    // open again (main's restart, or the user's): it leaves by itself instead of piling up one per crash. The centre
+    // keeps the entry.
+    const offBackendBack = $gatewayState.listen(state => {
+      if (state === 'open') {
+        dismissNotification(BACKEND_STOPPED_NOTIFICATION_ID)
+      } else {
+        dropStoppedToastIfOwned()
+      }
     })
 
     async function boot() {
@@ -1124,7 +1213,7 @@ export function useGatewayBoot({
           }
 
           failDesktopBoot(message)
-          notifyError(err, translateNow('boot.errors.desktopBootFailed'))
+          recordDesktopBootFailure(err)
           setSessionsLoading(false)
         }
       }
@@ -1191,10 +1280,14 @@ export function useGatewayBoot({
       offConnectionApplied?.()
       offBackendRestarted?.()
       offConnectionsChanged?.()
+      stopConnectionsRegistryBoot()
       offGatewayReconnect()
       offState()
       offEvent()
       offExit()
+      offBackendBack()
+      offStoppedBanner()
+      offStoppedBootCard()
       offWindowState?.()
       offBootProgress()
 

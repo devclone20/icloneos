@@ -27,11 +27,22 @@ import * as path from 'node:path'
 
 import { _electron, type ElectronApplication, type Page } from '@playwright/test'
 
+import { consentSeed } from './consent-seed'
 import { type MockServerOptions, startMockServer } from './mock-server'
+import { GATE_TITLE, judgeReadiness, type ReadinessVerdict, TERMINAL_VERDICTS } from './readiness'
+import { readinessFacts } from './readiness-page'
+import { claimBooted, claimNonReady, markReady, noteLaunch } from './ready-state'
 import { installErrorBannerGuard } from './test'
 
 const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
 const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
+export { consentSeed, E2E_CONSENT_SEED_MARKER } from './consent-seed'
+/**
+ * v0.0.9 G-M1: the mock provider's context window. The agent refuses any model under 64,000 tokens ("below the
+ * minimum 64,000 required by Hermes Agent"), so the old 4,096 failed every real turn; 65,536 clears it. A spec that
+ * needs a small window (compression) still sets model.context_length itself.
+ */
+export const E2E_MOCK_CONTEXT = 65_536
 const RELEASE_ROOT = path.join(DESKTOP_ROOT, 'release')
 
 // ─── Credential stripping (matches launch.spec.ts) ──────────────────────
@@ -97,8 +108,15 @@ export interface Sandbox {
   cleanup: () => void
 }
 
-export function createSandbox(prefix: string): Sandbox {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), `hermes-e2e-${prefix}-${Math.random()}`))
+export { GATE_TITLE, HOME_REGION_LABEL } from './readiness'
+
+export function createSandbox(prefix: string, { consent = true }: { consent?: boolean } = {}): Sandbox {
+  // A short root, like a default install's userData, so the sockets under it bind: macOS's sun_path is 104 bytes, and
+  // the old root (os.tmpdir() + 'hermes-e2e-<prefix>-<Math.random()>') put the launcher socket at 139 bytes, where it
+  // never bound and the agent silently lost `terminal` (rt's capture; the app now refuses such a path loudly,
+  // electron/socket-path.ts). A long os.tmpdir() (macOS's per-user /var/folders/…/T) falls back to /tmp.
+  const base = Buffer.byteLength(os.tmpdir()) <= 32 ? os.tmpdir() : '/tmp'
+  const root = fs.mkdtempSync(path.join(base, `e2e-${prefix.replace(/[^\w-]/g, '').slice(0, 10)}-`))
   const hermesHome = path.join(root, 'hermes-home')
   const userDataDir = path.join(root, 'electron-user-data')
 
@@ -122,6 +140,13 @@ export function createSandbox(prefix: string): Sandbox {
   // 100%. Without this file every sandbox would inherit the product default
   // and fail pointer interception + snapshot diffs.
   fs.writeFileSync(path.join(userDataDir, 'zoom-state.json'), JSON.stringify({ zoomLevel: 0 }, null, 2), 'utf8')
+
+  if (consent) {
+    fs.writeFileSync(path.join(userDataDir, 'consent.json'), `${JSON.stringify(consentSeed(), null, 2)}\n`, {
+      encoding: 'utf8',
+      mode: 0o600
+    })
+  }
 
   return {
     root,
@@ -172,7 +197,7 @@ ${modelContextLength ? `  context_length: ${modelContextLength}\n` : ''}provider
     key_env: MOCK_API_KEY
     models:
       mock-model: {}
-    context_length: 4096
+    context_length: ${E2E_MOCK_CONTEXT}
 ${displaySection}${extraConfig ? `\n${extraConfig.trim()}\n` : ''}`
 
   fs.writeFileSync(configPath, config, 'utf8')
@@ -310,8 +335,71 @@ export function findElectron(): string {
  * @param env      - the process environment (already has HERMES_HOME etc.)
  * @returns the ElectronApplication + first Page
  */
-export async function launchDesktop(env: Record<string, string>): Promise<{ app: ElectronApplication; page: Page }> {
+/**
+ * v0.0.9 e2e harness (triage B1): the dev backend and the permission-gate probe run `<hermes root>/.venv/bin/python`.
+ * A bare venv (no packages) makes the probe die on `ruamel`, and the app correctly refuses to start the agent, so every
+ * boot test timed out at 90 s. This preflight fails the launch at once with the cause and the remedy instead. Checked
+ * only for the repo's own root (the fail-closed spec points the app at a bare one on purpose), once per worker.
+ */
+const preflightOk = new Set<string>()
+
+export function e2ePythonProblem(root: string = REPO_ROOT): null | string {
+  const python = path.join(root, '.venv', 'bin', 'python')
+
+  if (!fs.existsSync(python)) {
+    return `${python} does not exist`
+  }
+
+  // The agent's own YAML layer: ruamel.yaml (a core dependency) behind hermes_yaml. PyYAML is NOT a runtime
+  // dependency (only optional voice extras pull it in), so probing `yaml` refused a correct core install.
+  const probe = spawnSync(python, ['-s', '-c', 'import ruamel.yaml, hermes_yaml'], { encoding: 'utf8', timeout: 30_000 })
+
+  if (probe.status !== 0) {
+    return `${python} cannot import the agent's packages (${(probe.stderr || probe.stdout).trim().split('\n').at(-1)})`
+  }
+
+  if (!fs.existsSync(path.join(root, '.venv', 'bin', 'hermes'))) {
+    return `${path.join(root, '.venv', 'bin', 'hermes')} does not exist (the hermes entry point)`
+  }
+
+  return null
+}
+
+export function assertE2ePython(root: string = REPO_ROOT): void {
+  if (preflightOk.has(root)) {
+    return
+  }
+
+  const problem = e2ePythonProblem(root)
+
+  if (problem) {
+    throw new Error(
+      `e2e preflight: ${problem}. The dev backend and the permission-gate probe run this venv, so the app would ` +
+        'refuse to start the agent. Create it with the repo\'s packages and entry point: ' +
+        '`uv sync --frozen` in the checkout (see the v0.0.9 e2e harness note).'
+    )
+  }
+
+  preflightOk.add(root)
+}
+
+export async function launchDesktop(
+  env: Record<string, string>,
+  { claim = 'booted', reason = '' }: { claim?: 'booted' | 'non-ready'; reason?: string } = {}
+): Promise<{ app: ElectronApplication; page: Page }> {
   assertDistBuilt()
+
+  if (env.HERMES_DESKTOP_HERMES_ROOT === REPO_ROOT && !env.HERMES_DESKTOP_BOOT_FAKE_ERROR) {
+    assertE2ePython(REPO_ROOT)
+  }
+
+  if (claim === 'booted') {
+    claimBooted()
+  } else {
+    claimNonReady(reason || 'not ready by design')
+  }
+
+  noteLaunch()
 
   const electronBin = findElectron()
 
@@ -322,7 +410,10 @@ export async function launchDesktop(env: Record<string, string>): Promise<{ app:
     args: [
       DESKTOP_ROOT, // `electron .` — the `.` is the desktop package dir
       '--disable-gpu',
-      '--no-sandbox'
+      '--no-sandbox',
+      // v0.0.9: never the real macOS keychain from an e2e run (safeStorage would create and prompt for a real
+      // "<app> Safe Storage" item on the developer's machine). Chromium's mock keychain is per process.
+      '--use-mock-keychain'
     ],
     env,
     cwd: DESKTOP_ROOT
@@ -418,7 +509,11 @@ export async function setupNoProvider(): Promise<NoProviderFixture> {
   writeEmptyConfig(sandbox.hermesHome)
 
   const env = buildAppEnv(sandbox)
-  const { app, page } = await launchDesktop(env)
+
+  const { app, page } = await launchDesktop(env, {
+    claim: 'non-ready',
+    reason: 'onboarding: no provider configured, the provider picker is the expected state'
+  })
 
   return {
     app,
@@ -472,7 +567,7 @@ providers:
     key_env: MOCK_API_KEY
     models:
       mock-model: {}
-    context_length: 4096
+    context_length: ${E2E_MOCK_CONTEXT}
 `,
     'utf8'
   )
@@ -485,7 +580,10 @@ providers:
       : {}
   )
 
-  const { app, page } = await launchDesktop(env)
+  const { app, page } = await launchDesktop(env, {
+    claim: 'non-ready',
+    reason: 'boot failure: the backend is dead (or a fake boot error) by design; the failure card is the expected state'
+  })
 
   return {
     app,
@@ -562,9 +660,12 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
   delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES
   delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES_ROOT
 
+  // The packaged smoke checks the binary (window, renderer, HUD, the fake boot overlay), not a live agent.
+  claimNonReady('packaged smoke: fake boot (HERMES_DESKTOP_BOOT_FAKE), the binary and its renderer only')
+
   const app = await _electron.launch({
     executablePath: PACKAGED_BINARY_PATH,
-    args: ['--disable-gpu', '--no-sandbox'],
+    args: ['--disable-gpu', '--no-sandbox', '--use-mock-keychain'],
     env
   })
 
@@ -585,81 +686,41 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
 // ─── Wait helpers ──────────────────────────────────────────────────────
 
 /**
- * Wait for the desktop app to finish booting and show the main chat UI.
- *
- * The boot overlay disappears when `completeDesktopBoot()` fires in the
- * renderer — at that point the gateway is open, config is loaded, and
- * sessions are loaded. We detect this by waiting for the boot/connecting
- * overlay to become invisible and the main app shell to be present.
- *
- * Two things must both be true before we return:
- *  1. The composer (chat input) is visible — it's disabled until the
- *     gateway is open.
- *  2. No full-screen overlay (onboarding Preparing, connecting overlay,
- *     boot-failure) covers the viewport center. The composer can be
- *     "visible" in Playwright's eyes (non-zero bounding box, not
- *     display:none) even when a z-1300+ overlay is painted on top of it,
- *     so checking the composer alone catches the app mid-boot at ~92%
- *     with the loading bar still showing.
+ * Wait until the icloneOS app is ready (e2e/readiness.ts): the home region is shown, main's boot progress says the
+ * backend is up, and no known blocker (the gate card, the consent sheet, the connecting overlay, any aria-modal
+ * dialog) is on screen. The gate card, the consent sheet and a backend error never clear by themselves, so they fail at
+ * once with their cause. Then, unless `openMessage: false`, the Message pane is opened from the Dock the way a user
+ * does, and its composer is awaited (the chat specs type into it). The window is polled visible (Electron 40.x
+ * ready-to-show, electron/electron#51972). Marks the test's booted claim ready (reached-ready).
  */
 export async function waitForAppReady(
   fixture: MockBackendFixture | NoProviderFixture | DeadBackendFixture,
-  timeoutMs = 60_000
+  timeoutMs = 60_000,
+  { openMessage = true }: { openMessage?: boolean } = {}
 ): Promise<void> {
   const { page, app } = fixture
+  const deadline = Date.now() + timeoutMs
+  let verdict: ReadinessVerdict = 'no-home'
 
-  // Wait for the composer to exist in the DOM (not necessarily interactive yet).
-  await page.waitForSelector('textarea, [contenteditable="true"]', {
-    state: 'attached',
-    timeout: timeoutMs
-  })
+  while (Date.now() < deadline) {
+    verdict = judgeReadiness(await readinessFacts(page))
 
-  // Now poll until no full-screen overlay covers the viewport center.
-  // elementFromPoint returns the topmost element at a point — if it's part
-  // of a fixed inset-0 overlay (onboarding/connecting/boot-failure), the
-  // app isn't ready yet.
-  await page.waitForFunction(
-    () => {
-      const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
+    if (verdict === 'ready') {
+      break
+    }
 
-      if (!el) {
-        return false
-      }
+    if (TERMINAL_VERDICTS.includes(verdict)) {
+      throw new Error(readinessFailure(verdict))
+    }
 
-      // Walk up to the nearest positioned ancestor — overlays are
-      // `position: fixed; inset: 0`. If the hit element or an ancestor
-      // is a full-viewport fixed overlay, we're still covered.
-      let node: Element | null = el
+    await page.waitForTimeout(250)
+  }
 
-      while (node) {
-        const cs = window.getComputedStyle(node)
+  if (verdict !== 'ready') {
+    throw new Error(`the app did not become ready in ${timeoutMs} ms (last state: ${verdict})`)
+  }
 
-        if (cs.position === 'fixed') {
-          const rect = node.getBoundingClientRect()
-
-          if (rect.left <= 0 && rect.top <= 0 && rect.right >= window.innerWidth && rect.bottom >= window.innerHeight) {
-            return false
-          }
-        }
-
-        node = node.parentElement
-      }
-
-      return true
-    },
-    undefined,
-    { timeout: timeoutMs }
-  )
-
-  // On Electron 40.x, ready-to-show may never fire (electron/electron#51972)
-  // and the window stays hidden even though the DOM is rendered. The main
-  // process reveals it anyway — immediately under TEST_WORKER_INDEX, and via
-  // wireWindowReveal's post-load fallback in production — but the DOM can be
-  // ready before that lands. Poll until the window is actually visible so
-  // interactions (click, screenshot) don't hit a hidden surface.
   if (app) {
-    const deadline = Date.now() + timeoutMs
-
     while (Date.now() < deadline) {
       const visible = await app
         .evaluate(({ BrowserWindow }) => {
@@ -676,6 +737,60 @@ export async function waitForAppReady(
       await page.waitForTimeout(500)
     }
   }
+
+  markReady()
+
+  if (openMessage) {
+    await openMessagePane(page, Math.max(10_000, deadline - Date.now()))
+  }
+}
+
+function readinessFailure(verdict: ReadinessVerdict): string {
+  switch (verdict) {
+    case 'gate':
+      return (
+        `the app shows "${GATE_TITLE}": the agent's python cannot load the permission gate, so the app refuses to ` +
+        'start it (correct). Fix the e2e venv (assertE2ePython) — never mock the gate.'
+      )
+
+    case 'consent':
+      return 'the first-run policy dialog covers the window: the sandbox has no consent.json (createSandbox)'
+
+    default:
+      return `the backend failed to start (main's boot progress: ${verdict})`
+  }
+}
+
+/** Open the Message pane from the Dock, as a user does, and wait for its composer. */
+export async function openMessagePane(page: Page, timeoutMs = 30_000): Promise<void> {
+  // The chat composer (pane-focus.ts targets the same root); never another textarea, e.g. the iT terminal's hidden one.
+  const composer = page
+    .locator('[data-slot="composer-root"] textarea, [data-slot="composer-root"] [contenteditable="true"]')
+    .filter({ visible: true })
+    .first()
+
+  if (await composer.isVisible().catch(() => false)) {
+    return
+  }
+
+  // A reload restores an open Message window, and its composer and frame mount a moment after ready while the Dock
+  // already sits outside the viewport (b2's report). The Dock leaving the viewport is the sign a window is up: then
+  // wait for its composer, never click the Dock.
+  const dockButton = page.getByRole('navigation', { name: 'Dock' }).getByRole('button', { name: 'Message', exact: true })
+  const box = await dockButton.boundingBox().catch(() => null)
+  // Electron has no emulated viewport (viewportSize() is null): read the window's own.
+  const viewport = await page.evaluate(() => ({ height: window.innerHeight, width: window.innerWidth }))
+  const dockOnScreen =
+    box !== null && box.x + box.width > 0 && box.y + box.height > 0 && box.x < viewport.width && box.y < viewport.height
+
+  if (!dockOnScreen || (await page.locator('[data-ic-window="message"]').count()) > 0) {
+    await composer.waitFor({ state: 'visible', timeout: timeoutMs })
+
+    return
+  }
+
+  await dockButton.click()
+  await composer.waitFor({ state: 'visible', timeout: timeoutMs })
 }
 
 /**
@@ -694,6 +809,11 @@ export async function waitForOnboarding(page: Page, timeoutMs = 60_000): Promise
 
       const text = root.textContent ?? ''
 
+      // The policy dialog's own text mentions "Sign in" and "provider": it is not onboarding.
+      if (document.body.textContent?.includes('Before you begin')) {
+        return false
+      }
+
       return (
         text.includes('provider') ||
         text.includes('Provider') ||
@@ -711,29 +831,105 @@ export async function waitForOnboarding(page: Page, timeoutMs = 60_000): Promise
  * Wait for the boot failure overlay to appear.
  */
 export async function waitForBootFailure(page: Page, timeoutMs = 60_000): Promise<void> {
+  // v0.0.9 F3: the failure CARD itself — the BootFailureOverlay dialog (its `#boot-failure-title`), shown and on top.
+  // Text alone ("Retry", a toast) is not enough: the onboarding sheet can name a failure screen that is not there.
   await page.waitForFunction(
     () => {
-      // Boot failure is terminal: the backend gave up. The renderer shows
-      // either BootFailureOverlay (z-1400, with Retry/Repair buttons) or
-      // falls back to the onboarding picker (z-1300) as a recovery path.
-      // We wait for the failure dialog itself — the Preparing component may
-      // still paint its progress bar (recolored red) underneath the overlay,
-      // which is harmless.
-      const text = document.body.textContent ?? ''
+      const title = document.getElementById('boot-failure-title')
+      const dialog = title?.closest('[role="dialog"][aria-modal="true"]')
 
-      // BootFailureOverlay buttons.
-      const hasFailureUI =
-        text.includes('Retry') ||
-        text.includes('Repair') ||
-        text.includes('Use local gateway') ||
-        text.includes('Connection settings')
+      if (!dialog || dialog.closest('[hidden], [aria-hidden="true"]')) {
+        return false
+      }
 
-      // The error toast / notification that fires on failDesktopBoot().
-      const hasErrorToast = text.includes('Desktop boot failed')
+      const el = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2)
 
-      return hasFailureUI || hasErrorToast
+      return Boolean(el && (dialog.contains(el) || el.contains(dialog)))
     },
     undefined,
     { timeout: timeoutMs }
   )
+}
+
+// ─── The Message pane's own conversation list (icloneOS) ────────────────
+//
+// v0.0.9 e2e harness (next layer): upstream specs drove the chat app's `[data-slot="sidebar"]` session list. The
+// icloneOS user has the Message pane's own list instead (src/app/home/msg-sidebar.tsx): a `Conversations` nav whose
+// panel opens from its rail ("Show conversations"), one `.imsg-row` per session, and "New conversation". These
+// helpers drive it the way a user does; the copy is the app's own (src/i18n/en/desktop.ts), held equal by
+// scripts/e2e-readiness.test.mjs.
+export const MESSAGE_LIST = {
+  nav: 'Conversations',
+  show: 'Show conversations',
+  newConversation: 'New conversation'
+} as const
+
+/** Open the Message pane's conversation panel (no-op when it is open). */
+export async function openConversationList(page: Page): Promise<void> {
+  const nav = page.getByRole('navigation', { name: MESSAGE_LIST.nav })
+
+  await nav.waitFor({ state: 'attached', timeout: 30_000 })
+
+  if ((await nav.getAttribute('data-open')) === null) {
+    await nav.getByRole('button', { name: MESSAGE_LIST.show }).first().click()
+    await page.waitForFunction(
+      label => document.querySelector(`nav[aria-label="${label}"]`)?.hasAttribute('data-open') === true,
+      MESSAGE_LIST.nav
+    )
+  }
+}
+
+/** A session's row in the Message pane's list (its open button), by its title. */
+export function conversationRow(page: Page, title: RegExp | string) {
+  return page
+    .getByRole('navigation', { name: MESSAGE_LIST.nav })
+    .locator('.imsg-side__panel .imsg-row')
+    .filter({ hasText: title })
+    .first()
+    .locator('button')
+    .first()
+}
+
+/** Open a stored session from the Message pane's list, as a user does. */
+export async function openConversation(page: Page, title: RegExp | string, timeoutMs = 60_000): Promise<void> {
+  await openConversationList(page)
+
+  const row = conversationRow(page, title)
+
+  await row.waitFor({ state: 'visible', timeout: timeoutMs })
+  await row.click()
+}
+
+/** Start a new conversation from the Message pane's list. */
+export async function newConversation(page: Page): Promise<void> {
+  await openConversationList(page)
+  // The open panel's own "+" (the rail's copy is inert while the panel is open).
+  await page
+    .getByRole('navigation', { name: MESSAGE_LIST.nav })
+    .locator('.imsg-side__panel')
+    .getByRole('button', { name: MESSAGE_LIST.newConversation })
+    .first()
+    .click()
+}
+
+export { openSessionsAndBots } from './settings-door'
+
+/** Leave Settings for the home route (the app's own NEW_CHAT_ROUTE, '/'), and wait until it is gone. */
+export async function closeSettings(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    window.location.hash = '/'
+  })
+  await page.waitForFunction(() => !window.location.hash.startsWith('#/settings'), undefined, { timeout: 15_000 })
+  // Back to the ready home by the harness's own rule, so the next test's per-test readiness claim holds.
+  const deadline = Date.now() + 30_000
+  let verdict = judgeReadiness(await readinessFacts(page))
+
+  while (verdict !== 'ready' && Date.now() < deadline) {
+    await page.waitForTimeout(250)
+    verdict = judgeReadiness(await readinessFacts(page))
+  }
+
+  if (verdict !== 'ready') {
+    throw new Error(`closeSettings: the app did not return to ready (${verdict}): ${JSON.stringify(await readinessFacts(page))}`)
+  }
 }

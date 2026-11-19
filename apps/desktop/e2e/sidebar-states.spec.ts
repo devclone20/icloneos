@@ -9,10 +9,10 @@
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
 
-import { expect, type Page, test } from '@playwright/test'
-
-import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
-import { createBackgroundReleaseHandle, restartMockServer, SIDEBAR_CROSS_TEXTS, SIDEBAR_TEXTS } from './mock-server'
+import { type MockBackendFixture, newConversation, openConversationList, setupMockBackend, waitForAppReady } from './fixtures'
+import { createBackgroundReleaseHandle, MOCK_REPLY, restartMockServer, SIDEBAR_CROSS_TEXTS, SIDEBAR_TEXTS } from './mock-server'
+// v0.0.9 e2e harness: the shared test (ready claims, error-banner guard), not the bare Playwright one.
+import { expect, type Page, test } from './test'
 
 /** Background-running dot aria-label (from i18n en.ts). */
 const BG_DOT_LABEL = 'Background task running'
@@ -20,6 +20,17 @@ const BG_DOT_LABEL = 'Background task running'
 const SESSION_RUNNING_DOT_LABEL = 'Session running'
 /** Finished-unread dot aria-label. */
 const UNREAD_DOT_LABEL = 'Finished — unread'
+
+/**
+ * Reviewed port (v0.0.9): upstream's left sidebar is, in icloneOS, the Message pane's conversation list (the same
+ * SidebarSessionRow and session-status-dot, src/app/home/msg-sidebar.tsx:642, src/app/chat/session-status-dot.tsx:57).
+ * Its rows, and so their dots, are drawn while the list is open: open it, then count the dots in it.
+ */
+async function dotCount(page: Page, label: string): Promise<number> {
+  await openConversationList(page)
+
+  return page.getByRole('navigation', { name: 'Conversations' }).locator(`[aria-label="${label}"]`).count()
+}
 
 /** Send a message and wait for the final response to appear. */
 async function sendMessageAndWait(page: Page, trigger: string, finalText: string, timeout = 90_000): Promise<void> {
@@ -64,7 +75,7 @@ test.describe('sidebar states — background process and subagent', () => {
     // final answer appeared and the dot is gone afterward.
     try {
       await expect
-        .poll(() => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(), {
+        .poll(() => dotCount(page, BG_DOT_LABEL), {
           timeout: 15_000,
           message: 'background dot should appear'
         })
@@ -76,7 +87,7 @@ test.describe('sidebar states — background process and subagent', () => {
     // After the turn completes and auto-dismiss fires, the background dot
     // should be gone.
     await page.waitForTimeout(8000)
-    const bgCount = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
+    const bgCount = await dotCount(page, BG_DOT_LABEL)
     expect(bgCount, 'background dot should be gone after auto-dismiss').toBe(0)
 
     // Evidence: capture the final state — no background dot, final answer visible.
@@ -124,10 +135,15 @@ test.describe('sidebar states — subagent and background dot coexist', () => {
       timeout: 15_000
     })
 
+    // Reviewed port (v0.0.9): the composer runs in Manual mode, so the scripted background command parks on the
+    // permission card ("Allow once / Deny") and spawns nothing until the owner answers (v009-trace2.md). Allow it,
+    // as a user does; the dot below is still the assertion.
+    await page.getByRole('button', { name: 'Allow once' }).first().click({ timeout: 20_000 })
+
     // The background process (sleep 5) should show a "Background task
     // running" dot while the subagent is also running.
     await expect
-      .poll(() => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(), {
+      .poll(() => dotCount(page, BG_DOT_LABEL), {
         timeout: 30_000,
         message: 'background dot should appear while subagent runs'
       })
@@ -145,7 +161,7 @@ test.describe('sidebar states — subagent and background dot coexist', () => {
 
     // After the turn + auto-dismiss, the background dot should be gone.
     await page.waitForTimeout(8000)
-    const bgCount = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
+    const bgCount = await dotCount(page, BG_DOT_LABEL)
     expect(bgCount, 'background dot should be gone after process exits').toBe(0)
   })
 })
@@ -188,9 +204,12 @@ test.describe('sidebar states — cross-session dot transition', () => {
     await composer.type('E2E_SIDEBAR_CROSS', { delay: 20 })
     await page.keyboard.press('Enter')
 
+    // Reviewed port (v0.0.9): allow the parked background command (Manual mode's permission card), as a user does.
+    await page.getByRole('button', { name: 'Allow once' }).first().click({ timeout: 20_000 })
+
     // Wait for the background dot to appear.
     await expect
-      .poll(() => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(), {
+      .poll(() => dotCount(page, BG_DOT_LABEL), {
         timeout: 30_000,
         message: 'background dot should appear'
       })
@@ -204,8 +223,23 @@ test.describe('sidebar states — cross-session dot transition', () => {
       SIDEBAR_CROSS_TEXTS.finalText,
       { timeout: 90_000 }
     )
+    // Reviewed (v0.0.9 G 914237d39d, :198 flaky): a top-level delegate_task always runs in the background
+    // (tools/delegate_tool.py:747) and its result re-enters the chat as one more turn after the scripted turn ends,
+    // answered here with the mock's default reply. Until that turn is over the row rightly shows "Session running",
+    // which hides the background dot; the G failed when the re-entry started between the two samples. Wait for that
+    // turn too, so the state below is the stable one the comment promises.
+    await page.waitForFunction(
+      ([finalText, reply]) => {
+        const text = document.querySelector('[data-slot="aui_thread-viewport"]')?.textContent ?? ''
+        const at = text.indexOf(finalText)
+
+        return at >= 0 && text.indexOf(reply, at) > at
+      },
+      [SIDEBAR_CROSS_TEXTS.finalText, MOCK_REPLY] as const,
+      { timeout: 90_000 }
+    )
     await expect
-      .poll(() => page.locator(`[aria-label="${SESSION_RUNNING_DOT_LABEL}"]`).count(), {
+      .poll(() => dotCount(page, SESSION_RUNNING_DOT_LABEL), {
         timeout: 30_000,
         message: 'session running dot should disappear after turn completes'
       })
@@ -214,22 +248,22 @@ test.describe('sidebar states — cross-session dot transition', () => {
     // The background dot must still be visible: the turn is done but the
     // process is held open by the sentinel, so this is a stable state rather
     // than a window we have to catch in time.
-    const bgDuringTurn = await page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count()
+    const bgDuringTurn = await dotCount(page, BG_DOT_LABEL)
     expect(bgDuringTurn, 'background dot should still be visible after turn completes').toBeGreaterThan(0)
 
     // Evidence: bg dot visible on session A while its turn is done but the
     // background process hasn't exited yet.
     await page.screenshot({ path: 'test-results/cross-session-bg-dot-before-switch.png' })
 
-    // Create a new session (click "New session" button).
-    await page.locator('button:has-text("New session")').first().click()
+    // Create a new session (Reviewed port (v0.0.9): the list's "New conversation", fixtures.newConversation).
+    await newConversation(page)
     await page.waitForTimeout(2000)
 
     // Now let the background process finish. The session A dot should
     // transition away from "background running".
     bgRelease.release()
     await expect
-      .poll(() => page.locator(`[aria-label="${BG_DOT_LABEL}"]`).count(), {
+      .poll(() => dotCount(page, BG_DOT_LABEL), {
         timeout: 30_000,
         message: 'background dot should disappear after process finishes'
       })
@@ -240,7 +274,7 @@ test.describe('sidebar states — cross-session dot transition', () => {
     // event-driven transition, so wait for it instead of sampling the DOM right
     // after the running dot disappears.
     await expect
-      .poll(() => page.locator(`[aria-label="${UNREAD_DOT_LABEL}"]`).count(), {
+      .poll(() => dotCount(page, UNREAD_DOT_LABEL), {
         timeout: 30_000,
         message: 'original session should show finished-unread dot'
       })

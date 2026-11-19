@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -14,7 +15,6 @@ import {
 import { Input } from '@/components/ui/input'
 import { getHermesConfigRecord, saveMcpServers } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { AlertTriangle } from '@/lib/icons'
 import { MCP_DEEPLINK_NAME_RE } from '@/lib/mcp-deeplink'
 import { getServers } from '@/lib/mcp-servers'
 import { $mcpInstallRequest } from '@/store/mcp-deeplink-install'
@@ -135,10 +135,7 @@ export function McpInstallDeepLinkDialog() {
 
         <div className="flex flex-col gap-3">
           {request.transport === 'stdio' && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{m.deepLinkStdioWarning}</span>
-            </div>
+            <IcAlert tone="warning">{m.deepLinkStdioWarning}</IcAlert>
           )}
 
           <label className="flex flex-col gap-1 text-xs text-muted-foreground">
@@ -159,10 +156,7 @@ export function McpInstallDeepLinkDialog() {
           </div>
 
           {error && (
-            <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-              <span>{error}</span>
-            </div>
+            <IcAlert tone="error">{error}</IcAlert>
           )}
         </div>
 

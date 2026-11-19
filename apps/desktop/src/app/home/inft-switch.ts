@@ -27,9 +27,11 @@ import { atom } from 'nanostores'
 
 import { openSession, type OpenSessionNavigate } from '@/app/open-session'
 import { NEW_CHAT_ROUTE } from '@/app/routes'
+import { f2Inft } from '@/i18n/en/v009-f2'
 import { sleep } from '@/iclone-shared/async'
 import { profileSlugFor, slugForInft } from '@/iclone-shared/inft-slug'
 import { isTimeoutError, withTimeout } from '@/lib/with-timeout'
+import { $backendRestart, isBackendRestarting } from '@/store/backend-restart'
 import { $gateway } from '@/store/gateway'
 import { $gatewayState, $selectedStoredSessionId, $sessions } from '@/store/session'
 
@@ -42,14 +44,29 @@ const RESOLVE_TIMEOUT_MS = 20_000
 export const APPLY_TIMEOUT_MS = 10_000
 export const RECONNECT_WAIT_MS = 30_000
 const DONE_VISIBLE_MS = 1_500
+/**
+ * v0.0.9 F2 (P0 cause D): the sign-in RESTORE (app reopen with an iNFT on the home) waits for the agent itself —
+ * event-based, bounded by the first-launch install ceiling (ruling 42: 300 s), not by the 20 s a click gets.
+ */
+export const RESTORE_READY_BUDGET_MS = 300_000
+/** Then, a restore that still fails for a passing reason is retried by itself before it is shown as failed. */
+export const RESTORE_RETRY_DELAYS_MS: readonly number[] = [2_000, 5_000, 15_000]
+/** The persona is re-sent after the agent came back (a restarted backend), retried on these waits. */
+const REASSERT_DELAYS_MS: readonly number[] = [1_000, 3_000, 9_000]
+/** A persona applied within this window was applied on the connection that just opened: not re-sent. */
+const REASSERT_FRESH_MS = 2_000
 
 type InftSwitchOrigin = 'pill' | 'collection' | 'settings' | 'wizard' | 'go-live' | 'restore' | 'sign-out' | 'stage'
 
 type InftSwitchScope = 'session' | 'next-chat' | 'reopened'
 
+/** Why a switch is waiting: the agent is starting (restore), the gateway is reconnecting, or a retry is pending. */
+type InftWaitReason = 'reconnecting' | 'retrying' | 'starting'
+
 type InftSwitchState =
   | { phase: 'idle' }
-  | { phase: 'resolving' | 'applying' | 'waiting'; slug: string; name: string; startedAt: number }
+  | { phase: 'resolving' | 'applying'; slug: string; name: string; startedAt: number }
+  | { phase: 'waiting'; slug: string; name: string; startedAt: number; reason?: InftWaitReason }
   | { phase: 'done'; slug: string; name: string; scope: InftSwitchScope }
   | { phase: 'failed'; slug: string; name: string; reason: string }
 
@@ -95,6 +112,19 @@ let activeSlug: string | null = null
 /** When `activeSlug` began speaking (ms): a chat started after it is its own. */
 let activeSince = 0
 let doneTimer: ReturnType<typeof setTimeout> | null = null
+/** Waits that end early when a newer switch starts (so a superseded wait never lingers for its whole budget). */
+const epochWaiters = new Set<() => void>()
+let reconnectWired = false
+
+function bumpEpoch(): number {
+  epoch += 1
+
+  for (const wake of [...epochWaiters]) {
+    wake()
+  }
+
+  return epoch
+}
 
 // ── the switch log ───────────────────────────────────────────────────────────
 
@@ -113,14 +143,32 @@ function switchLog(slug: string, phase: string, startedAt: number, reason?: stri
 // ── errors ───────────────────────────────────────────────────────────────────
 
 const RECONNECTING = 'Hermes is reconnecting — try again in a moment.'
+/** v0.0.9 Q (correctness 5): main gave up restarting the agent (or a cause a restart cannot cure stopped it). No
+ *  automatic retry can cure that; the agent card's Retry starts it, and the reconnect path then finishes the switch. */
+export const AGENT_STOPPED_REASON = 'Hermes is not running — start it from the agent card, then retry.'
+/** The restore waited its whole ready budget for an agent that never came up: said once, not waited for three more
+ *  times (that was about 20 minutes of "starting"). */
+export const READY_BUDGET_SPENT_REASON = 'Hermes did not start — retry when it is running.'
 const SWITCH_FAILED = 'Switching failed — retry.'
 const LOG_REASON_MAX = 160
 // The regex chain runs on the renderer main thread: a 100 KB message must not
 // stall it, and nothing past the 160-character log line is ever shown.
 const RAW_REASON_MAX = 4096
 
+/** The gateway is (re)connecting: the HermesGateway messages (api/client.ts) — "is not connected", "connection
+ *  closed" (a socket replaced mid-request, P0 D2), "Could not connect" — and a closed socket. */
 function isNotConnected(message: string): boolean {
-  return /gateway is not connected|not connected|socket (is )?closed/i.test(message)
+  return /gateway is not connected|not connected|socket (is )?closed|connection closed|could not connect/i.test(message)
+}
+
+/** A failure a later attempt can cure (everything but a window without the profile bridge). */
+function isPassingFailure(reason: string | undefined): boolean {
+  return (
+    Boolean(reason) &&
+    !/profile engine is unavailable/i.test(reason!) &&
+    reason !== AGENT_STOPPED_REASON &&
+    reason !== READY_BUDGET_SPENT_REASON
+  )
 }
 
 /** The text of anything thrown, without ever throwing itself: an object with
@@ -508,9 +556,28 @@ export function inftSwitchLabel(state: InftSwitchState): string {
 
     case 'applying':
       return `Switching to ${state.name}…`
+    case 'waiting': {
+      const restart = $backendRestart.get()
 
-    case 'waiting':
+      // Main stopped restarting it: never "starting" or "connecting" for an agent nothing will bring back.
+      if (restart.phase === 'stopped') {
+        return `${state.name}: Hermes is not running`
+      }
+
+      if (isBackendRestarting(restart)) {
+        return f2Inft.waitingForRestart(state.name, Math.max(1, restart.attempt), restart.maxAttempts)
+      }
+
+      if (state.reason === 'starting') {
+        return f2Inft.waitingForStart(state.name)
+      }
+
+      if (state.reason === 'retrying') {
+        return f2Inft.retrying(state.name)
+      }
+
       return `${state.name}: Hermes is reconnecting — finishing when it is back`
+    }
 
     case 'done':
       return state.scope === 'next-chat'
@@ -542,6 +609,7 @@ function setState(next: InftSwitchState): void {
  *  iNFT already switching joins the in-flight switch instead of writing twice. */
 export function switchInft(card: INftCardData | null, opts: SwitchOptions): Promise<SwitchResult> {
   wireRemember()
+  wireReconnect()
 
   const phase = $inftSwitch.get().phase
   const cardId = card?.id ?? null
@@ -565,15 +633,131 @@ export function switchInft(card: INftCardData | null, opts: SwitchOptions): Prom
     manualPicks += 1
   }
 
-  const mine = ++epoch
+  const mine = bumpEpoch()
 
   lastRequest = { card, opts }
 
-  const promise = runSwitch(card, opts, mine)
+  const promise = opts.origin === 'restore' && card ? runRestore(card, opts, mine, true) : runSwitch(card, opts, mine)
 
   inFlight = { cardId, promise }
 
   return promise
+}
+
+/**
+ * v0.0.9 F2: the restore at app reopen. It waits for the agent (see runSwitch `restore`), and a failure for a passing
+ * reason (the agent still starting, a socket replaced mid-request, a slow answer) is retried by itself on
+ * RESTORE_RETRY_DELAYS_MS — shown as "connecting…", never as failed — before the last attempt may show one.
+ */
+async function runRestore(
+  card: INftCardData,
+  opts: SwitchOptions,
+  mine: number,
+  restage: boolean
+): Promise<SwitchResult> {
+  const attempts = RESTORE_RETRY_DELAYS_MS.length + 1
+  let result: SwitchResult = { slug: '', personaApplied: false }
+
+  for (let index = 0; index < attempts; index += 1) {
+    const last = index === attempts - 1
+
+    result = await runSwitch(card, opts, mine, { restage: restage && index === 0, restore: true, quiet: !last })
+
+    if (last || result.stale || result.personaApplied || mine !== epoch || !isPassingFailure(result.error)) {
+      return result
+    }
+
+    await pause(RESTORE_RETRY_DELAYS_MS[index]!, mine)
+
+    if (mine !== epoch) {
+      return { slug: result.slug, personaApplied: false, stale: true }
+    }
+  }
+
+  return result
+}
+
+/** Sleep `ms`, ending early when a newer switch starts. */
+function pause(ms: number, mine: number): Promise<void> {
+  if (mine !== epoch) {
+    return Promise.resolve()
+  }
+
+  return new Promise(resolve => {
+    const done = () => {
+      clearTimeout(timer)
+      epochWaiters.delete(done)
+      resolve()
+    }
+
+    const timer = setTimeout(done, ms)
+
+    epochWaiters.add(done)
+  })
+}
+
+function gatewayReady(): boolean {
+  return $gatewayState.get() === 'open' && Boolean($gateway.get())
+}
+
+type GatewayWait = 'open' | 'stale' | 'stopped' | 'timeout'
+
+function agentStopped(): boolean {
+  return $backendRestart.get().phase === 'stopped'
+}
+
+/**
+ * Resolves 'open' when the gateway is open with a client (event-based: `$gatewayState` and `$gateway`), 'timeout'
+ * when `budgetMs` passes, 'stale' when a newer switch starts, and 'stopped' as soon as main's restart supervisor says
+ * it stopped (v0.0.9 Q correctness 5: nothing will open the gateway, so nothing is waited for). `fresh`: ignore the
+ * state right now and wait for the next change — after a request failed as "not connected" on a socket still marked
+ * open, so a re-try never spins.
+ */
+function untilGatewayOpen(mine: number, budgetMs: number, fresh = false): Promise<GatewayWait> {
+  if (mine !== epoch) {
+    return Promise.resolve('stale')
+  }
+
+  if (!fresh && gatewayReady()) {
+    return Promise.resolve('open')
+  }
+
+  if (agentStopped()) {
+    return Promise.resolve('stopped')
+  }
+
+  return new Promise(resolve => {
+    const stops: Array<() => void> = []
+    let settled = false
+
+    const finish = (value: GatewayWait) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      clearTimeout(timer)
+      epochWaiters.delete(onEpoch)
+      stops.forEach(stop => stop())
+      resolve(value)
+    }
+
+    const check = () => {
+      if (mine !== epoch) {
+        finish('stale')
+      } else if (gatewayReady()) {
+        finish('open')
+      } else if (agentStopped()) {
+        finish('stopped')
+      }
+    }
+
+    const onEpoch = () => finish('stale')
+    const timer = setTimeout(() => finish('timeout'), budgetMs)
+
+    epochWaiters.add(onEpoch)
+    stops.push($gatewayState.listen(check), $gateway.listen(check), $backendRestart.listen(check))
+  })
 }
 
 /** Re-run the last switch (the pill's "retry"). */
@@ -600,11 +784,29 @@ export function hideInft(): Promise<SwitchResult> {
   return switchInft(null, { origin: 'stage', keepChoice: true })
 }
 
-async function runSwitch(card: INftCardData | null, opts: SwitchOptions, mine: number): Promise<SwitchResult> {
+interface RunContext {
+  /** Put the card on the stage (false on an automatic re-try: it is already there). */
+  restage: boolean
+  /** The sign-in restore: wait for the agent before resolving, and for the gateway with the restore budget. */
+  restore: boolean
+  /** A passing failure is not shown as failed (a retry follows); a lasting one still is. */
+  quiet: boolean
+}
+
+const CLICK_CONTEXT: RunContext = { restage: true, restore: false, quiet: false }
+
+async function runSwitch(
+  card: INftCardData | null,
+  opts: SwitchOptions,
+  mine: number,
+  ctx: RunContext = CLICK_CONTEXT
+): Promise<SwitchResult> {
   const startedAt = Date.now()
 
   // Stage first, sync: the 3D model never waits on the persona.
-  if (!card) {
+  if (!ctx.restage) {
+    // An automatic re-try: the stage already shows this card.
+  } else if (!card) {
     dismissInft()
 
     if (!opts.keepChoice) {
@@ -622,6 +824,31 @@ async function runSwitch(card: INftCardData | null, opts: SwitchOptions, mine: n
   const name = card?.name ?? 'Hermes'
   const stale = (): SwitchResult => ({ slug, personaApplied: false, stale: true })
 
+  // v0.0.9 F2 (P0 D1/D3): the restore starts when the wallet scan lands, which can be long before the agent is up
+  // (34–57 s on a first-run install, any time during a restart). It waits for the agent instead of racing it into
+  // the 20 s resolve bound; the model is already on stage meanwhile.
+  if (ctx.restore && !gatewayReady()) {
+    setState({ phase: 'waiting', slug, name, startedAt, reason: 'starting' })
+    switchLog(slug, 'waiting', startedAt, 'backend-starting')
+
+    const ready = await untilGatewayOpen(mine, RESTORE_READY_BUDGET_MS)
+
+    if (mine !== epoch) {
+      return stale()
+    }
+
+    if (ready !== 'open') {
+      return fail(
+        slug,
+        name,
+        startedAt,
+        ready === 'stopped' ? AGENT_STOPPED_REASON : READY_BUDGET_SPENT_REASON,
+        undefined,
+        ctx.quiet
+      )
+    }
+  }
+
   if (source && slug && card) {
     setState({ phase: 'resolving', slug, name, startedAt })
     switchLog(slug, 'resolving', startedAt)
@@ -635,7 +862,7 @@ async function runSwitch(card: INftCardData | null, opts: SwitchOptions, mine: n
         `Resolving ${name} timed out`
       )
     } catch (err) {
-      return mine === epoch ? fail(slug, name, startedAt, friendlySelectError(err), err) : stale()
+      return mine === epoch ? fail(slug, name, startedAt, friendlySelectError(err), err, ctx.quiet) : stale()
     } finally {
       release()
     }
@@ -645,7 +872,7 @@ async function runSwitch(card: INftCardData | null, opts: SwitchOptions, mine: n
     }
   }
 
-  return apply({ slug, name, startedAt, mine, navigate: opts.navigate })
+  return apply({ slug, name, startedAt, mine, navigate: opts.navigate, restore: ctx.restore, quiet: ctx.quiet })
 }
 
 interface ApplyArgs {
@@ -654,6 +881,9 @@ interface ApplyArgs {
   startedAt: number
   mine: number
   navigate?: OpenSessionNavigate
+  /** v0.0.9 F2: the restore waits for the gateway with its own budget, and never fails on a missing client. */
+  restore?: boolean
+  quiet?: boolean
 }
 
 async function apply(args: ApplyArgs): Promise<SwitchResult> {
@@ -661,7 +891,10 @@ async function apply(args: ApplyArgs): Promise<SwitchResult> {
   const gateway = $gateway.get()
 
   if (!gateway) {
-    return fail(slug, name, startedAt, 'Hermes is still starting up — try again in a moment.')
+    // A click gets an answer at once; the restore waits for the client to exist (P0 D3).
+    return args.restore
+      ? waitForGateway(args)
+      : fail(slug, name, startedAt, 'Hermes is still starting up — try again in a moment.')
   }
 
   if ($gatewayState.get() !== 'open') {
@@ -702,8 +935,8 @@ async function apply(args: ApplyArgs): Promise<SwitchResult> {
     }
 
     return isNotConnected(safeErrorMessage(err))
-      ? waitForGateway(args)
-      : fail(slug, name, startedAt, friendlySelectError(err), err)
+      ? waitForGateway(args, true)
+      : fail(slug, name, startedAt, friendlySelectError(err), err, args.quiet)
   }
 
   if (mine !== epoch) {
@@ -728,48 +961,163 @@ async function apply(args: ApplyArgs): Promise<SwitchResult> {
 }
 
 /** The gateway is reconnecting: show why, and finish the switch by itself as
- *  soon as it is open again (bounded). */
-function waitForGateway(args: ApplyArgs): Promise<SwitchResult> {
+ *  soon as it is open again (bounded: RECONNECT_WAIT_MS for a click, RESTORE_READY_BUDGET_MS for the restore).
+ *  `fresh`: a request just failed as not connected — wait for the next change, never re-try on the spot. */
+async function waitForGateway(args: ApplyArgs, fresh = false): Promise<SwitchResult> {
   const { slug, name, startedAt, mine } = args
 
-  setState({ phase: 'waiting', slug, name, startedAt })
+  setState({ phase: 'waiting', slug, name, startedAt, reason: args.restore && !$gateway.get() ? 'starting' : 'reconnecting' })
   switchLog(slug, 'waiting', startedAt, 'gateway-reconnecting')
 
-  return new Promise<SwitchResult>(resolve => {
-    let unsubscribe: (() => void) | null = null
+  const ready = await untilGatewayOpen(mine, args.restore ? RESTORE_READY_BUDGET_MS : RECONNECT_WAIT_MS, fresh)
 
-    const timer = setTimeout(() => {
-      unsubscribe?.()
-      resolve(mine === epoch ? fail(slug, name, startedAt, RECONNECTING) : { slug, personaApplied: false, stale: true })
-    }, RECONNECT_WAIT_MS)
+  if (mine !== epoch) {
+    return { slug, personaApplied: false, stale: true }
+  }
 
-    unsubscribe = $gatewayState.listen(state => {
-      if (mine !== epoch) {
-        clearTimeout(timer)
-        unsubscribe?.()
-        resolve({ slug, personaApplied: false, stale: true })
+  if (ready === 'open') {
+    return apply(args)
+  }
 
-        return
-      }
+  // A restore spent its whole ready budget here: said once (a retry would wait the same five minutes again).
+  const reason = ready === 'stopped' ? AGENT_STOPPED_REASON : args.restore ? READY_BUDGET_SPENT_REASON : RECONNECTING
 
-      if (state === 'open' && $gateway.get()) {
-        clearTimeout(timer)
-        unsubscribe?.()
-        resolve(apply(args))
-      }
-    })
-  })
+  return fail(slug, name, startedAt, reason, undefined, args.quiet)
 }
 
-function fail(slug: string, name: string, startedAt: number, reason: string, cause?: unknown): SwitchResult {
-  setState({ phase: 'failed', slug, name, reason })
-  switchLog(slug, 'failed', startedAt, cause === undefined ? reason : redactSwitchReason(cause))
+/**
+ * A switch that did not apply. `quiet` (a restore with a retry still to come): a passing failure is shown as
+ * "connecting…" and logged at info level — the 20/20 reopen gate counts `[inft-switch] … failed` lines — while a
+ * lasting one (no profile bridge) is shown and logged as failed at once.
+ */
+function fail(
+  slug: string,
+  name: string,
+  startedAt: number,
+  reason: string,
+  cause?: unknown,
+  quiet = false
+): SwitchResult {
+  const detail = cause === undefined ? reason : redactSwitchReason(cause)
+
+  if (quiet && isPassingFailure(reason)) {
+    setState({ phase: 'waiting', slug, name, startedAt, reason: 'retrying' })
+    switchLog(slug, 'retry', startedAt, detail)
+  } else {
+    setState({ phase: 'failed', slug, name, reason })
+    switchLog(slug, 'failed', startedAt, detail)
+  }
 
   return { slug, personaApplied: false, error: reason }
 }
 
+// ── reconnect: the agent came back ───────────────────────────────────────────
+// v0.0.9 F2 (P0 cause D, owner report "close and reopen the agent fixes it"): when the gateway opens again after a
+// drop (a websocket close, a backend crash that main restarted, a reopen), the iNFT on the home reconnects by itself:
+// a switch that failed is re-run (no navigation, latest-wins still applies), and an applied persona is re-sent to
+// the agent that came back. A switch still in flight finishes on its own (it waits for the same event).
+
+function wireReconnect(): void {
+  if (reconnectWired) {
+    return
+  }
+
+  reconnectWired = true
+
+  let wasOpen = $gatewayState.get() === 'open'
+
+  $gatewayState.listen(state => {
+    const open = state === 'open'
+    const reopened = open && !wasOpen
+
+    wasOpen = open
+
+    if (reopened) {
+      // After the state settles: the client atom is published beside the state.
+      setTimeout(onGatewayReopened, 0)
+    }
+  })
+}
+
+function onGatewayReopened(): void {
+  if (isSwitching() || !gatewayReady()) {
+    return
+  }
+
+  const state = $inftSwitch.get()
+  const request = lastRequest
+
+  if (state.phase === 'failed' && request?.card && isPassingFailure(state.reason)) {
+    inFlight = null
+
+    const mine = bumpEpoch()
+    // Re-run as the restore runs: waits, retries quietly, never navigates the window by itself.
+    const promise = runRestore(request.card, { ...request.opts, navigate: undefined }, mine, false)
+
+    inFlight = { cardId: request.card.id, promise }
+    switchLog(state.slug, 'reconnect', Date.now(), 'gateway-open')
+
+    return
+  }
+
+  // A persona applied a moment ago was applied on THIS connection (a switch that waited for the same reopen).
+  if (activeSlug && (state.phase === 'idle' || state.phase === 'done') && Date.now() - activeSince >= REASSERT_FRESH_MS) {
+    void reassertPersona(activeSlug)
+  }
+}
+
+/** Re-send the applied persona to the agent that came back; retried while it is still settling. Silent. */
+async function reassertPersona(slug: string): Promise<void> {
+  const mine = epoch
+  const startedAt = Date.now()
+
+  for (let attempt = 0; attempt <= REASSERT_DELAYS_MS.length; attempt += 1) {
+    if (mine !== epoch || activeSlug !== slug) {
+      return
+    }
+
+    const gateway = $gateway.get()
+
+    if (gateway && $gatewayState.get() === 'open') {
+      const rpc = gateway.request('config.set', { key: 'personality', value: slug }, APPLY_TIMEOUT_MS)
+
+      const settled = rpc.then(
+        () => undefined,
+        () => undefined
+      )
+
+      staleApply = settled
+      void settled.then(() => {
+        if (staleApply === settled) {
+          staleApply = null
+        }
+      })
+
+      try {
+        await rpc
+        switchLog(slug, 'reasserted', startedAt)
+
+        return
+      } catch (err) {
+        const message = safeErrorMessage(err)
+
+        if (!isNotConnected(message) && !isTimeoutError(err) && !/timed out|timeout/i.test(message)) {
+          switchLog(slug, 'reassert-skipped', startedAt, redactSwitchReason(err))
+
+          return
+        }
+      }
+    }
+
+    if (attempt < REASSERT_DELAYS_MS.length) {
+      await pause(REASSERT_DELAYS_MS[attempt]!, mine)
+    }
+  }
+}
+
 /** Test seam: forget module state between cases. */
 export function resetInftSwitchForTests(): void {
+  bumpEpoch()
   epoch = 0
   manualPicks = 0
   inFlight = null
@@ -777,6 +1125,7 @@ export function resetInftSwitchForTests(): void {
   staleApply = null
   activeSlug = null
   activeSince = 0
+  epochWaiters.clear()
   $activeInftName.set(null)
   setState({ phase: 'idle' })
 }

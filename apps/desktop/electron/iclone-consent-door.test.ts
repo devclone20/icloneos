@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { startAcpSocketServer } from './iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from './iclone-acp-ipc'
 import { createConsentStore, registerIcloneConsent, resetConsentForTests } from './iclone-consent'
 import {
   cleanReason,
@@ -336,6 +336,7 @@ describe('the consent verb on the agent socket', () => {
     const server = await startAcpSocketServer({
       admitStreaming: () => true,
       dir: path.join(dir, 'run'),
+      socket: acpSocketFile(dir),
       resolveInft: key => (
         resolved.push(key),
         key === 'nope' ? { ok: false, error: 'unknown iNFT' } : { ok: true, slug: 'inft-6' }

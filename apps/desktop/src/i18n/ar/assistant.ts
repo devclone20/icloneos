@@ -5,6 +5,7 @@ export const assistant: TranslationOverrides['assistant'] = {
     loadingSession: 'جار تحميل الجلسة...',
     showEarlier: 'عرض الرسائل الأقدم',
     loadingResponse: 'الوكيل يحمّل ردًا',
+    agentWorking: 'الوكيل يعمل',
     resumeWhenBackgroundDone: count =>
       count === 1 ? 'سيُستأنف عند انتهاء المهمة الخلفية' : `سيُستأنف عند انتهاء ${count} مهام خلفية`,
     thinking: 'يفكر...',
@@ -102,6 +103,13 @@ export const assistant: TranslationOverrides['assistant'] = {
     statusRecovered: 'تم الاسترداد',
     statusDone: 'تم',
     permissionAsked: 'طُلب إذنك',
+    refused: 'مرفوض',
+    refusedByMode: (tool, mode) => `لم يُشغَّل ${tool}: وضع الأذونات في هذه المحادثة (${mode}) لا يسمح بذلك.`,
+    refusedNoGateway: tool => `لم يُشغَّل ${tool}: تعذّر الوصول إلى icloneOS، لذا يُسمح بالقراءة فقط.`,
+    refusedGeneric: tool => `لم يُشغَّل ${tool}: لا يسمح icloneOS بهذا الإجراء.`,
+    refusedChangeMode: 'تغيير وضع الأذونات',
+    refusedSentToAgent: 'ما أُرسل إلى الوكيل',
+    statusRefused: 'رُفض قبل التشغيل',
     memoryWriteNoted: 'تم تسجيل كتابة الذاكرة',
     actions: {
       read: 'قراءة',

@@ -510,7 +510,6 @@ export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promis
         setUpdateOverlayOpen(false)
         resetUpdateApplyState()
         notify({
-          durationMs: 8000,
           id: UPDATE_TOAST_ID,
           kind: 'success',
           message: translateNow('updates.manualPickedUp'),

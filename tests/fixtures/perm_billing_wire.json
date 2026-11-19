@@ -1,0 +1,33 @@
+{
+  "_comment": "v0.0.9 Q tests-perf 13 - the one perm billing wire shape. plugins/iclone-permissions/channel.py must produce exactly text+mac (tests/tui_gateway/test_billing_owner_confirm.py) and electron/iclone-permissions/socket-verb.ts must read it into the consumer (socket-verb-billing.test.ts). Change both sides and this file together.",
+  "keyHex": "0909090909090909090909090909090909090909090909090909090909090909",
+  "keyId": "k-billing",
+  "pid": 4242,
+  "verb": "billing",
+  "cases": [
+    {
+      "action": "charge",
+      "subject": "25",
+      "ownerConfirm": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "idempotencyKey": "key-0000-0001",
+      "text": "{\"ownerConfirm\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"action\":\"charge\",\"subject\":\"25\",\"idempotencyKey\":\"key-0000-0001\",\"pid\":4242,\"keyId\":\"k-billing\"}",
+      "mac": "593ca8903132fee39152ba341ea7f62730152febd270b6a383fa0dd6721faed5"
+    },
+    {
+      "action": "subscription-upgrade",
+      "subject": "tier_pro",
+      "ownerConfirm": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "idempotencyKey": "key-0000-0002",
+      "text": "{\"ownerConfirm\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"action\":\"subscription-upgrade\",\"subject\":\"tier_pro\",\"idempotencyKey\":\"key-0000-0002\",\"pid\":4242,\"keyId\":\"k-billing\"}",
+      "mac": "e01c39af0bdb445e81df8a808d95dc4079b417e8419bae587d63ef20d64a6f54"
+    },
+    {
+      "action": "auto-reload",
+      "subject": "on|10|25.50",
+      "ownerConfirm": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "idempotencyKey": "key-0000-0003",
+      "text": "{\"ownerConfirm\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"action\":\"auto-reload\",\"subject\":\"on|10|25.50\",\"idempotencyKey\":\"key-0000-0003\",\"pid\":4242,\"keyId\":\"k-billing\"}",
+      "mac": "ea3739c9205d594964ad6c22ccc3a859e3e8640836564d5c71ade75845ab0d30"
+    }
+  ]
+}

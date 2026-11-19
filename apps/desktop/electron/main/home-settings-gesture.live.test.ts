@@ -123,7 +123,7 @@ describe.runIf(process.platform === 'darwin' && electronBinary())(
       fs.writeFileSync(secret, 'FAKE-SECRET\n')
       fs.symlinkSync(secret, path.join(home, '.op.env'))
 
-      const child = spawnSync(String(electronBinary()), [mainJs, `--user-data-dir=${path.join(base, 'ud')}`], {
+      const child = spawnSync(String(electronBinary()), [mainJs, `--user-data-dir=${path.join(base, 'ud')}`, '--use-mock-keychain'], {
         env: {
           ...process.env,
           FX_HOME: home,

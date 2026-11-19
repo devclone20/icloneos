@@ -217,7 +217,6 @@ function notifyGatewayTools(tools: string[] | undefined) {
   const list = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`
 
   notify({
-    durationMs: 8000,
     kind: 'info',
     message: `${list} now run through your Nous subscription — no separate API keys needed.`,
     title: 'Tool Gateway enabled'

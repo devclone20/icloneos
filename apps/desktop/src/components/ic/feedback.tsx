@@ -2,7 +2,7 @@ import './ic-ui.css'
 
 import { type ComponentType, type ReactNode, useId } from 'react'
 
-import { AlertCircle } from '@/lib/icons'
+import { IcAlert } from './ic-page'
 
 /**
  * OUR state vocabulary: one tone scale for every page (a dot, a pill, an inline
@@ -28,13 +28,20 @@ export function IcPill({ children, tone = 'muted' }: { children: ReactNode; tone
   )
 }
 
+/**
+ * v0.0.9 F4b — a danger note is the one inline alert (type 3, IcAlert); a plain note stays a quiet line of text (it
+ * tells, it does not alert).
+ */
 export function IcNote({ children, tone }: { children: ReactNode; tone?: 'danger' }) {
-  return (
-    <span className="icui-note" data-tone={tone} role={tone === 'danger' ? 'alert' : undefined}>
-      {tone === 'danger' ? <AlertCircle size={14} /> : null}
-      {children}
-    </span>
-  )
+  if (tone === 'danger') {
+    return (
+      <IcAlert tone="error">
+        {children}
+      </IcAlert>
+    )
+  }
+
+  return <span className="icui-note">{children}</span>
 }
 
 export function IcEmpty({

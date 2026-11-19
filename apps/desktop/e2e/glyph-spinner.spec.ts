@@ -20,24 +20,38 @@
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
 
-import { expect, type Page, test } from '@playwright/test'
+// v0.0.9 e2e harness: the shared test (ready claims, error-banner guard), not the bare Playwright one.
+import { expect, type Page, test } from './test'
 
 import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
+import { TASK_PANEL_RESUME_TRIGGER } from './mock-server'
 
 const STRIP = '.glyph-spinner__strip'
 
 /**
- * Send a message so a turn is in flight — the composer status stack mounts a
- * GlyphSpinner while the agent is working. Resolves once a frame strip is in
- * the DOM.
+ * Reviewed port (v0.0.9): upstream's status stack mounted a GlyphSpinner for any in-flight turn; icloneOS's status
+ * stack spins only for running work rows (src/app/chat/composer/status-stack/status-row.tsx:61-63, a running todo
+ * or task; index.tsx:183). So the turn sent here is the mock's working session: a five-row todo with one item in
+ * progress, held open by a foreground tool. Same spinner component, same CSS contract under test. Idempotent: the
+ * held turn keeps the spinner mounted for the later tests in this file.
  */
 async function mountSpinner(page: Page): Promise<void> {
+  if ((await page.locator(STRIP).count()) > 0) {
+    return
+  }
+
   const composer = page.locator('[contenteditable="true"]').first()
   await composer.waitFor({ state: 'visible', timeout: 10_000 })
   await composer.click()
-  await composer.type('hello from the glyph spinner spec', { delay: 10 })
+  await composer.type(`${TASK_PANEL_RESUME_TRIGGER} glyph spinner spec`, { delay: 10 })
   await page.keyboard.press('Enter')
 
+  // The working turn has started streaming; its todo row (in progress) then mounts the spinner.
+  await page.waitForFunction(
+    () => (document.querySelector('[data-slot="aui_thread-viewport"]')?.textContent ?? '').includes('Task-panel clearance line 1:'),
+    undefined,
+    { timeout: 30_000 }
+  )
   await page.waitForSelector(STRIP, { state: 'attached', timeout: 20_000 })
 }
 
@@ -94,7 +108,10 @@ test.describe('GlyphSpinner (compositor animation)', () => {
     expect(observed.durationMs).toBeGreaterThan(0)
     // Length-typed travel, never a percentage: `translateY(-100%)` would keep
     // the animation off the compositor.
-    expect(observed.travel).toContain('calc(')
+    // Reviewed port (v0.0.9): this Chromium reports the engine keyframes already resolved to pixels
+    // ("translateY(0px) | translateY(-136px)") where upstream's saw the calc() source. The contract is unchanged and
+    // still checked in full: every keyframe is a length (px or calc), none is a percentage.
+    expect(observed.travel).toMatch(/^translateY\((?:-?\d+(?:\.\d+)?px|calc\([^%]*\))\)(?: \| translateY\((?:-?\d+(?:\.\d+)?px|calc\([^%]*\))\))+$/)
     expect(observed.travel).not.toContain('%')
   })
 

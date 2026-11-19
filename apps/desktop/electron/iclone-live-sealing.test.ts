@@ -99,20 +99,17 @@ describe('M1: wiring — the toggle reaches every subscriber', () => {
     expect(main).toContain('noSealReason: () => acpToolsSealing.noSealReason()')
   })
 
-  it('r3 (critic k2): initIcloneAcp hands the installer live getters, never a value read once at start', async () => {
+  it('r3 (critic k2) → v0.0.9 F1-B: the ACP tools take no sealer at all (bundled copy, no Keychain, no download)', async () => {
     const fs = await import('node:fs')
     const path = await import('node:path')
     const acp = fs.readFileSync(path.join(__dirname, 'iclone-acp.ts'), 'utf8')
-    const call = acp.slice(acp.indexOf('tools = createAcpTools({'), acp.indexOf('void tools.refresh()'))
+    const start = acp.indexOf('return createAcpTools({')
+    const call = acp.slice(start, acp.indexOf('\n  })\n', start))
 
-    expect(call).toMatch(
-      /get sealer\(\) \{\n\s+return typeof sealer === 'function' \? sealer\(\) : \(sealer \?\? null\)\n\s+\}/
-    )
-    expect(call).toMatch(
-      /get noSealReason\(\) \{\n\s+return typeof noSeal === 'function' \? noSeal\(\) : noSeal\n\s+\}/
-    )
-    expect(call).not.toMatch(/\bsealer: /)
-    expect(call).not.toMatch(/\bnoSealReason: /)
+    expect(start).toBeGreaterThan(-1)
+    expect(call).toContain('bundleDir: bundleDirPath()')
+    // Nothing a value read once at start could freeze: no seal key, no seal reason, no record, no network fetch.
+    expect(call).not.toMatch(/\b(sealer|noSealReason|record|fetch)\b/)
     expect(acp).toMatch(/export function refreshAcpToolsSealing\(\): void \{\n\s+void tools\?\.refresh\(\)/)
   })
 })

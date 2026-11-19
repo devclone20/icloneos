@@ -11,10 +11,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { getProfileSoul, updateProfileSoul } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { AlertTriangle } from '@/lib/icons'
 import { notify } from '@/store/notifications'
 
-import { IcPageButton, IcPageSection, IcPageState } from './ic-page'
+import { IcAlert, IcPageButton, IcPageSection, IcPageState } from './ic-page'
 import { clearSoulDraft, readSoulDraft, writeSoulDraft } from './soul-draft'
 
 type Load = { kind: 'error'; message: string } | { kind: 'loading' } | { kind: 'ready' }
@@ -119,10 +118,7 @@ export function SoulEditor({ profileName }: { profileName: string }) {
             value={text}
           />
           {saveError ? (
-            <p className="icpg__alert" role="alert">
-              <AlertTriangle aria-hidden="true" size={14} />
-              <span>{saveError}</span>
-            </p>
+            <IcAlert tone="error">{saveError}</IcAlert>
           ) : null}
           <div className="icpg__foot">
             <IcPageButton disabled={!dirty || saving} onClick={() => void save()} tone="accent">

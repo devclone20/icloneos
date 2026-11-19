@@ -879,10 +879,13 @@ describe('orphanOwners (fx26a, fx28) — a confined process whose run token is g
 
 describe('fx29 — the pane says when a live count is an orphan; a stop with no outcome counts only once nothing is alive', () => {
   const orphan = (pid: number, elapsedSec = 5) => member(0, pid, { run: null, elapsedSec })
+
   const launcherEvents = (lines: object[]): RunEvent[] =>
     lines.map(line => parseRunLine(JSON.stringify(line), 'launcher')).filter((event): event is RunEvent => event !== null)
+
   const foldL = (lines: object[], rows: PsRow[]) =>
     foldRuns({ nowMs: T0 + 600 * 1_000, events: launcherEvents(lines), rows, verified: true, refusals: new Map() })
+
   const leftRunning = (n: number, sec: number) => ({ v: 1, ev: 'left-running', ts: at(sec), run: token(n) })
   const stopLine = (n: number, sec: number, outcome?: 'failed') => ({ v: 1, ev: 'stop', ts: at(sec), run: token(n), ...(outcome ? { outcome } : {}) })
 

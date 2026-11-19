@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BillingResult } from './api'
 import { BILLING_COPY } from './copy'
+import { resetOpenPurchaseForTests } from './open-purchase'
 import type { BillingChargeStatusResponse } from './types'
 
 const apiMocks = vi.hoisted(() => ({
@@ -20,6 +21,18 @@ vi.mock('./api', () => ({
 }))
 
 import { CHARGE_POLL_CAP_MS, pollChargeSettlement, useChargeFlow } from './use-charge-poller'
+
+/** The keys the flow sent, in order. r3 (eng n1): the flow mints the key itself, before the send, so the first Buy of
+ *  an intent already carries one; what matters is which sends share it. */
+const sentKeys = () => apiMocks.charge.mock.calls.map(call => call[1] as string)
+
+function expectKeys(pattern: string): void {
+  const keys = sentKeys()
+  const names = new Map<string, string>()
+
+  expect(keys.every(key => typeof key === 'string' && key.length >= 16)).toBe(true)
+  expect(keys.map(key => names.get(key) ?? (names.set(key, String.fromCharCode(97 + names.size)), names.get(key))).join('')).toBe(pattern)
+}
 
 const en = BILLING_COPY.en
 
@@ -65,6 +78,7 @@ function wrapper({ children }: PropsWithChildren) {
 }
 
 beforeEach(() => {
+  resetOpenPurchaseForTests()
   apiMocks.charge.mockReset()
   apiMocks.chargeStatus.mockReset()
 })
@@ -230,7 +244,120 @@ describe('useChargeFlow', () => {
       await result.current.start('25')
     })
 
-    expect(apiMocks.charge).toHaveBeenNthCalledWith(1, '25', undefined)
-    expect(apiMocks.charge).toHaveBeenNthCalledWith(2, '25', 'key-1')
+    expect(apiMocks.charge.mock.calls.map(call => call[0])).toEqual(['25', '25'])
+    expectKeys('aa')
+  })
+
+  describe('m-r2-1: one purchase intent = one idempotency key until a definite answer', () => {
+    const lost = (kind: string, idempotencyKey = 'key-1') => ({
+      idempotencyKey,
+      ok: false,
+      refusal: { kind, message: kind }
+    })
+
+    // stripe_unavailable is what the runtime makes of a portal 503 (the r2 proof); the rest are lost/unclear answers.
+    for (const kind of [
+      'stripe_unavailable',
+      'temporarily_unavailable',
+      'network_error',
+      'internal_error',
+      'endpoint_unavailable',
+      'rate_limited',
+      'timeout',
+      'transport',
+      'error',
+      'some_new_server_code'
+    ]) {
+      it(`${kind}: Retry sends the ORIGINAL key (a lost first charge collapses into one at the portal)`, async () => {
+        apiMocks.charge.mockResolvedValueOnce(lost(kind)).mockResolvedValueOnce(lost(kind)).mockResolvedValue(lost(kind))
+
+        const { result } = renderHook(() => useChargeFlow(), { wrapper })
+
+        await act(async () => {
+          await result.current.start('10')
+        })
+        expect(result.current.outcome).toMatchObject({ kind: 'failure' })
+        await act(async () => {
+          await result.current.start('10')
+        })
+        await act(async () => {
+          await result.current.start('10')
+        })
+
+        expect(apiMocks.charge.mock.calls.map(call => call[0])).toEqual(['10', '10', '10'])
+        expectKeys('aaa')
+      })
+    }
+
+    it('a refused owner confirm in between (nothing sent) keeps the original key for the next Retry', async () => {
+      apiMocks.charge
+        .mockResolvedValueOnce(lost('stripe_unavailable'))
+        .mockResolvedValueOnce(lost('owner_confirm'))
+        .mockResolvedValueOnce(lost('stripe_unavailable'))
+
+      const { result } = renderHook(() => useChargeFlow(), { wrapper })
+
+      for (let i = 0; i < 3; i += 1) {
+        await act(async () => {
+          await result.current.start('10')
+        })
+      }
+
+      expectKeys('aaa')
+    })
+
+    it('a definite refusal ends the intent: the next Buy mints a NEW key', async () => {
+      apiMocks.charge
+        .mockResolvedValueOnce(lost('stripe_unavailable'))
+        .mockResolvedValueOnce(lost('no_payment_method'))
+        .mockResolvedValueOnce(lost('stripe_unavailable', 'key-2'))
+
+      const { result } = renderHook(() => useChargeFlow(), { wrapper })
+
+      for (let i = 0; i < 3; i += 1) {
+        await act(async () => {
+          await result.current.start('10')
+        })
+      }
+
+      expectKeys('aab')
+    })
+
+    it('an accepted charge ends the intent: the next Buy mints a NEW key', async () => {
+      apiMocks.charge
+        .mockResolvedValueOnce(lost('stripe_unavailable'))
+        .mockResolvedValueOnce({ data: { charge_id: 'ch_1', ok: true }, idempotencyKey: 'key-1', ok: true })
+        .mockResolvedValueOnce(lost('transport', 'key-2'))
+      apiMocks.chargeStatus.mockResolvedValue(status({ amount_usd: '10', status: 'settled' }))
+
+      const { result } = renderHook(() => useChargeFlow(), { wrapper })
+
+      for (let i = 0; i < 3; i += 1) {
+        await act(async () => {
+          await result.current.start('10')
+        })
+      }
+
+      expectKeys('aab')
+    })
+
+    // r3 (eng n1): stricter than r2. Another amount while a purchase may already be charged used to send at once under
+    // a new key (two charges if the first went through); now nothing is sent and Try again finishes the open purchase.
+    // Never the same key across amounts still holds (idempotency_conflict): the second amount is simply not sent.
+    it('another amount while a purchase is open is held, never sent under any key', async () => {
+      apiMocks.charge.mockResolvedValue(lost('stripe_unavailable'))
+
+      const { result } = renderHook(() => useChargeFlow(), { wrapper })
+
+      await act(async () => {
+        await result.current.start('10')
+      })
+      await act(async () => {
+        await result.current.start('25')
+      })
+
+      expect(apiMocks.charge.mock.calls.map(call => call[0])).toEqual(['10'])
+      expect(result.current.outcome).toMatchObject({ kind: 'failure', retryAmountUsd: '10' })
+    })
   })
 })

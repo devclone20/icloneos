@@ -9,9 +9,13 @@ import path from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { confinementMembersDir, protectedPaths } from './classify-policy'
+import { SOCKET_NAMES, socketPath } from '../iclone-confinement/launcher-socket'
 
-const input = { userDataDir: '/ud', hermesHome: '/home/u/.hermes', home: '/home/u', hermesRoot: null }
+import { confinementMembersDir, protectedPaths, socketFolders } from './classify-policy'
+
+// v0.0.9: the socket place is part of the input, so the private socket folder the list carries is deterministic.
+const socketPlace = { tmpdir: '/private/var/folders/xx/abc/T', uid: 501 }
+const input = { userDataDir: '/ud', hermesHome: '/home/u/.hermes', home: '/home/u', hermesRoot: null, socketPlace }
 
 const FIXTURE = path.resolve(
   __dirname,
@@ -57,6 +61,28 @@ describe('K98 protected paths', () => {
     expect(covers(list, '/home/u/Library/Caches/iclone-os-confinement/scratch/x')).toBe(false)
   })
 
+  it('v0.0.9: covers the private socket folder of this userData, per-user and its /tmp fallback, every socket in it', () => {
+    const perUser = path.dirname(socketPath('/ud', 'pay', socketPlace))
+    // The fallback socketPath takes when the per-user folder is too long (forced here by a long temp dir).
+    const fallback = path.dirname(socketPath('/ud', 'pay', { tmpdir: `/${'x'.repeat(120)}`, uid: 501 }))
+
+    expect(perUser).toMatch(/^\/private\/var\/folders\/xx\/abc\/T\/ic-[0-9a-f]{10}$/)
+    expect(fallback).toMatch(/^\/tmp\/501-[0-9a-f]{10}$/)
+
+    for (const folder of [perUser, fallback, fallback.replace(/^\/tmp\//, '/private/tmp/')]) {
+      expect(covers(list, folder), folder).toBe(true)
+      expect(covers(list, path.join(folder, 'planted')), folder).toBe(true)
+
+      for (const name of SOCKET_NAMES) {
+        expect(covers(list, path.join(folder, `${name}.sock`)), name).toBe(true)
+      }
+    }
+
+    // Exactly this userData's folder: not the temp dir, not another userData's folder.
+    expect(covers(list, path.join(socketPlace.tmpdir, 'other'))).toBe(false)
+    expect(covers(list, path.dirname(socketPath('/other-ud', 'pay', socketPlace)))).toBe(false)
+  })
+
   it('does not reach look-alike siblings or project folders', () => {
     for (const target of [
       '/ud/acp-work-export/ledger.jsonl',
@@ -69,9 +95,14 @@ describe('K98 protected paths', () => {
   })
 
   it("pins the plugin's fixture: the Python floor test reads exactly this list", () => {
-    const pinned = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as { input: typeof input; protectedPaths: string[] }
+    const pinned = JSON.parse(fs.readFileSync(FIXTURE, 'utf8')) as {
+      input: typeof input
+      protectedPaths: string[]
+      socketFolders: string[]
+    }
 
     expect(pinned.input).toEqual(input)
     expect(pinned.protectedPaths).toEqual(list)
+    expect(pinned.socketFolders).toEqual(socketFolders(input))
   })
 })

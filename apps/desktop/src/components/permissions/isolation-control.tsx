@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { type ReactNode, useEffect, useState } from 'react'
 
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { getTerminalBackends, selectTerminalBackend } from '@/hermes'
 import type { IsolationSetResultView, IsolationView } from '@/iclone-shared/confinement'
@@ -81,13 +82,9 @@ async function dropOtherBackend(): Promise<boolean> {
 
 function Warning({ text }: { text: string }) {
   return (
-    <p
-      className="border-l-2 border-(--ic-danger) pl-2.5 text-[0.75rem] leading-[1.15rem] font-medium text-(--ic-danger)"
-      data-isolation-warning=""
-      role="alert"
-    >
+    <IcAlert data={{ 'data-isolation-warning': '' }} tone="error">
       {text}
-    </p>
+    </IcAlert>
   )
 }
 

@@ -5,6 +5,7 @@ helpers (``_sessions``, ``_ok``, ``_err``, ...) bare; module-level helpers are p
 server.py the same way (tests monkeypatching ``server.X`` still intercept)."""
 
 import contextlib
+import re
 
 from .method_ctx import HandlerRegistry, bind_module
 
@@ -1906,23 +1907,128 @@ def _billing_route(name: str, call, *, invalid=None, message: str = "", error: s
         return _billing_call(rid, lambda: call(nb, params, key) | (extra or {}), extra=extra)
 
 
+_OWNER_CONFIRM_RE = re.compile(r"[0-9a-f]{64}")
+_OWNER_CONFIRM_REFUSED = {
+    "ok": False,
+    "error": "owner_confirm",
+    "message": "icloneOS did not confirm the owner's click on Buy for this amount; nothing was charged",
+}
+_OWNER_ACTION_REFUSED = {
+    "ok": False,
+    "error": "owner_confirm",
+    "message": "icloneOS did not confirm the owner's click for this billing change; nothing was changed or charged",
+}
+_AMOUNT_TEXT_RE = re.compile(r"\d{1,7}(\.\d{1,2})?")
+
+
+def _owner_action_refusal(p: dict, key, action: str, subject) -> dict | None:
+    """v0.0.9 Q (lead decision 1) — under icloneOS every billing write that charges the card or arms a charge
+    (``subscription.upgrade``, ``subscription.change`` to a tier, ``subscription.resume``, ``billing.auto_reload``
+    switched on) needs main's single-use owner confirm for exactly this action, subject and idempotency key, spent over
+    the permission channel BEFORE the portal is called. None = go ahead; a plain Hermes process is unchanged."""
+    try:
+        from hermes_cli.iclone_policy_env import locked, owner_action_confirmed
+    except Exception:  # noqa: BLE001 — the module ships with this runtime; its absence under the app is a refusal
+        import os as _os
+        return dict(_OWNER_ACTION_REFUSED) if _os.environ.get("ICLONE_POLICY_LOCK") == "1" else None
+    if not locked():
+        return None
+    token = p.get("owner_confirm")
+    if (
+        not isinstance(token, str)
+        or not _OWNER_CONFIRM_RE.fullmatch(token)
+        or not isinstance(subject, str)
+        or not subject
+        or not isinstance(key, str)
+        or not key
+        or not owner_action_confirmed(action, subject, token, key)
+    ):
+        return dict(_OWNER_ACTION_REFUSED)
+    return None
+
+
+def _auto_reload_subject(p: dict):
+    """``on|<threshold>|<top_up_amount>`` when both are decimal strings (what main bound the confirm to), else None."""
+    threshold, top_up = p.get("threshold"), p.get("top_up_amount")
+    if not all(isinstance(v, str) and _AMOUNT_TEXT_RE.fullmatch(v) for v in (threshold, top_up)):
+        return None
+    return f"on|{threshold}|{top_up}"
+
+
+def _subscription_change(nb, p: dict, _key) -> dict:
+    """PUT pending-change. A period-end cancellation charges nothing; a change to a tier can replace a pending
+    cancellation (re-arming the recurring charge), so it needs the owner confirm."""
+    if not p.get("cancel"):
+        refused = _owner_action_refusal(p, p.get("idempotency_key"), "subscription-change",
+                                        p.get("subscription_type_id"))
+        if refused is not None:
+            return refused
+    return _billing_pending_change(nb.put_subscription_pending_change(
+        subscription_type_id=p.get("subscription_type_id"), cancel=bool(p.get("cancel"))))
+
+
+def _subscription_resume(nb, p: dict, _key) -> dict:
+    """DELETE pending-change: re-enables the recurring spend, so it needs the owner confirm."""
+    refused = _owner_action_refusal(p, p.get("idempotency_key"), "subscription-resume", "resume")
+    if refused is not None:
+        return refused
+    return _billing_pending_change(nb.delete_subscription_pending_change())
+
+
+def _subscription_upgrade(nb, p: dict, key) -> dict:
+    """The money route (prorate + charge + flip plan): the owner confirm is checked BEFORE the portal is called."""
+    refused = _owner_action_refusal(p, key, "subscription-upgrade", p.get("subscription_type_id"))
+    if refused is not None:
+        return refused
+    return _billing_pick(
+        nb.post_subscription_upgrade(subscription_type_id=p.get("subscription_type_id"), idempotency_key=key),
+        status="status", target_tier_name="targetTierName", recovery_url="recoveryUrl", reason="reason")
+
+
 # PUT pending-change: schedule a downgrade / same-price change OR a period-end cancellation.
-_billing_route("subscription.change", lambda nb, p, _k: _billing_pending_change(nb.put_subscription_pending_change(
-    subscription_type_id=p.get("subscription_type_id"), cancel=bool(p.get("cancel")))),
+_billing_route("subscription.change", _subscription_change,
     invalid=lambda p: not p.get("cancel") and not p.get("subscription_type_id"),
     message="subscription_type_id or cancel is required")
 # DELETE pending-change: clear a scheduled downgrade / cancellation (re-enables recurring spend).
-_billing_route("subscription.resume",
-               lambda nb, p, _k: _billing_pending_change(nb.delete_subscription_pending_change()))
+_billing_route("subscription.resume", _subscription_resume)
 # The money route (prorate + charge + flip plan). SCA / decline → status requires_action / payment_failed +
 # recovery_url.
-_billing_route("subscription.upgrade", lambda nb, p, key: _billing_pick(
-    nb.post_subscription_upgrade(subscription_type_id=p.get("subscription_type_id"), idempotency_key=key),
-    status="status", target_tier_name="targetTierName", recovery_url="recoveryUrl", reason="reason"),
+_billing_route("subscription.upgrade", _subscription_upgrade,
     invalid=lambda p: not p.get("subscription_type_id"), message="subscription_type_id is required", idempotent=True)
+
+
+def _owner_confirm_refusal(p: dict, key) -> dict | None:
+    """v0.0.9 R-f1s-5 — under icloneOS a charge needs main's owner confirm for exactly this amount and key (spent
+    over the permission channel, single use). None = go ahead; a plain Hermes process is unchanged."""
+    try:
+        from hermes_cli.iclone_policy_env import locked, owner_charge_confirmed
+    except Exception:  # noqa: BLE001 — the module ships with this runtime; its absence under the app is a refusal
+        import os as _os
+        return dict(_OWNER_CONFIRM_REFUSED) if _os.environ.get("ICLONE_POLICY_LOCK") == "1" else None
+    if not locked():
+        return None
+    token, amount = p.get("owner_confirm"), p.get("amount_usd")
+    if (
+        not isinstance(token, str)
+        or not _OWNER_CONFIRM_RE.fullmatch(token)
+        or not isinstance(amount, str)
+        or not isinstance(key, str)
+        or not owner_charge_confirmed(token, amount, key)
+    ):
+        return dict(_OWNER_CONFIRM_REFUSED)
+    return None
+
+
+def _charge(nb, p: dict, key) -> dict:
+    """POST /api/billing/charge → {ok, charge_id}. The owner confirm is checked BEFORE the portal is called."""
+    refused = _owner_confirm_refusal(p, key)
+    if refused is not None:
+        return refused
+    return _billing_pick(nb.post_charge(amount_usd=p.get("amount_usd"), idempotency_key=key), charge_id="chargeId")
+
+
 # POST /api/billing/charge → {ok, charge_id, idempotency_key}.
-_billing_route("billing.charge", lambda nb, p, key: _billing_pick(
-    nb.post_charge(amount_usd=p.get("amount_usd"), idempotency_key=key), charge_id="chargeId"),
+_billing_route("billing.charge", _charge,
     invalid=lambda p: p.get("amount_usd") is None, message="amount_usd is required", idempotent=True)
 # GET /api/billing/charge/{id} — a single status read; the caller drives the poll cadence.
 _billing_route("billing.charge_status", lambda nb, p, _k: _billing_pick(
@@ -1932,7 +2038,12 @@ _billing_route("billing.charge_status", lambda nb, p, _k: _billing_pick(
 
 
 def _auto_reload(nb, p: dict, _key) -> dict:
-    """PATCH /api/billing/auto-top-up. params: {enabled, threshold, top_up_amount}."""
+    """PATCH /api/billing/auto-top-up. params: {enabled, threshold, top_up_amount}. Switching it ON arms a standing
+    charge: under icloneOS that needs the owner confirm for exactly this rule (turning it off is free)."""
+    if p.get("enabled"):
+        refused = _owner_action_refusal(p, p.get("idempotency_key"), "auto-reload", _auto_reload_subject(p))
+        if refused is not None:
+            return refused
     nb.patch_auto_top_up(enabled=bool(p.get("enabled")), threshold=p.get("threshold"),
                          top_up_amount=p.get("top_up_amount"))
     return {"ok": True}

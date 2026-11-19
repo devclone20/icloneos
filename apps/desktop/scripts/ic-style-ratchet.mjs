@@ -9,7 +9,7 @@
 // The counting rules mirror the P5 gate counter (kept outside this repository) so the two never disagree.
 import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, sep } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const DESK = join(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC_APP = join(DESK, 'src', 'app')
@@ -160,7 +160,23 @@ function writeBaseline(files) {
   writeFileSync(BASELINE, `${JSON.stringify({ allow: [...ALLOW].sort(), totals, files }, null, 2)}\n`)
 }
 
-function main() {
+async function faintInkGate() {
+  // v0.0.9 r3: the faint token never sits on an interactive element or an action label (scripts/ic-faint-ink.mjs).
+  const { checkFaintInk } = await import('./ic-faint-ink.mjs')
+  const { violations } = checkFaintInk()
+
+  if (violations.length) {
+    console.error(`ic-style-ratchet: ${violations.length} interactive element(s) wear the faint ink (--ic-text-3 fails AA) — use --ic-text-2-aa:`)
+    violations.forEach(v => console.error(`  ${v}`))
+    process.exit(1)
+  }
+
+  return violations.length
+}
+
+async function main() {
+  await faintInkGate()
+
   const now = measure()
   const base = readBaseline()
   const update = process.argv.includes('--update')
@@ -203,7 +219,9 @@ function main() {
   }
 
   const total = k => Object.values(now).reduce((n, f) => n + f[k], 0)
-  console.log(`ic-style-ratchet: ok (${KINDS.map(k => `${k} ${total(k)}`).join(', ')})`)
+  console.log(`ic-style-ratchet: ok (${KINDS.map(k => `${k} ${total(k)}`).join(', ')}; faint ink on controls 0)`)
 }
 
-main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  await main()
+}

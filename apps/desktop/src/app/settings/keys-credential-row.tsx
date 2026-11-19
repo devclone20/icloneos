@@ -55,7 +55,7 @@ export function CredentialRow({
           <>
             {href ? (
               <a
-                className="mt-1 inline-flex w-fit items-center gap-1 text-[length:var(--conversation-caption-font-size)] text-(--ic-text-3) underline-offset-4 hover:text-(--ic-text-1) hover:underline"
+                className="mt-1 inline-flex w-fit items-center gap-1 text-[length:var(--conversation-caption-font-size)] text-(--ic-text-2-aa) underline-offset-4 hover:text-(--ic-text-1) hover:underline"
                 href={href}
                 rel="noreferrer"
                 target="_blank"

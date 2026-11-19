@@ -1,3 +1,6 @@
+import * as fs from 'node:fs'
+import * as path from 'node:path'
+
 import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
 /**
  * E2E smoke tests for the dev-mode desktop app.
@@ -17,8 +20,12 @@ import { expectVisualSnapshot } from './visual-snapshot'
 
 let fixture: MockBackendFixture | null = null
 
+// v0.0.9 e2e harness (owner condition): every test below claims a booted app, so the suite reaches ready FIRST. A
+// launch that never reaches ready (no consent seed, a gate the python cannot load) fails here with its cause, instead
+// of the DOM-only tests passing over a policy dialog and a gate card (e2e triage "false passes").
 test.beforeAll(async () => {
   fixture = await setupMockBackend()
+  await waitForAppReady(fixture, 120_000)
 })
 
 test.afterAll(async () => {
@@ -27,9 +34,15 @@ test.afterAll(async () => {
 })
 
 test.describe('dev-mode boot with mock backend', () => {
-  test('window opens with Hermes title', async () => {
-    const title = await fixture!.page.title()
-    expect(title).toContain('Hermes')
+  // Reviewed loosening (v0.0.9 e2e triage, class A): the upstream expectation was "Hermes"; the product title is
+  // index.html's own `<title>iclone os</title>`. The test now reads that file and asserts the window carries exactly
+  // it, so a future rename moves both together instead of loosening the check further.
+  test('window opens with the product title (index.html)', async () => {
+    const html = fs.readFileSync(path.join(import.meta.dirname, '..', 'index.html'), 'utf8')
+    const product = /<title>([^<]+)<\/title>/.exec(html)?.[1]
+
+    expect(product).toBe('iclone os')
+    expect(await fixture!.page.title()).toBe(product)
   })
 
   test('renderer mounts and shows DOM content', async () => {

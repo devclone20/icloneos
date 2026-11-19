@@ -384,24 +384,42 @@ async function tailRows({ fd, size }: Snapshot, tailBytes: number): Promise<{ ro
   }
 
   const lines = buffer.subarray(0, read).toString('utf8').split('\n')
-  const rows: RefusalView[] = []
 
   // A window that starts mid-line drops that first, partial line; a torn last line is skipped.
-  for (const line of start > 0 ? lines.slice(1) : lines) {
-    if (line) {
-      try {
-        const row = ownRow(JSON.parse(line))
+  return { rows: await parseRowsInSlices(start > 0 ? lines.slice(1) : lines), whole: start === 0 }
+}
 
-        if (row) {
-          rows.push(row)
+/**
+ * r4d (eng r4-m5, the L4-02 200 MB case at its cause): a 4 MB tail is ~17 000 rows, and parsing them in one turn held
+ * main for 16.2 ms under suite load (the gate is < 16 ms). They are parsed TAIL_PARSE_SLICE at a time, with a turn of
+ * the event loop between slices, so no single turn carries the whole tail.
+ */
+export const TAIL_PARSE_SLICE = 1_000
+
+export async function parseRowsInSlices(lines: readonly string[], slice = TAIL_PARSE_SLICE): Promise<RefusalView[]> {
+  const rows: RefusalView[] = []
+
+  for (let from = 0; from < lines.length; from += slice) {
+    if (from > 0) {
+      await yieldToLoop()
+    }
+
+    for (const line of lines.slice(from, from + slice)) {
+      if (line) {
+        try {
+          const row = ownRow(JSON.parse(line))
+
+          if (row) {
+            rows.push(row)
+          }
+        } catch {
+          // torn
         }
-      } catch {
-        // torn
       }
     }
   }
 
-  return { rows, whole: start === 0 }
+  return rows
 }
 
 const utcDay = (date: Date) => date.toISOString().slice(0, 10)
@@ -797,6 +815,17 @@ export function createNoticeThrottle(send: () => void, everyMs = 250, clock: () 
   let timer: NodeJS.Timeout | null = null
 
   const fire = () => {
+    // r4d (eng r4-m5, L4-02 at its cause): a timer may run up to ~1 ms before the sub-millisecond clock says the
+    // interval is over (libuv rounds a fractional delay down and its loop time is whole milliseconds; measured 248.9 ms
+    // gaps under load). A notice is never sent early: an early wake-up waits out the rest.
+    const early = last + everyMs - clock()
+
+    if (early > 0) {
+      timer = setTimeout(fire, Math.ceil(early))
+
+      return
+    }
+
     timer = null
     last = clock()
     send()
@@ -813,7 +842,7 @@ export function createNoticeThrottle(send: () => void, everyMs = 250, clock: () 
       if (wait <= 0) {
         fire()
       } else {
-        timer = setTimeout(fire, wait)
+        timer = setTimeout(fire, Math.ceil(wait))
       }
     },
     stop(): void {

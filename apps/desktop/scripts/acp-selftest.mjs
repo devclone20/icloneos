@@ -151,10 +151,11 @@ export function judgePackagedSelftest({ status, stdout, stderr }, expectVersion)
     return { ok: false, error: `${failed}: ${report[failed]?.error ?? 'not run'}` }
   }
 
-  // REL-6 (ruling 26): the app bundles no CLI. Its acp check proves the bundle carries none and that the pin it
-  // installs from at first use is the one this build was made with.
-  if (report.acp.bundled !== false) {
-    return { ok: false, error: 'acp: the app reports a bundled ACP CLI (REL-6: it must ship only the pin)' }
+  // v0.0.9 (owner decision 17 Nov, replaces ruling 26): the app SHIPS the CLI in Resources/acp-tools, which the static
+  // proof (acp-pack-bundled.mjs) checks file by file. The app's acp check must pass for the pin this build was made
+  // with; when it reports on the bundled copy (`bundled: true`), that copy must also say it verified.
+  if (report.acp.bundled === true && report.acp.verified === false) {
+    return { ok: false, error: `acp: the app's bundled ACP CLI did not verify: ${report.acp.error ?? 'no reason'}` }
   }
 
   if (expectVersion && report.acp.version !== expectVersion) {

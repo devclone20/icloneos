@@ -12,7 +12,7 @@ import json
 import threading
 from pathlib import Path
 
-from pm.environments import dependency_home_root, install_state_dir, runtime_facts_path
+from pm.environments import data_home_root, install_state_dir, runtime_facts_path
 from pm.filesystem import durable_write_bytes, file_digest, read_bytes_or_none
 from pm.workspace import enabled_plugin_dirs, _is_member_candidate
 
@@ -65,7 +65,7 @@ class PluginSelection:
 
         self.configs = selection_snapshot()
         self.home = Path(selection["home"]).resolve()
-        if not self.home.is_relative_to(dependency_home_root().resolve()):
+        if not self.home.is_relative_to(data_home_root().resolve()):
             raise ValueError("config path is outside Hermes state")
         self.path = self.home / "config.yaml"
         self.previous = read_bytes_or_none(self.path)
@@ -109,7 +109,7 @@ class StagedPlugin:
         self.configs = selection_snapshot()
         self.target = Path(plugin["target"]).absolute()
         self.staged = Path(plugin["staged"]).resolve()
-        if (not self.target.resolve().is_relative_to(dependency_home_root().resolve())
+        if (not self.target.resolve().is_relative_to(data_home_root().resolve())
                 or self.target.parent.name != "plugins" or self.target.is_symlink()
                 or self.staged == self.target.resolve() or self.staged.is_relative_to(self.target.resolve())
                 or self.target.resolve().is_relative_to(self.staged)):

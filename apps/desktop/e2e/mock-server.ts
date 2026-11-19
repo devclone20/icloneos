@@ -44,6 +44,8 @@ export interface MockServer {
   port: number
   url: string
   receivedPrompts: string[]
+  /** The user text of each session-title request (agent/title_generator.py), kept out of receivedPrompts. */
+  receivedTitleRequests: string[]
   waitForHeldStream: () => Promise<void>
   waitForHeldCompletion: () => Promise<void>
   releaseHeldStream: () => void
@@ -76,25 +78,35 @@ export interface ScriptedTurn {
   }>
 }
 
+// v0.0.9 root cause (interim-messages ×2, glyph spinner): the scripted Todo call was stale against this runtime.
+// The tool is todo_list (tools/todo_tool.py:230; 'todo' is only a replay/dispatch alias, TODO_LEGACY_ALIASES), and
+// todo_list is DEFERRED behind tool search by default (hermes_cli/config_defaults.py:2021, tools.tool_search.defer),
+// so a direct call to either name is an unknown tool: rejected three times, the turn ended "Model generated invalid
+// tool call" (agent/turn_tool_validation.py:133). A real provider is told to reach deferred tools through the
+// tool_call bridge (agent/prompt_builder.py:631-633), so the mock now calls it exactly that way. Harness, not app.
+function todoCall(args: { todos: Array<{ id: string; content: string; status: string }> }) {
+  return { name: 'tool_call', args: { calls: [{ name: 'todo_list', arguments: args }] } }
+}
+
 const INTERIM_SCRIPT: ScriptedTurn[] = [
   {
     text: 'Let me start by planning the approach.',
-    toolCalls: [{ name: 'todo', args: { todos: [{ id: '1', content: 'Plan', status: 'in_progress' }] } }]
+    toolCalls: [todoCall({ todos: [{ id: '1', content: 'Plan', status: 'in_progress' }] })]
   },
   {
     text: 'Now checking the details before answering.',
-    toolCalls: [{ name: 'todo', args: { todos: [{ id: '2', content: 'Check details', status: 'in_progress' }] } }]
+    toolCalls: [todoCall({ todos: [{ id: '2', content: 'Check details', status: 'in_progress' }] })]
   },
   {
     // No visible text alongside this tool call — should NOT produce an
     // interim message. The agent fires _emit_interim_assistant_message
     // but _interim_assistant_visible_text returns "" so it's a no-op.
     text: '',
-    toolCalls: [{ name: 'todo', args: { todos: [{ id: '3', content: 'Silent step', status: 'completed' }] } }]
+    toolCalls: [todoCall({ todos: [{ id: '3', content: 'Silent step', status: 'completed' }] })]
   },
   {
     text: 'Found something interesting worth noting.',
-    toolCalls: [{ name: 'todo', args: { todos: [{ id: '4', content: 'Note finding', status: 'completed' }] } }]
+    toolCalls: [todoCall({ todos: [{ id: '4', content: 'Note finding', status: 'completed' }] })]
   },
   {
     // Final answer — different from all interim texts.
@@ -318,9 +330,7 @@ const TASK_PANEL_RESUME_SCRIPT: ScriptedTurn[] = [
   {
     text: TASK_PANEL_RESUME_TEXT,
     toolCalls: [
-      {
-        name: 'todo',
-        args: {
+      todoCall({
           todos: [
             { id: 'design', content: 'Design the restored layout', status: 'completed' },
             { id: 'implement', content: 'Implement the measured clearance', status: 'in_progress' },
@@ -328,8 +338,7 @@ const TASK_PANEL_RESUME_SCRIPT: ScriptedTurn[] = [
             { id: 'review', content: 'Review the visual regression', status: 'pending' },
             { id: 'ship', content: 'Ship the focused fix', status: 'pending' }
           ]
-        }
-      },
+      }),
       {
         name: 'terminal',
         args: { command: 'sleep 60' }
@@ -398,9 +407,22 @@ function includesBlockingClarifyTrigger(value: unknown): boolean {
  *
  * @returns a handle with `port`, `url`, received user prompts, and `close()`.
  */
+/**
+ * v0.0.9 (G 1c2bbb9423): the runtime's session-title request (agent/title_generator.py), sent after a turn with the
+ * turn's user text as its last user message. It is not a turn, so the prompt logs must not count it.
+ */
+const TITLE_REQUEST_SYSTEM_PREFIX = 'You name chat sessions.'
+
+function isTitleRequest(parsed: { messages?: unknown }): boolean {
+  const first = Array.isArray(parsed.messages) ? (parsed.messages[0] as { content?: unknown; role?: unknown }) : null
+
+  return first?.role === 'system' && typeof first.content === 'string' && first.content.startsWith(TITLE_REQUEST_SYSTEM_PREFIX)
+}
+
 export function startMockServer(options: MockServerOptions = {}): Promise<MockServer> {
   return new Promise((resolve, reject) => {
     const receivedPrompts: string[] = []
+    const receivedTitleRequests: string[] = []
     let resolveHeldStreamStarted: (() => void) | null = null
     let releaseHeldStream: (() => void) | null = null
     let heldCompletionCount = 0
@@ -468,8 +490,14 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             .reverse()
             .find((message: { role?: unknown }) => message?.role === 'user')
 
+          const titleRequest = isTitleRequest(parsed)
+
           if (typeof lastUserMessage?.content === 'string') {
-            receivedPrompts.push(lastUserMessage.content)
+            if (titleRequest) {
+              receivedTitleRequests.push(lastUserMessage.content)
+            } else {
+              receivedPrompts.push(lastUserMessage.content)
+            }
           }
 
           const stream = parsed.stream === true
@@ -491,7 +519,8 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           const lastUserMsg = [...messages].reverse().find(m => m?.role === 'user')
           const userText = typeof lastUserMsg?.content === 'string' ? lastUserMsg.content : ''
 
-          if (userText) {
+          // A session-title request is not a turn (see isTitleRequest).
+          if (userText && !titleRequest) {
             _receivedUserTexts.push(userText)
           }
 
@@ -713,6 +742,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
         port,
         url,
         receivedPrompts,
+        receivedTitleRequests,
         waitForHeldStream: () => heldStreamStarted,
         waitForHeldCompletion: () => heldStreamStarted,
         releaseHeldStream: () => releaseHeldStream?.(),

@@ -185,7 +185,8 @@ export function AboutSettings() {
           className={cn(
             'rounded-xl border px-4 py-1 text-sm',
             statusTone === 'available' && 'border-primary/30 bg-primary/5 text-foreground',
-            statusTone === 'error' && 'border-destructive/35 bg-destructive/5 text-destructive',
+            // v0.0.9 F4b — the error card wears the inline alert's plate and ink (type 3, AA), not the theme's destructive.
+            statusTone === 'error' && 'border-(--ic-danger-soft) bg-(--ic-danger-soft) text-(--ic-danger-ink)',
             statusTone === 'idle' && 'border-border/70 bg-muted/20 text-foreground'
           )}
         >

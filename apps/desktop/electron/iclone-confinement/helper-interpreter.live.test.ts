@@ -154,10 +154,13 @@ describe.skipIf(!live)('the helper interpreter is the trusted one, whatever the 
     confined = await ask(true)
   }, 900_000)
 
+  // r4d (eng r4-m5): the teardown stops the confined writer's whitelist service and removes a world of real venvs
+  // and a Python home (thousands of files). Under full-suite load that measured 10–20 s, past vitest's 10 s default
+  // hook timeout, in r3b, r4 and r4b (every test in the file had passed). It gets its own budget, not a skipped cleanup.
   afterAll(async () => {
     await wl?.dispose()
     world?.dispose()
-  })
+  }, 60_000)
 
   it('unconfined, every write into PM’s folders goes through (the control)', () => {
     expect(plain).toMatchObject({

@@ -2619,6 +2619,8 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
             error_type="plugin_block", error_message=block_message,
             middleware_trace=_tool_middleware_trace,
         )
+        from agent.tool_executor import notify_tool_refused  # iclone-seam: v009-rt refusal visibility
+        notify_tool_refused(agent, function_name, function_args, tool_call_id, result, block_message)
         return result
     tool_start_time = time.monotonic()
     inline_executor = resolve_invoke_tool_executor(agent, function_name)

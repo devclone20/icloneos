@@ -8,7 +8,7 @@ import { app, BrowserWindow, dialog } from 'electron'
 
 import { errorMessage } from '../../src/iclone-shared/errors'
 import { isRecord } from '../../src/iclone-shared/guards'
-import { classifyActiveRuntime } from '../active-runtime-state'
+import { brokenAppInstallReason, classifyActiveRuntime, type VenvPythonState } from '../active-runtime-state'
 import { canImportHermesCli, shouldTrustHermesOverride, verifyHermesCli } from '../backend-probes'
 import { isWindowsBinaryPathInWsl } from '../bootstrap-platform'
 import { readSourceMarker, resolveCheckoutHead, runPinnedRuntimeUpdate } from '../bootstrap-runner'
@@ -81,7 +81,9 @@ import { runResolvedGit } from './executables'
 import { checkRuntimeIntegrity } from './iclone-gate'
 import { rememberLog, updatePolicy } from './log'
 import { BOOTSTRAP_COMPLETE_MARKER, BOOTSTRAP_MARKER_SCHEMA_VERSION } from './paths'
+import { postNotice } from './renderer-dialogs'
 import { createActiveBackend, createPythonBackend, curatedRuntimeConfig, type HermesBackendSpec } from './runtime'
+import { managedRuntimeEnv } from './runtime-install-state'
 import { bootState, quitState } from './state'
 
 // --- in-app update mutual exclusion (#50238) -------------------------------
@@ -173,17 +175,42 @@ export async function waitForUpdateToFinish() {
       // machines with no shim browser and no notifier this dialog is the
       // FIRST time the message is visible — it must not be a log line.
       rememberLog(`[updates] detached update finished with manual action (branch ${result.branch}): ${result.message}`)
-      dialog.showMessageBox({
-        type: 'warning',
-        title: 'iclone os update',
-        message: 'The update finished, but needs one more step',
-        detail: result.message
-      })
+      // v0.0.9 F4b — native dialogs to renderer: a sticky warning in the notification centre when the window takes
+      // it; the native box only if no window drains it in time (the boot never got a renderer).
+      postNotice(
+        {
+          kind: 'warning',
+          message: result.message,
+          nativeFallback: { kind: 'message-box', type: 'warning' },
+          title: 'The update finished, but needs one more step'
+        },
+        () =>
+          void dialog.showMessageBox({
+            type: 'warning',
+            title: 'iclone os update',
+            message: 'The update finished, but needs one more step',
+            detail: result.message
+          })
+      )
     } else if (result && result.ok) {
       rememberLog(`[updates] detached update finished OK (branch ${result.branch})`)
     } else if (result) {
       rememberLog(`[updates] detached update FAILED (exit ${result.exitCode}): ${result.message}`)
-      dialog.showErrorBox('Hermes update did not finish', `${result.message}\n\nDetails: ${newestHandoffLog()}`)
+      // v0.0.9 F4b — native dialogs to renderer: an error in the notification centre (whole message, the log path as
+      // copyable detail, what to do next) instead of showErrorBox (no scroll, OK only); the error box stays the fallback.
+      const logPath = newestHandoffLog()
+
+      postNotice(
+        {
+          detail: `Details: ${logPath}`,
+          kind: 'error',
+          message: result.message,
+          nativeFallback: { kind: 'error-box' },
+          nextStep: 'Open the log above to see which step failed, then try the update again from Settings › Updates.',
+          title: 'The update did not finish'
+        },
+        () => dialog.showErrorBox('The update did not finish', `${result.message}\n\nDetails: ${logPath}`)
+      )
     }
   } catch (err) {
     rememberLog(`[updates] could not read hand-off result: ${errorMessage(err)}`)
@@ -899,10 +926,38 @@ function isActiveRuntimeUsable() {
     fileExists(venvPython) &&
     canImportHermesCli(venvPython, {
       env: {
-        PYTHONPATH: [ACTIVE_HERMES_ROOT, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter)
+        PYTHONPATH: [ACTIVE_HERMES_ROOT, process.env.PYTHONPATH].filter(Boolean).join(path.delimiter),
+        // The import probe runs hermes_bootstrap, which activates the dependencies: the same pin as every launch.
+        ...managedRuntimeEnv(ACTIVE_HERMES_ROOT)
       }
     })
   )
+}
+
+function venvPythonState(venvPython: string): VenvPythonState {
+  try {
+    fs.lstatSync(venvPython)
+  } catch {
+    return 'missing'
+  }
+
+  return fileExists(venvPython) ? 'present' : 'dangling'
+}
+
+/** m-r2-2: the reason the app's own install here is broken (not a first run), or null. File reads only. */
+function brokenActiveInstall(activeRuntime: ReturnType<typeof activeRuntimeState>, repairRequested: boolean) {
+  const venvPython = getVenvPython(activeVenvRoot())
+  const hasSourceTree = isHermesSourceRoot(ACTIVE_HERMES_ROOT)
+
+  return brokenAppInstallReason({
+    activeRuntimeUsable: activeRuntime.shouldUseActiveRuntime,
+    hasSourceTree,
+    installedByApp:
+      activeRuntime.hasValidMarker || (IS_PACKAGED && hasSourceTree && isRecordedInstall(ACTIVE_HERMES_ROOT)),
+    repairRequested,
+    venvPython,
+    venvPythonState: venvPythonState(venvPython)
+  })
 }
 
 function activeRuntimeState() {
@@ -1085,7 +1140,16 @@ export function resolveHermesBackend(backendArgs: string[]): HermesBackendSpec {
   //    resolveHermesBackend was the old "no payload" path and forced the
   //    user into a dead end. With the bootstrap protocol, "no install yet"
   //    is a recoverable state the GUI can drive through.
+  // m-r2-2: the app installed its runtime here and that environment broke: a boot failure the kit repairs, not the
+  // first-run chooser (which covered the kit and never said why).
+  const brokenInstall = brokenActiveInstall(activeRuntime, repairRequested)
+
+  if (brokenInstall) {
+    rememberLog(`[bootstrap] the app's runtime at ${ACTIVE_HERMES_ROOT} is installed but broken: ${brokenInstall}`)
+  }
+
   return {
+    ...(brokenInstall ? { brokenInstall } : {}),
     kind: 'bootstrap-needed',
     label: 'Hermes Agent not installed yet; bootstrap required',
     command: null,
@@ -1138,6 +1202,7 @@ export function ensureRuntimeUpdateCheckOff(profile: null | string = null): Prom
         policy,
         profile,
         run: spawnCapped,
+        runtimeEnv: managedRuntimeEnv(root),
         ...(IS_PACKAGED
           ? {
               sealed: {

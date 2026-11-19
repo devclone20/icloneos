@@ -94,7 +94,7 @@ describe.skipIf(process.platform !== 'darwin' || !electronBinary())('the refusal
     // Where the profile name '../..' would land if main ever let it through: a refusable link, so an answer proves the escape.
     fs.symlinkSync(target, path.join(base, name, '.env'))
 
-    const child = spawnSync(String(electronBinary()), [mainJs, `--user-data-dir=${path.join(base, name, 'ud')}`], {
+    const child = spawnSync(String(electronBinary()), [mainJs, `--user-data-dir=${path.join(base, name, 'ud')}`, '--use-mock-keychain'], {
       env: { ...process.env, FX_HOME: home, FX_OUT: out, FX_TARGET: target, FX_TRUST: trust, FX_USER_DATA: path.join(base, name, 'ud') },
       timeout: 90_000
     })

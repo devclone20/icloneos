@@ -1,11 +1,15 @@
 /* iclone os — per-iNFT Virtuals CLI setup wizard (EconomyOS & iNFT pane).
    House grammar: champagne-gold accents on frosted ink, hairline borders. */
 
+/* v0.0.9 r4 (design r3 N9): no 720px cap — the step actions end on the page's own right edge, the same edge as the
+   other Settings sections (Billing's Change plan / Update). */
 .iws {
+  /* v0.0.9 G GF-9: the title column (the step dot plus its gap); the step's text and its actions both start here. */
+  --iws-step-indent: 32px;
+
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-width: 720px;
   padding: 4px 0 24px;
 }
 
@@ -74,6 +78,12 @@
   opacity: 1;
 }
 
+.iws__title-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .iws__refresh {
   display: inline-flex;
   padding: 7px;
@@ -85,6 +95,29 @@
 
 .iws__refresh:hover {
   opacity: 1;
+}
+
+/* The licences disclosure row at the foot of step 1: a quiet text line with a chevron, the step body's own inset. */
+.iws__disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ic-text-2-aa);
+  font-size: var(--ic-type-md);
+  cursor: pointer;
+}
+
+.iws__disclosure:hover {
+  color: var(--ic-text-1);
+}
+
+.iws__disclosure:focus-visible {
+  outline: 2px solid var(--ic-accent);
+  outline-offset: 2px;
 }
 
 /* ── steps ── */
@@ -136,7 +169,8 @@
   border-radius: var(--ic-radius-pill);
   border: 1px solid var(--ic-home-ink-14);
   font-size: var(--ic-type-sm);
-  letter-spacing: 0.08em;
+  /* v0.0.9 G GF-3: body tracking; the tracked caps-like setting read as chrome noise. */
+  letter-spacing: normal;
   opacity: 0.65;
   cursor: pointer;
   transition: opacity var(--ic-dur-fast) var(--ic-ease-std);
@@ -151,7 +185,12 @@
   flex-direction: column;
   gap: 8px;
   margin-top: 8px;
-  padding-left: 32px;
+  padding-left: var(--iws-step-indent);
+}
+
+.iws__step-hint {
+  display: block;
+  padding-left: var(--iws-step-indent);
 }
 
 .iws__step-body:empty {

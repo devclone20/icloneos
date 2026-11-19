@@ -20,7 +20,7 @@ import './ic-page.css'
 
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 
-import { AlertTriangle, Check, ChevronDown, Loader2, X } from '@/lib/icons'
+import { AlertCircle, AlertTriangle, Check, CheckCircle2, ChevronDown, Info, Loader2, X } from '@/lib/icons'
 
 interface IcPageProps {
   actions?: ReactNode
@@ -240,12 +240,21 @@ export function IcPageSection({ aside, children, label, note }: IcPageSectionPro
 interface IcPageButtonProps {
   block?: boolean
   children: ReactNode
+  /**
+   * v0.0.9 G-1: `data-*` hooks on the button itself — e.g. `data-repair-kit-confirm`, the marker the preload's
+   * owner-click lock looks for on the clicked control.
+   */
+  data?: { [key: `data-${string}`]: string | undefined }
   disabled?: boolean
   /** Marks this button as the dialog's first focus (IcDialog reads the hook). */
   firstFocus?: boolean
   /** Omitted by a submit button: the form it sits in does the work. */
   onClick?: () => void
-  tone?: 'accent' | 'danger' | 'default' | 'quiet'
+  /**
+   * `note`: the leading action on a notification plate (toast, status banner) — the plate's full ink, weight 500, a
+   * hairline; its siblings stay `quiet`, which a plate re-inks to --ic-note-ink-2 (notification-system.css).
+   */
+  tone?: 'accent' | 'danger' | 'default' | 'note' | 'quiet'
   type?: 'button' | 'submit'
 }
 
@@ -253,6 +262,7 @@ interface IcPageButtonProps {
 export function IcPageButton({
   block = false,
   children,
+  data,
   disabled = false,
   firstFocus = false,
   onClick,
@@ -271,6 +281,7 @@ export function IcPageButton({
 
   return (
     <button
+      {...data}
       className={classes.join(' ')}
       data-ic-autofocus={firstFocus ? '' : undefined}
       disabled={disabled}
@@ -291,12 +302,60 @@ export function IcHiddenLabel({ children, id }: { children: ReactNode; id: strin
   )
 }
 
-export function IcAlert({ children }: { children: ReactNode }) {
+export type IcAlertTone = 'error' | 'info' | 'success' | 'warning'
+
+const IC_ALERT_ICON = { error: AlertCircle, info: Info, success: CheckCircle2, warning: AlertTriangle } as const
+
+/**
+ * v0.0.9 F4 — type 3, the inline alert: inside the screen, next to the control it is about. One line of cause (the
+ * words wrap, never cut) and at most one action. It does not close; it leaves when its cause does. Errors and warnings
+ * are announced (`role="alert"`), the rest is a polite status. `tone` defaults to the old look (an error).
+ */
+export function IcAlert({
+  action,
+  children,
+  className,
+  data,
+  id,
+  testId,
+  title,
+  tone = 'error'
+}: {
+  action?: { label: string; onClick: () => void }
+  children: ReactNode
+  className?: string
+  /** v0.0.9 F4b: the `data-*` hooks a migrated site already exposes (its tests and CSS read them on the alert itself). */
+  data?: { [key: `data-${string}`]: string | undefined }
+  /** v0.0.9 F4b: lets a control point at the alert (`aria-describedby`/`aria-errormessage`). */
+  id?: string
+  /** v0.0.9 F4b: the `data-testid` a migrated site's tests already select by. */
+  testId?: string
+  title?: ReactNode
+  tone?: IcAlertTone
+}) {
+  const Icon = IC_ALERT_ICON[tone]
+
   return (
-    <p className="icpg__alert" role="alert">
-      <AlertTriangle aria-hidden="true" size={14} />
-      <span>{children}</span>
-    </p>
+    <div
+      {...data}
+      className={className ? `icpg__alert ${className}` : 'icpg__alert'}
+      data-slot="ic-alert"
+      data-testid={testId}
+      data-tone={tone}
+      id={id}
+      role={tone === 'error' || tone === 'warning' ? 'alert' : 'status'}
+    >
+      <Icon aria-hidden="true" className="icpg__alert-icon" size={14} />
+      <div className="icpg__alert-text">
+        {title ? <strong className="icpg__alert-title">{title}</strong> : null}
+        <span>{children}</span>
+      </div>
+      {action ? (
+        <IcPageButton onClick={action.onClick} tone="quiet">
+          {action.label}
+        </IcPageButton>
+      ) : null}
+    </div>
   )
 }
 
@@ -434,6 +493,13 @@ export function IcTextarea({
 const IC_FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
 
+/** A key on one of these is that control's own (a button's Enter/Space is its click), never the dialog's. */
+function isOwnControl(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element && target.closest('button, a[href], input, select, textarea, [role="button"]') !== null
+  )
+}
+
 interface IcDialogProps {
   /** While true Escape still stops at the dialog but does not close it. */
   busy?: boolean
@@ -442,8 +508,8 @@ interface IcDialogProps {
   /** Rendered after the body; the footer owns its own row (`icdlg__foot`). */
   footer: ReactNode
   onClose: () => void
-  /** Enter/Space anywhere in the dialog runs this — a confirm whose body holds
-   *  no text field, so the key is unambiguous. */
+  /** Enter on the dialog itself (no other control focused) runs this — a confirm whose body holds no text field.
+   *  v0.0.9 F4 (X6): Space never confirms, and Enter on another focused button (Cancel) is that button's own. */
   onEnter?: () => void
   onSubmit?: (event: React.FormEvent) => void
   open: boolean
@@ -550,7 +616,9 @@ export function IcDialog({
       return
     }
 
-    if (onEnter && !busy && (event.key === 'Enter' || event.key === ' ')) {
+    // v0.0.9 F4 (X6): only Enter, and only when no control of the dialog holds focus. A focused button (Cancel, or the
+    // confirm itself) answers Enter and Space natively, so a key on Cancel can never confirm.
+    if (onEnter && !busy && event.key === 'Enter' && !isOwnControl(event.target)) {
       event.preventDefault()
       onEnter()
     }
@@ -615,9 +683,10 @@ interface IcConfirmDialogProps {
 }
 
 /**
- * The confirm shape on IcDialog: opens focused on the action, Enter confirms
- * from anywhere inside, and it owns the idle → saving → done beat plus the
- * inline error. Callers pass only the copy and an async onConfirm.
+ * The confirm shape on IcDialog: opens focused on the action; Enter and Space only ever press the focused button
+ * (natively), so the action fires only from a key on the action itself — never from Cancel and never from the dialog
+ * body (v0.0.9 F4, P0_DESIGN_SPECS F4 type 4; Q renderer 5). It owns the idle → saving → done
+ * beat plus the inline error. Callers pass only the copy and an async onConfirm.
  */
 export function IcConfirmDialog({
   busyLabel,
@@ -701,7 +770,6 @@ export function IcConfirmDialog({
         </>
       }
       onClose={onClose}
-      onEnter={() => void run()}
       open={open}
       title={title}
     >

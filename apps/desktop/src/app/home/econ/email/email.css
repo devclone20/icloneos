@@ -890,7 +890,7 @@
   white-space: nowrap;
   font-family: var(--e-mono);
   font-size: var(--ic-type-sm);
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
 }
 
 .em-msg__to {
@@ -1102,11 +1102,9 @@
   color: var(--e-faint);
 }
 
+/* v0.0.9 F4b — the reply error is IcAlert; only its place under the field is set here. */
 .em-reply__error {
-  margin: 0;
-  padding: 0 12px;
-  font-size: var(--ic-type-md);
-  color: var(--e-down);
+  margin: 0 12px;
 }
 
 .em-reply__foot {
@@ -1120,7 +1118,7 @@
   margin-right: auto;
   font-size: var(--ic-type-sm);
   letter-spacing: 0.06em;
-  color: var(--e-faint);
+  color: var(--ic-text-2-aa);
   white-space: nowrap;
 }
 

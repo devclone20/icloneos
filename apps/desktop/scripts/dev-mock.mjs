@@ -218,7 +218,7 @@ async function main() {
   }
 
   console.log('Launching Electron...')
-  const child = spawn(electronBin, [DESKTOP_ROOT, '--disable-gpu', '--no-sandbox'], {
+  const child = spawn(electronBin, [DESKTOP_ROOT, '--disable-gpu', '--no-sandbox', '--use-mock-keychain'], {
     env,
     cwd: DESKTOP_ROOT,
     stdio: 'inherit',

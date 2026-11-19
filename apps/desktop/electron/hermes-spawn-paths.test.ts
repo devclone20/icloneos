@@ -812,7 +812,9 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-confinement/hardlinks-walker.ts startWalkWorker d9900039f3c3',
     // FSEV: the F7 guard's own FSEvents addon, by one of two fixed paths (iclone-fsevents.ts addonCandidates).
     'iclone-confinement/iclone-fsevents.ts loadIcloneFsevents 4ad2963c3c82',
-    'iclone-confinement/index.ts ensureLauncher f7ddcbee85a4',
+    // v0.0.9 re-pin (owner decision): the launcher's socket is launcherSocketFile(userData), its short private folder
+    // (launcher-socket.ts), instead of userData/confinement/run/launcher.sock; the launch itself is unchanged.
+    'iclone-confinement/index.ts ensureLauncher 649c68abe96e',
     'iclone-confinement/index.ts xcrunCacheFile cbfdec72e4bb',
     'iclone-confinement/launcher.ts launch 173752b931b3',
     'iclone-confinement/probe.ts probeContainer 46034aa8f4fe',
@@ -827,7 +829,7 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-doctor-checks.ts codesignFacts 6d5803d89ed8',
     'iclone-doctor-checks.ts codesignFacts 921510d7117a',
     'iclone-doctor-checks.ts codesignFacts fe04fa320632',
-    'iclone-doctor-checks.ts hermesDoctor f9cb6922485b',
+    'iclone-doctor-checks.ts hermesDoctor c472b5101e69',
     'iclone-doctor-checks.ts listenerPid 9726a2987217',
     'iclone-doctor-checks.ts networkQuality fc95009919a7',
     'iclone-doctor-checks.ts openHolders 8200b1d1607c',
@@ -881,17 +883,20 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
   probe: [
     'main/executables.ts findSystemPython 1737b10074ff',
     'main/iclone-gate.ts runtimeFacts 0e1a1b7fe2d0',
-    'main/managed-ssh-update.ts spawnPoolBackend 6e63cde75e03',
+    'main/managed-ssh-update.ts spawnPoolBackend e8c2ac06cbd6',
     'main/start-hermes.ts connectionPromise 82a5b4c26962',
-    'main/updates.ts isActiveRuntimeUsable 76496a28bbee',
+    'main/updates.ts isActiveRuntimeUsable ff7292cbaec1',
     'main/updates.ts resolveHermesBackend b594a284f6c9',
     'main/updates.ts resolveHermesBackend d111ba4ee0d3',
     'windows-hermes-path.ts resolveVenvHermesCommand 4c8b69b9010a'
   ],
   pty: [
     'iclone-acp.ts selftestPty e59b2bd7e440',
-    'iclone-pane-bus/ipc.ts initPaneBus 627c94081b48',
-    'iclone-pane-bus/ipc.ts initPaneBus 1a9aa7099107',
+    // v0.0.9 re-pin (owner decision): initPaneBus listens on paneBusSocketFile(userData), the pane socket of the
+    // short private socket folder (launcher-socket.ts), instead of ~/.iclone-os/bus/bus-<pid>.sock, and sweeps only the
+    // legacy folder; the two tmux launches themselves are unchanged.
+    'iclone-pane-bus/ipc.ts initPaneBus 687a8211d940',
+    'iclone-pane-bus/ipc.ts initPaneBus 5c7af629e888',
     'terminal-ipc.ts registerTerminalIpc 06fa48d7bd1b',
     'terminal-ipc.ts registerTerminalIpc 9fd62ffc6ffb',
     'terminal-ipc.ts registerTerminalIpc e56f2dcc77f2'
@@ -933,12 +938,12 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'wsl-path-bridge.ts resolveDefaultWslDistro 791d319fbd21'
   ],
   uninstall: [
-    'main/updates-ipc.ts probeUninstallSummary d1e941024f50',
+    'main/updates-ipc.ts probeUninstallSummary c2b24e77fcca',
     'main/updates-ipc.ts runDesktopUninstall d711e200f684'
   ],
   update: [
     'main/agent-update.ts applyAgentUpdate 34b4eb53b70b',
-    'main/agent-update.ts applyAgentUpdate c619d79d6cb6',
+    'main/agent-update.ts applyAgentUpdate ccf8ea57c32f',
     'main/backend-pool.ts handOffWindowsBootstrapRecovery ab5fbb15f9a7',
     'main/update-apply.ts applyUpdates 3d263fca6807',
     'main/update-apply.ts applyUpdates ab5fbb15f9a7',
@@ -947,9 +952,9 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'venv-blocker-scan.ts stopSafeVenvBlockers 080e9420e569'
   ],
   forward: [
-    'agent-update.ts ensureFullPreUpdateBackup eaa6ff34ed3c',
-    'backend-claim.ts execText 98361ea0d7e6',
-    'backend-probes.ts canImportHermesCli 14cae9cb73b8',
+    'agent-update.ts ensureFullPreUpdateBackup 2dd1f2758bc4',
+    'backend-claim.ts execText fdd7b03e0862',
+    'backend-probes.ts canImportHermesCli 332635e20857',
     'backend-probes.ts execProbeSync df4d0932f2f5',
     'backend-probes.ts verifyHermesCli 15c1a273e53e',
     'git-review-ops.ts fileDiffVsHead 26e20713074d',
@@ -971,21 +976,30 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-doctor-checks.ts interpreterVersion a5abcdd7d2ec',
     'iclone-doctor-fixes.ts runStep 40ba0f99e98d',
     'iclone-doctor-main.ts read f20007f49164',
-    'iclone-hermes-plugins.ts ensureIcloneHermesPlugins eebc30c36c1c',
+    'iclone-hermes-plugins.ts ensureIcloneHermesPlugins 628f00848fe7',
     'iclone-ownership.ts applyDeactivation 358a50fc6e98',
     'iclone-ownership.ts applyDeactivation e0259db21478',
     'iclone-ownership.ts currentAgentName 5f284c884659',
     'iclone-ownership.ts execRunner c5f2cc83ac68',
     'iclone-pane-bus/ipc.ts runTmux 5eb21e90cf4b',
     'iclone-pane-remote/probe.ts runFile 3a4016461683',
-    'main/executables.ts backendSupportsServe 0d1c893b6526',
+    'main/executables.ts backendSupportsServe 1dd7951256b7',
     'main/executables.ts getBackendArgsForRuntime bcacf7675e2c',
-    'main/iclone-gate.ts prepareHermesSpawn 7cfe24a437c3',
+    // v0.0.9 re-pin (owner decision, merge of r4 + sock2): permissionsSpawn takes the userData; the agent socket it
+    // names is socketPath(userData, 'acp'), and the primary's pay socket fact is paySocketFile(userData) =
+    // socketPath(userData, 'pay'): both in their short private folder (launcher-socket.ts), never userData/run. The
+    // confinement spawn env also names the run dir for the plugin's refusal journal (ICLONE_LAUNCHER_JOURNAL_DIR),
+    // since the launcher socket left that folder. The launch itself is unchanged.
+    'main/iclone-gate.ts prepareHermesSpawn 2d0a69c49116',
     'main/iclone-gate.ts probe 40c9200fcb97',
     'shell-path.ts runProbe b136afc56cc8',
-    'update-runtime-align.ts ensureCuratedRuntimeConfig af753e2675ff',
+    'update-runtime-align.ts ensureCuratedRuntimeConfig 62917dc22711',
     'update-runtime-align.ts spawnCapped 05d3a399ed9a',
-    'updater-process.ts spawnUpdaterProcess 079cebda2add'
+    'updater-process.ts spawnUpdaterProcess 079cebda2add',
+    // v0.0.9 W1b voice extra: the runtime's own PM installs one extra into the app's PRIVATE dependency home, only on
+    // the owner's click (gesture + trusted sender), after the runtime integrity check, sealed env when packaged
+    // (same rule as ensureCuratedRuntimeConfig). Never the user's HERMES_HOME.
+    'voice-extra.ts runInstall 887b8234da62'
   ],
   open: [
     'fs-ipc.ts registerFsIpc 4fc8f572e075',
@@ -994,7 +1008,7 @@ const ALLOW: Record<keyof typeof WHY, string[]> = {
     'iclone-doctor-main.ts initIcloneDoctor efc485bb3d06',
     // REL-6 notices (J6 m-r5-4): main picks the path AND re-checks the content before every open: a regular,
     // single-linked file of this user, re-hashed against the verified manifest, in a 0700 folder that is not a link.
-    'iclone-acp-tools/ipc.ts registerAcpToolsIpc dd66b4850c0e',
+    'iclone-acp-tools/ipc.ts registerAcpToolsIpc 81d887cb9e42',
     'iclone-acp.ts openFile f245ec560339',
     'iclone-doctor-main.ts openExternal b294026502a3',
     // V3-RT-B RTB-6: a fixed macOS Settings pane (Network / Storage) for an install fix, from a closed enum.
@@ -1055,6 +1069,38 @@ function readSnapshot(): Map<string, string> {
 const GATED: Record<Exclude<Verdict, 'open'>, string[]> = {
   gated: ['main/managed-ssh-update.ts spawnPoolBackend', 'main/start-hermes.ts connectionPromise'],
   refused: ['main/window-ipc.ts registerWindowIpc']
+}
+
+const CARRIES = 'carries managedRuntimeEnv (its own launch text names the pin)'
+
+/**
+ * Each launch that runs the runtime's Python or CLI (v0.0.9 point A): CARRIES, or why the pin does not belong there.
+ * `file function` as in a site key.
+ */
+const RUNTIME_LAUNCHES: Record<string, string> = {
+  'agent-update.ts ensureFullPreUpdateBackup': CARRIES,
+  'backend-probes.ts canImportHermesCli': 'a forwarder: the env is its caller’s (opts.env), each caller is classified',
+  'iclone-confinement/members.ts createMemberProbe':
+    'a ctypes sandbox_check probe (`-I -S`, env {}): no Hermes code runs, nothing is activated',
+  'iclone-doctor-checks.ts hermesDoctor': CARRIES,
+  'iclone-hermes-plugins.ts ensureIcloneHermesPlugins': CARRIES,
+  'main/agent-update.ts applyAgentUpdate': CARRIES,
+  'main/executables.ts backendSupportsServe': CARRIES,
+  'main/iclone-gate.ts prepareHermesSpawn':
+    'runtimeFacts asks the interpreter for sys.prefix (`-I -S`): no Hermes code runs, nothing is activated',
+  'main/managed-ssh-update.ts spawnPoolBackend': CARRIES,
+  'main/start-hermes.ts connectionPromise': CARRIES,
+  'main/updates-ipc.ts probeUninstallSummary': CARRIES,
+  'main/updates.ts isActiveRuntimeUsable': CARRIES,
+  'main/updates.ts resolveHermesBackend':
+    'a system Python with hermes_cli installed (never the app’s runtime; null when packaged)',
+  'update-runtime-align.ts ensureCuratedRuntimeConfig': CARRIES,
+  'venv-blocker-scan.ts stopSafeVenvBlockers':
+    'hermes_cli._scan_venv_blockers is a stdlib process scan: it never imports hermes_bootstrap (no activation)',
+  'voice-extra.ts runInstall':
+    'the explicit voice install: voiceExtraCommand sets HERMES_HOME = HERMES_DEPENDENCY_HOME = the private root',
+  'windows-hermes-path.ts resolveVenvHermesCommand':
+    'Windows only: the app keeps no private dependency root there (runtime-install-state skips win32)'
 }
 
 function sourceFilesOnDisk(dir: string): string[] {
@@ -1135,6 +1181,35 @@ describe('every app-launched Hermes goes through prepareHermesSpawn (content-bas
     expect(differ.join('\n')).toBe('')
     expect([...snapshot.keys()].filter(key => !expected.has(key))).toEqual([])
     expect(fs.readFileSync(SNAPSHOT_FILE, 'utf8').startsWith(SNAPSHOT_HEADER)).toBe(true)
+  })
+
+  // v0.0.9 point A (dephome): every launch of the app's runtime carries its private dependency root and no lazy
+  // installs (main/runtime-install-state.ts `managedRuntimeEnv`), or the process selects — and, unconfined, leases
+  // into — `<HERMES_HOME>/installs/<key>`. Content-based like the rest: a launch whose text runs the runtime's Python or
+  // CLI is classified here, and a CARRIES one must name the pin in its own launch text. A new runtime launch fails
+  // until it is classified; an exemption needs its reason.
+  it('every launch of the app’s runtime carries its dependency pin (managedRuntimeEnv)', () => {
+    const runsRuntime = (site: Site) =>
+      site.verdict !== 'refused' &&
+      /hermes_cli|hermesRuntimeImportProbe|PROBE_SCRIPT|backend\.command|hermesBin|venvPython(Path)?\(|canImportHermesCli\(/.test(
+        site.full
+      )
+
+    const carriesPin = (site: Site) => /managedRuntimeEnv\(|\bruntimeEnv\b|HERMES_DEPENDENCY_HOME/.test(site.full)
+
+    const found = [...new Set(sites.filter(runsRuntime).map(site => `${site.file} ${site.fn}`))].sort()
+
+    expect(found).toEqual(Object.keys(RUNTIME_LAUNCHES).sort())
+
+    const missing = sites
+      .filter(site => runsRuntime(site) && RUNTIME_LAUNCHES[`${site.file} ${site.fn}`] === CARRIES && !carriesPin(site))
+      .map(site => `${site.key}  (line ${site.line})  ${site.text}`)
+
+    expect(missing).toEqual([])
+
+    for (const reason of Object.values(RUNTIME_LAUNCHES)) {
+      expect(reason.length).toBeGreaterThan(20)
+    }
   })
 
   it('the agent spawns are found and gated: primary and pool / forced-local; Open in terminal is refused', () => {

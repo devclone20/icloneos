@@ -3,6 +3,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ICLONE_STORAGE } from '@/app/home/lib/storage-keys'
+import { $panes, registerPane, resetPanesForTests, unregisterPane } from '@/app/home/window/pane-layout'
 import { HOME_ROUTE, SETTINGS_ROUTE } from '@/app/routes'
 import { setDockWindowSize } from '@/store/dock-window-size'
 
@@ -67,6 +68,12 @@ function mountHost(): HTMLElement {
   act(() => publishDockWindowHost(host))
 
   return host
+}
+
+/** v0.0.9 F6: the expand/retract button became the window menu; its Fill is the old expand (it toggles). */
+function chooseFill(pane: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Window options for ${pane}` }), { detail: 1 })
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Fill' }), { detail: 1 })
 }
 
 function settingsWindow(host: ParentNode): HTMLElement {
@@ -144,7 +151,7 @@ describe('SettingsShell as a Dock window', () => {
     renderShell()
 
     expect(settingsWindow(window.document).dataset.expanded).toBe('true')
-    fireEvent.click(screen.getByRole('button', { name: 'Retract Settings window' }))
+    chooseFill('Settings')
     expect(settingsWindow(window.document).dataset.expanded).toBeUndefined()
   })
 
@@ -152,13 +159,14 @@ describe('SettingsShell as a Dock window', () => {
     mountHost()
     const { onClose } = renderShell()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Settings window' }))
+    chooseFill('Settings')
     expect(settingsWindow(window.document).dataset.expanded).toBe('true')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retract Settings window' }))
+    chooseFill('Settings')
     expect(settingsWindow(window.document).dataset.expanded).toBeUndefined()
 
-    expect(screen.getByLabelText('Settings opacity')).toBeTruthy()
+    // v0.0.9 F6: one opacity for every window, and the lone window's control says so.
+    expect(screen.getByLabelText('Settings opacity · every window')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: 'Close settings' }))
     expect(onClose).toHaveBeenCalledOnce()
@@ -168,7 +176,7 @@ describe('SettingsShell as a Dock window', () => {
     mountHost()
     const { onClose } = renderShell()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand Settings window' }))
+    chooseFill('Settings')
     expect(settingsWindow(window.document).dataset.expanded).toBe('true')
 
     fireEvent.keyDown(window, { key: 'Escape' })
@@ -245,13 +253,12 @@ describe('SettingsShell as a Dock window', () => {
 
 describe('useSettingsWindowRoute', () => {
   function renderRoute(path: string) {
-    const closeEcon = vi.fn()
     const seen: { open?: boolean; go: (to: string) => void } = { go: () => undefined }
 
     function Probe() {
       const navigate = useNavigate()
 
-      seen.open = useSettingsWindowRoute(closeEcon)
+      seen.open = useSettingsWindowRoute()
       seen.go = to => act(() => void navigate(to))
 
       return null
@@ -263,29 +270,28 @@ describe('useSettingsWindowRoute', () => {
       </MemoryRouter>
     )
 
-    return { closeEcon, seen }
+    return { seen }
   }
 
-  it('is open only on the Settings route and closes the econ window once each time Settings opens', () => {
-    const { closeEcon, seen } = renderRoute(HOME_ROUTE)
+  it('is open only on the Settings route (v0.0.9 F6: it no longer closes the econ window)', () => {
+    const { seen } = renderRoute(HOME_ROUTE)
 
     expect(seen.open).toBe(false)
     seen.go(`${SETTINGS_ROUTE}?tab=economyos`)
     expect(seen.open).toBe(true)
     seen.go(`${SETTINGS_ROUTE}?tab=hud`)
-    expect(closeEcon).toHaveBeenCalledTimes(1)
+    expect(seen.open).toBe(true)
     seen.go(HOME_ROUTE)
     expect(seen.open).toBe(false)
     seen.go(SETTINGS_ROUTE)
-    expect(closeEcon).toHaveBeenCalledTimes(2)
+    expect(seen.open).toBe(true)
   })
 
-  it('a cold start on /settings is already open and has no econ window to close', () => {
+  it('a cold start on /settings is already open', () => {
     $settingsOpenedInApp.set(false)
-    const { closeEcon, seen } = renderRoute(`${SETTINGS_ROUTE}?tab=inft`)
+    const { seen } = renderRoute(`${SETTINGS_ROUTE}?tab=inft`)
 
     expect(seen.open).toBe(true)
-    expect(closeEcon).not.toHaveBeenCalled()
     expect($settingsOpenedInApp.get()).toBe(false)
   })
 
@@ -302,7 +308,7 @@ describe('useSettingsWindowRoute', () => {
 const isEconKind = (value: string): value is 'wallet' | 'bank' => value === 'wallet' || value === 'bank'
 
 describe('useDockWindows', () => {
-  it('a double-click on an econ tile leaves its window open; a later click, a close or Settings closes it', () => {
+  it('a double-click on an econ tile leaves its window open; a later click or a close closes it; Settings sits beside it (F6)', () => {
     const now = vi.spyOn(performance, 'now').mockReturnValue(1000)
 
     const seen: { go: (to: string) => void; dock?: ReturnType<typeof useDockWindows<'wallet' | 'bank'>> } = {
@@ -338,7 +344,8 @@ describe('useDockWindows', () => {
     toggle('bank')
     seen.go(SETTINGS_ROUTE)
     expect(seen.dock!.settingsOpen).toBe(true)
-    expect(seen.dock!.econ).toBeNull()
+    // v0.0.9 F6 (R-f6-5): Settings opens beside the econ window; the pane layer caps the home at two.
+    expect(seen.dock!.econ).toBe('bank')
     now.mockRestore()
   })
 })
@@ -443,7 +450,7 @@ describe('settingsDockItem', () => {
     function Probe() {
       const navigate = useNavigate()
       const location = useLocation()
-      const settingsOpen = useSettingsWindowRoute(() => undefined)
+      const settingsOpen = useSettingsWindowRoute()
       const tile = settingsDockItem({ active: settingsOpen, hint: 'hint', onSelect: () => navigate(SETTINGS_ROUTE) })
 
       seen.location = `${location.pathname}${location.search}`
@@ -556,5 +563,85 @@ describe('focusSettingsDockTile (U1-p2b-11 / U4-p2b-02)', () => {
     expect(window.document.activeElement?.id).toBe('other')
 
     window.document.body.innerHTML = ''
+  })
+})
+
+// v0.0.9 F6 (chrome lens r1): Settings beside another pane. Its overlay focus trap pulled every Tab back into Settings
+// and its Esc layer closed Settings whichever pane had the focus.
+describe('Settings beside another pane', () => {
+  // The trap only counts laid-out controls (offsetParent); jsdom lays nothing out, so every connected one counts here.
+  const offsetParent = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'offsetParent')
+
+  beforeEach(() => {
+    Object.defineProperty(HTMLElement.prototype, 'offsetParent', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.parentNode
+      }
+    })
+  })
+
+  afterEach(() => {
+    act(() => resetPanesForTests())
+
+    if (offsetParent) {
+      Object.defineProperty(HTMLElement.prototype, 'offsetParent', offsetParent)
+    }
+  })
+
+  function besideEmail() {
+    const outside = window.document.createElement('button')
+
+    outside.textContent = 'Email list'
+    window.document.body.append(outside)
+    mountHost()
+    const view = renderShell()
+
+    act(() => {
+      registerPane('email')
+      $panes.set({ ...$panes.get(), focused: 'email' })
+    })
+
+    return { ...view, outside }
+  }
+
+  it('the other pane focused: Tab is not pulled into Settings and Esc does not close it', () => {
+    const { onClose, outside } = besideEmail()
+
+    expect($panes.get().open).toEqual(['settings', 'email'])
+    outside.focus()
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+
+    outside.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(false)
+    expect(window.document.activeElement).toBe(outside)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+    outside.remove()
+  })
+
+  it('Settings focused again: its trap and its Esc are back', () => {
+    const { onClose, outside } = besideEmail()
+
+    act(() => $panes.set({ ...$panes.get(), focused: 'settings' }))
+    outside.focus()
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })
+
+    outside.dispatchEvent(tab)
+    expect(tab.defaultPrevented).toBe(true)
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    outside.remove()
+  })
+
+  it('alone again (the other pane closed): Settings owns the keyboard', () => {
+    const { onClose, outside } = besideEmail()
+
+    act(() => unregisterPane('email'))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+    outside.remove()
   })
 })

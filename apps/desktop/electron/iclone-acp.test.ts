@@ -36,7 +36,7 @@ import {
   validateArgv,
   writeAcpWrapper
 } from './iclone-acp'
-import { startAcpSocketServer } from './iclone-acp-ipc'
+import { acpSocketFile, startAcpSocketServer } from './iclone-acp-ipc'
 
 // Only the readStatus test below drives main-process state: a throwaway HOME and userData, IPC handlers captured.
 const lab = vi.hoisted(() => {
@@ -492,6 +492,7 @@ describe('the agent’s acp — registry + wrapper', () => {
     const server = await startAcpSocketServer({
       admitStreaming: () => true,
       dir: path.join(home, 'run'),
+      socket: acpSocketFile(home),
       resolveInft: key => (key === '6' ? { ok: true, slug: 'inft-6' } : { ok: false, error: `unknown ${key}` }),
       run: (slug, argv, _streaming, sink) => {
         seen.push({ slug, argv })

@@ -25,10 +25,19 @@
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
 
-import { expect, type Page, test } from '@playwright/test'
+// v0.0.9 e2e harness: the shared test (ready claims, error-banner guard), not the bare Playwright one.
+import { expect, type Page, test } from './test'
 import { type ElectronApplication } from '@playwright/test'
 
-import { buildAppEnv, launchDesktop, type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
+import {
+  buildAppEnv,
+  launchDesktop,
+  type MockBackendFixture,
+  newConversation,
+  openConversationList,
+  setupMockBackend,
+  waitForAppReady
+} from './fixtures'
 import { restartMockServer } from './mock-server'
 
 /** Finished-unread dot aria-label (from i18n en.ts). */
@@ -40,7 +49,16 @@ const HELD_PROMPT = 'E2E unread restart: hold this stream until released.'
 /** Second session's prompt — completes normally while selected. */
 const SECOND_PROMPT = 'E2E unread restart: second session, read while open.'
 
-const unreadDots = (page: Page) => page.locator(`[aria-label="${UNREAD_DOT_LABEL}"]`)
+// Reviewed port (v0.0.9): upstream's sidebar rows are the Message pane's conversation list rows in icloneOS (the same
+// SidebarSessionRow and status dot, src/app/home/msg-sidebar.tsx:642); they are drawn while the list is open.
+const unreadDots = (page: Page) =>
+  page.getByRole('navigation', { name: 'Conversations' }).locator(`[aria-label="${UNREAD_DOT_LABEL}"]`)
+
+async function unreadDotCount(page: Page): Promise<number> {
+  await openConversationList(page)
+
+  return unreadDots(page).count()
+}
 
 async function sendMessage(page: Page, text: string): Promise<void> {
   const composer = page.locator('[contenteditable="true"]').first()
@@ -99,7 +117,7 @@ test.describe('unread dot survives app restart', () => {
     await fixture.mock.waitForHeldStream()
 
     // ── 2. Session B: complete a turn while SELECTED (stays read) ──────
-    await page.locator('button:has-text("New session")').first().click()
+    await newConversation(page)
     await sendMessage(page, SECOND_PROMPT)
 
     // B's reply lands in the open transcript — this session is "read".
@@ -113,7 +131,7 @@ test.describe('unread dot survives app restart', () => {
     fixture.mock.releaseHeldStream()
 
     await expect
-      .poll(() => unreadDots(page).count(), {
+      .poll(() => unreadDotCount(page), {
         timeout: 30_000,
         message: 'green unread dot should appear after the background finish'
       })
@@ -125,7 +143,7 @@ test.describe('unread dot survives app restart', () => {
     await restartApp()
 
     await expect
-      .poll(() => unreadDots(page).count(), {
+      .poll(() => unreadDotCount(page), {
         timeout: 60_000,
         message: 'green unread dot should be rebuilt from persisted state after restart'
       })
@@ -133,10 +151,11 @@ test.describe('unread dot survives app restart', () => {
 
     // ── 5. Open session A — the dot clears ─────────────────────────────
     // The dot sits inside A's sidebar row button; click that row.
+    await openConversationList(page)
     await unreadDots(page).first().locator('xpath=ancestor::button[1]').click()
 
     await expect
-      .poll(() => unreadDots(page).count(), {
+      .poll(() => unreadDotCount(page), {
         timeout: 15_000,
         message: 'opening the session should clear its unread dot'
       })
@@ -146,8 +165,13 @@ test.describe('unread dot survives app restart', () => {
     await restartApp()
 
     // Give the sidebar a moment to load rows, then assert no dot returns.
-    await page.waitForSelector('[data-slot="sidebar"]', { timeout: 60_000 })
+    await openConversationList(page)
+    await page
+      .getByRole('navigation', { name: 'Conversations' })
+      .locator('.imsg-side__panel .imsg-row')
+      .first()
+      .waitFor({ state: 'visible', timeout: 60_000 })
     await page.waitForTimeout(5_000)
-    expect(await unreadDots(page).count(), 'acked session must stay read after restart').toBe(0)
+    expect(await unreadDotCount(page), 'acked session must stay read after restart').toBe(0)
   })
 })

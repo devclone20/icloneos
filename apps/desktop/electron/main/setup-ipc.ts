@@ -13,6 +13,7 @@ import { parseScreenPreflight, registerIcloneSetup, SCREEN_PREFLIGHT_JXA, type S
 import { createNotificationFailureWatch } from '../notification-failure'
 
 import { rememberLog } from './log'
+import { askDecision, postNotice } from './renderer-dialogs'
 import { requestMicrophoneAccess } from './window-ipc'
 
 // An unsigned macOS build shows no banner: the failure is logged once and the step still counts as notified.
@@ -72,6 +73,8 @@ function electronSetupSystemSeam(store: ConsentStore, relaunch: () => void): Set
 
       watchNotificationFailure(notification, 'setup')
       notification.show()
+      // v0.0.9 F4b — the OS banner is mirrored into the notification centre (history only, no toast).
+      postNotice({ historyOnly: true, kind: 'info', message: body, title }, () => {})
 
       return true
     },
@@ -79,16 +82,21 @@ function electronSetupSystemSeam(store: ConsentStore, relaunch: () => void): Set
     consentAllows,
     freshScreenStatus,
     appBundleId: readAppBundleId,
+    // v0.0.9 F4b — native dialogs to renderer: the in-app decision dialog while the window can answer; the native box
+    // only when none can. "Later" stays the safe answer (Esc).
     confirmRestart: async () => {
-      const { response } = await dialog.showMessageBox({
-        type: 'info',
-        message: 'Restart to use Screen recording',
-        detail:
-          'macOS has allowed Screen recording, and applies it only when the app starts again. Anything your agent is doing now will stop.',
-        buttons: ['Restart now', 'Later'],
-        defaultId: 0,
-        cancelId: 1
-      })
+      const { response } = await askDecision(
+        {
+          title: 'Restart to use Screen recording',
+          detail:
+            'macOS has allowed Screen recording, and applies it only when the app starts again. Anything your agent is doing now will stop.',
+          buttons: ['Restart now', 'Later'],
+          defaultId: 0,
+          cancelId: 1,
+          nativeType: 'info'
+        },
+        options => dialog.showMessageBox(options)
+      )
 
       return response === 0
     },

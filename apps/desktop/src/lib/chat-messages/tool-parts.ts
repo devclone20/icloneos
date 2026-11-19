@@ -274,7 +274,9 @@ function toolResult(
     ...(payload?.preview ? { preview: payload.preview } : {}),
     ...(payload?.duration_s !== undefined ? { duration_s: payload.duration_s } : {}),
     ...carryTodos(payload, prevResult, prevArgs),
-    ...(payload?.error ? { error: payload.error } : {})
+    ...(payload?.error ? { error: payload.error } : {}),
+    // A call the gate or confinement refused (tui_gateway _on_tool_refused): nothing ran.
+    ...(payload?.refused === true ? { refused: true } : {})
   }
 }
 
@@ -666,6 +668,36 @@ export function toolPartFromStoredCall(call: unknown, fallbackIndex: number, tim
   }
 }
 
+/**
+ * A stored tool row's result, with a refusal folded in (v0.0.9 pass 4). rt persists a refused call's refusal on the
+ * row's display_metadata (refused, refusal_reason), the content being whatever the model was told; the live shape is
+ * the result's own { refused, error }. Either way the row hydrates with { refused: true, error: <reason> }, so it
+ * reads "Refused" after a reload or a switch exactly as it did live.
+ */
+function storedToolResult(toolMessage: SessionMessage, content: unknown): unknown {
+  const parsed = parseStoredToolResult(content)
+  let metadata: unknown = toolMessage.display_metadata
+
+  if (typeof metadata === 'string') {
+    try {
+      metadata = JSON.parse(metadata)
+    } catch {
+      metadata = null
+    }
+  }
+
+  const display = recordFromUnknown(metadata)
+
+  if (display?.refused !== true) {
+    return parsed
+  }
+
+  const base = recordFromUnknown(parsed) ?? (parsed ? { output: parsed } : {})
+  const reason = typeof display.refusal_reason === 'string' && display.refusal_reason.trim() ? display.refusal_reason.trim() : ''
+
+  return { ...base, refused: true, ...(reason ? { error: reason } : {}) }
+}
+
 export function applyStoredToolResult(messages: ChatMessage[], toolMessage: SessionMessage): boolean {
   const toolCallId = toolMessage.tool_call_id || undefined
   const toolName = toolMessage.tool_name || toolMessage.name || 'tool'
@@ -693,7 +725,7 @@ export function applyStoredToolResult(messages: ChatMessage[], toolMessage: Sess
     parts[partIndex] = {
       ...existing,
       completedAt: toolMessage.timestamp,
-      result: parseStoredToolResult(content),
+      result: storedToolResult(toolMessage, content),
       isError: false
     } as ChatMessagePart
     messages[i] = { ...message, parts }
@@ -727,7 +759,7 @@ export function applyStoredToolResultToParts(
   next[partIndex] = {
     ...existing,
     completedAt: toolMessage.timestamp,
-    result: parseStoredToolResult(content),
+    result: storedToolResult(toolMessage, content),
     isError: false
   } as ChatMessagePart
 
@@ -752,7 +784,12 @@ export function storedToolMessagePart(toolMessage: SessionMessage, fallbackIndex
     argsText: Object.keys(args).length ? JSON.stringify(args) : '',
     timestamp: toolMessage.timestamp,
     completedAt: toolMessage.timestamp,
-    result: context ? { context } : {},
+    result: (() => {
+      const refusal = storedToolResult(toolMessage, '')
+      const refused = recordFromUnknown(refusal)?.refused === true
+
+      return refused ? { ...(context ? { context } : {}), ...(refusal as Record<string, unknown>) } : context ? { context } : {}
+    })(),
     isError: false
   }
 }

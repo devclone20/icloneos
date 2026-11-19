@@ -14,7 +14,8 @@
  *
  * Prerequisite: `npm run build` must have been run so dist/ exists.
  */
-import { expect, type Page, test } from '@playwright/test'
+// v0.0.9 e2e harness: the shared test (ready claims, error-banner guard), not the bare Playwright one.
+import { expect, type Page, test } from './test'
 
 import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fixtures'
 import {
@@ -121,6 +122,7 @@ test.describe('sidebar states — tab (hidden) unread is correct', () => {
   })
 
   test('session opened as a tab (not visible) correctly gets unread dot', async () => {
+    test.skip(true, 'N/A in v0.0.9: upstream session tabs (a row opened as a hidden tab beside the chat); icloneOS renders no session tiles or tabs ($sessionTilesRender is false, src/store/tile-render.ts:10), so a modifier-click resumes the session in front (src/app/chat/sidebar/session-row.tsx:150-155)')
     const page = fixture.page
 
     await startTurnAndSwitchAway(page)

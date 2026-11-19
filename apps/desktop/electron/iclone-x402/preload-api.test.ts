@@ -249,7 +249,7 @@ describe('wire-preload: hermesDesktop.payments', () => {
     const { token } = await world.token('agent-a')
 
     expect(
-      (await askSocket(path.join(world.socketDir, 'pay.sock'), token, ['pay', world.url(), '--mandate', jti])).code
+      (await askSocket(world.paySocket, token, ['pay', world.url(), '--mandate', jti])).code
     ).toBe(0)
 
     const bridge = createPaymentsBridge(
@@ -328,7 +328,9 @@ describe('wire-preload: hermesDesktop.payments', () => {
     expect(preload).toContain('payments: createPaymentsBridge(')
     expect(preload).toContain("closest('[data-payments-confirm]')")
     expect(preload).toContain('() => userGesture(paymentsConfirm)')
-    expect(preload).toContain('paymentsConfirm.observe(observed)')
+    // F1-S: every lock built by createGestureLocks is observed by construction (electron/gesture-locks.test.ts).
+    expect(preload).toContain('payments: paymentsLock')
+    expect(preload).toContain('gestureLocks.observe(observed)')
     expect(preload).not.toMatch(/iclone:payments:(sign|pay|issue)/)
   })
 })

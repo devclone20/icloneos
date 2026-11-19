@@ -21,6 +21,10 @@
  *   (user site-packages are off with `-s`, so XDG/HOME paths cannot add code either);
  * - the 9 `HERMES_*` the app sets on a gated spawn (`HERMES_APP_ENV`): home, dashboard token, desktop flag and ready
  *   file, web dist, parent-watchdog identity;
+ * - NEVER inherited (v0.0.9 Q, lead decision 4): the dependency-home pin and the lazy-installs switch
+ *   (`MANAGED_RUNTIME_ENV`). An ambient `HERMES_DEPENDENCY_HOME` would put a foreign folder's site-packages on the
+ *   gated runtime's sys.path, so the seal drops both from every input and main sets them explicitly per managed spawn
+ *   (`sealHermesSpawnEnv`'s `appEnv`, or after the isolation at the other launches of the app's runtime);
  * - `PYTHONIOENCODING`, `PYTHONUNBUFFERED` and `PYTHONUTF8` (`PYTHON_INHERIT_ALLOW`): text encoding and output buffering
  *   only (backend-env itself sets PYTHONUTF8);
  * - `PYTHONPATH`, cut to the runtime's own entries (the runtime root and what lies inside it — its venv site-packages);
@@ -68,6 +72,27 @@ export const HERMES_APP_ENV: ReadonlySet<string> = new Set([
   'HERMES_SPAWN',
   'HERMES_WEB_DIST'
 ])
+
+/**
+ * v0.0.9 Q (lead decision 4): the managed runtime's private dependency root (honoured by a runtime carrying
+ * runtime-patches/pm-dependency-home.patch) and the switch that stops on-demand dependency syncs (pm/install.py
+ * `lazy_installs_allowed`). Never inherited: main/runtime-install-state.ts `managedRuntimeEnv` is the only source, set
+ * per managed spawn after the allowlist.
+ */
+export const MANAGED_RUNTIME_ENV: ReadonlySet<string> = new Set(['HERMES_DEPENDENCY_HOME', 'HERMES_DISABLE_LAZY_INSTALLS'])
+
+/** Only the `MANAGED_RUNTIME_ENV` names of `env` (what main explicitly sets for its own runtime). */
+export function managedRuntimeEnvOf(env: Readonly<Record<string, string | undefined>> | undefined): Record<string, string> {
+  const out: Record<string, string> = {}
+
+  for (const [key, value] of Object.entries(env ?? {})) {
+    if (typeof value === 'string' && MANAGED_RUNTIME_ENV.has(key)) {
+      out[key] = value
+    }
+  }
+
+  return out
+}
 
 /** The gate's runtime-confinement variables: kept from the gate's env only, never inherited or composed. */
 export const CONFINEMENT_RUNTIME_ENV: ReadonlySet<string> = new Set([
@@ -207,7 +232,13 @@ export type SealRole = 'pool' | 'primary'
  */
 export function sealHermesSpawnEnv(
   composed: Record<string, string | undefined>,
-  options: { gateEnv: Readonly<Record<string, string>>; role: SealRole; runtimeRoot: string }
+  options: {
+    gateEnv: Readonly<Record<string, string>>
+    role: SealRole
+    runtimeRoot: string
+    /** Main's explicit env for its own runtime (`managedRuntimeEnv`): only `MANAGED_RUNTIME_ENV` names are taken. */
+    appEnv?: Readonly<Record<string, string>>
+  }
 ): Record<string, string> {
   const kept: Record<string, string | undefined> = {}
 
@@ -226,6 +257,7 @@ export function sealHermesSpawnEnv(
   const sealed = {
     ...isolatePythonEnv(kept, options.runtimeRoot),
     HERMES_LANGUAGE: RUNTIME_LANGUAGE,
+    ...managedRuntimeEnvOf(options.appEnv),
     ...options.gateEnv
   }
 

@@ -150,6 +150,12 @@ declare global {
       icloneModel?: {
         fetch: (url: string) => Promise<{ ok: boolean; data?: Uint8Array; error?: string }>
       }
+      // v0.0.9 F6 — the 3D iNFT in its own window.
+      stage3dWindow?: {
+        open: () => Promise<{ ok: boolean; error?: string }>
+        close: () => Promise<void>
+        onClosed: (callback: () => void) => () => void
+      }
       // iCLONE OS — first-launch policy acceptance + permission intents (main owns consent.json).
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
       icloneConsent?: import('./components/consent/types').IcloneConsentBridge
@@ -162,6 +168,12 @@ declare global {
       icloneConfinement?: import('./store/confinement').IcloneConfinementBridge
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
       icloneDoctor?: import('./app/settings/diagnostics-settings-model').IcloneDoctorBridge
+      // v0.0.9 F3 — the repair kit (electron/repair-kit/ipc.ts).
+      // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
+      icloneRepairKit?: import('../electron/repair-kit/types').RepairKitBridge
+      // v0.0.9 W1b — the voice extra, installed app-side on the owner's click (electron/voice-extra.ts).
+      // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
+      icloneVoiceExtra?: import('../electron/voice-extra-types').VoiceExtraBridge
       // V3-I — ACP Market › Work (electron/iclone-acp-work/ipc.ts).
       // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
       icloneAcpWork?: import('./store/acp-work').AcpWorkBridge
@@ -188,6 +200,8 @@ declare global {
         /** electron/iclone-agentcard-status.ts: the owner's own AgentCard account, read-only (state null = unknown). */
         agentcardStatus?: () => Promise<unknown>
         run: (inftId: string, argv: string[], timeoutMs?: number) => Promise<AcpRunResult>
+        /** F1-S: call synchronously inside the click of the write's marked control, then `run` the same argv. */
+        ownerConfirm?: (inftId: string, argv: string[]) => Promise<{ ok: true } | { ok: false; error: string } | null>
         status: (inftId: string, opts?: AcpStatusOptions) => Promise<InftAcpStatus>
         kvGet: (inftId: string, key: InftKvKey) => Promise<InftKvResult>
         kvSet: (inftId: string, key: InftKvKey, value: Record<string, unknown>) => Promise<InftKvResult>
@@ -206,6 +220,12 @@ declare global {
         watch: (slug: string | null) => Promise<{ ok: true; slug: string | null } | { ok: false; error: string }>
         /** `{ slug, source, type, jobId, status, at }` per job event; validated by the renderer. */
         onEvent: (callback: (payload: unknown) => void) => () => void
+      }
+      // F1-S — Settings › Billing › Buy credits: main's single-use owner confirm for one charge (null = sender refused).
+      billingCharge?: {
+        authorize: (amountUsd: string, idempotencyKey: string) => Promise<unknown>
+        // v0.0.9 Q: Upgrade / Change plan / Resume / Turn on auto-reload, bound to (action, subject, key).
+        authorizeAction: (action: string, subject: string, idempotencyKey: string) => Promise<unknown>
       }
       // iCLONE OS — bundled Hermes skills → the agent's skills trees.
       icloneSkills?: {
@@ -704,7 +724,7 @@ declare global {
       onBatteryChanged?: (callback: (onBattery: boolean) => void) => () => void
       onBootProgress: (callback: (payload: DesktopBootProgress) => void) => () => void
       getBootstrapState: () => Promise<DesktopBootstrapState>
-      continueBootstrapLocal: () => Promise<{ ok: boolean }>
+      continueBootstrapLocal: () => Promise<{ ok: boolean; refused?: 'gesture' } | null>
       resetBootstrap: () => Promise<{ ok: boolean }>
       repairBootstrap: () => Promise<{ ok: boolean }>
       cancelBootstrap: () => Promise<{ ok: boolean; cancelled: boolean }>
@@ -732,6 +752,17 @@ declare global {
         checkApp?: () => Promise<IcloneAppUpdateCheck>
         setDeveloperPolicy?: (payload: { ack: string; by: string }) => Promise<IcloneSetDeveloperPolicyResult>
         onProgress: (callback: (payload: DesktopUpdateProgress) => void) => () => void
+      }
+      /**
+       * v0.0.9 F4b: main's decisions and notices shown in the window (electron/main/renderer-dialogs.ts). Payloads are
+       * `unknown` on purpose: the host parses them with src/iclone-shared/native-decision.ts. Absent on older bridges.
+       */
+      nativeDecisions?: {
+        onAsk: (callback: (ask: unknown) => void) => () => void
+        shown: (id: string) => Promise<boolean>
+        answer: (id: string, response: number) => Promise<boolean>
+        onNoticesReady: (callback: () => void) => () => void
+        drainNotices: () => Promise<unknown>
       }
       /** H1: the app updater (electron/app-update-ipc.ts). Absent on bridges that predate it. */
       appUpdate?: {
@@ -1303,6 +1334,12 @@ export interface DesktopBootProgress {
   /** Structured HTTP status when the boot failure carried one (e.g. 503). */
   statusCode?: number | null
   timestamp: number
+  /** v0.0.9 F2 — the true cause of a boot failure (electron/boot-cause.ts); null once the backend is ready. */
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
+  bootCause?: import('../electron/boot-cause').BootCause | null
+  /** v0.0.9 F2 — main's automatic backend restart (electron/main/backend-auto-restart.ts). */
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports -- seam: only this block may change
+  restart?: import('../electron/main/backend-auto-restart').BackendRestartStatus | null
 }
 
 // First-launch install ("bootstrap") event types -- emitted by

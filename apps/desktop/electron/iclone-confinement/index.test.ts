@@ -34,6 +34,7 @@ import {
   registerConfinement,
   stopConfinement
 } from './ipc'
+import { socketPath } from './launcher-socket'
 import { realOrSelf } from './profiles'
 import { projectFs } from './project-fs'
 import { refusalRecordDir, reportedRefusalsDir } from './refusals'
@@ -452,7 +453,8 @@ describe('G6 — one seam: flipping the backend is one setting', () => {
       ICLONE_CONFINEMENT_ACK: path.join(path.dirname(layer.paths.profilesDir), 'run', 'hermes-ack.json'),
       ICLONE_CONFINEMENT_LINK_KEY: expect.stringMatching(/^[0-9a-f]{64}$/),
       TERMINAL_ENV: 'iclone_seatbelt',
-      ICLONE_CONFINEMENT_LAUNCHER: path.join(path.dirname(layer.paths.profilesDir), 'run', 'launcher.sock'),
+      ICLONE_CONFINEMENT_LAUNCHER: socketPath(path.dirname(path.dirname(layer.paths.profilesDir)), 'launcher'),
+      ICLONE_LAUNCHER_JOURNAL_DIR: path.join(path.dirname(layer.paths.profilesDir), 'run'),
       ICLONE_RUNTIME_CONFINED: '1'
     })
   })

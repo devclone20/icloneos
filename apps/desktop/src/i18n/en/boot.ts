@@ -15,7 +15,7 @@ export const boot: Translations['boot'] = {
   errors: {
     backgroundExited: 'The agent background process exited.',
     backgroundExitedDuringStartup: 'The agent background process exited during startup.',
-    backendStopped: 'Backend stopped',
+    backendStopped: 'The agent stopped',
     desktopBootFailed: 'Desktop boot failed',
     gatewayConnectionLost: 'Lost connection to the gateway',
     gatewayConnectionLostDetail:

@@ -58,6 +58,7 @@ import {
   teardownPrimaryBackendAndWait,
   waitForBackendExit
 } from './backend'
+import { resetBackendAutoRestart } from './backend-auto-restart'
 import {
   evictLruPoolBackends,
   poolStopper,
@@ -822,6 +823,8 @@ async function restoreManagedPrimarySshBackend(source: { id: string }, profile: 
 
   managedPrimaryRestoreOwners.set(source.id, { correlationId, profile: profileKey, source })
   backendConnectionState.invalidate()
+  // v0.0.9 Q (correctness 2): an intentional re-home supersedes any pending automatic restart of the old primary.
+  resetBackendAutoRestart()
 
   try {
     return await startHermes()

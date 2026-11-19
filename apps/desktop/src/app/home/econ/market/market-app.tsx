@@ -20,6 +20,7 @@ import './market.css'
  */
 import { type RefObject, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
+import { f1sOwnerClick } from '@/i18n/en/v009-f1s'
 import { acpToolsReady } from '@/iclone-shared/acp-tools'
 import { hasAcpToolsBridge, useAcpTools } from '@/store/acp-tools'
 
@@ -27,6 +28,7 @@ import { AcpToolsPanel } from '../acp-tools-panel'
 import { type AcpResult, setupNotice } from '../cli'
 import { EconWindowContext, useAskInft, useOpenSetup } from '../handoff'
 import { reportEconStatus } from '../live'
+import { confirmOwnerWrite } from '../owner-write'
 import { clearSnapshot } from '../snapshot'
 import type { EconAppProps } from '../types'
 import { AppFrame } from '../ui'
@@ -488,9 +490,21 @@ function MarketAppBody({ identity, inftId, refreshKey, slug }: EconAppProps) {
       return null
     }
 
+    // F1-S: taken before any await, inside the click on the marked control (data-acp-market-confirm), for exactly
+    // this argv; main runs the write only on that admission.
+    const confirming = confirmOwnerWrite(inftId, argv)
+
     writing.current = true
     setBusy(kind)
     setWriteError(null)
+
+    if (!(await confirming).ok) {
+      writing.current = false
+      setBusy(null)
+      setWriteError(f1sOwnerClick.writeRefused)
+
+      return null
+    }
 
     const result = await writeCatalogue(inftId, slug, argv, kind === 'resource-create' ? 'resource' : 'offering')
 

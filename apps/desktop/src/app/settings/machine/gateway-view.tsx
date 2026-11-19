@@ -1,3 +1,4 @@
+import { IcAlert } from '@/components/ic/ic-page'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Input } from '@/components/ui/input'
@@ -113,13 +114,9 @@ export function GatewayView({ connection, embedded, handlers }: GatewayViewProps
       )}
 
       {state.envOverride ? (
-        <div className="mb-5 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[length:var(--conversation-caption-font-size)] text-destructive">
-          <AlertCircle className="mt-0.5 size-4 shrink-0" />
-          <div>
-            <div className="font-medium">{g.envOverrideTitle}</div>
-            <div className="mt-1 leading-5">{g.envOverrideDesc}</div>
-          </div>
-        </div>
+        <IcAlert className="mb-5" title={g.envOverrideTitle} tone="error">
+          {g.envOverrideDesc}
+        </IcAlert>
       ) : null}
 
       <SettingRow
@@ -340,10 +337,9 @@ export function GatewayView({ connection, embedded, handlers }: GatewayViewProps
           ) : null}
 
           {state.mode === 'remote' && probeStatus === 'error' ? (
-            <div className="flex items-start gap-2 py-3 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <IcAlert className="my-3" tone="warning">
               {g.probeError}
-            </div>
+            </IcAlert>
           ) : null}
 
           {/* OAuth / password gateways: present a sign-in button + connection status. */}
@@ -407,13 +403,9 @@ export function GatewayView({ connection, embedded, handlers }: GatewayViewProps
               {/* The saved token is on disk in plain text (no OS keyring). Same
                   banner idiom as envOverride so it reads as a real warning. */}
               {state.remoteTokenPlainText ? (
-                <div className="mt-2 flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-[length:var(--conversation-caption-font-size)] text-destructive">
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" />
-                  <div>
-                    <div className="font-medium">{g.plainTextStoredTitle}</div>
-                    <div className="mt-1 leading-5">{g.plainTextStoredDesc}</div>
-                  </div>
-                </div>
+                <IcAlert className="mt-2" title={g.plainTextStoredTitle} tone="warning">
+                  {g.plainTextStoredDesc}
+                </IcAlert>
               ) : null}
             </>
           ) : null}

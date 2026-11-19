@@ -2,7 +2,7 @@ import { act, cleanup, render } from '@testing-library/react'
 import { useEffect, useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { $notifications, clearNotifications } from '@/store/notifications'
+import { $notificationHistory, $notifications, clearNotifications } from '@/store/notifications'
 import { $gatewayState, setActiveSessionId, setSelectedStoredSessionId } from '@/store/session'
 
 import { RECONNECT_HOLD_MS } from './reconnect-hold'
@@ -86,6 +86,7 @@ afterEach(() => {
   clearSubmitInFlight()
   clearNotifications()
   $notifications.set([])
+  $notificationHistory.set([])
 })
 
 describe('a slash command entered while the backend restarts', () => {
@@ -115,6 +116,13 @@ describe('a slash command entered while the backend restarts', () => {
     await expect(sent).resolves.toBe(false)
     expect(titles(request)).toHaveLength(0)
     expect(shown()).toMatch(/did not come back/i)
+
+    // Q tests-perf 2: the kept command's reason is sticky — still on screen five minutes later, never timed.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+    })
+    expect(shown()).toMatch(/did not come back/i)
+    expect($notifications.get().find(n => /did not come back/i.test(n.message))?.durationMs).toBe(0)
   })
 })
 
@@ -202,10 +210,24 @@ describe('a message sent while the backend restarts', () => {
     $gatewayState.set('error')
     const sent = submit('never up')
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5 * 60_000)
+      await vi.advanceTimersByTimeAsync(RECONNECT_HOLD_MS + 1)
     })
     await expect(sent).resolves.toBe(false)
     expect(submits(request)).toHaveLength(0)
     expect(shown()).toMatch(/not sent/i)
+
+    // The kept words' only on-screen reason is sticky (lead decision, durationMs 0): still shown five minutes later,
+    // and in the notification centre too (Q tests-perf 2 restores the on-screen assertion fixpass1 dropped).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60_000)
+    })
+    expect(submits(request)).toHaveLength(0)
+    expect(shown()).toMatch(/not sent/i)
+
+    const kept = $notifications.get().find(n => n.id === 'send-kept')
+
+    expect(kept).toMatchObject({ durationMs: 0, kind: 'warning' })
+    expect(kept?.message).toMatch(/not sent/i)
+    expect($notificationHistory.get().map(r => r.message)).toContainEqual(expect.stringMatching(/not sent/i))
   })
 })

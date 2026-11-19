@@ -5,6 +5,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type * as ActiveRuntimeState from '../active-runtime-state'
+
 const h = vi.hoisted(() => ({
   bootState: { bootstrapRepairRequested: false } as Record<string, unknown>,
   canImport: vi.fn(() => true),
@@ -13,7 +15,8 @@ const h = vi.hoisted(() => ({
 }))
 
 vi.mock('electron', () => ({ app: { getPath: () => '/nonexistent' }, BrowserWindow: {}, dialog: {} }))
-vi.mock('../active-runtime-state', () => ({
+vi.mock('../active-runtime-state', async importOriginal => ({
+  ...(await importOriginal<typeof ActiveRuntimeState>()),
   // The active runtime is usable: only a pending Repair makes the resolver go past step 3.
   classifyActiveRuntime: () => ({ hasValidMarker: true, shouldUseActiveRuntime: true })
 }))

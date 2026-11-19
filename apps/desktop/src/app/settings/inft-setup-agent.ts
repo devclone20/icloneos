@@ -4,8 +4,11 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 
+import { f1sOwnerClick } from '@/i18n/en/v009-f1s'
+
 import type { InftAcpStatus } from '../home/acp-setup'
 import type { INftCardData } from '../home/collections'
+import { confirmOwnerWrite } from '../home/econ/owner-write'
 import { openExternal } from '../home/lib/external'
 
 import { cliJson, pickString, type StepRunner } from './inft-setup-runner'
@@ -129,13 +132,26 @@ export function useAgentSteps({ runner, selected, status }: AgentStepsParams): A
   const registerErc8004 = useCallback(async () => {
     const agentId = status?.agentId
 
-    if (!agentId) {
+    const inftId = selected?.id
+
+    if (!agentId || !inftId) {
       return
     }
 
-    await exec('erc8004', ['agent', 'register-erc8004', '--agent-id', agentId, '--chain-id', '8453', '--json'], 180_000)
+    const argv = ['agent', 'register-erc8004', '--agent-id', agentId, '--chain-id', '8453', '--json']
+    // F1-S: signs an on-chain transaction, so it runs only on the owner's own click (data-acp-register-confirm):
+    // the confirm is taken here, before any await, for exactly this argv.
+    const confirmed = await confirmOwnerWrite(inftId, argv)
+
+    if (!confirmed.ok) {
+      setStep('erc8004', { running: false, error: f1sOwnerClick.writeRefused })
+
+      return
+    }
+
+    await exec('erc8004', argv, 180_000)
     refresh()
-  }, [exec, refresh, status?.agentId])
+  }, [exec, refresh, selected?.id, setStep, status?.agentId])
 
   return { agentName, setAgentName, startSignIn, createAgent, armSigner, provisionEmail, registerErc8004 }
 }

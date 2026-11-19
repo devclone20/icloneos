@@ -5,10 +5,12 @@
  * The iNFT's Hermes agent used to `exec` this Electron binary as Node with
  * ELECTRON_RUN_AS_NODE — which made the signed app a general-purpose
  * interpreter that could read the ACP keychain items with no prompt. Now the
- * agent's `acp` wrapper is a thin client of `<userData>/run/acp.sock` and THIS
+ * agent's `acp` wrapper is a thin client of the `acp` socket and THIS
  * module decides what runs:
  *
- *   - who: the socket lives in a 0700 dir and is 0600 (macOS checks socket
+ *   - who: the socket lives in the short private socket folder of this userData
+ *     (v0.0.9, launcher-socket.ts: ours, exactly 0700, never a link, checked
+ *     before the listen; never under userData) and is 0600 (macOS checks socket
  *     file permissions on connect, so only this uid gets in); every request
  *     carries the per-launch token from `acp.token` (0600), so a client that
  *     outlived an app launch is refused;
@@ -30,22 +32,24 @@ import path from 'node:path'
 
 import { redactSecrets } from '../src/iclone-shared/redact'
 
+import { type AcpDoorWriteDeps, admitAcpDoorWrite } from './iclone-acp-door-writes'
 import { redactCardOutput } from './iclone-acp-output'
+import { prepareSocket, socketPath } from './iclone-confinement/launcher-socket'
 import { consentAllows } from './iclone-consent'
-import { consentDoorCommand } from './iclone-consent-door'
+import { askOnActiveDoor, consentDoorCommand } from './iclone-consent-door'
 import { doctorDoorCommand } from './iclone-doctor'
 import { economyRefusal } from './iclone-ownership-gate'
 import { withCallingSession } from './iclone-permissions/calling-session'
-import { activePermissions } from './iclone-permissions/ipc'
+import { activePermissions, recordAcpWrite } from './iclone-permissions/ipc'
 import { permVerb } from './iclone-permissions/socket-verb'
 import { writeFileAtomicSync } from './lib/atomic-write'
+import { assertSocketPathFits } from './socket-path'
 
 const REQUEST_MAX_BYTES = 256 * 1024
 const REQUEST_WAIT_MS = 10_000
 const ARGV_MAX = 64
 const ARG_MAX_CHARS = 16_384
 // macOS sun_path is 104 bytes including the terminator.
-const SUN_PATH_MAX = 103
 
 /** Every command the agent may run, by root. `null` = the root takes no
  *  subcommand; a list = one of these must follow the root. Mirrors the
@@ -320,9 +324,19 @@ export interface AgentRunSink {
   signal: AbortSignal
 }
 
+/**
+ * v0.0.9 (owner decision): the agent socket (the `perm` and `acp` verbs) lives in the short private socket folder of
+ * this userData, never under it, where a long enough userData overflowed sun_path. The token is a file, not a socket:
+ * it stays in `<userData>/run`, the folder the confined runtime may read (runtime-profile.ts PERM_DIR).
+ */
+export const acpSocketFile = (userDataDir: string): string => socketPath(userDataDir, 'acp')
+export const acpTokenFile = (userDataDir: string): string => path.join(userDataDir, 'run', 'acp.token')
+
 interface AcpSocketDeps {
-  /** `<userData>/run` */
+  /** `<userData>/run`: the token's folder. */
   dir: string
+  /** The socket: acpSocketFile(userData), in its short private folder. */
+  socket: string
   resolveInft(key: string | null): InftResolution
   /** K29 (V3-I critic r2 n4): may the agent start a streaming reader (`events listen`, `job watch`) for this iNFT? Main's
    *  WORK supervisor is the only authority over listeners for an iNFT it holds, and none run while signed out. */
@@ -335,6 +349,20 @@ interface AcpSocketDeps {
     sink: AgentRunSink
   ): Promise<{ code: number | null; error?: string }>
   log(line: string): void
+  /**
+   * v0.0.9 lead decision: register-erc8004 and the offering / resource writes are decided by the owner's level for the
+   * `acp` function (default = ask for this call), never by the global mode (iclone-acp-door-writes.ts). Tests inject
+   * their own; the app uses main's permission authority, its sheet and its audit.
+   */
+  doorWrites?: AcpDoorWriteDeps
+}
+
+/** The live door-write deps: main's authority (the `acp` level), the permission sheet and the chained audit. */
+const liveDoorWrites: AcpDoorWriteDeps = {
+  level: () => activePermissions().authority?.levelOf('acp') ?? null,
+  mode: sessionId => activePermissions().authority?.modeOfCaller(sessionId) ?? null,
+  ask: (slug, permission, key, reason, signal) => askOnActiveDoor(slug, permission, key, reason, signal),
+  audit: entry => recordAcpWrite(entry)
 }
 
 interface AcpSocketServer {
@@ -356,36 +384,19 @@ function ownedPrivateDir(dir: string): void {
   chmodSync(dir, 0o700)
 }
 
-function clearStaleSocket(file: string): void {
-  try {
-    if (!lstatSync(file).isSocket()) {
-      throw new Error(`refusing ${file}: exists and is not a socket`)
-    }
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return
-    }
-
-    throw error
-  }
-
-  rmSync(file, { force: true })
-}
-
 /** Slugs with a streaming reader running — the agent door's and the app's job watcher
  *  (iclone-acp-watch.ts) share it, so a slug never has two listeners. */
 export const streamingSlugs = new Set<string>()
 
 export async function startAcpSocketServer(deps: AcpSocketDeps): Promise<AcpSocketServer> {
-  const socketPath = path.join(deps.dir, 'acp.sock')
+  const socketPath = deps.socket
   const tokenPath = path.join(deps.dir, 'acp.token')
 
-  if (Buffer.byteLength(socketPath) > SUN_PATH_MAX) {
-    throw new Error(`socket path is longer than ${SUN_PATH_MAX} bytes: ${socketPath}`)
-  }
-
+  assertSocketPathFits(socketPath, 'The permission and agent socket (acp.sock)')
+  // Its private folder is checked (ours, exactly 0700, never a link; only our own stale socket removed) before the
+  // listen, and before the token is written: a refused folder opens no door at all.
+  prepareSocket(socketPath)
   ownedPrivateDir(deps.dir)
-  clearStaleSocket(socketPath)
 
   const token = randomBytes(32).toString('hex')
 
@@ -549,6 +560,26 @@ export async function startAcpSocketServer(deps: AcpSocketDeps): Promise<AcpSock
 
       if (refused) {
         return fail(refused, 3)
+      }
+
+      // v0.0.9 lead decision: an on-chain registration or a catalogue write runs only on the owner's level for `acp`
+      // or the owner's click on the sheet for this very call — whatever the global mode.
+      const write = await admitAcpDoorWrite(
+        deps.doorWrites ?? liveDoorWrites,
+        {
+          slug: inft.slug,
+          // A claim, used only for the sheet's words (the mode it names); never part of the decision.
+          session:
+            typeof request.session === 'string' && request.session.length > 0 && request.session.length <= 200
+              ? request.session
+              : null,
+          argv: policy.argv
+        },
+        abort.signal
+      )
+
+      if (write && write.admitted === false) {
+        return fail(write.error, 77)
       }
 
       // The agent operates, the owner spends (economyos law + R10 consent key spendTrade): a value-moving

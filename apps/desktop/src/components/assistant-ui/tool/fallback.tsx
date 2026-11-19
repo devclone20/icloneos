@@ -35,7 +35,7 @@ import { FileTypeIcon } from '@/components/ui/file-type-icon'
 import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { ToolIcon } from '@/components/ui/tool-icon'
 import { Tip } from '@/components/ui/tooltip'
-import { useI18n } from '@/i18n'
+import { translateNow, useI18n } from '@/i18n'
 import { PrettyLink, LinkifiedText as SharedLinkifiedText, urlSlugTitleLabel } from '@/lib/external-link'
 import { AlertCircle, CheckCircle2 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
@@ -140,6 +140,7 @@ function ToolPayloadDisclosure({ args, result }: { args: unknown; result: unknow
 
 interface ToolStatusCopy {
   permissionAsked: string
+  statusRefused: string
   statusDone: string
   statusError: string
   statusRecovered: string
@@ -198,6 +199,11 @@ function statusGlyph(status: ToolStatus, copy: ToolStatusCopy): ReactNode {
 
   if (status === 'asked') {
     return <AlertCircle aria-label={copy.permissionAsked} className="size-3.5 shrink-0 text-(--ic-text-2)" />
+  }
+
+  // Refused before it ran: the same quiet glyph as an ask, never the red of a failed run.
+  if (status === 'refused') {
+    return <AlertCircle aria-label={copy.statusRefused} className="size-3.5 shrink-0 text-(--ic-text-2)" />
   }
 
   if (status === 'warning') {
@@ -544,7 +550,9 @@ function ToolEntry({ part }: ToolEntryProps) {
         'group/tool-block min-w-0 max-w-full overflow-hidden text-[length:var(--conversation-tool-font-size)] text-(--ic-text-2)',
         open && TOOL_EXPANDED_SHELL_CLASS
       )}
-      data-conversation-scaffold=""
+      // v0.0.9 G GF-M2: a refusal is what the owner must read, so a refused row is never faded as scaffolding
+      // (the 0.67 rest fade took its reason line under AA).
+      data-conversation-scaffold={view.status === 'refused' ? undefined : ''}
       data-file-edit={isFileEdit && open ? '' : undefined}
       data-slot="tool-block"
       data-tool-open={open ? '' : undefined}
@@ -591,6 +599,32 @@ function ToolEntry({ part }: ToolEntryProps) {
           </span>
         </DisclosureRow>
       </div>
+      {/* v0.0.9 G GF-M2: a refused row always says why, to the OWNER: what did not run, in plain words, in full ink
+          (the agent-directed tool result is only in the expanded detail, under "Sent to the agent"). When the chat's
+          permission mode refused it, the mode picker is one click away. */}
+      {view.refusal && (
+        <p className="px-2 pb-1.5 text-xs leading-relaxed text-(--ic-text-1) wrap-anywhere" data-slot="tool-refusal-reason">
+          {view.refusal.owner}
+          {view.refusal.modeRefusal && (
+            <>
+              {' '}
+              <button
+                // UI lens: the underline is the link's cue, so it holds 3:1 (AA secondary ink); hover thickens it
+                // instead of moving the ink to a gold that fell under AA in light.
+                className="underline decoration-(--ic-text-2-aa) underline-offset-2 hover:decoration-2 focus-visible:outline-2 focus-visible:outline-(--ic-accent)"
+                data-slot="tool-refusal-change-mode"
+                onClick={event => {
+                  event.stopPropagation()
+                  window.dispatchEvent(new CustomEvent('hermes:open-permissions'))
+                }}
+                type="button"
+              >
+                {translateNow('assistant.tool.refusedChangeMode')}
+              </button>
+            </>
+          )}
+        </p>
+      )}
       {isPending && <PendingToolApproval part={part} />}
       {open && (
         <div className="relative grid w-full min-w-0 max-w-full gap-1.5 overflow-hidden p-1.5">
@@ -608,6 +642,12 @@ function ToolEntry({ part }: ToolEntryProps) {
           )}
           {part.toolName === 'terminal' && toolViewMode !== 'technical' && (
             <TerminalTranscript command={view.terminalCommand} exitCode={view.terminalExitCode} />
+          )}
+          {view.refusal?.raw && (
+            <div className="max-w-full text-xs leading-relaxed" data-slot="tool-refusal-raw">
+              <p className={TOOL_SECTION_LABEL_CLASS}>{translateNow('assistant.tool.refusedSentToAgent')}</p>
+              <pre className={cn(TOOL_SECTION_PRE_CLASS, 'whitespace-pre-wrap wrap-anywhere')}>{view.refusal.raw}</pre>
+            </div>
           )}
           {view.imageUrl && (
             <div className="max-w-72 overflow-hidden rounded-[0.25rem] border border-(--ic-border-strong)">

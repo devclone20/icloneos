@@ -37,7 +37,7 @@ import { execFileSync } from 'node:child_process'
 import path from 'node:path'
 
 import { NO_BYTECODE_PREFIX, pycacheEnv } from './iclone-pycache'
-import { isolatePythonEnv, PYTHON_ISOLATION_FLAGS } from './iclone-spawn-env'
+import { isolatePythonEnv, managedRuntimeEnvOf, PYTHON_ISOLATION_FLAGS } from './iclone-spawn-env'
 
 /** Default probe budget. 5s false-negativeed healthy Windows cold starts (#61764). */
 const DEFAULT_PROBE_TIMEOUT_MS = 15_000
@@ -76,7 +76,7 @@ function isTimeoutError(err: unknown): boolean {
  * (iclone-spawn-env.ts allowlist, PYTHONPATH cut to the first entry's tree, which callers make the runtime root; none
  * when there is no PYTHONPATH) and the bytecode prefix under /dev/null with PYTHONDONTWRITEBYTECODE=1.
  */
-function sealedProbeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+function sealedProbeEnv(env: NodeJS.ProcessEnv, explicit?: Record<string, string>): Record<string, string> {
   const root = String(env.PYTHONPATH ?? '')
     .split(path.delimiter)
     .find(entry => entry && path.isAbsolute(entry))
@@ -84,7 +84,8 @@ function sealedProbeEnv(env: NodeJS.ProcessEnv): Record<string, string> {
   // No absolute first entry: no PYTHONPATH at all (a system Python finds hermes_cli in its own site-packages).
   const sealed = isolatePythonEnv({ ...env, PYTHONPATH: root ? env.PYTHONPATH : undefined }, root ?? path.sep)
 
-  return { ...sealed, ...pycacheEnv(NO_BYTECODE_PREFIX) }
+  // v0.0.9 Q decision 4: the dependency pin only as the caller set it explicitly (never inherited through the seal).
+  return { ...sealed, ...managedRuntimeEnvOf(explicit), ...pycacheEnv(NO_BYTECODE_PREFIX) }
 }
 
 /**
@@ -156,7 +157,7 @@ function canImportHermesCli(pythonPath: string | null | undefined, opts: { env?:
     // to the runtime (the callers put its root first), no bytecode read or written — so this probe never writes a pyc
     // into the runtime tree, and nothing inherited runs inside it.
     execProbeSync(pythonPath, [...PYTHON_ISOLATION_FLAGS, '-c', hermesRuntimeImportProbe()], {
-      env: sealedProbeEnv({ ...process.env, ...(opts.env || {}) }),
+      env: sealedProbeEnv({ ...process.env, ...(opts.env || {}) }, opts.env),
       stdio: 'ignore',
       timeout: PROBE_TIMEOUT_MS,
       windowsHide: true

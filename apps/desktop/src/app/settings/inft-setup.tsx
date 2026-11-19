@@ -23,6 +23,7 @@ import { useCallback } from 'react'
 import { HOME_ROUTE } from '@/app/routes'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
+import { f1bAcpBundled } from '@/i18n/en/v009-f1b'
 import { acpToolsReady } from '@/iclone-shared/acp-tools'
 import { slugForInft } from '@/iclone-shared/inft-slug'
 import { useAcpTools } from '@/store/acp-tools'
@@ -47,6 +48,9 @@ import { cardRefusalSentence, useInftWizardCopy } from './inft-setup-wizard-copy
 import { SettingRow } from './setting-row'
 import { useDeepLinkHighlight } from './use-deep-link-highlight'
 import { useLinkedSelection, useLinkedStep } from './use-linked-selection'
+
+/** The wizard's steps in the order the owner meets them (v0.0.9 G GF-3: the active step is the first not done). */
+const STEP_ORDER = ['cli', 'profile', 'auth', 'agent', 'signer', 'wallet', 'email', 'card', 'hl', 'market'] as const
 
 export function InftSetupPane({ navigate, onClose }: { navigate: (route: string) => void; onClose: () => void }) {
   const copy = useInftWizardCopy()
@@ -77,8 +81,9 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
   })
   const status: InftAcpStatus | undefined = inftId ? configMap[slugForInft(inftId)] : undefined
 
-  const { cli, cliInstall, cliUpdate, skills, skillsBusy, installCli, checkCliUpdate, teachAgent } = useAcpCliStep()
-  // REL-6: the CLI installs from npm on the owner's click; the row shows the tools' own state while they are not ready.
+  const { cli, cliState, onRepairResult, skills, skillsBusy, teachAgent } = useAcpCliStep()
+  // v0.0.9 (F1-B): the CLI ships inside the app; the row shows ONE status line from main's tools state
+  // ("Virtuals ACP CLI 1.0.38 · included · verified") and Repair only when the included copy does not verify.
   const tools = useAcpTools()
   const toolsCopy = useI18n().t.acpTools
   const toolsPending = tools !== null && !acpToolsReady(tools)
@@ -189,6 +194,23 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
   const cardOpen = status?.cardState !== 'ready'
   const cardBusy = Boolean(steps.card?.running) || cooldownHeld
 
+  // v0.0.9 G GF-3: one source for each step's done state, and the active step (the first one not done) is the only
+  // one that offers "Ask the agent / Add notes".
+  const stepDone = {
+    cli: Boolean(cli?.ok) && !toolsPending,
+    profile: profileExists,
+    auth: authenticated,
+    agent: hasAgent,
+    signer: Boolean(status?.signerReady),
+    wallet: Boolean(status?.walletAddress),
+    email: Boolean(status?.email),
+    card: Boolean(status?.cardReady),
+    hl: Boolean(steps.hl?.output) && !steps.hl?.error,
+    market: false
+  }
+
+  const activeStep = STEP_ORDER.find(key => !stepDone[key])
+
   return (
     <div className="iws">
       <SettingRow
@@ -202,7 +224,8 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
                 onClick={() => setSelectedId(card.id)}
                 type="button"
               >
-                <b>{card.name.toLowerCase()}</b>
+                {/* v0.0.9 r4 (design r3 N9): the iNFT's own name, as written ("iCLONE Aurora"). */}
+                <b>{card.name}</b>
                 <span>{card.chain}</span>
                 <em
                   className={configMap[slugForInft(card.id)]?.configured ? 'iws__badge iws__badge--gold' : 'iws__badge'}
@@ -213,64 +236,55 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             ))}
           </div>
         }
-        control={
-          <Tip label={copy.picker.refresh}>
-            <button
-              aria-label={copy.picker.refresh}
-              className="iws__refresh"
-              onClick={() => refresh({ force: true })}
-              type="button"
-            >
-              <RefreshCw size={13} strokeWidth={1.8} />
-            </button>
-          </Tip>
-        }
         hint={copy.picker.hint}
-        title={copy.picker.title}
+        // v0.0.9 r4 (design r3 N9): the re-check sits in the heading it acts on, not mid-row away from the chips.
+        title={
+          <span className="iws__title-row">
+            {copy.picker.title}
+            <Tip label={copy.picker.refresh}>
+              <button
+                aria-label={copy.picker.refresh}
+                className="iws__refresh"
+                onClick={() => refresh({ force: true })}
+                type="button"
+              >
+                <RefreshCw size={13} strokeWidth={1.8} />
+              </button>
+            </Tip>
+          </span>
+        }
       />
 
       <Step
+        active={activeStep === 'cli'}
         control={
-          toolsPending ? (
-            <AcpToolsControl cancelClassName="iws__btn" className="iws__btn iws__btn--primary" view={tools} />
-          ) : cli?.ok ? (
-            <button className="iws__btn" onClick={() => void checkCliUpdate()} type="button">
-              {copy.cli.checkUpdate}
-            </button>
-          ) : (
-            <button
-              className="iws__btn iws__btn--primary"
-              data-acp-tools-confirm=""
-              disabled={cliInstall.running}
-              onClick={() => void installCli()}
-              type="button"
-            >
-              {copy.cli.install}
-            </button>
-          )
+          // v0.0.9 (F1-B): no Install, Cancel, Check for updates or Update now — the CLI ships inside the app. Repair
+          // (gesture-locked, `data-acp-tools-confirm`) only while the included copy does not verify.
+          tools?.state === 'unverified' ? (
+            <AcpToolsControl className="iws__btn iws__btn--primary" onResult={onRepairResult} view={tools} />
+          ) : null
         }
-        done={Boolean(cli?.ok) && !toolsPending}
+        done={stepDone.cli}
         hint={
-          toolsPending
-            ? `${acpToolsLine(toolsCopy, tools)}. ${copy.cli.hint}`
-            : tools?.state === 'installed'
-              ? acpToolsLine(toolsCopy, tools)
-              : cli?.ok
-                ? copy.cli.ready(cli.version ?? '')
-                : copy.cli.hint
+          tools
+            ? `${acpToolsLine(toolsCopy, tools)}${
+                tools.state === 'unverified'
+                  ? `. ${f1bAcpBundled.repairHint}`
+                  : tools.state === 'unavailable' || tools.state === 'absent'
+                    ? `. ${f1bAcpBundled.reinstallHint}`
+                    : tools.state === 'installed' && cli && !cli.ok && cli.error
+                      ? ` — ${cli.error}`
+                      : ''
+              }`
+            : f1bAcpBundled.stepHint
         }
         index={1}
         kit={kit}
         notesKey="cli"
-        onAskHermes={() => askHermes('installing the Virtuals ACP CLI', 'cli')}
-        state={cliInstall}
-        title={copy.cli.title}
+        onAskHermes={() => askHermes('the Virtuals ACP CLI included in iclone os', 'cli')}
+        state={cliState}
+        title={f1bAcpBundled.stepTitle}
       >
-        {tools && tools.state !== 'checking' && tools.state !== 'unavailable' ? (
-          <div className="iws__row">
-            <AcpToolsLicences view={tools} />
-          </div>
-        ) : null}
         {cli?.ok && !toolsPending && (
           <>
             <p className="iws__note">
@@ -286,19 +300,16 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
               </button>
             </div>
             <p className="iws__note">{copy.cli.keychain}</p>
-            {cliUpdate?.updateAvailable && (
-              <div className="iws__row">
-                <p className="iws__note">{copy.cli.updateAvailable(cliUpdate.latest ?? '')}</p>
-                <button className="iws__btn iws__btn--primary" onClick={() => void installCli()} type="button">
-                  {copy.cli.updateNow}
-                </button>
-              </div>
-            )}
           </>
         )}
+        {/* v0.0.9 r4 (design r3 N9): the licences are a disclosure row at the foot of the step, never a lone label. */}
+        {tools && (tools.state === 'installed' || tools.state === 'unverified') ? (
+          <AcpToolsLicences variant="row" view={tools} />
+        ) : null}
       </Step>
 
       <Step
+        active={activeStep === 'profile'}
         control={
           selected?.bootstrap ? (
             profileExists ? (
@@ -332,7 +343,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             )
           ) : undefined
         }
-        done={profileExists}
+        done={stepDone.profile}
         hint={selected?.bootstrap ? copy.profile.hint : copy.profile.noSoul}
         index={2}
         kit={kit}
@@ -345,6 +356,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'auth'}
         control={
           // A session can expire while the cached status still says
           // "authenticated" — the owner must always be able to sign in again.
@@ -357,7 +369,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             <ExternalLink size={13} strokeWidth={1.8} /> {authenticated ? copy.auth.again : copy.auth.start}
           </button>
         }
-        done={authenticated}
+        done={stepDone.auth}
         hint={copy.auth.hint}
         index={3}
         kit={kit}
@@ -368,6 +380,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       />
 
       <Step
+        active={activeStep === 'agent'}
         control={
           authenticated && !hasAgent ? (
             <button
@@ -380,7 +393,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={hasAgent}
+        done={stepDone.agent}
         hint={hasAgent ? copy.agent.bound(status?.agentName ?? copy.agent.fallback) : copy.agent.hint}
         index={4}
         kit={kit}
@@ -401,6 +414,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'signer'}
         control={
           hasAgent ? (
             <button
@@ -414,7 +428,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={Boolean(status?.signerReady)}
+        done={stepDone.signer}
         hint={status?.signerReady ? copy.signer.armed : copy.signer.hint}
         index={5}
         kit={kit}
@@ -428,8 +442,10 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
         {hasAgent && status?.signerReady && (
           <div className="iws__row">
             <Tip label={copy.signer.registerTip}>
+              {/* F1-S: the owner-click lock — only a real click or key here registers (signs a transaction). */}
               <button
                 className="iws__btn"
+                data-acp-register-confirm=""
                 disabled={steps.erc8004?.running}
                 onClick={() => void registerErc8004()}
                 type="button"
@@ -442,6 +458,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'wallet'}
         control={
           hasAgent ? (
             <button
@@ -454,7 +471,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={Boolean(status?.walletAddress)}
+        done={stepDone.wallet}
         hint={copy.wallet.hint}
         index={6}
         kit={kit}
@@ -470,6 +487,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'email'}
         control={
           !status?.email && hasAgent ? (
             <button
@@ -482,7 +500,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={Boolean(status?.email)}
+        done={stepDone.email}
         hint={copy.email.hint}
         index={7}
         kit={kit}
@@ -495,6 +513,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'card'}
         control={
           hasAgent && cardOpen ? (
             // The tip is WHY the button is disabled (a refused gate, a held cooldown): a disabled button fires
@@ -519,7 +538,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </Tip>
           ) : undefined
         }
-        done={Boolean(status?.cardReady)}
+        done={stepDone.card}
         hint={copy.card.hint}
         index={8}
         kit={kit}
@@ -625,6 +644,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'hl'}
         control={
           hasAgent ? (
             <button
@@ -637,7 +657,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={Boolean(steps.hl?.output) && !steps.hl?.error}
+        done={stepDone.hl}
         hint={copy.hl.hint}
         index={9}
         kit={kit}
@@ -650,6 +670,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
       </Step>
 
       <Step
+        active={activeStep === 'market'}
         control={
           hasAgent ? (
             <button
@@ -662,7 +683,7 @@ export function InftSetupPane({ navigate, onClose }: { navigate: (route: string)
             </button>
           ) : undefined
         }
-        done={false}
+        done={stepDone.market}
         hint={copy.market.hint}
         index={10}
         kit={kit}

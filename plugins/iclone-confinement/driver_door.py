@@ -18,6 +18,7 @@ import os
 import re
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -154,12 +155,53 @@ class Door:
         self.lock = threading.Lock()
 
     def socket_path(self, name: str) -> str:
+        """The daemon's socket, only ever ``hc-<hex>.sock`` in the checked private folder (lens MINOR 1)."""
         if not SOCKET_NAME.match(name):
             raise DoorRefused("the driver's socket is named by the launcher, never by a path")
         path = os.path.join(self.directory, name + ".sock")
         if len(path.encode("utf-8")) > SOCKET_PATH_MAX:
             raise DoorRefused("the driver's socket path is too long for this Mac")
+        self._check_folder()
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            return path
+        if not stat.S_ISSOCK(st.st_mode) or st.st_uid != os.getuid():
+            raise DoorRefused("something that is not the driver's own socket is already where its socket goes")
         return path
+
+    def _check_folder(self) -> None:
+        """The folder the launcher made: a real folder of this user, 0700. Never made here, never followed if a link."""
+        try:
+            st = os.lstat(self.directory)
+        except OSError:
+            st = None
+        if (st is None or not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid()
+                or stat.S_IMODE(st.st_mode) != 0o700):
+            raise DoorRefused("the private socket folder is missing, a link, another user's or open to others, "
+                              "so the driver gets no socket; restart icloneOS")
+
+    def sweep(self) -> None:
+        """Remove the door's own dead sockets: ``hc-<hex>.sock``, a socket of this user, nothing listening. A live
+        daemon's socket stays (its sitter needs it to find the daemon), and so does every other name and kind."""
+        try:
+            self._check_folder()
+            names = os.listdir(self.directory)
+        except (DoorRefused, OSError):
+            return
+        for entry in names:
+            if not entry.endswith(".sock") or not SOCKET_NAME.match(entry[:-5]):
+                continue
+            path = os.path.join(self.directory, entry)
+            try:
+                st = os.lstat(path)
+            except OSError:
+                continue
+            if stat.S_ISSOCK(st.st_mode) and st.st_uid == os.getuid() and not _listening(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
     def plan(self, req: dict) -> dict:
         args, name, serving = _shape(list(req["argv"][1:]))
@@ -199,6 +241,7 @@ class Door:
             sitters, self.sitters = list(self.sitters.values()), {}
         for sitter in sitters:
             stop_sitter(sitter)
+        self.sweep()
 
 
 def start_sitter(exe: str, path: str, python: str) -> subprocess.Popen:
@@ -218,6 +261,18 @@ def stop_sitter(sitter: subprocess.Popen, wait: float = STOP_WAIT_S + 8.0) -> No
         sitter.wait(timeout=wait)
     except subprocess.TimeoutExpired:
         pass
+
+
+def _listening(path: str) -> bool:
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(1.0)
+        sock.connect(path)
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()
 
 
 def _peer_pid(path: str):

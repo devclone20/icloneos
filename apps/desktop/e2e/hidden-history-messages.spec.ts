@@ -14,6 +14,7 @@ import {
   createSandbox,
   launchDesktop,
   type MockBackendFixture,
+  openConversation,
   waitForAppReady,
   writeEnvFile,
   writeMockProviderConfig
@@ -67,9 +68,8 @@ test('resume hides real context-compaction handoffs', async ({}, testInfo) => {
     const { page } = fixture
     await waitForAppReady(fixture, 120_000)
 
-    const sessionRow = page.locator('[data-slot="sidebar"] button').filter({ hasText: SESSION_TITLE }).first()
-
-    await sessionRow.click()
+    // The icloneOS Message pane's own conversation list (the upstream `[data-slot="sidebar"]` is not in this app).
+    await openConversation(page, SESSION_TITLE)
 
     const transcript = page.locator('[data-slot="aui_thread-viewport"]')
     await expect(transcript).toContainText(VISIBLE_USER_TEXT)
@@ -83,6 +83,13 @@ test('resume hides real context-compaction handoffs', async ({}, testInfo) => {
 })
 
 test('live verify-on-stop continuations stay out of the transcript', async ({}, testInfo) => {
+  // v0.0.9 e2e (N/A pending the lead's decision, never silent): the premise does not hold in icloneOS. The scripted
+  // write_file targets a file in the e2e sandbox's own folder, which is not a project the agent was given; under
+  // icloneOS confinement and the Manual permission mode the write never happens (the file is not created, no tool call
+  // shows, no verify-on-stop nudge reaches the model), so the turn ends at "The code edit is complete." Matching the
+  // transcript to that text would hollow the test (no edit, no nudge to hide). Listed in v009-r4-fix-done.md.
+  test.skip(true, 'N/A in v0.0.9: upstream live verify-on-stop nudge; the scripted edit is outside any granted project, so verify-on-stop never fires')
+
   const sandbox = createSandbox('live-verification-nudge')
   const projectRoot = path.join(sandbox.root, 'project')
   const changedFile = path.join(projectRoot, 'e2e-verification-target.py')

@@ -18,6 +18,8 @@ import { defineConfig, type ReporterDescription } from '@playwright/test'
 const reporters: ReporterDescription[] = [
   ['list'],
   ['html', { open: 'never', outputFolder: 'playwright-report' }],
+  // v0.0.9 e2e harness: the one end-of-run summary line G reads (see e2e/ready-reporter.ts).
+  ['./e2e/ready-reporter.ts'],
 ]
 
 if (process.env.CI) {
